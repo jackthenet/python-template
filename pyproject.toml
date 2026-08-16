@@ -1,0 +1,158 @@
+# pyproject.toml
+[project]
+name = "novel-writer"
+version = "0.1.0"
+description = "Local-first novel writing application with tree-based narrative editing and LLM-assisted generation."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    # Optional vector store backing hybrid story and codex retrieval.
+    "chromadb>=1.5.9",
+    # Pydantic EmailStr validation used by auth/user models.
+    "email-validator>=2.3.0",
+    # FastAPI user-management primitives used for auth/password helper integration.
+    "fastapi-users>=15.0.1",
+    # HTTP client for LLM metadata, tokenization, and streaming generation calls.
+    "httpx>=0.28.1",
+    # Signed token serializer used for auth session payloads.
+    "itsdangerous>=2.2.0",
+    # Structured application logging across backend and NiceGUI integrations.
+    "loguru>=0.7.3",
+    # Local-first web UI framework that powers the entire app shell.
+    "nicegui>=3.12.0",
+    # High-performance JSON serialization/deserialization across exports, auth tokens, and UI metadata.
+    "orjson>=3.11.8",
+    # Domain and request/response validation models.
+    "pydantic>=2.13.1",
+    # YAML persistence for settings presets and runtime configuration layers.
+    "ruamel.yaml>=0.19.1",
+    # NLP model runtime for codex matching and codex generation.
+    "spacy>=3.8.13",
+    # SQLite ORM/query layer for novel, codex, and user persistence.
+    "sqlmodel>=0.0.38",
+    # Unified resilience patterns used for retry handling around network-bound operations.
+    "pyresilience>=0.3.2",
+    "fastapi-mail>=1.6.4",
+]
+
+[dependency-groups]
+# Development-only tooling installed by `uv sync`; keep runtime packages out of
+# this group so deploy and compatibility mirrors stay minimal.
+dev = [
+    # Complexity reporting used during refactors and cleanup work.
+    "complexipy>=4.2",
+    # Property-based testing for pure logic and boundary-heavy helpers.
+    "hypothesis>=6.155.0",
+    # Load testing for HTTP-facing routes and interactive flows.
+    "locust>=2.44.0",
+    # Pre-commit automation for local quality gates.
+    "pre-commit>=4.0",
+    # Low-overhead sampling profiler for live Python processes and spawned commands.
+    "py-spy>=0.4.2",
+    # Unit and integration test runner.
+    "pytest>=8.3",
+    # Randomized pytest ordering to expose order-dependent test coupling.
+    "pytest-random>=0.2",
+    # Parallel pytest execution for faster focused and full-suite runs.
+    "pytest-xdist>=3.8.0",
+    # Linting, formatting, and autofix checks.
+    "ruff>=0.14",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+[tool.complexipy]
+paths = ["src", "tests"]
+max-complexity-allowed = 30
+snapshot-create = false
+snapshot-ignore = false
+quiet = false
+ignore-complexity = false
+failed = false
+color = "auto"
+sort = "asc"
+exclude = []
+output-csv = false
+output-json = false
+
+[tool.coverage.run]
+branch = true
+# Only include valid Python package names (no hyphens). Keep the canonical
+# package module name used by the project.
+source = ["novel_writer"]
+
+[tool.mypy]
+python_version = "3.14"
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py314"
+indent-width = 4
+line-length = 120
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"
+multiline-quotes = "double"
+docstring-quotes = "double"
+avoid-escape = true
+
+[tool.ruff.lint]
+# See complete list: https://docs.astral.sh/ruff/rules/
+select = [
+    "I",  # isort
+    "E",  # pycodestyle
+    "W",  # pycodestyle
+    "B",  # bugbear
+    "F",  # pyflakes
+    "UP", # pyupgrade
+    "RUF", # ruff
+    "PL", # pylint
+    "Q", # flake8-quotes
+    "SIM",
+    "C4",
+]
+fixable = [
+    "I",  # isort
+    "UP035", # deprecated import
+    "RUF022", # `__all__` is not sorted
+    "Q000",  # bad quotes inline string
+    "Q001",  # bad quotes multiline string
+    "Q002",  # bad quotes docstring
+    "Q003",  # avoidable escaped quote
+    "Q004",  # unnecessary escaped quote
+]
+ignore = [
+    "PLR0913",
+    "E501", # line too long
+    "PLC0415", # import outside top level
+]
+exclude = [
+    "data/", "chroma/", "__pycache__", ".venv", "venv", "build", "dist",
+]
+
+[tool.pylint]
+disable = [
+    "C0103", # Invalid name (e.g., variable/function/class naming conventions)
+    "C0114", # Missing module docstring
+    "C0115", # Missing class docstring
+    "C0301", # Line too long (exceeds character limit)
+    "C0302", # Too many lines in module
+    "R0801", # Similar lines in files
+    "R0901", # Too many ancestors
+    "R0902", # Too many instance attributes
+    "R0903", # Too few public methods
+    "R0904", # Too many public methods
+    "R0911", # Too many return statements
+    "R0912", # Too many branches
+    "R0913", # Too many arguments
+    "R0914", # Too many local variables
+    "R0915", # Too many statements
+    "R0917", # Too many positional arguments
+    "R1705", # Unnecessary "else" after "return"
+    "W0102", # Dangerous default value as argument
+    "W0718", # Catching too general exception
+    "W1203", # Use % formatting in logging functions
+]

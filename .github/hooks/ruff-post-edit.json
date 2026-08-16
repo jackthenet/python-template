@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "windows": "python .github\\hooks\\ruff-post-edit.py",
+        "command": "python .github/hooks/ruff-post-edit.py",
+        "timeout": 30
+      }
+    ]
+  }
+}

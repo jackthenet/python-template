@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Novel Writer Ruff Post-Edit Hook Config",
+  "description": "Schema for the Copilot post-tool-use hook that runs Ruff after Python file edits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["hooks"],
+  "properties": {
+    "hooks": {
+      "type": "object",
+      "description": "Hook stage map keyed by Copilot hook lifecycle name.",
+      "additionalProperties": false,
+      "required": ["PostToolUse"],
+      "properties": {
+        "PostToolUse": {
+          "type": "array",
+          "description": "Commands to run after a tool edits files in the workspace.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "description": "One command hook definition for the post-tool-use stage.",
+            "additionalProperties": false,
+            "required": ["type", "windows", "command", "timeout"],
+            "properties": {
+              "type": {
+                "const": "command",
+                "description": "Hook execution mode. Use `command` for shell commands."
+              },
+              "windows": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Windows command line used when the hook runner executes on Windows."
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1,
+                "description": "POSIX-style command line used by non-Windows hook runners."
+              },
+              "timeout": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Maximum hook runtime in seconds before the hook runner aborts execution."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

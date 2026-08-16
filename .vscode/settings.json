@@ -1,0 +1,19 @@
+{
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+
+  "[python]": {
+    "editor.defaultFormatter": "ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "always"
+    }
+  },
+
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.typeCheckingMode": "strict"
+}
