@@ -1,24 +1,56 @@
-# Task [000]: [Task Title]
-
-## Metadata
-- **Status:** [Pending | In Progress | Completed]
-- **Spec Reference:** `/docs/specs/[feature-name].md`
-- **Prerequisites:** [e.g., Task 001, or None]
-
-## Context & Execution Steps
-[Provide direct, unambiguous instructions for this specific slice of work.]
-
-1. Create module at `src/[path/to/file.py]`.
-2. Implement components defined in `/docs/specs/[feature-name].md` (Section 3).
-3. Ensure error handling follows Section 5 of the spec.
-
-## Work Checklist
-- [ ] Implement core logic in target file
-- [ ] Add type hints and docstrings
-- [ ] Create corresponding unit test file in `tests/`
-- [ ] Verify test execution succeeds via verification command
-
-## Verification Command
-```bash
-# Exact command the AI must run and pass before marking this task as completed
-pytest tests/test_[feature].py -v
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "feature_name": "feature-name-slug",
+  "spec_reference": "docs/specs/feature-name.md",
+  "version": "1.0.0",
+  "tasks": [
+    {
+      "task_id": "TASK-001",
+      "title": "Short Descriptive Title",
+      "description": "Clear, unambiguous instructions for this isolated slice of work.",
+      "status": "pending",
+      "dependencies": [],
+      "inputs": [
+        "docs/specs/feature-name.md"
+      ],
+      "allowed_files": {
+        "test_files": [
+          "tests/test_feature_part1.py"
+        ],
+        "source_files": [
+          "src/feature_part1.py"
+        ]
+      },
+      "acceptance_criteria": [
+        "Criterion 1: Specific input yields expected output",
+        "Criterion 2: Raises specific Exception on invalid input"
+      ],
+      "verification_command": "pytest tests/test_feature_part1.py -v"
+    },
+    {
+      "task_id": "TASK-002",
+      "title": "Dependent Task Title",
+      "description": "Implementation relying on outputs from TASK-001.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-001"
+      ],
+      "inputs": [
+        "docs/specs/feature-name.md",
+        "src/feature_part1.py"
+      ],
+      "allowed_files": {
+        "test_files": [
+          "tests/test_feature_part2.py"
+        ],
+        "source_files": [
+          "src/feature_part2.py"
+        ]
+      },
+      "acceptance_criteria": [
+        "Criterion 1: Integrates with TASK-001 components cleanly"
+      ],
+      "verification_command": "pytest tests/test_feature_part2.py -v"
+    }
+  ]
+}
