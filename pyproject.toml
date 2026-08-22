@@ -105,3 +105,9 @@ exclude = [
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+
+[tool.agent-runner]
+tasks_file = ".github/task-runner/tasks.json"
+test_command = "uv run pytest"
+quality_check = "uv run ruff check src/ && uv run mypy src/"
+max_retries = 3
