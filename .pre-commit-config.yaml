@@ -7,13 +7,6 @@ default_stages: [pre-commit]
 # time the Python or CI toolchain changes materially.
 
 repos:
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.37.2
-    hooks:
-      - id: check-jsonschema
-        name: Validate Ruff post-edit hook config
-        args: [--schemafile, .github/hooks/ruff-post-edit.schema.json]
-        files: ^\.github/hooks/ruff-post-edit\.json$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.12
     hooks:

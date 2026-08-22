@@ -1,38 +1,19 @@
-# pyproject.toml
+# pyproject.toml — default template for Python projects
 [project]
-name = "novel-writer"
+name = "python-template"
 version = "0.1.0"
-description = "Local-first novel writing application with tree-based narrative editing and LLM-assisted generation."
+description = "Default template for Python projects."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    # Optional vector store backing hybrid story and codex retrieval.
-    "chromadb>=1.5.9",
-    # Pydantic EmailStr validation used by auth/user models.
-    "email-validator>=2.3.0",
-    # FastAPI user-management primitives used for auth/password helper integration.
-    "fastapi-users>=15.0.1",
-    # HTTP client for LLM metadata, tokenization, and streaming generation calls.
-    "httpx>=0.28.1",
-    # Signed token serializer used for auth session payloads.
-    "itsdangerous>=2.2.0",
-    # Structured application logging across backend and NiceGUI integrations.
-    "loguru>=0.7.3",
-    # Local-first web UI framework that powers the entire app shell.
-    "nicegui>=3.12.0",
-    # High-performance JSON serialization/deserialization across exports, auth tokens, and UI metadata.
-    "orjson>=3.11.8",
     # Domain and request/response validation models.
     "pydantic>=2.13.1",
-    # YAML persistence for settings presets and runtime configuration layers.
-    "ruamel.yaml>=0.19.1",
-    # NLP model runtime for codex matching and codex generation.
-    "spacy>=3.8.13",
-    # SQLite ORM/query layer for novel, codex, and user persistence.
-    "sqlmodel>=0.0.38",
-    # Unified resilience patterns used for retry handling around network-bound operations.
-    "pyresilience>=0.3.2",
-    "fastapi-mail>=1.6.4",
+    # Structured application logging across backend and UI integrations.
+    "loguru>=0.7.3",
+    # High-performance JSON serialization/deserialization.
+    "orjson>=3.11.8",
+    # HTTP client for outbound calls.
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
@@ -43,8 +24,6 @@ dev = [
     "complexipy>=4.2",
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.155.0",
-    # Load testing for HTTP-facing routes and interactive flows.
-    "locust>=2.44.0",
     # Pre-commit automation for local quality gates.
     "pre-commit>=4.0",
     # Low-overhead sampling profiler for live Python processes and spawned commands.
@@ -60,28 +39,18 @@ dev = [
 ]
 
 [tool.uv]
-package = false
+package = true
 default-groups = ["dev"]
 
 [tool.complexipy]
 paths = ["src", "tests"]
 max-complexity-allowed = 30
-snapshot-create = false
-snapshot-ignore = false
-quiet = false
-ignore-complexity = false
-failed = false
-color = "auto"
-sort = "asc"
-exclude = []
-output-csv = false
-output-json = false
 
 [tool.coverage.run]
 branch = true
 # Only include valid Python package names (no hyphens). Keep the canonical
 # package module name used by the project.
-source = ["novel_writer"]
+source = ["python_template"]
 
 [tool.mypy]
 python_version = "3.14"
@@ -130,29 +99,9 @@ ignore = [
     "PLC0415", # import outside top level
 ]
 exclude = [
-    "data/", "chroma/", "__pycache__", ".venv", "venv", "build", "dist",
+    "data/", "__pycache__", ".venv", "venv", "build", "dist",
 ]
 
-[tool.pylint]
-disable = [
-    "C0103", # Invalid name (e.g., variable/function/class naming conventions)
-    "C0114", # Missing module docstring
-    "C0115", # Missing class docstring
-    "C0301", # Line too long (exceeds character limit)
-    "C0302", # Too many lines in module
-    "R0801", # Similar lines in files
-    "R0901", # Too many ancestors
-    "R0902", # Too many instance attributes
-    "R0903", # Too few public methods
-    "R0904", # Too many public methods
-    "R0911", # Too many return statements
-    "R0912", # Too many branches
-    "R0913", # Too many arguments
-    "R0914", # Too many local variables
-    "R0915", # Too many statements
-    "R0917", # Too many positional arguments
-    "R1705", # Unnecessary "else" after "return"
-    "W0102", # Dangerous default value as argument
-    "W0718", # Catching too general exception
-    "W1203", # Use % formatting in logging functions
-]
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
