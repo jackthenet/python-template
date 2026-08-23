@@ -179,11 +179,32 @@ Especially strong for: cryptography, password hashing, authentication protocols,
 
 ---
 
+## Spec Amendment Workflow
+
+When an approved spec must change after implementation has started:
+
+1. **Open a new PR** for the spec change. Do not edit the spec file on `main` directly.
+2. **Version the spec file** by appending a changelog entry at the top of the spec:
+   ```
+   ## Changelog
+   - v2 (2026-08-16): REQ-003 amended — response now includes `request_id`.
+   ```
+3. **Identify affected tasks** — any task whose `requirements` or `acceptance_criteria` reference the changed IDs.
+4. **Re-run RED/GREEN** for affected tasks: re-derive tests from the amended spec, confirm RED, implement, confirm GREEN.
+5. **Update the traceability matrix** with the amended IDs and new test references.
+6. **Merge the spec PR** before resuming implementation on affected tasks.
+
+An agent MUST NOT modify an approved spec without going through this workflow. Direct edits to `docs/specs/` on `main` are rejected.
+
+---
+
 ## Emergency / Fast-Path Exception
 The spec-and-task workflow is bypassed **ONLY** for:
-- Minor typos, docstring fixes, or comment edits.
+- Changes that do not alter observable behavior and touch ≤ 2 lines (typos, docstring fixes, comment edits).
 - One-line bug fixes with an existing, failing test already in place.
 - Direct user commands explicitly containing the keyword `--skip-spec`.
+
+The boundary is concrete: if the change alters externally observable behavior, the full spec-and-task workflow applies regardless of how small the change appears.
 ## Spec Approval Gate (GitHub Review)
 A specification file `docs/specs/[feature-name].md` is considered **HUMAN APPROVED** if and only if it has been merged through the repository's configured GitHub review process.
 

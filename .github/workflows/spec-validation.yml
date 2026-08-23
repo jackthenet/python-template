@@ -37,6 +37,8 @@ jobs:
         run: uv sync --only-group dev
       - name: Run spec validation
         run: uv run python scripts/verify_spec.py docs/specs/template.md
+      - name: Validate task DAG
+        run: uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json || true
   tests:
     runs-on: ubuntu-latest
     steps:
