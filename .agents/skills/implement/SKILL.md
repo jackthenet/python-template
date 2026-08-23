@@ -11,6 +11,7 @@ Implement the minimum behavior required to turn RED into GREEN.
 - [ ] Acceptance tests have been executed.
 - [ ] RED has been confirmed.
 - [ ] RED evidence is recorded in `docs/verification/<feature>.md`.
+- [ ] Working tree is clean.
 
 ## Input
 
@@ -31,6 +32,7 @@ Implementation code in `src/` that makes the failing tests pass.
 - Run regression tests to confirm no other behavior broke.
 - Record GREEN evidence in `docs/verification/<feature>.md`.
 - Pass quality gates: lint, type checks, coverage threshold.
+- Commit the implementation: `feat(<feature>): implement <behavior>`.
 
 ## MUST-NOT
 
@@ -42,10 +44,25 @@ Implementation code in `src/` that makes the failing tests pass.
 - Skip GREEN confirmation.
 - Mark the task complete without evidence.
 
+## Git Responsibilities
+
+Before work:
+- Verify acceptance tests exist.
+- Verify RED has been demonstrated.
+- Verify the working tree is clean.
+
+After work:
+- Run GREEN verification.
+- Commit implementation.
+
+Commit:
+    feat(<feature>): implement <behavior>
+
 ## Verification
 
 - `green_command` passes 100%.
 - Regression suite passes.
 - Lint and type checks pass.
 - GREEN evidence recorded.
+- Implementation committed.
 - Task status updated to `VERIFIED`.

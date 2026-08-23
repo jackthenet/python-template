@@ -9,6 +9,7 @@ Produce evidence that the implementation satisfies the specification.
 - [ ] RED was previously confirmed.
 - [ ] GREEN has been achieved.
 - [ ] GREEN evidence is recorded in `docs/verification/<feature>.md`.
+- [ ] Working tree is clean.
 
 ## Input
 
@@ -32,6 +33,7 @@ Verification report at `docs/verification/<feature>.md`.
 - Run architecture rules (`uv run pytest tests/architecture/ -v`) and confirm they pass.
 - Run `uv run python scripts/verify_spec.py docs/specs/<feature>.md` and confirm it passes.
 - Produce a verification report with pass/fail status per check.
+- Commit verification artifacts: `docs(<feature>): add verification report`.
 
 ## MUST-NOT
 
@@ -40,9 +42,22 @@ Verification report at `docs/verification/<feature>.md`.
 - Weaken verification criteria to make them pass.
 - Treat "I think this is implemented" as evidence.
 
+## Git Responsibilities
+
+Before work:
+- Verify implementation is complete.
+- Verify GREEN has been achieved.
+- Verify the working tree is clean.
+
+After work:
+- Commit verification artifacts.
+
+Commit:
+    docs(<feature>): add verification report
+
 ## Verification
 
 - All checks pass.
-- Verification report produced.
+- Verification report produced and committed.
 - `verify_spec.py` exits 0.
 - Task status is `VERIFIED`.

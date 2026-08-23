@@ -44,6 +44,19 @@ Review findings ordered by severity.
 - Approve a change that violates feature boundaries.
 - Treat code style as more important than spec compliance.
 
+## Git Responsibilities
+
+This skill does not create commits. It reviews existing PRs/diffs.
+
+Before work:
+- Verify the PR/diff exists.
+- Verify the specification is approved.
+- Verify acceptance tests exist.
+
+After work:
+- Post review findings as PR comments.
+- Do NOT merge the PR (human governance).
+
 ## Verification
 
 - All review findings addressed or accepted.

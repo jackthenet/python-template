@@ -7,6 +7,7 @@ Convert an approved specification into executable acceptance tests.
 - [ ] An approved specification exists at `docs/specs/<feature>.md` (merged PR).
 - [ ] Acceptance criteria are identified in the spec.
 - [ ] No acceptance tests exist for this feature yet.
+- [ ] Working tree is clean.
 
 ## Input
 
@@ -27,6 +28,7 @@ Convert an approved specification into executable acceptance tests.
 - Write property tests for every `INV-XXX` using Hypothesis in `tests/property/<feature>/`.
 - Write unit tests for `EDGE-XXX` cases in `tests/unit/<feature>/`.
 - Write contract tests for `NFR-XXX` requirements in `tests/contract/<feature>/`.
+- Commit the tests: `test(<feature>): add acceptance tests`.
 
 ## MUST-NOT
 
@@ -36,6 +38,22 @@ Convert an approved specification into executable acceptance tests.
 - Test implementation details at the acceptance layer.
 - Modify the spec to fit the tests.
 - Skip RED confirmation.
+- Commit implementation code.
+
+## Git Responsibilities
+
+Before work:
+- Verify the current branch is the feature branch.
+- Verify the specification is approved (merged PR).
+- Verify the working tree is clean.
+
+After work:
+- Run the RED command.
+- Commit the acceptance tests.
+- Do not commit implementation code.
+
+Commit:
+    test(<feature>): add acceptance tests
 
 ## Verification
 
@@ -43,3 +61,4 @@ Convert an approved specification into executable acceptance tests.
 - Tests fail (RED confirmed) before implementation.
 - RED evidence recorded.
 - Traceability matrix updated.
+- Tests committed.
