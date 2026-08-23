@@ -23,7 +23,10 @@
         "tests/acceptance/test_feature.py::test_missing_customer_id"
       ],
       "red_command": "uv run pytest tests/acceptance/test_feature.py -v",
-      "implementation_command": "uv run pytest tests/acceptance/test_feature.py -v",
+      "implementation_steps": [
+        "Implement the minimum behavior required by AC-001 and AC-002.",
+        "Do not modify acceptance tests to make them pass."
+      ],
       "green_command": "uv run pytest tests/acceptance/test_feature.py -v",
       "inputs": [
         "docs/specs/feature-name.md"
@@ -66,7 +69,10 @@
         "tests/acceptance/test_feature.py::test_invalid_customer_id"
       ],
       "red_command": "uv run pytest tests/acceptance/test_feature.py::test_invalid_customer_id -v",
-      "implementation_command": "uv run pytest tests/acceptance/test_feature.py::test_invalid_customer_id -v",
+      "implementation_steps": [
+        "Implement error handling for invalid customer_id per AC-003.",
+        "Do not modify acceptance tests to make them pass."
+      ],
       "green_command": "uv run pytest tests/acceptance/test_feature.py::test_invalid_customer_id -v",
       "inputs": [
         "docs/specs/feature-name.md",

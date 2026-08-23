@@ -42,8 +42,8 @@ Once the specification file is merged into `main`:
 4. Write contract tests for NFR contract requirements.
 5. Write integration tests for multi-component interactions.
 6. **Run the test suite and confirm RED state** (tests must fail before implementation).
-7. Update the traceability matrix in `docs/verification/traceability.md` with test references.
-
+7. Record RED evidence in `docs/verification/[feature-name].md`.
+8. Update the traceability matrix in `docs/verification/traceability.md` with test references.
 ### Phase 3: DESIGN (`docs/decisions/`, `docs/tasks/`)
 After RED is confirmed:
 1. Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
@@ -53,22 +53,22 @@ After RED is confirmed:
    - `acceptance_criteria`: AC-XXX IDs covered by this task.
    - `tests_to_create`: Test functions to write (MUST come before implementation scope).
    - `red_command`: Command to confirm RED state.
+   - `implementation_steps`: Explicit steps for implementation.
    - `green_command`: Command to confirm GREEN state.
    - `design_constraints`: Constraints that must be respected.
-   - `implementation_scope`: What to implement.
    - `completion_gates`: Gates that must pass before the task is complete.
 4. Copy `docs/tasks/[feature-name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
-
 ### Phase 4: IMPLEMENT
 When instructed to execute tasks:
 1. Pick a ready task from the task DAG.
 2. **QA Agent (Red):** Write failing tests in `allowed_files.test_files`. Run `red_command`. Confirm tests FAIL.
-3. **Coder Agent (Green):** Implement logic in `allowed_files.source_files`. Run `green_command`. Confirm tests PASS 100%.
-4. **Refactor:** Improve code without changing observable behavior. Re-run `green_command`.
-5. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[feature-name].tasks.json`.
-
+3. **Record RED evidence** in `docs/verification/[feature-name].md`.
+4. **Coder Agent (Green):** Implement logic in `allowed_files.source_files` following `implementation_steps`. Run `green_command`. Confirm tests PASS 100%.
+5. **Record GREEN evidence** in `docs/verification/[feature-name].md`.
+6. **Refactor:** Improve code without changing observable behavior. Re-run `green_command`.
+7. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[feature-name].tasks.json`.
 ### Phase 5: VERIFY
-After all tasks are complete:
+After all tasks are complete:    
 1. Run the full test suite: `uv run pytest tests/ -v`.
 2. Run acceptance tests: `uv run pytest tests/acceptance/ -v`.
 3. Run property tests: `uv run pytest tests/property/ -v`.
@@ -157,20 +157,18 @@ The spec-and-task workflow is bypassed **ONLY** for:
 - Minor typos, docstring fixes, or comment edits.
 - One-line bug fixes with an existing, failing test already in place.
 - Direct user commands explicitly containing the keyword `--skip-spec`.
-
----
-
-## Spec Approval Gate (Git-Native)
-A specification file `docs/specs/[feature-name].md` is considered **HUMAN APPROVED** if and only if it exists on `main`.
+## Spec Approval Gate (GitHub Review)
+A specification file `docs/specs/[feature-name].md` is considered **HUMAN APPROVED** if and only if it has been merged through the repository's configured GitHub review process.
 
 Before starting Phase 2 or 3, verify approval via:
 `git log main -- docs/specs/[feature-name].md`
 
 - Output is empty: **STOP.** Prompt user to merge spec PR first.
-- Commit logs appear: **PROCEED** to Task Decomposition / Execution.
+- Commit logs appear: Verify the commit was introduced by a merged PR (not a direct push to `main`). **PROCEED** only if the spec was reviewed.
 
-## Project Structure and Feature Architecture
+**Direct commits to `main` do NOT constitute approval.** The spec must go through GitHub PR review to maintain the boundary: human controls WHAT, agent controls HOW.
 
+## Project Structure and Feature Architecture 
 The project is organized around **features**, with `frontend` and `backend` as the primary runtime boundaries.
 
 ```text

@@ -4,8 +4,9 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 
 ## Invariants
 
-- Every normative requirement MUST have at least one executable test.
+- Every normative requirement MUST have one or more executable tests.
 - Every acceptance test MUST trace back to a normative requirement.
+- Acceptance tests are the authoritative executable representation of externally observable behavior. Unit tests must not replace missing acceptance tests.
 - Status values: `PENDING`, `RED`, `GREEN`, `REFACTORED`, `VERIFIED`.
 
 ## Matrix
