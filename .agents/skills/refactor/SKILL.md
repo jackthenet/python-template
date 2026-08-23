@@ -1,4 +1,9 @@
-# Skill: refactor
+---
+name: refactor
+description: Improves code structure without changing specified behavior. Re-runs tests after every meaningful refactoring step to confirm GREEN is maintained. Use when implementation is GREEN and code structure needs improvement (duplication, complexity, naming, boundaries).
+---
+
+# Refactor
 
 Improve code structure without changing specified behavior.
 

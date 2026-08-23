@@ -1,4 +1,9 @@
-# Skill: specify
+---
+name: specify
+description: Turns a feature brief into an approved-quality specification with stable REQ, AC, INV, EDGE, and NFR IDs in Given/When/Then form. Commits the specification and opens a PR for human review. Use when a feature brief exists and a specification needs to be written before acceptance testing.
+---
+
+# Specify
 
 Turn a feature brief into an approved-quality specification.
 

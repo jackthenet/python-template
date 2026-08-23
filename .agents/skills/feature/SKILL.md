@@ -1,4 +1,9 @@
-# Skill: feature
+---
+name: feature
+description: Orchestrates the discovery side of a new feature: creates a feature branch, invokes grill to interrogate the idea, captures a feature brief, invokes specify to write the specification, and opens a PR for human review. Use when starting a new feature from a user request, GitHub issue, or problem description.
+---
+
+# Feature
 
 Discover, challenge, scope, and establish a new feature. This skill is the orchestrator of the discovery side.
 

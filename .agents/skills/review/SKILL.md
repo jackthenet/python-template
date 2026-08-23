@@ -1,4 +1,9 @@
-# Skill: review
+---
+name: review
+description: Reviews code changes against the specification before reviewing implementation style. Checks traceability, acceptance tests, feature boundaries, and architecture rules. Use when reviewing pull requests, diffs, or code changes that implement a specified feature.
+---
+
+# Review
 
 Spec-driven code review: review behavior against the specification before reviewing implementation style.
 

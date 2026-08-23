@@ -1,4 +1,9 @@
-# Skill: grill
+---
+name: grill
+description: Adversarially interrogates a feature idea to discover ambiguity, hidden requirements, edge cases, conflicting assumptions, and scope boundaries before specification. Use when starting a new feature, reviewing a feature brief, or challenging assumptions before writing a specification.
+---
+
+# Grill
 
 Adversarially interrogate a feature idea to discover ambiguity, hidden requirements, edge cases, conflicting assumptions, and scope boundaries before specification.
 
@@ -15,8 +20,6 @@ Feature idea / user request / GitHub issue.
 ## Output
 
 Feature brief: decisions, scope, actors, out-of-scope, open questions.
-
-## Purpose
 
 ## Build or Buy
 

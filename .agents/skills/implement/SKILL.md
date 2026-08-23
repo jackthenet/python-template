@@ -1,4 +1,9 @@
-# Skill: implement
+---
+name: implement
+description: Implements the minimum behavior required to turn failing acceptance tests (RED) into passing tests (GREEN). Follows feature boundaries, records evidence, and passes quality gates. Use when an approved specification and failing acceptance tests exist, and implementation is needed to achieve GREEN.
+---
+
+# Implement
 
 Implement the minimum behavior required to turn RED into GREEN.
 

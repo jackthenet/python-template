@@ -1,4 +1,9 @@
-# Skill: verify
+---
+name: verify
+description: Produces evidence that the implementation satisfies the specification by running acceptance tests, regression suites, lint, type checks, coverage, architecture rules, and spec validation. Use when implementation is complete and GREEN has been achieved, to confirm the feature is verified.
+---
+
+# Verify
 
 Produce evidence that the implementation satisfies the specification.
 
