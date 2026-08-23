@@ -152,6 +152,33 @@ An agent MUST:
 
 ---
 
+## Dependencies and Existing Packages
+
+Prefer established, well-maintained packages over custom implementations when a package materially solves the problem and fits the project's requirements, architecture, licensing, and operational constraints.
+
+Do not implement functionality from scratch when a suitable, established package already exists.
+
+When considering a dependency, evaluate:
+- Does it solve the actual problem?
+- Is it actively maintained?
+- Is its API and behavior appropriate for the specification?
+- Is the dependency reasonably lightweight?
+- Is its license compatible with the project?
+- Does it introduce undesirable security, operational, or architectural risk?
+- Is the dependency sufficiently mature for the required use case?
+
+Prefer an established package when it provides meaningful value over a custom implementation.
+
+Do not add dependencies merely for convenience when a small, clear implementation is more appropriate.
+
+Dependency decisions must be traceable to the feature or architectural decision that motivated them. Record the decision in an ADR.
+
+Especially strong for: cryptography, password hashing, authentication protocols, parsing complex formats, database drivers, HTTP clients, OAuth/OIDC, serialization formats, timezone handling, validation, cryptographic randomness.
+
+"Not invented here" is not a reason to reject a dependency. The question is whether the dependency is the better engineering choice.
+
+---
+
 ## Emergency / Fast-Path Exception
 The spec-and-task workflow is bypassed **ONLY** for:
 - Minor typos, docstring fixes, or comment edits.

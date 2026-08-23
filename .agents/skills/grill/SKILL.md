@@ -18,6 +18,34 @@ Feature brief: decisions, scope, actors, out-of-scope, open questions.
 
 ## Purpose
 
+## Build or Buy
+
+One of the grill's questions should effectively be: **Could an existing package solve this problem?**
+
+For a new feature, challenge the agent to investigate candidates and compare them against the requirements before designing a custom implementation.
+
+The result should be a decision:
+
+```
+Decision:
+Use package X for <problem>.
+
+Reasons:
+- established implementation
+- supports required behavior
+- maintained
+- integrates with existing framework
+- avoids reimplementing complex primitives ourselves
+
+Rejected:
+- package Y: insufficient maintenance activity
+- custom implementation: unnecessary risk
+```
+
+That decision belongs naturally in an ADR.
+
+## Purpose
+
 The purpose of the grill is to discover ambiguity, hidden requirements, edge cases, conflicting assumptions, and scope boundaries before specification. Not merely to ask questions — to challenge assumptions.
 
 ## Dimensions
