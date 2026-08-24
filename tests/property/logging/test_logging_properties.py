@@ -42,8 +42,9 @@ def test_inv_003_logged_preserves_exception_messages(msg: str) -> None:
     def fail(msg: str) -> None:
         raise ValueError(msg)
 
-    with pytest.raises(ValueError, match=msg if msg else "."):
+    with pytest.raises(ValueError) as exc_info:
         fail(msg)
+    assert str(exc_info.value) == msg
 
 
 @given(st.integers())
