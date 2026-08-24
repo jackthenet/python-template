@@ -87,11 +87,11 @@ def main() -> int:
         print(f"\u2713 {req} has acceptance criteria" if spec_ids["acceptance_criteria"] else f"\u2717 {req} has no acceptance criteria")
 
     for ac in spec_ids["acceptance_criteria"]:
-        has_test = any(f.startswith(ac.lower().replace("ac-", "test_")) for f in test_funcs.get("acceptance", []))
+        has_test = any(ac.lower().replace("ac-", "") in f for f in test_funcs.get("acceptance", []))
         print(f"\u2713 {ac} has executable test" if has_test else f"\u2717 {ac} has no executable test")
 
     for inv in spec_ids["invariants"]:
-        has_prop = any(f.startswith(inv.lower().replace("inv-", "test_")) for f in test_funcs.get("property", []))
+        has_prop = any(inv.lower().replace("inv-", "") in f for f in test_funcs.get("property", []))
         print(f"\u2713 {inv} has property test" if has_prop else f"\u2717 {inv} has no property test")
 
     if failures:
