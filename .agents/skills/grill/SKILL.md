@@ -1,11 +1,11 @@
 ---
-name: grill
-description: Adversarially interrogates a feature idea to discover ambiguity, hidden requirements, edge cases, conflicting assumptions, and scope boundaries before specification. Use when starting a new feature, reviewing a feature brief, or challenging assumptions before writing a specification.
+name: grill-me
+description: Adversarially interrogates a feature idea to discover ambiguity, hidden requirements, edge cases, conflicting assumptions, and scope boundaries before specification. Asks more questions than feels necessary. Use when starting a new feature, reviewing a feature brief, or challenging assumptions before writing a specification.
 ---
 
-# Grill
+# Grill Me
 
-Adversarially interrogate a feature idea to discover ambiguity, hidden requirements, edge cases, conflicting assumptions, and scope boundaries before specification.
+Adversarially interrogate a feature idea to discover ambiguity, hidden requirements, edge cases, conflicting assumptions, and scope boundaries before specification. Ask more questions than feels necessary.
 
 ## Entry Conditions
 
@@ -72,10 +72,13 @@ Adaptively probe based on the feature. Not all dimensions apply every time:
 - **OBSERVABILITY** — What should be logged/audited?
 - **MIGRATION** — Does existing data or behavior need consideration?
 - **SCOPE CONTROL** — What are we deliberately NOT building?
+- **FEATURE TYPE** — Is this a frontend, backend, or global feature? This determines the target component and test strategy.
 
 ## Stopping Condition
 
 Stop when the feature can be expressed as a bounded set of externally observable behaviors with no unresolved decisions that would materially affect architecture, acceptance criteria, or scope.
+
+Before stopping, ask the user: "Do you expect more questions, or are we done?" If the user expects more, continue probing.
 
 ## MUST
 
@@ -85,6 +88,8 @@ Stop when the feature can be expressed as a bounded set of externally observable
 - Identify what is explicitly out of scope.
 - Produce a feature brief with decisions, scope, actors, out-of-scope, open questions.
 - Stop when the stopping condition is met.
+- Ask the user if they expect more questions before finishing.
+- Ask whether the feature is frontend, backend, or global.
 
 ## MUST-NOT
 
@@ -93,6 +98,7 @@ Stop when the feature can be expressed as a bounded set of externally observable
 - Turn a half-baked idea into REQ-001 immediately.
 - Ask all dimensions every time (adaptively probe).
 - Be merely inquisitive — must be adversarial.
+- Stop without asking the user if they expect more questions.
 
 ## Verification
 
