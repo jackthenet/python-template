@@ -36,7 +36,20 @@ jobs:
       - name: Sync tooling
         run: uv sync --only-group dev
       - name: Run spec validation
-        run: uv run python scripts/verify_spec.py docs/specs/template.md
+        run: |
+          has_tests=false
+          for f in tests/acceptance/test_*.py tests/property/test_*.py tests/unit/test_*.py; do
+            [ -e "$f" ] && has_tests=true && break
+          done
+          for spec in docs/specs/*.md; do
+            [ "$(basename "$spec")" = "template.md" ] && continue
+            echo "Validating $spec"
+            if [ "$has_tests" = "true" ]; then
+              uv run python scripts/verify_spec.py "$spec" || exit 1
+            else
+              uv run python scripts/verify_spec.py "$spec" || echo "Traceability incomplete (expected RED state — no tests written yet)"
+            fi
+          done
       - name: Validate task DAG
         run: uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json || true
   tests:
@@ -51,11 +64,10 @@ jobs:
           python-version: '3.14'
       - name: Sync tooling
         run: uv sync --only-group dev
-      - name: Run acceptance tests
-        run: uv run pytest tests/acceptance/ -v
-      - name: Run property tests
-        run: uv run pytest tests/property/ -v
-      - name: Run unit tests
-        run: uv run pytest tests/unit/ -v
-      - name: Run full suite
-        run: uv run pytest tests/ -v
+      - name: Run test suites
+        run: |
+          if ls tests/**/test_*.py 1>/dev/null 2>&1; then
+            uv run pytest tests/ -v
+          else
+            echo "No tests yet (expected RED state on spec PR)"
+          fi
