@@ -10,7 +10,7 @@ class TestLoggedDecoratorEdgeCases:
 
     def test_edge_001_logged_with_no_arguments(self) -> None:
         """EDGE-001: @logged on a function with no arguments works."""
-        from features.logging import logged
+        from backend.logging import logged
 
         @logged
         def noop() -> None:
@@ -20,7 +20,7 @@ class TestLoggedDecoratorEdgeCases:
 
     def test_edge_002_logged_with_keyword_arguments(self) -> None:
         """EDGE-002: @logged on a function called with keyword arguments works."""
-        from features.logging import logged
+        from backend.logging import logged
 
         @logged
         def add(a: int, b: int) -> int:
@@ -34,7 +34,7 @@ class TestLoggedClassEdgeCases:
 
     def test_edge_003_logged_class_with_init(self) -> None:
         """EDGE-003: @logged_class on a class with __init__ works."""
-        from features.logging import logged_class
+        from backend.logging import logged_class
 
         @logged_class
         class Container:
@@ -52,13 +52,13 @@ class TestSetupLoggerEdgeCases:
 
     def test_edge_004_setup_logger_with_none_settings(self) -> None:
         """EDGE-004: setup_logger(None) uses default settings."""
-        from features.logging import setup_logger
+        from backend.logging import setup_logger
 
         setup_logger(None)
 
     def test_edge_005_setup_logger_with_custom_settings(self) -> None:
         """EDGE-005: setup_logger() with custom Settings configures sinks accordingly."""
-        from features.logging import setup_logger
+        from backend.logging import setup_logger
 
         class CustomSettings:
             log_level: str = "DEBUG"

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from features.logging import logged, logged_class, setup_logger
+from backend.logging import logged, logged_class, setup_logger
 
 
 def test_inv_001_setup_logger_idempotent() -> None:

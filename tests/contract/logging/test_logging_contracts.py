@@ -9,8 +9,8 @@ class TestPublicApiContract:
     """NFR-001: the public API surface is stable and importable."""
 
     def test_nfr_001_public_api_importable(self) -> None:
-        """NFR-001: from features.logging import setup_logger, logged, logged_class works."""
-        from features.logging import setup_logger, logged, logged_class
+        """NFR-001: from backend.logging import setup_logger, logged, logged_class works."""
+        from backend.logging import setup_logger, logged, logged_class
 
         assert callable(setup_logger)
         assert callable(logged)
@@ -22,7 +22,7 @@ class TestNoNewDependencies:
 
     def test_nfr_002_no_new_dependencies(self) -> None:
         """NFR-002: the logging feature depends only on loguru and the standard library."""
-        import features.logging as mod
+        import backend.logging as mod
 
         # Verify the module can be imported without additional third-party packages
         assert mod is not None
@@ -35,7 +35,7 @@ class TestTypeSafety:
         """NFR-003: setup_logger, logged, logged_class have return type annotations."""
         import inspect
 
-        from features.logging import setup_logger, logged, logged_class
+        from backend.logging import setup_logger, logged, logged_class
 
         for func in (setup_logger, logged, logged_class):
             sig = inspect.signature(func)
@@ -51,7 +51,7 @@ class TestThreadSafetyContract:
         """NFR-004: concurrent setup_logger() calls do not corrupt state."""
         import threading
 
-        from features.logging import setup_logger
+        from backend.logging import setup_logger
 
         errors: list[BaseException] = []
 

@@ -2,7 +2,7 @@
 
 import logging
 
-from features.logging import logged, setup_logger
+from backend.logging import logged, setup_logger
 
 
 def test_stdlib_logging_intercepted() -> None:

@@ -216,8 +216,8 @@ Before starting Phase 2 or 3, verify approval via:
 
 **Direct commits to `main` do NOT constitute approval.** The spec must go through GitHub PR review to maintain the boundary: human controls WHAT, agent controls HOW.
 
-## Project Structure and Feature Architecture 
-The project is organized around **features**, with `frontend` and `backend` as the primary runtime boundaries.
+## Project Structure
+The project is organized around a single `src/` package, with `frontend` and `backend` as the primary runtime boundaries inside it.
 
 ```text
 project/
@@ -225,23 +225,20 @@ project/
 │   ├── specs/
 │   └── decisions/
 │
-├── frontend/
-│   ├── features/
+├── src/
+│   ├── main.py
+│   ├── frontend/
 │   │   ├── <feature>/
 │   │   │   ├── model/
 │   │   │   ├── services/
 │   │   │   └── ...
-│   │   └── ...
-│   └── shared/
-│
-├── backend/
-│   ├── features/
-│   │   ├── <feature>/
-│   │   │   ├── model/
-│   │   │   ├── services/
-│   │   │   └── ...
-│   │   └── ...
-│   └── shared/
+│   │   └── shared/
+│   └── backend/
+│       ├── <feature>/
+│       │   ├── model/
+│       │   ├── services/
+│       │   └── ...
+│       └── shared/
 │
 └── tests/
     └── acceptance/
@@ -251,7 +248,7 @@ project/
 ### Principles
 
 * **Features are the primary architectural boundary.** Code belonging to a feature should live together rather than being split into global `models`, `services`, or `repositories` directories.
-* **Frontend and backend are separate runtime boundaries.** A feature may have both a frontend and backend implementation, but each side owns its respective concerns.
+* **Frontend and backend are separate runtime boundaries inside `src/`.** A feature may have both a frontend and backend implementation, but each side owns its respective concerns.
 * **`model` contains domain concepts and business rules.** It should not contain infrastructure concerns.
 * **`services` contains use cases and orchestration.** Services coordinate models and external dependencies to implement a specific behavior.
 * **Do not create layers or directories prematurely.** `model/` and `services/` are architectural roles, not mandatory folders. Small features may use simple modules and should be split only when complexity justifies it.

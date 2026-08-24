@@ -2,7 +2,7 @@
 
 import inspect
 
-from features.logging import logged, logged_class, setup_logger
+from backend.logging import logged, logged_class, setup_logger
 
 
 def test_setup_logger_signature() -> None:

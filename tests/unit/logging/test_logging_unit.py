@@ -1,6 +1,6 @@
 """Unit tests for the logging feature (docs/specs/logging.md)."""
 
-from features.logging import logged, logged_class, setup_logger
+from backend.logging import logged, logged_class, setup_logger
 
 
 def test_setup_logger_registers_sink() -> None:
