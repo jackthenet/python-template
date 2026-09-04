@@ -76,7 +76,7 @@ def test_nfr_002_decorator_overhead_budget() -> None:
         decorated = median_per_call(nfr_002_noop, 500)
         bare = median_per_call(bare_noop, 500)
     finally:
-        logger.enable()
+        logger.enable("DEBUG")
 
     overhead_ms = (decorated - bare) * 1000
     assert overhead_ms < 1

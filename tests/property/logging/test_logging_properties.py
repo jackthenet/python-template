@@ -64,7 +64,7 @@ print("HANDLERS", len(logger._core.handlers))
 def test_inv_002_elapsed_time_non_negative(log_records: list[Any]) -> None:
     """INV-002: for any sync or async @logged function, the reported elapsed time is non-negative."""
 
-    @given(st.booleans(), st.floats(min_value=0.0, max_value=0.05, allow_nan=False, allow_inf=False))
+    @given(st.booleans(), st.floats(min_value=0.0, max_value=0.05, allow_nan=False, allow_infinity=False))
     def inner(is_async: bool, sleep_s: float) -> None:
         log_records.clear()
 

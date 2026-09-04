@@ -40,13 +40,39 @@ def session_settings(_logging_session_setup: Any) -> Any:
     return _logging_session_setup
 
 
+class _Captured:
+    """A captured loguru record.
+
+    Exposes the message text via ``str(m)`` and the record fields via
+    ``m["level"]``/``m["function"]``/... plus ``m["record"]`` for the whole
+    record dict, matching the suite's assertions.
+    """
+
+    __slots__ = ("_record",)
+
+    def __init__(self, record: dict[str, Any]) -> None:
+        self._record = record
+
+    def __str__(self) -> str:
+        return str(self._record.get("message", ""))
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "record":
+            return self._record
+        return self._record[key]
+
+
 @pytest.fixture
 def log_records() -> Iterator[list[Any]]:
-    """Capture loguru messages as Message objects for the duration of a test."""
+    """Capture loguru records for the duration of a test.
+
+    Each record supports ``str(m)`` (the message text) and ``m["level"]`` /
+    ``m["record"]`` (record fields), matching the suite's assertions.
+    """
     records: list[Any] = []
 
     def _sink(message: Any) -> None:
-        records.append(message)
+        records.append(_Captured(message.record))
 
     handler_id = logger.add(_sink, level="DEBUG", catch=False)
     try:
