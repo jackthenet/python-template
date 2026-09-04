@@ -13,10 +13,34 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
-| REQ-001 | AC-001 | `test_valid_request` | PENDING |
-| REQ-001 | AC-002 | `test_missing_customer_id` | PENDING |
-| REQ-002 | AC-003 | `test_invalid_customer_id` | PENDING |
-| INV-001 | — | `test_normalize_idempotent` | PENDING |
+| REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks` | RED |
+| REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | RED |
+| REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` | RED |
+| REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records` | RED |
+| REQ-003 | AC-005 | `test_ac_005_intercept_handler_skips_bootstrap` | RED |
+| REQ-004 | AC-006 | `test_ac_006_logged_sync_entry_exit` | RED |
+| REQ-004 | AC-007 | `test_ac_007_logged_async_entry_exit` | RED |
+| REQ-004 | AC-008 | `test_ac_008_logged_exception_propagates` | RED |
+| REQ-005 | AC-009 | `test_ac_009_logged_level_param` | RED |
+| REQ-005 | AC-010 | `test_ac_010_logged_include_args` | RED |
+| REQ-006 | AC-011 | `test_ac_011_logged_slow_threshold` | RED |
+| REQ-007 | AC-012 | `test_ac_012_logged_class_public_method` | RED |
+| REQ-007 | AC-013 | `test_ac_013_logged_class_private_method` | RED |
+| REQ-008 | AC-014 | `test_ac_014_get_settings_defaults` | RED |
+| REQ-009 | AC-015 | `test_ac_015_obsolete_module_deleted` | RED |
+| INV-001 | — | `test_inv_001_concurrent_setup_logger_sinks` | RED |
+| INV-002 | — | `test_inv_002_elapsed_time_non_negative` | RED |
+| INV-003 | — | `test_inv_003_exception_propagates_unchanged` | RED |
+| EDGE-001 | — | `test_edge_001_log_file_parent_created` | RED |
+| EDGE-002 | — | `test_edge_002_logged_no_args` | RED |
+| EDGE-003 | — | `test_edge_003_logged_nonexistent_setting` | RED |
+| EDGE-004 | — | `test_edge_004_logged_class_no_public_methods` | RED |
+| EDGE-005 | — | `test_edge_005_intercept_unknown_level` | RED |
+| NFR-001 | — | `test_nfr_001_setup_time_budget` | RED |
+| NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | RED |
+| NFR-003 | — | `test_nfr_003_diagnose_false` | RED |
+| NFR-004 | — | `test_nfr_004_backward_compatible_api` | RED |
+| — | — | `test_stdlib_loguru_decorator_pipeline` (integration) | RED |
 
 ## Drift Checks
 

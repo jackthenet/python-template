@@ -1,9 +1,9 @@
 ---
-name: acceptance-test
+name: test
 description: Converts an approved specification into executable acceptance tests, property tests, unit tests, and contract tests. Derives tests from acceptance criteria, confirms RED state, and records evidence. Use when an approved specification exists and acceptance tests need to be created before implementation.
 ---
 
-# Acceptance Test
+# Test
 
 Convert an approved specification into executable acceptance tests.
 

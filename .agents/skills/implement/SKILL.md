@@ -1,73 +1,75 @@
 ---
 name: implement
-description: Implements the minimum behavior required to turn failing acceptance tests (RED) into passing tests (GREEN). Follows feature boundaries, records evidence, and passes quality gates. Use when an approved specification and failing acceptance tests exist, and implementation is needed to achieve GREEN.
+description: Implements the minimum behavior required to turn failing acceptance tests (RED) into passing tests (GREEN), then refactors to improve code structure without changing specified behavior. Follows feature boundaries, records evidence, re-runs tests after every meaningful refactoring step, and passes quality gates. Use when an approved specification and failing acceptance tests exist, and implementation is needed to achieve GREEN.
 ---
 
 # Implement
 
-Implement the minimum behavior required to turn RED into GREEN.
+## Purpose
 
-## Entry Conditions
+Implement the minimum behavior required to turn failing acceptance tests (RED) into passing tests (GREEN), then refactor to improve code structure without changing specified behavior. Follow feature boundaries, record evidence, re-run tests after every meaningful refactoring step, and pass quality gates.
 
-- [ ] An approved specification exists at `docs/specs/<feature>.md` (merged PR).
-- [ ] The task references the specification.
-- [ ] Acceptance criteria are identified in the spec.
-- [ ] Acceptance tests exist.
-- [ ] Acceptance tests have been executed.
-- [ ] RED has been confirmed.
-- [ ] RED evidence is recorded in `docs/verification/<feature>.md`.
-- [ ] Working tree is clean.
+## When to Use
 
-## Input
+- An approved specification and failing acceptance tests (RED) exist.
+- Implementation is needed to achieve GREEN.
+- A ready task from the task DAG is available to execute.
+- Implementation is GREEN and code structure needs improvement (duplication, complexity, naming, boundaries).
 
-Approved spec + approved task + failing acceptance tests.
+## Inputs
 
-## Output
+- An approved specification at `docs/specs/[feature-name].md`.
+- Failing acceptance tests (RED) in `tests/`.
+- A ready task from the task DAG at `docs/tasks/[feature-name].tasks.json`.
 
-Implementation code in `src/` that makes the failing tests pass.
+## Process
 
-## MUST
+### 1. Red (failing tests)
 
-- Implement the minimum behavior required by the acceptance criteria.
-- Follow feature boundaries: code lives in `frontend/features/<feature>/` or `backend/features/<feature>/`.
-- Do not modify acceptance criteria or tests.
-- Do not weaken tests.
-- Do not introduce unspecified behavior.
-- Run `green_command` and confirm tests PASS 100%.
-- Run regression tests to confirm no other behavior broke.
-- Record GREEN evidence in `docs/verification/<feature>.md`.
-- Pass quality gates: lint, type checks, coverage threshold.
-- Commit the implementation: `feat(<feature>): implement <behavior>`.
+1. Pick a ready task from the task DAG.
+2. **QA Agent (Red):** Write failing tests in `allowed_files.test_files`. Run `red_command`. Confirm tests FAIL.
+3. **Record RED evidence** in `docs/verification/[feature-name].md`.
 
-## MUST-NOT
+### 2. Green (minimum implementation)
 
-- Modify acceptance tests to make them pass.
-- Delete or weaken tests.
-- Convert a failing test into a weaker passing test.
-- Introduce behavior not in the spec.
-- Add functionality beyond what the acceptance criteria require.
-- Skip GREEN confirmation.
-- Mark the task complete without evidence.
+4. **Coder Agent (Green):** Implement logic in `allowed_files.source_files` following `implementation_steps`. Run `green_command`. Confirm tests PASS 100%.
+5. **Record GREEN evidence** in `docs/verification/[feature-name].md`.
 
-## Git Responsibilities
+### 3. Refactor (improve structure, keep GREEN)
 
-Before work:
-- Verify acceptance tests exist.
-- Verify RED has been demonstrated.
-- Verify the working tree is clean.
+6. **Refactor:** Identify code structure issues (duplication, complexity, naming, boundaries). Make small, focused refactoring changes without changing observable behavior. Re-run `green_command` after every meaningful refactoring step. Confirm GREEN is maintained.
 
-After work:
-- Run GREEN verification.
-- Commit implementation.
+### 4. Commit & update status
 
-Commit:
-    feat(<feature>): implement <behavior>
+7. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[feature-name].tasks.json`.
 
-## Verification
+## Rules
 
-- `green_command` passes 100%.
-- Regression suite passes.
-- Lint and type checks pass.
-- GREEN evidence recorded.
-- Implementation committed.
-- Task status updated to `VERIFIED`.
+- Implementation MUST follow the `implementation_steps` in the task DAG.
+- Implementation MUST only touch `allowed_files.source_files`.
+- Tests MUST only be touched in `allowed_files.test_files`.
+- RED evidence MUST be recorded before implementation.
+- GREEN evidence MUST be recorded after implementation.
+- Refactoring MUST NOT change observable behavior.
+- Tests MUST be re-run after every meaningful refactoring step.
+- GREEN MUST be maintained throughout refactoring.
+- The task status MUST be set to `VERIFIED` when complete.
+- Do NOT modify the specification in this phase.
+- Do NOT weaken or delete acceptance tests.
+- Do NOT add new behavior during refactoring.
+
+## Outputs
+
+- Implemented logic in `allowed_files.source_files`.
+- Improved code structure (refactored, GREEN maintained).
+- RED and GREEN evidence in `docs/verification/[feature-name].md`.
+- Updated task status in `.github/task-runner/tasks.json` and `docs/tasks/[feature-name].tasks.json`.
+
+## Definition of Done
+
+- The task's acceptance tests pass (GREEN).
+- RED and GREEN evidence are recorded.
+- The code structure is improved with observable behavior unchanged.
+- The test suite is GREEN after refactoring.
+- The task status is set to `VERIFIED`.
+- The specification was not modified.

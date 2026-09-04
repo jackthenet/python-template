@@ -2,7 +2,7 @@
 
 ## 1. Overview & Objectives
 - **Feature Name:** Logging
-- **Target Component:** `src/features/logging/`
+- **Target Component:** `src/backend/logging/`
 - **Goal:** Replace the obsolete `src/core/logging/` module with a fresh, self-contained logging feature that provides loguru sink setup (console + rotating file), stdlib logging interception, and `@logged` / `@logged_class` decorators for function entry/exit/elapsed-time tracing.
 
 ## 2. Architecture & Design Decisions
@@ -10,9 +10,9 @@
 - **Dependencies:** `loguru >= 0.7.3` (already a template dependency). No new dependencies required.
 - **Constraints:** Must be importable without application wiring. Must be safe to call multiple times (idempotent). Must not leak local variable values (`diagnose=False`).
 - **Design Decisions:**
-  - The obsolete `src/core/logging/` module is deleted and replaced at `src/features/logging/`.
-  - A stub `Settings` module is created at `src/features/logging/settings.py` providing the fields the logging feature needs. A dedicated `settings` feature will follow later.
-  - The core structure (`src/core/`) is no longer supported per `AGENTS.md`; features live under `src/features/`.
+  - The obsolete `src/core/logging/` module is deleted and replaced at `src/backend/logging/`.
+  - A stub `Settings` module is created at `src/backend/logging/settings.py` providing the fields the logging feature needs. A dedicated `settings` feature will follow later.
+  - The core structure (`src/core/`) is no longer supported per `AGENTS.md`; backend features live under `src/backend/`.
 
 ## 3. Data Structures & API Schemas
 ```python
@@ -35,7 +35,7 @@ def get_settings() -> Settings:
 
 ```python
 # Public API of the logging feature.
-from features.logging import setup_logger, logged, logged_class
+from backend.logging import setup_logger, logged, logged_class
 
 # Consumer usage:
 from loguru import logger

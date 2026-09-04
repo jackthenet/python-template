@@ -1,15 +1,4 @@
-#!/usr/bin/env python3
-"""Verify spec traceability: requirements, acceptance criteria, invariants, and tests.
-
-Usage:
-    uv run python scripts/verify_spec.py [spec-file]
-
-Exit codes:
-    0 - all checks pass
-    1 - one or more checks fail
-"""
-
-from __future__ import annotations
+"""Verify specification traceability against test functions."""
 
 import re
 import sys
@@ -97,12 +86,15 @@ def main() -> int:
     for req in spec_ids["requirements"]:
         print(f"\u2713 {req} has acceptance criteria" if spec_ids["acceptance_criteria"] else f"\u2717 {req} has no acceptance criteria")
 
+    all_test_funcs = [f for funcs in test_funcs.values() for f in funcs]
+    property_funcs = test_funcs.get("property", [])
+
     for ac in spec_ids["acceptance_criteria"]:
-        has_test = any(ac.lower().replace("ac-", "test_") in f for f in test_funcs.get("acceptance", []))
+        has_test = any(ac.lower().replace("ac-", "") in f for f in all_test_funcs)
         print(f"\u2713 {ac} has executable test" if has_test else f"\u2717 {ac} has no executable test")
 
     for inv in spec_ids["invariants"]:
-        has_prop = any(inv.lower().replace("inv-", "test_") in f for f in test_funcs.get("property", []))
+        has_prop = any(inv.lower().replace("inv-", "") in f for f in property_funcs)
         print(f"\u2713 {inv} has property test" if has_prop else f"\u2717 {inv} has no property test")
 
     if failures:

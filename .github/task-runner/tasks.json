@@ -1,0 +1,113 @@
+{
+  "feature": "logging",
+  "spec": "docs/specs/logging.md",
+  "branch": "feature/logging",
+  "tasks": [
+    {
+      "task_id": "T-001",
+      "title": "Implement setup_logger with loguru sinks and stdlib interception",
+      "requirements": ["REQ-001", "REQ-002", "REQ-003"],
+      "acceptance_criteria": ["AC-001", "AC-002", "AC-003", "AC-004", "AC-005"],
+      "tests_to_create": [
+        "test_ac_001_setup_logger_adds_sinks",
+        "test_ac_002_setup_logger_idempotent",
+        "test_ac_003_setup_logger_thread_safe",
+        "test_ac_004_intercept_handler_routes_records",
+        "test_ac_005_intercept_handler_skips_bootstrap"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging/ tests/property/logging/ tests/unit/logging/ -v",
+      "implementation_steps": [
+        "Create src/backend/logging/__init__.py exporting setup_logger, logged, logged_class",
+        "Implement _setup.py with setup_logger() configuring console sink (stderr, colorize, backtrace) and rotating file sink (UTF-8, enqueue, backtrace, diagnose=False)",
+        "Implement idempotency guard using threading.Lock and a threading.Event",
+        "Implement _InterceptHandler subclassing logging.Handler to route stdlib records to loguru, skipping frozen importlib bootstrap frames",
+        "Install intercept handler on root stdlib logger exactly once",
+        "Create the log-file parent directory if it does not exist (EDGE-001)"
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging/ tests/property/logging/ tests/unit/logging/ -v",
+      "design_constraints": [
+        "Must be importable without application wiring",
+        "Must be safe to call multiple times (idempotent)",
+        "Must not leak local variable values (diagnose=False)",
+        "Thread-safe via threading.Lock + threading.Event"
+      ],
+      "completion_gates": [
+        "All acceptance tests for AC-001 through AC-005 pass",
+        "Property tests for INV-001 and INV-002 pass",
+        "No new third-party dependencies beyond loguru"
+      ],
+      "dependencies": ["T-003"],
+      "status": "RED_CONFIRMED"
+    },
+    {
+      "task_id": "T-002",
+      "title": "Implement @logged and @logged_class decorators",
+      "requirements": ["REQ-004", "REQ-005", "REQ-006", "REQ-007"],
+      "acceptance_criteria": ["AC-006", "AC-007", "AC-008", "AC-009", "AC-010", "AC-011", "AC-012", "AC-013"],
+      "tests_to_create": [
+        "test_ac_006_logged_sync_entry_exit",
+        "test_ac_007_logged_async_entry_exit",
+        "test_ac_008_logged_exception_propagates",
+        "test_ac_009_logged_level_param",
+        "test_ac_010_logged_include_args",
+        "test_ac_011_logged_slow_threshold",
+        "test_ac_012_logged_class_public_method",
+        "test_ac_013_logged_class_private_method"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging/ tests/property/logging/ tests/unit/logging/ -v",
+      "implementation_steps": [
+        "Implement _decorator.py with logged() decorator factory supporting level, slow_threshold_ms, slow_threshold_setting, include_args, context_getter, depth",
+        "Implement entry log line with function qualname and (optional) argument representation",
+        "Implement exit log line with elapsed time in milliseconds (sync and async)",
+        "Implement exception log line with exception type and message, propagating the exception unchanged",
+        "Implement slow-threshold escalation to a configurable slow_level (default WARNING)",
+        "Implement logged_class() decorator that applies logged() to all public (non-underscore) methods",
+        "Support both @logged and @logged(level=...) usage patterns"
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging/ tests/property/logging/ tests/unit/logging/ -v",
+      "design_constraints": [
+        "Must preserve function return values and exception propagation",
+        "Must use functools.wraps to preserve function metadata",
+        "Must skip private methods (prefixed with _) in logged_class",
+        "Must support both @logged and @logged(level=...) usage patterns"
+      ],
+      "completion_gates": [
+        "All acceptance tests for AC-006 through AC-013 pass",
+        "Property tests for INV-003 pass",
+        "Edge case tests for EDGE-002 and EDGE-003 pass"
+      ],
+      "dependencies": ["T-003"],
+      "status": "RED_CONFIRMED"
+    },
+    {
+      "task_id": "T-003",
+      "title": "Implement stub Settings module and public API exports",
+      "requirements": ["REQ-008", "REQ-009"],
+      "acceptance_criteria": ["AC-014", "AC-015"],
+      "tests_to_create": [
+        "test_ac_014_get_settings_defaults",
+        "test_ac_015_obsolete_module_deleted"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging/ tests/contract/logging/ -v",
+      "implementation_steps": [
+        "Create src/backend/logging/settings.py with Settings class providing log_level, log_file, log_max_bytes, log_backup_count, profiling_include_arguments fields",
+        "Implement get_settings() returning a Settings instance with default values",
+        "Verify src/core/logging/ does not exist in the repository",
+        "Ensure public API exports setup_logger, logged, logged_class from __init__.py"
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging/ tests/contract/logging/ -v",
+      "design_constraints": [
+        "Settings stub must be self-contained without external dependencies",
+        "Obsolete module deletion must be verified by filesystem inspection",
+        "Public API must be importable as from backend.logging import setup_logger, logged, logged_class"
+      ],
+      "completion_gates": [
+        "All acceptance tests for AC-014 and AC-015 pass",
+        "Contract tests for NFR-001 through NFR-004 pass",
+        "Type annotations present on all public functions (NFR-003)"
+      ],
+      "dependencies": [],
+      "status": "RED_CONFIRMED"
+    }
+  ]
+}
