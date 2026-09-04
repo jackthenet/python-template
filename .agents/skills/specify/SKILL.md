@@ -1,6 +1,6 @@
 ---
 name: specify
-description: Orchestrates discovery and specification of a new feature: creates a feature branch, adversarially interrogates the feature idea into a feature brief, and turns the brief into an approved-quality specification with stable REQ, AC, INV, EDGE, and NFR IDs in Given/When/Then form. Commits the specification and opens a PR for human review. Use when starting a new feature from a user request, GitHub issue, or problem description.
+description: "Orchestrates discovery and specification of a new feature: creates a feature branch, adversarially interrogates the feature idea into a feature brief, and turns the brief into an approved-quality specification with stable REQ, AC, INV, EDGE, and NFR IDs in Given/When/Then form. Commits the specification and opens a PR for human review. Use when starting a new feature from a user request, GitHub issue, or problem description."
 ---
 
 # Specify
