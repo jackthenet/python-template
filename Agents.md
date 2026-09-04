@@ -178,6 +178,7 @@ An agent MUST:
 - Every acceptance test MUST trace back to a normative requirement.
 - The traceability matrix in `docs/verification/traceability.md` MUST be maintained.
 - CI MUST detect: missing tests, orphaned tests, missing evidence, and changed behavior without spec updates.
+- **Tests are the contract.** Once acceptance tests are re-derived from an approved spec, the executable tests are the authoritative contract. If a spec *wording* or an implementation detail conflicts with a re-derived test, the test wins. The conflict MUST be flagged as a finding and resolved via the Spec Amendment Workflow — never by weakening, removing, or "fixing" the test to match the implementation.
 
 ---
 

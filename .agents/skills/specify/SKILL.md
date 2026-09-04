@@ -49,11 +49,27 @@ Discover and specify a new feature end to end: create a feature branch, adversar
 15. Define the test strategy: map each AC/INV/EDGE to a test category (acceptance, integration, contract, property, unit) and a test function name.
 16. Write the complete specification to `docs/specs/[feature-name].md`.
 
-### 4. Present for approval
+### 4. Verify self-consistency
 
-17. Commit the specification file.
-18. Open a PR for human review.
-19. STOP and present the specification for human approval.
+17. Run the self-consistency checklist (below) against the written specification. Fix every inconsistency in the spec itself — do NOT defer to implementation or review.
+
+### 5. Present for approval
+
+18. Commit the specification file.
+19. Open a PR for human review.
+20. STOP and present the specification for human approval.
+
+## Self-Consistency Checklist
+
+Run this against the written specification before presenting it for approval. Fix every failure in the spec itself (never defer to implementation or review).
+
+- **Configurability**: every "configurable X" / "X can be set" claim names a real parameter in the API/signature, and that parameter has a stated default or a matching AC. No aspirational parameters that don't exist.
+- **Parameter coverage**: every parameter in the API/signature is either configurable-by-spec or has a stated default. No orphan parameters.
+- **REQ↔AC wording**: every AC's Given/When/Then is consistent with the REQ it satisfies — same terms, no contradictory or stricter/looser wording.
+- **Terminology drift**: every defined term (e.g., "private method", "public method") is used consistently in every definition, example, and AC. The definition and every example must agree (if "private" means "underscore-prefixed", no example uses a non-underscore name).
+- **Test strategy coverage**: every normative ID (REQ/AC/INV/EDGE/NFR) appears in the test strategy with a test category and test function.
+- **ID references**: every cross-reference (e.g., "see REQ-005", "per AC-011") points to an ID that exists.
+- **Scope consistency**: every in-scope item has at least one REQ; every out-of-scope item is not accidentally covered by a REQ/AC.
 
 ## Rules
 
@@ -66,6 +82,7 @@ Discover and specify a new feature end to end: create a feature branch, adversar
 - Every edge case MUST have an `EDGE-XXX` ID.
 - Every non-functional requirement MUST have an `NFR-XXX` ID.
 - The specification MUST be committed to `docs/specs/`.
+- The specification MUST pass the self-consistency checklist before it is presented for approval.
 - The specification MUST be presented to a human for approval before implementation.
 - Do NOT write implementation code in this phase.
 - Do NOT derive acceptance tests in this phase.
@@ -83,6 +100,7 @@ Discover and specify a new feature end to end: create a feature branch, adversar
 - The feature branch exists.
 - The feature brief captures goals, constraints, out-of-scope items, and edge cases.
 - The specification has stable IDs for every requirement, acceptance criterion, invariant, edge case, and non-functional requirement.
+- The specification passes the self-consistency checklist (no internal inconsistencies).
 - The specification is committed to `docs/specs/`.
 - A PR is open for human review.
 - The specification has NOT been approved yet (approval is a human action).
