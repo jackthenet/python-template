@@ -1,37 +1,71 @@
-# RED Evidence — Logging Feature
+# Verification — Logging Feature
 
 **Spec:** `docs/specs/logging.md`
 **Branch:** `feature/logging`
-**Date:** 2026-08-24
 
-## RED Command
+---
 
-```bash
-uv run pytest tests/acceptance/logging/ tests/property/logging/ tests/unit/logging/ tests/contract/logging/ -v
-```
+## Phase 3 — RED Evidence
 
-## Result
+**Date:** 2026-09-04
+**Command:** `uv run pytest tests/ -q`
 
-**28 failed, 0 passed** — all tests fail with `ModuleNotFoundError: No module named 'features'`.
+**Result: 28 errors, 0 passed** — the suite fails before implementation.
 
-This is the expected RED state: the `features.logging` module does not exist yet.
+All 28 tests error in the session setup fixture with
+`ModuleNotFoundError: No module named 'backend.logging.settings'`.
+The settings module (REQ-008 / AC-014) is the foundational missing piece:
+the approved spec's `backend/logging/settings.py` does not exist, and the
+in-process session setup (which configures the real sinks for the suite)
+cannot run without it.
 
-## Failure Summary
+### Test Inventory (28 tests, spec-derived)
 
-| Category | Tests | Status |
+| Category | File | Tests |
 |---|---|---|
-| Acceptance | 15 (AC-001..AC-015) | FAILED |
-| Property | 4 (INV-001..INV-003) | FAILED |
-| Unit | 5 (EDGE-001..EDGE-005) | FAILED |
-| Contract | 4 (NFR-001..NFR-004) | FAILED |
+| Acceptance | `tests/acceptance/logging/test_logging.py` | AC-001, AC-002, AC-015 |
+| Unit | `tests/unit/logging/test_logging.py` | AC-003 … AC-014 |
+| Unit (edge) | `tests/unit/logging/test_logging_edges.py` | EDGE-001 … EDGE-005 |
+| Property | `tests/property/logging/test_logging_properties.py` | INV-001 … INV-003 |
+| Contract | `tests/contract/logging/test_logging_contracts.py` | NFR-001 … NFR-004 |
+| Integration | `tests/integration/logging/test_logging_integration.py` | stdlib + loguru + @logged pipeline |
 
-## Falsifying Examples (Hypothesis)
+Every test function name encodes its spec ID
+(`test_<id>_<spec suffix>`), matching the spec's test strategy.
 
-- `test_inv_001_setup_logger_idempotent(n=1)` — `ModuleNotFoundError`
-- `test_inv_002_setup_logger_thread_safe(n_threads=2)` — `ModuleNotFoundError`
-- `test_inv_003_logged_preserves_return_value(a=0, b=0)` — `ModuleNotFoundError`
-- `test_inv_003_logged_preserves_exceptions(msg='')` — `ModuleNotFoundError`
+### Known gaps the tests will exercise once setup runs
 
-## Next Step
+Derived from the spec-vs-implementation analysis (the current
+`backend/logging/` implementation predates the approved spec):
 
-Phase 3 (DESIGN): create ADRs and task DAG, then Phase 4 (IMPLEMENT) to achieve GREEN.
+| Spec item | Expected failure mode |
+|---|---|
+| AC-001 / AC-002 | No real console/file sinks (no-op lambda sink; no `logger.remove()`) |
+| AC-005 | No bootstrap-frame skipping in `_InterceptHandler` (wrong caller attribution) |
+| AC-007 | No async support in `@logged` (elapsed time excludes execution) |
+| AC-010 | No `include_args` parameter |
+| AC-011 | No `slow_threshold_ms` parameter / no WARNING escalation |
+| AC-014 | `backend/logging/settings.py` missing |
+| EDGE-001 | No log-file parent directory creation |
+| EDGE-003 | No `slow_threshold_setting` parameter |
+| INV-001 | Handler count 1 (no-op sink), not exactly one console + one file |
+| NFR-003 | No file sink (nothing to write) |
+| NFR-004 | `logged` missing `slow_threshold_ms`, `slow_threshold_setting`, `include_args`, `context_getter`, `depth` |
+
+---
+
+## Phase 4 — GREEN Evidence
+
+*(pending — implementation in progress)*
+
+---
+
+## Phase 5 — Verification Report
+
+*(pending)*
+
+---
+
+## Phase 6 — Review Report
+
+*(pending)*

@@ -1,67 +1,100 @@
-"""Unit tests for the logging feature edge cases (docs/specs/logging.md)."""
+"""Edge case tests for the logging feature (docs/specs/logging.md).
+
+Covers the spec's edge cases: log file parent directory creation, @logged
+with no arguments, slow_threshold_setting referencing a non-existent field,
+@logged_class with no public methods, and stdlib records with unknown levels.
+"""
 
 from __future__ import annotations
 
-import pytest
+import time
+from pathlib import Path
+from typing import Any
+
+from logging_test_helpers import run_python
+
+from backend.logging import logged, logged_class, setup_logger
 
 
-class TestLoggedDecoratorEdgeCases:
-    """EDGE-001, EDGE-002 — @logged decorator edge cases."""
+def test_edge_001_log_file_parent_created(tmp_path: Path) -> None:
+    """EDGE-001: a log_file path whose parent directory does not exist is created automatically.
 
-    def test_edge_001_logged_with_no_arguments(self) -> None:
-        """EDGE-001: @logged on a function with no arguments works."""
-        from backend.logging import logged
+    Runs in a subprocess because setup_logger() is idempotent per process and
+    the in-process session setup already chose its log file.
+    """
+    nested = tmp_path / "a" / "b" / "c" / "app.log"
+    code = f"""
+from backend.logging import setup_logger
+from backend.logging.settings import Settings
 
-        @logged
-        def noop() -> None:
-            pass
-
-        noop()
-
-    def test_edge_002_logged_with_keyword_arguments(self) -> None:
-        """EDGE-002: @logged on a function called with keyword arguments works."""
-        from backend.logging import logged
-
-        @logged
-        def add(a: int, b: int) -> int:
-            return a + b
-
-        assert add(a=1, b=2) == 3
+setup_logger(Settings(log_file={str(nested)!r}, log_level="INFO"))
+"""
+    result = run_python(code)
+    assert result.returncode == 0, result.stderr
+    assert nested.parent.exists()
+    assert nested.exists()
 
 
-class TestLoggedClassEdgeCases:
-    """EDGE-003 — @logged_class edge cases."""
+def test_edge_002_logged_no_args(log_records: list[Any]) -> None:
+    """EDGE-002: @logged on a no-argument function emits an entry line without argument repr."""
 
-    def test_edge_003_logged_class_with_init(self) -> None:
-        """EDGE-003: @logged_class on a class with __init__ works."""
-        from backend.logging import logged_class
+    @logged
+    def edge_002_fn() -> str:
+        return "ok"
 
-        @logged_class
-        class Container:
-            def __init__(self, value: int) -> None:
-                self.value = value
+    assert edge_002_fn() == "ok"
 
-            def get(self) -> int:
-                return self.value
-
-        assert Container(42).get() == 42
+    entries = [m for m in log_records if ">>" in str(m) and "edge_002_fn" in str(m)]
+    assert entries
 
 
-class TestSetupLoggerEdgeCases:
-    """EDGE-004, EDGE-005 — setup_logger() edge cases."""
+def test_edge_003_logged_nonexistent_setting(log_records: list[Any]) -> None:
+    """EDGE-003: slow_threshold_setting referencing a non-existent field means no escalation."""
 
-    def test_edge_004_setup_logger_with_none_settings(self) -> None:
-        """EDGE-004: setup_logger(None) uses default settings."""
-        from backend.logging import setup_logger
+    @logged(slow_threshold_setting="does_not_exist")
+    def edge_003_fn() -> None:
+        time.sleep(0.05)
 
-        setup_logger(None)
+    edge_003_fn()
 
-    def test_edge_005_setup_logger_with_custom_settings(self) -> None:
-        """EDGE-005: setup_logger() with custom Settings configures sinks accordingly."""
-        from backend.logging import setup_logger
+    # No escalation: no WARNING end-of-call line for this function.
+    warnings = [
+        m
+        for m in log_records
+        if "<<" in str(m) and "edge_003_fn" in str(m) and m["level"].name == "WARNING"
+    ]
+    assert not warnings
 
-        class CustomSettings:
-            log_level: str = "DEBUG"
-            log_file: str = "/tmp/test.log"
 
-        setup_logger(CustomSettings())
+def test_edge_004_logged_class_no_public_methods() -> None:
+    """EDGE-004: @logged_class on a class with no public methods returns the class unchanged."""
+
+    @logged_class
+    class Edge004Service:
+        def __init__(self) -> None:
+            self.x = 1
+
+    assert Edge004Service().x == 1
+
+
+def test_edge_005_intercept_unknown_level(log_records: list[Any]) -> None:
+    """EDGE-005: a stdlib record with a level name loguru does not recognize is routed numerically."""
+    import logging
+
+    setup_logger()
+
+    unknown_level_no = 25
+
+    class UnknownLevelFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            record.levelname = "NOT_A_LEVEL"
+            return True
+
+    stdlib_logger = logging.getLogger("edge_005")
+    stdlib_logger.setLevel(unknown_level_no)
+    stdlib_logger.addFilter(UnknownLevelFilter())
+    stdlib_logger.log(unknown_level_no, "unknown level message")
+
+    routed = [m for m in log_records if "unknown level message" in str(m)]
+    assert routed
+    assert routed[0]["level"].no == unknown_level_no
