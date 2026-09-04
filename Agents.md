@@ -7,7 +7,7 @@ This repository strictly enforces a **Spec-Driven, Test-Driven Development (Spec
 ## Primary Constraint: No Direct Implementation Code
 **DO NOT write, modify, or scaffold implementation source code (`src/`, `lib/`, `app/`, etc.) without an approved Specification file and a validated Task Graph.**
 
-If asked to implement a new feature, refactor core components, or build a system, you MUST complete **Phase 1** and **Phase 2** first.
+If asked to implement a new feature, refactor core components, or build a system, you MUST complete **Phase 1**, **Phase 2**, and **Phase 3** first.
 
 ---
 
@@ -22,30 +22,33 @@ This repository utilizes modern Python tooling managed via `uv`:
 
 ---
 
-## The 5-Phase Spec-TDD Workflow Protocol
+## The 6-Phase Spec-TDD Workflow Protocol
 
-### Phase 1: SPECIFY (`docs/specs/`)
+### Skill-to-Phase Mapping
+
+| Phase | Skill | Purpose |
+|-------|-------|---------|
+| Phase 1: DISCOVER & SPECIFY | `specify` | Creates a feature branch, adversarially interrogates the feature idea into a feature brief, and turns the brief into an approved-quality specification with stable REQ, AC, INV, EDGE, and NFR IDs. |
+| Phase 2: DECOMPOSE | `decompose` | Creates ADRs and decomposes the spec into a machine-readable JSON task DAG. |
+| Phase 3: TEST & RED | `test` | Converts an approved specification into executable acceptance tests, property tests, unit tests, and contract tests, and confirms RED state. |
+| Phase 4: IMPLEMENT | `implement` | Implements the minimum behavior required to turn failing acceptance tests (RED) into passing tests (GREEN), then refactors without changing specified behavior. |
+| Phase 5: VERIFY | `verify` | Produces evidence that the implementation satisfies the specification by running acceptance tests, regression suites, lint, type checks, coverage, and architecture rules. |
+| Phase 6: REVIEW | `review` | Reviews code changes against the specification before reviewing implementation style. Checks traceability, acceptance tests, feature boundaries, and architecture rules. |
+
+### Phase 1: DISCOVER & SPECIFY (`docs/specs/`)
 Before writing task files or code:
-1. Search and read existing codebase files to understand current context and patterns.
-2. Check `docs/specs/template.md` for formatting requirements.
-3. Draft a complete feature spec at `docs/specs/[feature-name].md`.
-4. Include exact API schemas, Pydantic models, interface signatures, and non-functional requirements.
-5. Assign stable IDs to every normative requirement (`REQ-XXX`), acceptance criterion (`AC-XXX`), invariant (`INV-XXX`), edge case (`EDGE-XXX`), and NFR (`NFR-XXX`).
-6. Define the test strategy mapping each AC/INV/EDGE to a test category and test function.
-7. **STOP and present the spec for human approval via Git PR.**
+1. Create a feature branch `feature/[feature-name]` from `main`.
+2. Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief.
+3. Search and read existing codebase files to understand current context and patterns.
+4. Check `docs/specs/template.md` for formatting requirements.
+5. Draft a complete feature spec at `docs/specs/[feature-name].md`.
+6. Include exact API schemas, Pydantic models, interface signatures, and non-functional requirements.
+7. Assign stable IDs to every normative requirement (`REQ-XXX`), acceptance criterion (`AC-XXX`), invariant (`INV-XXX`), edge case (`EDGE-XXX`), and NFR (`NFR-XXX`).
+8. Define the test strategy mapping each AC/INV/EDGE to a test category and test function.
+9. **STOP and present the spec for human approval via Git PR.**
 
-### Phase 2: TEST DESIGN (`tests/`)
+### Phase 2: DECOMPOSE (`docs/decisions/`, `docs/tasks/`)
 Once the specification file is merged into `main`:
-1. Write acceptance tests derived directly from the spec's acceptance criteria.
-2. Write property tests for every invariant (`INV-XXX`) using Hypothesis.
-3. Write unit tests for edge cases and error conditions.
-4. Write contract tests for NFR contract requirements.
-5. Write integration tests for multi-component interactions.
-6. **Run the test suite and confirm RED state** (tests must fail before implementation).
-7. Record RED evidence in `docs/verification/[feature-name].md`.
-8. Update the traceability matrix in `docs/verification/traceability.md` with test references.
-### Phase 3: DESIGN (`docs/decisions/`, `docs/tasks/`)
-After RED is confirmed:
 1. Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
 2. Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[feature-name].tasks.json`.
 3. Each task MUST specify:
@@ -58,6 +61,16 @@ After RED is confirmed:
    - `design_constraints`: Constraints that must be respected.
    - `completion_gates`: Gates that must pass before the task is complete.
 4. Copy `docs/tasks/[feature-name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
+### Phase 3: TEST & RED (`tests/`)
+After the task DAG is initialized:
+1. Write acceptance tests derived directly from the spec's acceptance criteria.
+2. Write property tests for every invariant (`INV-XXX`) using Hypothesis.
+3. Write unit tests for edge cases and error conditions.
+4. Write contract tests for NFR contract requirements.
+5. Write integration tests for multi-component interactions.
+6. **Run the test suite and confirm RED state** (tests must fail before implementation).
+7. Record RED evidence in `docs/verification/[feature-name].md`.
+8. Update the traceability matrix in `docs/verification/traceability.md` with test references.
 ### Phase 4: IMPLEMENT
 When instructed to execute tasks:
 1. Pick a ready task from the task DAG.
@@ -76,6 +89,31 @@ After all tasks are complete:
 5. Update the traceability matrix: every REQ must have at least one GREEN test.
 6. Produce a verification report: specification coverage, acceptance coverage, branch coverage.
 7. **Spec coverage = 100% is required.** Code coverage is a secondary quality signal, not evidence that the specification has been implemented.
+8. **If verification fails**, the agent MUST re-enter either Phase 4 (IMPLEMENT) to fix the failing behavior, or Phase 3 (TEST & RED) to re-derive failing tests from the specification. The agent MUST NOT mark the feature verified until spec coverage = 100% and all gates pass.
+### Phase 6: REVIEW
+After verification passes:
+1. Review all code changes against the approved specification.
+2. Check traceability: every REQ has at least one GREEN test, every acceptance test traces back to a normative requirement.
+3. Verify feature boundaries: code lives in the correct feature directory, no cross-feature internal imports.
+4. Verify architecture rules: `model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small.
+5. Verify acceptance tests were not weakened or deleted to achieve GREEN.
+6. Verify no behavior was introduced that is not represented in the specification.
+7. Produce a review report documenting any findings and their resolutions.
+8. **The feature is only considered complete when the review report is clean.**
+
+---
+
+## Review Gate (Phase 6)
+
+A feature is considered **COMPLETE** if and only if the Phase 6 review report is clean. A clean review report means:
+
+- Every REQ-XXX has at least one GREEN test.
+- Every acceptance test traces back to a normative requirement.
+- No acceptance test was weakened or deleted to achieve GREEN.
+- No behavior was introduced that is not represented in the specification.
+- Feature boundaries and architecture rules are respected.
+
+If the review report is not clean, the agent MUST resolve every finding and re-run the review before declaring the feature complete. A feature with an open finding MUST NOT be merged or marked verified.
 
 ---
 
@@ -208,7 +246,7 @@ The boundary is concrete: if the change alters externally observable behavior, t
 ## Spec Approval Gate (GitHub Review)
 A specification file `docs/specs/[feature-name].md` is considered **HUMAN APPROVED** if and only if it has been merged through the repository's configured GitHub review process.
 
-Before starting Phase 2 or 3, verify approval via:
+Before starting Phase 2, verify approval via:
 `git log main -- docs/specs/[feature-name].md`
 
 - Output is empty: **STOP.** Prompt user to merge spec PR first.
