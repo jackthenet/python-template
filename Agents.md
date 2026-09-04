@@ -100,7 +100,8 @@ After verification passes:
 6. Verify no behavior was introduced that is not represented in the specification.
 7. Produce a review report documenting any findings and their resolutions.
 8. **The feature is only considered complete when the review report is clean.**
-9. **When the review report is clean, open a PR** for the feature branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
+9. **When the review report is clean, document the feature in `AGENTS.md`.** If the feature is reusable by future features (a shared capability, not a one-off), add a short "how to use this feature" note to `AGENTS.md` so future features use it correctly. Skip this if the feature is not applicable to other features.
+10. **When the review report is clean, open a PR** for the feature branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
 
 ---
 
@@ -191,6 +192,28 @@ An agent MUST:
 - **Testing Standard:** Framework `pytest`. Tests must precede implementation code. Never remove existing tests without explicit spec authorization.
 - **Property Testing:** Use `hypothesis` for invariant verification. Strategies must match the domain.
 - **Documentation:** Keep docstrings concise; explain *why* non-obvious logic exists rather than restating *what* the code does.
+
+---
+
+## Using the Logging Feature
+
+New backend features MUST use the shared logging feature at `src/backend/logging/` (spec: `docs/specs/logging.md`) instead of inventing their own logging.
+
+- **Set it up once at startup.** Call `setup_logger(settings)` exactly once in the application entrypoint (e.g., `src/main.py` / backend startup) before any feature code runs. It is idempotent and thread-safe (later calls are no-ops).
+- **Configure with `Settings`.** Build a `Settings` instance (or use `get_settings()`) to set `log_level`, `log_file`, `log_max_bytes`, `log_backup_count`, and `profiling_include_arguments`.
+- **Trace functions with `@logged`.** Decorate sync or async functions/methods to log entry, exit (with elapsed ms), and exceptions. Usable bare (`@logged`, default level `DEBUG`) or with parameters: `level`, `slow_threshold_ms`, `slow_threshold_setting`, `include_args`, `context_getter`, `depth`.
+- **Trace classes with `@logged_class`.** Decorate a class to apply `@logged` to every public method (private methods are skipped).
+- **Simple statements.** The feature configures loguru's sinks, so feature code may also use loguru's `logger` directly (e.g., `logger.info("...")`) for one-off statements.
+- **Conventions.** `diagnose=False` is enforced (no local variable leakage). Import the public API only (`from backend.logging import logged, logged_class, setup_logger, Settings, get_settings`); do not import the private `_setup` / `_decorator` modules. The logger MUST be set up before any `@logged` call or log statement.
+
+```python
+from backend.logging import Settings, logged, setup_logger
+
+setup_logger(Settings(log_level="INFO"))
+
+@logged
+def my_func() -> None: ...
+```
 
 ---
 
