@@ -100,6 +100,7 @@ After verification passes:
 6. Verify no behavior was introduced that is not represented in the specification.
 7. Produce a review report documenting any findings and their resolutions.
 8. **The feature is only considered complete when the review report is clean.**
+9. **When the review report is clean, open a PR** for the feature branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
 
 ---
 
@@ -114,6 +115,8 @@ A feature is considered **COMPLETE** if and only if the Phase 6 review report is
 - Feature boundaries and architecture rules are respected.
 
 If the review report is not clean, the agent MUST resolve every finding and re-run the review before declaring the feature complete. A feature with an open finding MUST NOT be merged or marked verified.
+
+When the review report IS clean, the feature branch MUST be merged into `main` via a GitHub pull request. The agent MUST open the PR and present it for human review/merge, then STOP — the agent MUST NOT merge the PR itself (human governance).
 
 ---
 

@@ -40,6 +40,7 @@ Review findings ordered by severity.
 - Check that dependencies follow the architecture rules.
 - Flag any orphaned tests (tests without spec reference).
 - Flag any missing traceability links.
+- When the review is clean, open a PR for the feature branch to `main` and present it for human review/merge, then STOP (do NOT merge it yourself).
 
 ## MUST-NOT
 
@@ -60,6 +61,7 @@ Before work:
 
 After work:
 - Post review findings as PR comments.
+- When the review is clean, ensure a PR for the feature branch to `main` is open (open one if it isn't) and present it for human review/merge.
 - Do NOT merge the PR (human governance).
 
 ## Verification
