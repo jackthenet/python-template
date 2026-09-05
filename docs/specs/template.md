@@ -64,8 +64,23 @@ State invariants that hold over a large input space. These become Hypothesis pro
 | NFR-001 | Performance | [e.g., Must execute in < 5ms per request] |
 | NFR-002 | Security | [e.g., All requests must be authenticated] |
 | NFR-003 | Contract | [e.g., Response schema must remain backward-compatible] |
+| NFR-004 | Observability | [e.g., Errors and lifecycle events are logged with request/event context] |
 
-## 9. Test Strategy
+## 9. Observability & Logging
+
+Every feature MUST be observable. Specify the logging behavior: which operations are logged, at what level, and with what context. Shared infrastructure features MUST log entry points, errors, and lifecycle events; verbose tracing belongs at DEBUG (off by default).
+
+| Operation / Event | Level | Context |
+|-------------------|-------|---------|
+| [e.g., Request received] | DEBUG | [e.g., request id, path] |
+| [e.g., Error handling request] | EXCEPTION | [e.g., request id, exception] |
+| [e.g., Worker started] | DEBUG | [e.g., thread name] |
+| [e.g., Queue full / dropped] | WARNING | [e.g., event type, dropped count] |
+
+- **Default level:** [e.g., INFO; verbose tracing at DEBUG]
+- **Error conditions:** [which conditions are errors, and how they're logged]
+
+## 10. Test Strategy
 
 Map each requirement/AC to a test category. This drives the test file layout.
 
@@ -77,7 +92,7 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | INV-001 | property | `tests/property/test_feature.py` | `test_normalize_idempotent` |
 | EDGE-001 | unit | `tests/unit/test_feature.py` | `test_empty_body` |
 
-## 10. Traceability Matrix
+## 11. Traceability Matrix
 
 Maintain this matrix as tests are written and pass. Every normative requirement MUST have at least one executable test.
 

@@ -14,6 +14,9 @@ dependencies = [
     "orjson>=3.11.8",
     # HTTP client for outbound calls.
     "httpx>=0.28.1",
+    "sqlmodel>=0.0.42",
+    "argon2-cffi>=25.1.0",
+    "email-validator>=2.3.0",
 ]
 
 [dependency-groups]
