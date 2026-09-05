@@ -38,7 +38,38 @@ Every test function name encodes its spec ID
 
 ## Phase 4 — GREEN Evidence
 
-*(pending implementation)*
+**Date:** 2026-09-04
+**Command:** `uv run python -m pytest tests/acceptance/eventbus/ tests/property/eventbus/ tests/unit/eventbus/ tests/contract/eventbus/ tests/integration/eventbus/ -v`
+
+**Result: 31 passed, 0 failed** — the full event-bus suite is GREEN.
+
+### Implementation delivered
+
+| Module | Purpose |
+|---|---|
+| `src/backend/eventbus/eventbus.py` | `EventBus` (bounded, thread-safe, async in-memory bus), `get_event_bus()` singleton, `reset_event_bus()` (REQ-001..007, AC-001..012, INV-001..004, EDGE-001..010, NFR-001..004) |
+| `src/backend/eventbus/__init__.py` | Public API exports (`EventBus`, `get_event_bus`, `reset_event_bus`) |
+
+### Design
+
+- **Async non-blocking delivery:** `publish()` enqueues via `queue.Queue.put_nowait` and returns; a single background worker thread (`eventbus-worker`, daemon) dequeues FIFO and dispatches.
+- **Typed events (isinstance):** handlers are registered for an event type; `_dispatch` invokes every handler whose registered type matches the event by `isinstance`, in subscription order.
+- **Bounded queue, drop-on-full:** `queue.Queue(maxsize=max_queue_size)`; `put_nowait` raises `queue.Full` → event dropped, logged, `dropped_count` incremented.
+- **Handler error isolation:** `_dispatch` wraps each handler call in `try/except`; a handler's exception is caught and logged, remaining handlers still run, the publisher is unaffected.
+- **Thread safety:** a `threading.Lock` guards the registry and lifecycle flags; `queue.Queue` is itself thread-safe.
+- **Lifecycle:** lazy start on first `publish()`/`start()`; `shutdown()` sets a flag, puts a sentinel, and joins the worker (graceful drain); idempotent; context manager.
+- **Singleton:** module-level `list[EventBus | None]` holder (avoids a `global` statement); `get_event_bus()` returns the shared default, `reset_event_bus()` shuts it down and resets.
+
+### Quality gates
+
+| Gate | Command | Result |
+|---|---|---|
+| Lint | `uv run ruff check src/` | All checks passed |
+| Types | `uv run mypy src/` | Success: no issues found in 7 source files |
+
+### Regression
+
+`uv run python -m pytest tests/ -q` → **59 passed** (28 logging + 31 event-bus).
 
 ---
 

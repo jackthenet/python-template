@@ -48,37 +48,37 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
-| REQ-001 | AC-001 | `test_ac_001_publish_non_blocking` | RED |
-| REQ-002 | AC-002 | `test_ac_002_subscribe_matching_event` | RED |
-| REQ-002 | AC-003 | `test_ac_003_no_match_different_type` | RED |
-| REQ-002 | AC-004 | `test_ac_004_isinstance_matching` | RED |
-| REQ-003 | AC-005 | `test_ac_005_error_isolation` | RED |
-| REQ-003 | AC-006 | `test_ac_006_exception_no_propagate` | RED |
-| REQ-004 | AC-007 | `test_ac_007_thread_safe_publish` | RED |
-| REQ-005 | AC-008 | `test_ac_008_shutdown_drains` | RED |
-| REQ-005 | AC-009 | `test_ac_009_shutdown_idempotent` | RED |
-| REQ-005 | AC-010 | `test_ac_010_context_manager` | RED |
-| REQ-006 | AC-011 | `test_ac_011_singleton` | RED |
-| REQ-007 | AC-012 | `test_ac_012_bounded_queue_drop` | RED |
-| INV-001 | — | `test_inv_001_exactly_once` | RED |
-| INV-002 | — | `test_inv_002_isolation` | RED |
-| INV-003 | — | `test_inv_003_queue_bounded` | RED |
-| INV-004 | — | `test_inv_004_handler_order` | RED |
-| EDGE-001 | — | `test_edge_001_lazy_start` | RED |
-| EDGE-002 | — | `test_edge_002_drop_on_full` | RED |
-| EDGE-003 | — | `test_edge_003_non_callable_handler` | RED |
-| EDGE-004 | — | `test_edge_004_non_class_event` | RED |
-| EDGE-005 | — | `test_edge_005_unsubscribe_not_subscribed` | RED |
-| EDGE-006 | — | `test_edge_006_dedup` | RED |
-| EDGE-007 | — | `test_edge_007_publish_after_shutdown` | RED |
-| EDGE-008 | — | `test_edge_008_handler_raises` | RED |
-| EDGE-009 | — | `test_edge_009_start_idempotent` | RED |
-| EDGE-010 | — | `test_edge_010_no_handlers` | RED |
-| NFR-001 | — | `test_nfr_001_publish_non_blocking_budget` | RED |
-| NFR-002 | — | `test_nfr_002_handler_failure_isolation` | RED |
-| NFR-003 | — | `test_nfr_003_single_worker_bounded_queue` | RED |
-| NFR-004 | — | `test_nfr_004_api_backward_compatible` | RED |
-| — | — | `test_multi_feature_publish_subscribe` (integration) | RED |
+| REQ-001 | AC-001 | `test_ac_001_publish_non_blocking` | GREEN |
+| REQ-002 | AC-002 | `test_ac_002_subscribe_matching_event` | GREEN |
+| REQ-002 | AC-003 | `test_ac_003_no_match_different_type` | GREEN |
+| REQ-002 | AC-004 | `test_ac_004_isinstance_matching` | GREEN |
+| REQ-003 | AC-005 | `test_ac_005_error_isolation` | GREEN |
+| REQ-003 | AC-006 | `test_ac_006_exception_no_propagate` | GREEN |
+| REQ-004 | AC-007 | `test_ac_007_thread_safe_publish` | GREEN |
+| REQ-005 | AC-008 | `test_ac_008_shutdown_drains` | GREEN |
+| REQ-005 | AC-009 | `test_ac_009_shutdown_idempotent` | GREEN |
+| REQ-005 | AC-010 | `test_ac_010_context_manager` | GREEN |
+| REQ-006 | AC-011 | `test_ac_011_singleton` | GREEN |
+| REQ-007 | AC-012 | `test_ac_012_bounded_queue_drop` | GREEN |
+| INV-001 | — | `test_inv_001_exactly_once` | GREEN |
+| INV-002 | — | `test_inv_002_isolation` | GREEN |
+| INV-003 | — | `test_inv_003_queue_bounded` | GREEN |
+| INV-004 | — | `test_inv_004_handler_order` | GREEN |
+| EDGE-001 | — | `test_edge_001_lazy_start` | GREEN |
+| EDGE-002 | — | `test_edge_002_drop_on_full` | GREEN |
+| EDGE-003 | — | `test_edge_003_non_callable_handler` | GREEN |
+| EDGE-004 | — | `test_edge_004_non_class_event` | GREEN |
+| EDGE-005 | — | `test_edge_005_unsubscribe_not_subscribed` | GREEN |
+| EDGE-006 | — | `test_edge_006_dedup` | GREEN |
+| EDGE-007 | — | `test_edge_007_publish_after_shutdown` | GREEN |
+| EDGE-008 | — | `test_edge_008_handler_raises` | GREEN |
+| EDGE-009 | — | `test_edge_009_start_idempotent` | GREEN |
+| EDGE-010 | — | `test_edge_010_no_handlers` | GREEN |
+| NFR-001 | — | `test_nfr_001_publish_non_blocking_budget` | GREEN |
+| NFR-002 | — | `test_nfr_002_handler_failure_isolation` | GREEN |
+| NFR-003 | — | `test_nfr_003_single_worker_bounded_queue` | GREEN |
+| NFR-004 | — | `test_nfr_004_api_backward_compatible` | GREEN |
+| — | — | `test_multi_feature_publish_subscribe` (integration) | GREEN |
 
 ## Drift Checks
 
