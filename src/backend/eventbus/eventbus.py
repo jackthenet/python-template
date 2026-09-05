@@ -25,6 +25,12 @@ T = TypeVar("T")
 _SENTINEL = object()
 
 
+def _handler_name(handler: Callable[..., None]) -> str:
+    """Best-effort human-readable name for a handler (for logging)."""
+    qualname = getattr(handler, "__qualname__", None)
+    return qualname if qualname is not None else repr(handler)
+
+
 class EventBus:
     """A bounded, thread-safe, asynchronous in-memory event bus."""
 
@@ -53,6 +59,7 @@ class EventBus:
                 if et is event_type and h is handler:
                     return
             self._registry.append((event_type, handler))
+            logger.debug("event bus: subscribed handler '{}' for event type '{}'", _handler_name(handler), event_type.__name__)
 
     def unsubscribe(self, event_type: type[T], handler: Callable[[T], None]) -> None:
         """Remove ``handler`` for ``event_type``. No-op if not subscribed."""
@@ -60,6 +67,7 @@ class EventBus:
             for i, (et, h) in enumerate(self._registry):
                 if et is event_type and h is handler:
                     del self._registry[i]
+                    logger.debug("event bus: unsubscribed handler '{}' for event type '{}'", _handler_name(handler), event_type.__name__)
                     return
 
     def publish(self, event: T) -> None:
@@ -74,10 +82,12 @@ class EventBus:
             self._ensure_worker_unlocked()
         try:
             self._queue.put_nowait(event)
+            logger.debug("event bus: published event type '{}'", type(event).__name__)
         except queue.Full:
             with self._lock:
                 self._dropped += 1
-            logger.warning("event bus queue full; dropping event")
+                dropped = self._dropped
+            logger.warning("event bus: queue full; dropping event type '{}' (dropped={})", type(event).__name__, dropped)
 
     def start(self) -> None:
         """Start the background worker. Idempotent."""
@@ -91,6 +101,7 @@ class EventBus:
                 return
             self._shutdown = True
             worker = self._worker
+        logger.debug("event bus: shutdown initiated")
         if worker is not None:
             # Blocking put: the worker is draining, so space opens up.
             self._queue.put(_SENTINEL)
@@ -130,6 +141,7 @@ class EventBus:
             daemon=True,
         )
         self._worker.start()
+        logger.debug("event bus: started background worker thread")
 
     def _worker_loop(self) -> None:
         """Drain the queue and dispatch events until the sentinel or shutdown."""
@@ -150,10 +162,11 @@ class EventBus:
             registry = list(self._registry)
         for event_type, handler in registry:
             if isinstance(event, event_type):
+                logger.debug("event bus: dispatching event type '{}' to handler '{}'", type(event).__name__, _handler_name(handler))
                 try:
                     handler(event)
                 except Exception:
-                    logger.exception("event bus handler raised for event")
+                    logger.exception("event bus: handler '{}' raised for event type '{}'", _handler_name(handler), type(event).__name__)
 
 
 _default_bus: list[EventBus | None] = [None]
@@ -165,6 +178,7 @@ def get_event_bus() -> EventBus:
     if bus is None:
         bus = EventBus()
         _default_bus[0] = bus
+        logger.debug("event bus: created shared default instance")
     return bus
 
 
@@ -174,3 +188,4 @@ def reset_event_bus() -> None:
     if bus is not None:
         bus.shutdown()
     _default_bus[0] = None
+    logger.debug("event bus: reset shared default instance")
