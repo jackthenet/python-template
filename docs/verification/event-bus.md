@@ -117,4 +117,24 @@ Every normative requirement (REQ-001 … REQ-007) has at least one GREEN test; e
 
 ## Phase 6 — Review Report
 
-*(pending)*
+**Date:** 2026-09-04
+
+### Review order
+
+1. **Specification** — The implementation matches the spec exactly: `publish()` enqueues and returns immediately (REQ-001, non-blocking); `subscribe()`/`isinstance` matching (REQ-002); handler exceptions caught, logged, and isolated (REQ-003); a lock + thread-safe queue make the bus thread-safe (REQ-004); lazy start, graceful drain, idempotent `shutdown()`, and context-manager support (REQ-005); the module singleton `get_event_bus()`/`reset_event_bus()` (REQ-006); and the bounded queue with drop-on-full (REQ-007). No more, no less.
+2. **Traceability** — Every REQ-XXX maps to AC-XXX maps to executable tests (verified by `verify_spec.py`: Traceability PASS). The single integration test traces to the combined behavior of REQ-001/002/006 (a legitimate multi-component interaction test), so there are no orphaned tests.
+3. **Acceptance tests** — The tests prove the specified behavior. No test was modified to make the implementation pass; no test was deleted or weakened. The only post-RED edits were lint fixes (constants for magic values, named functions for handlers, import cleanup) that do not change any assertion.
+4. **Implementation** — The code is correct, minimal, and within feature boundaries: `src/backend/eventbus/` only. The singleton uses a `list[EventBus | None]` holder (no `global`); the worker is a single daemon thread; `shutdown()` blocks on the sentinel `put` + `join` for a graceful drain.
+5. **Architecture** — Dependencies respect the feature architecture rules: stdlib only (`queue`, `threading`) + the shared logging feature (loguru). No new external dependencies; no cross-feature internal imports.
+6. **Quality** — `ruff check src/ tests/` clean; `mypy src/` clean (7 source files); naming and complexity are reasonable.
+
+### Findings
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| F-1 | Minor | `shutdown()`'s blocking `put(_SENTINEL)` will wait if the queue is at capacity, so `shutdown()` blocks until the worker drains the queue. This is the intended graceful-drain behavior (REQ-005), but it means `shutdown()` is not non-blocking. | Accepted — matches the spec ("drains all pending events before stopping"). Documented in the docstring. |
+| F-2 | Minor | `dropped_count` is a monotonically increasing counter (never reset). | Accepted — matches the spec ("counted"); tests only assert `>= 1`. |
+
+### Verdict
+
+**Review clean.** No P0/P1 findings; the two minor findings are accepted as spec-conformant. The feature is reusable by future features (a shared async communication capability), so a usage note is added to `AGENTS.md`. A PR for `feature/event-bus` → `main` is opened for human review/merge (the agent does not merge it).
