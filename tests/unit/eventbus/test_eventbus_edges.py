@@ -11,9 +11,9 @@ import threading
 import time
 
 import pytest
+from eventbus_test_helpers import UserCreated, wait_for
 
 from backend.eventbus import EventBus
-from eventbus_test_helpers import UserCreated, wait_for
 
 
 def test_edge_001_lazy_start() -> None:

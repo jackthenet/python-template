@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import threading
 
-from backend.eventbus import get_event_bus, reset_event_bus
 from eventbus_test_helpers import UserCreated, wait_for
+
+from backend.eventbus import get_event_bus, reset_event_bus
 
 
 def test_multi_feature_publish_subscribe() -> None:

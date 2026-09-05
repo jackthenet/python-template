@@ -217,6 +217,28 @@ def my_func() -> None: ...
 
 ---
 
+## Using the Event Bus Feature
+
+New backend features MUST use the shared event bus at `src/backend/eventbus/` (spec: `docs/specs/event-bus.md`) for async communication between features instead of calling other features directly.
+
+- **Publish events.** Get the bus with `get_event_bus()` (the module singleton) and call `publish(event)`. It is non-blocking: the event is enqueued and dispatched by a background worker.
+- **Subscribe handlers.** Call `subscribe(event_type, handler)` to register a handler for an event type. Matching is by `isinstance`, so a handler for a base type also receives subclass events.
+- **Define events.** Any class is a valid event type (typically a Pydantic model or dataclass). No base class is required.
+- **Isolate errors.** A handler's exception is caught and logged; other handlers for the same event still run; the exception never propagates to the publisher.
+- **Lifecycle.** The worker starts lazily on the first `publish()`. Call `shutdown()` to drain pending events and stop (idempotent). The bus is usable as a context manager.
+- **Testing.** Use `EventBus(max_queue_size=...)` for a fresh instance, and `reset_event_bus()` to reset the module singleton between tests.
+
+```python
+from backend.eventbus import get_event_bus
+
+def on_user_created(event: UserCreated) -> None: ...
+
+get_event_bus().subscribe(UserCreated, on_user_created)
+get_event_bus().publish(UserCreated(user_id="u1", email="e1"))
+```
+
+---
+
 ## Dependencies and Existing Packages
 
 Prefer established, well-maintained packages over custom implementations when a package materially solves the problem and fits the project's requirements, architecture, licensing, and operational constraints.
