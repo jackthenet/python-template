@@ -29,6 +29,7 @@ Review findings ordered by severity.
 4. **Implementation** — Is the code correct, minimal, and within feature boundaries?
 5. **Architecture** — Do dependencies respect the feature architecture rules?
 6. **Quality** — Lint, type checks, naming, duplication, complexity.
+7. **Observability** — Does the feature log meaningfully (entry points, errors, lifecycle) at appropriate levels with useful context? Shared infrastructure features MUST be observable.
 
 ## MUST
 
@@ -40,6 +41,7 @@ Review findings ordered by severity.
 - Check that dependencies follow the architecture rules.
 - Flag any orphaned tests (tests without spec reference).
 - Flag any missing traceability links.
+- Check that the feature is observable: it logs entry points, errors, and lifecycle events at appropriate levels with useful context (shared infrastructure features MUST be observable).
 - When the review is clean and the feature is reusable by future features, add a short "how to use this feature" note to `AGENTS.md` (so future features use it correctly).
 - When the review is clean, open a PR for the feature branch to `main` and present it for human review/merge, then STOP (do NOT merge it yourself).
 
