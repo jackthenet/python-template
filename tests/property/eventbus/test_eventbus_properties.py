@@ -9,11 +9,13 @@ from __future__ import annotations
 import threading
 import time
 
+from eventbus_test_helpers import UserCreated, wait_for
 from hypothesis import given
 from hypothesis import strategies as st
 
 from backend.eventbus import EventBus
-from eventbus_test_helpers import UserCreated, wait_for
+
+_MAX_QUEUE_SIZE = 10
 
 
 def test_inv_001_exactly_once() -> None:
@@ -78,7 +80,7 @@ def test_inv_003_queue_bounded() -> None:
         def publisher() -> None:
             for _ in range(20):
                 bus.publish(UserCreated("u", "e"))
-                assert bus.pending_count <= 10, f"queue exceeded max: {bus.pending_count}"
+                assert bus.pending_count <= _MAX_QUEUE_SIZE, f"queue exceeded max: {bus.pending_count}"
 
         threads = [threading.Thread(target=publisher) for _ in range(n_threads)]
         for t in threads:

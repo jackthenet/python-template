@@ -12,9 +12,14 @@ import time
 from collections.abc import Iterator
 
 import pytest
+from eventbus_test_helpers import BaseEvent, OrderPlaced, UserCreated, wait_for
 
 from backend.eventbus import EventBus, get_event_bus, reset_event_bus
-from eventbus_test_helpers import BaseEvent, OrderPlaced, UserCreated, wait_for
+
+_PUBLISH_BUDGET_S = 0.01
+_MAX_QUEUE_SIZE = 3
+_MIN_DROPPED = 1
+_DRAIN_COUNT = 2
 
 
 @pytest.fixture
@@ -37,14 +42,18 @@ def test_ac_001_publish_non_blocking(bus: EventBus) -> None:
     start = time.monotonic()
     bus.publish(UserCreated("u1", "e1"))
     elapsed = time.monotonic() - start
-    assert elapsed < 0.01, f"publish() blocked for {elapsed:.3f}s"
+    assert elapsed < _PUBLISH_BUDGET_S, f"publish() blocked for {elapsed:.3f}s"
     assert done.wait(timeout=5.0), "handler did not run on the background worker"
 
 
 def test_ac_002_subscribe_matching_event(bus: EventBus) -> None:
     """AC-002: a handler registered for UserCreated receives UserCreated events."""
     received: list[object] = []
-    bus.subscribe(UserCreated, lambda e: received.append(e))
+
+    def handler(event: object) -> None:
+        received.append(event)
+
+    bus.subscribe(UserCreated, handler)
     bus.publish(UserCreated("u1", "e1"))
     assert wait_for(lambda: len(received) == 1), "handler not called for matching event"
     assert isinstance(received[0], UserCreated)
@@ -53,7 +62,11 @@ def test_ac_002_subscribe_matching_event(bus: EventBus) -> None:
 def test_ac_003_no_match_different_type(bus: EventBus) -> None:
     """AC-003: a handler registered for UserCreated is NOT called for OrderPlaced."""
     received: list[object] = []
-    bus.subscribe(UserCreated, lambda e: received.append(e))
+
+    def handler(event: object) -> None:
+        received.append(event)
+
+    bus.subscribe(UserCreated, handler)
     bus.publish(OrderPlaced("o1", "u1", 100))
     # Give the worker time; the handler must NOT be called.
     time.sleep(0.3)
@@ -63,7 +76,11 @@ def test_ac_003_no_match_different_type(bus: EventBus) -> None:
 def test_ac_004_isinstance_matching(bus: EventBus) -> None:
     """AC-004: a handler registered for BaseEvent receives subclass events (isinstance)."""
     received: list[object] = []
-    bus.subscribe(BaseEvent, lambda e: received.append(e))
+
+    def handler(event: object) -> None:
+        received.append(event)
+
+    bus.subscribe(BaseEvent, handler)
     bus.publish(UserCreated("u1", "e1"))
     assert wait_for(lambda: len(received) == 1), "base-type handler not called for subclass event"
 
@@ -145,11 +162,11 @@ def test_ac_008_shutdown_drains(bus: EventBus) -> None:
     bus.publish(UserCreated("u2", "e2"))
     bus.shutdown()
     # Graceful drain: both events enqueued before shutdown are processed.
-    assert wait_for(lambda: count == 2, timeout=10.0), "shutdown did not drain pending events"
+    assert wait_for(lambda: count == _DRAIN_COUNT, timeout=10.0), "shutdown did not drain pending events"
     # publish() after shutdown is a no-op.
     bus.publish(UserCreated("u3", "e3"))
     time.sleep(0.3)
-    assert count == 2, "publish() after shutdown should be a no-op"
+    assert count == _DRAIN_COUNT, "publish() after shutdown should be a no-op"
 
 
 def test_ac_009_shutdown_idempotent(bus: EventBus) -> None:
@@ -189,8 +206,8 @@ def test_ac_012_bounded_queue_drop() -> None:
         for i in range(50):
             b.publish(UserCreated(f"u{i}", "e"))
         # The queue is bounded; some events must have been dropped.
-        assert wait_for(lambda: b.dropped_count > 0, timeout=10.0), "no events dropped under backpressure"
+        assert wait_for(lambda: b.dropped_count >= _MIN_DROPPED, timeout=10.0), "no events dropped under backpressure"
         # The queue size never exceeds max_queue_size.
-        assert b.pending_count <= 3, f"queue exceeded max_queue_size: {b.pending_count}"
+        assert b.pending_count <= _MAX_QUEUE_SIZE, f"queue exceeded max_queue_size: {b.pending_count}"
     finally:
         b.shutdown()

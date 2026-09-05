@@ -9,8 +9,12 @@ from __future__ import annotations
 import threading
 import time
 
+from eventbus_test_helpers import OrderPlaced, UserCreated
+
 from backend.eventbus import EventBus, get_event_bus, reset_event_bus
-from eventbus_test_helpers import OrderPlaced, UserCreated, wait_for
+
+_PUBLISH_BUDGET_S = 0.001
+_MAX_QUEUE_SIZE = 5
 
 
 def test_nfr_001_publish_non_blocking_budget() -> None:
@@ -28,7 +32,7 @@ def test_nfr_001_publish_non_blocking_budget() -> None:
             samples.append(time.monotonic() - start)
         samples.sort()
         median = samples[len(samples) // 2]
-        assert median < 0.001, f"publish() median {median * 1000:.3f} ms exceeds 1 ms budget"
+        assert median < _PUBLISH_BUDGET_S, f"publish() median {median * 1000:.3f} ms exceeds 1 ms budget"
     finally:
         bus.shutdown()
 
@@ -70,8 +74,7 @@ def test_nfr_003_single_worker_bounded_queue() -> None:
             nonlocal active, max_active
             with lock:
                 active += 1
-                if active > max_active:
-                    max_active = active
+                max_active = max(max_active, active)
             time.sleep(0.01)
             with lock:
                 active -= 1
@@ -83,7 +86,7 @@ def test_nfr_003_single_worker_bounded_queue() -> None:
         # Single worker: handlers never run concurrently.
         assert max_active == 1, f"handlers ran concurrently (max_active={max_active}); expected single worker"
         # Bounded queue.
-        assert bus.pending_count <= 5, f"queue exceeded max_queue_size: {bus.pending_count}"
+        assert bus.pending_count <= _MAX_QUEUE_SIZE, f"queue exceeded max_queue_size: {bus.pending_count}"
     finally:
         bus.shutdown()
 

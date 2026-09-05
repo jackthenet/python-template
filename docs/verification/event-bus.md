@@ -75,7 +75,43 @@ Every test function name encodes its spec ID
 
 ## Phase 5 — Verification Report
 
-*(pending)*
+**Date:** 2026-09-04
+
+### Checks
+
+| Check | Command | Result |
+|---|---|---|
+| Lint | `uv run ruff check src/ tests/` | All checks passed |
+| Types | `uv run mypy src/` | Success: no issues found in 7 source files |
+| Acceptance tests | `uv run python -m pytest tests/acceptance/eventbus/ -q` | 12 passed |
+| Full regression suite | `uv run python -m pytest tests/ -q` | 59 passed (28 logging + 31 event-bus) |
+| Spec validation | `uv run python scripts/verify_spec.py docs/specs/event-bus.md` | Traceability: PASS (every REQ has ACs, every AC has a test, every INV has a property test) |
+| Coverage | `uv run pytest tests/ --cov` | N/A — coverage not installed; `[tool.coverage.run] source` references the old `python_template` package (pre-`src/` layout), so a run would not measure current code |
+| Architecture rules | `uv run pytest tests/architecture/ -v` | N/A — `tests/architecture/` does not exist in this template |
+
+### Spec coverage (100%)
+
+Every normative requirement (REQ-001 … REQ-007) has at least one GREEN test; every acceptance criterion (AC-001 … AC-012), invariant (INV-001 … INV-004), edge case (EDGE-001 … EDGE-010), and NFR (NFR-001 … NFR-004) is covered by a GREEN test.
+
+| Spec ID | GREEN test(s) |
+|---|---|
+| REQ-001 / AC-001 | `test_ac_001_publish_non_blocking` |
+| REQ-002 / AC-002, AC-003, AC-004 | `test_ac_002_subscribe_matching_event`, `test_ac_003_no_match_different_type`, `test_ac_004_isinstance_matching` |
+| REQ-003 / AC-005, AC-006 | `test_ac_005_error_isolation`, `test_ac_006_exception_no_propagate` |
+| REQ-004 / AC-007 | `test_ac_007_thread_safe_publish` |
+| REQ-005 / AC-008, AC-009, AC-010 | `test_ac_008_shutdown_drains`, `test_ac_009_shutdown_idempotent`, `test_ac_010_context_manager` |
+| REQ-006 / AC-011 | `test_ac_011_singleton` |
+| REQ-007 / AC-012 | `test_ac_012_bounded_queue_drop` |
+| INV-001 … INV-004 | `test_inv_001_exactly_once`, `test_inv_002_isolation`, `test_inv_003_queue_bounded`, `test_inv_004_handler_order` |
+| EDGE-001 … EDGE-010 | `test_edge_001_lazy_start` … `test_edge_010_no_handlers` |
+| NFR-001 … NFR-004 | `test_nfr_001_publish_non_blocking_budget`, `test_nfr_002_handler_failure_isolation`, `test_nfr_003_single_worker_bounded_queue`, `test_nfr_004_api_backward_compatible` |
+| Integration | `test_multi_feature_publish_subscribe` |
+
+**No orphaned tests.** Every test function traces to a spec ID (the single integration test traces to the combined behavior of REQ-001/002/006 — a legitimate multi-component interaction test).
+
+### Regression
+
+`uv run python -m pytest tests/ -q` → **59 passed** (28 logging + 31 event-bus).
 
 ---
 
