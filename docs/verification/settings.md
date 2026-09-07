@@ -120,3 +120,32 @@ All 7 tasks in `docs/tasks/settings.tasks.json` (and `.github/task-runner/tasks.
 ### Conclusion
 
 The settings feature satisfies the specification. All 84 spec-derived tests pass, all quality gates pass, and spec coverage = 100%. The feature is verified and ready for Phase 6 (REVIEW).
+
+---
+
+## Phase 6 — Review Report
+
+**Date:** 2026-09-07
+**Branch:** `feature/settings`
+
+### Review Order
+
+1. **Specification** — The change implements exactly what the spec says: six setting kinds with per-kind validation, category/group hierarchy, feature-scoped registration, renderable views, template CRUD with scope-coverage save and leave-as-is load, YAML storage via the repository pattern, `SettingChanged` event integration, and loguru observability. No unspecified behavior was introduced.
+2. **Traceability** — Every REQ-XXX (25) maps to AC-XXX (39) maps to executable tests (84, all GREEN). Every acceptance test traces back to a normative requirement. No orphaned tests, no missing traceability links.
+3. **Acceptance tests** — The tests prove the specified behavior. No test was weakened, deleted, or modified to make the implementation pass. The test-setup fixes (AC-039 race, NFR-001 delete budget, NFR-004 category/level) preserve all assertions.
+4. **Implementation** — The code is correct, minimal, and within feature boundaries. The only cross-feature import is `backend.eventbus` (a shared infrastructure feature, allowed). No cross-feature internal imports.
+5. **Architecture** — Dependencies respect the feature architecture rules. `models.py` contains domain concepts, `registry.py` contains the use case, `repository.py` contains the storage abstraction. No premature abstractions.
+6. **Quality** — Ruff (lint + format) and mypy pass on `src/`. Naming is consistent. Complexity is reasonable (the `is_valid_value` function has many branches, suppressed with `# noqa: PLR0911, PLR0912`, as it is a kind-specific validation function).
+7. **Observability** — The feature logs meaningfully at appropriate levels with useful context. All spec observability-table operations are logged (registration, value set/reset, template create/load/update/delete, storage save/load, validation failures at WARNING, storage failures at ERROR). `reset_all` logs per setting (consistent with `reset(key)`), satisfying NFR-004 ("value changes ... are logged").
+
+### Findings
+
+- **F1 (resolved during review):** `reset_all()` did not log per setting, while NFR-004 requires value changes to be logged and the spec's observability table lists "Value reset | DEBUG | key". Resolved by adding `logger.debug("value reset: key={}", key)` per setting in `reset_all()`, consistent with `reset(key)`. Tests re-run: 84 passed; quality gates pass.
+
+### Conclusion
+
+The review is clean. The settings feature satisfies the specification, all quality gates pass, and spec coverage = 100%. The feature is complete and ready for a PR to `main`.
+
+### AGENTS.md Note
+
+The settings feature is a reusable backend capability (typed settings registry with templates). A "how to use this feature" note is added to `AGENTS.md` so future features use it correctly.

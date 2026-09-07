@@ -117,6 +117,7 @@ class SettingsRegistry:
             with self._lock:
                 previous = self._values[key]
                 self._values[key] = d.default
+            logger.debug("value reset: key={}", key)
             self._publish_setting_changed(key, d.default, previous)
 
     # -- Status / views --
