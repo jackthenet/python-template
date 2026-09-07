@@ -6,8 +6,15 @@
     {
       "task_id": "T-001",
       "title": "Implement exceptions and core models with construction-time validation",
-      "requirements": ["REQ-001", "REQ-002", "REQ-004"],
-      "acceptance_criteria": ["AC-009", "AC-010"],
+      "requirements": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-004"
+      ],
+      "acceptance_criteria": [
+        "AC-009",
+        "AC-010"
+      ],
       "tests_to_create": [
         "test_ac_009_invalid_default",
         "test_ac_010_missing_kind_params",
@@ -45,13 +52,36 @@
         "Property tests for INV-004 and INV-005 pass"
       ],
       "dependencies": [],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-002",
       "title": "Implement registry core: registration, per-kind validation, value access, resets, status",
-      "requirements": ["REQ-003", "REQ-005", "REQ-006", "REQ-007", "REQ-008", "REQ-009", "REQ-010", "REQ-013"],
-      "acceptance_criteria": ["AC-001", "AC-002", "AC-003", "AC-004", "AC-005", "AC-006", "AC-007", "AC-008", "AC-011", "AC-012", "AC-013", "AC-014", "AC-017"],
+      "requirements": [
+        "REQ-003",
+        "REQ-005",
+        "REQ-006",
+        "REQ-007",
+        "REQ-008",
+        "REQ-009",
+        "REQ-010",
+        "REQ-013"
+      ],
+      "acceptance_criteria": [
+        "AC-001",
+        "AC-002",
+        "AC-003",
+        "AC-004",
+        "AC-005",
+        "AC-006",
+        "AC-007",
+        "AC-008",
+        "AC-011",
+        "AC-012",
+        "AC-013",
+        "AC-014",
+        "AC-017"
+      ],
       "tests_to_create": [
         "test_ac_001_text_roundtrip",
         "test_ac_002_number_roundtrip",
@@ -110,14 +140,22 @@
         "Edge tests for EDGE-001 through EDGE-013, EDGE-020 pass",
         "Property tests for INV-001, INV-002, INV-003, INV-010 pass"
       ],
-      "dependencies": ["T-001"],
-      "status": "SPECIFIED"
+      "dependencies": [
+        "T-001"
+      ],
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-003",
       "title": "Implement views and hierarchy",
-      "requirements": ["REQ-011", "REQ-012"],
-      "acceptance_criteria": ["AC-015", "AC-016"],
+      "requirements": [
+        "REQ-011",
+        "REQ-012"
+      ],
+      "acceptance_criteria": [
+        "AC-015",
+        "AC-016"
+      ],
       "tests_to_create": [
         "test_ac_015_grouped_views",
         "test_ac_016_to_view",
@@ -139,14 +177,35 @@
         "Acceptance tests for AC-015 and AC-016 pass",
         "Property test for INV-006 passes"
       ],
-      "dependencies": ["T-002"],
-      "status": "SPECIFIED"
+      "dependencies": [
+        "T-002"
+      ],
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-004",
       "title": "Implement template CRUD semantics (scope-coverage, leave-as-is load)",
-      "requirements": ["REQ-015", "REQ-016", "REQ-017", "REQ-018", "REQ-019", "REQ-020"],
-      "acceptance_criteria": ["AC-019", "AC-020", "AC-021", "AC-022", "AC-023", "AC-024", "AC-025", "AC-026", "AC-027", "AC-028", "AC-029"],
+      "requirements": [
+        "REQ-015",
+        "REQ-016",
+        "REQ-017",
+        "REQ-018",
+        "REQ-019",
+        "REQ-020"
+      ],
+      "acceptance_criteria": [
+        "AC-019",
+        "AC-020",
+        "AC-021",
+        "AC-022",
+        "AC-023",
+        "AC-024",
+        "AC-025",
+        "AC-026",
+        "AC-027",
+        "AC-028",
+        "AC-029"
+      ],
       "tests_to_create": [
         "test_ac_019_create_template_explicit",
         "test_ac_020_create_template_capture",
@@ -189,14 +248,26 @@
         "Property test for INV-007 passes",
         "Integration test test_template_capture_restore_workflow passes"
       ],
-      "dependencies": ["T-002"],
-      "status": "SPECIFIED"
+      "dependencies": [
+        "T-002"
+      ],
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-005",
       "title": "Implement TemplateRepository and YamlTemplateRepository (atomic writes)",
-      "requirements": ["REQ-021", "REQ-022", "REQ-023"],
-      "acceptance_criteria": ["AC-030", "AC-031", "AC-032", "AC-033", "AC-034"],
+      "requirements": [
+        "REQ-021",
+        "REQ-022",
+        "REQ-023"
+      ],
+      "acceptance_criteria": [
+        "AC-030",
+        "AC-031",
+        "AC-032",
+        "AC-033",
+        "AC-034"
+      ],
       "tests_to_create": [
         "test_ac_030_yaml_file_written",
         "test_ac_031_persistence_across_instances",
@@ -232,14 +303,24 @@
         "Property test for INV-009 passes",
         "Contract tests for NFR-002 and NFR-003 pass"
       ],
-      "dependencies": ["T-004"],
-      "status": "SPECIFIED"
+      "dependencies": [
+        "T-004"
+      ],
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-006",
       "title": "Implement event-bus integration (SettingChanged) and observability",
-      "requirements": ["REQ-024", "REQ-025"],
-      "acceptance_criteria": ["AC-035", "AC-036", "AC-037", "AC-039"],
+      "requirements": [
+        "REQ-024",
+        "REQ-025"
+      ],
+      "acceptance_criteria": [
+        "AC-035",
+        "AC-036",
+        "AC-037",
+        "AC-039"
+      ],
       "tests_to_create": [
         "test_ac_035_set_value_publishes_event",
         "test_ac_036_load_template_publishes_events",
@@ -273,14 +354,24 @@
         "Integration test test_multi_feature_reactive_settings passes",
         "Contract test for NFR-004 passes"
       ],
-      "dependencies": ["T-002", "T-004"],
-      "status": "SPECIFIED"
+      "dependencies": [
+        "T-002",
+        "T-004"
+      ],
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-007",
       "title": "Implement registry singleton, thread-safe registration, and performance budgets",
-      "requirements": ["REQ-005", "REQ-014", "REQ-025"],
-      "acceptance_criteria": ["AC-018", "AC-038"],
+      "requirements": [
+        "REQ-005",
+        "REQ-014",
+        "REQ-025"
+      ],
+      "acceptance_criteria": [
+        "AC-018",
+        "AC-038"
+      ],
       "tests_to_create": [
         "test_ac_018_singleton",
         "test_ac_038_thread_safe_registration",
@@ -304,8 +395,12 @@
         "Acceptance tests for AC-018 and AC-038 pass",
         "Contract test for NFR-001 passes"
       ],
-      "dependencies": ["T-003", "T-005", "T-006"],
-      "status": "SPECIFIED"
+      "dependencies": [
+        "T-003",
+        "T-005",
+        "T-006"
+      ],
+      "status": "VERIFIED"
     }
   ]
 }
