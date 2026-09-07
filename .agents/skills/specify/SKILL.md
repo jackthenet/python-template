@@ -27,37 +27,44 @@ Discover and specify a new feature end to end: create a feature branch, adversar
 ### 1. Create the feature branch
 
 1. Create a feature branch `feature/[feature-name]` from `main` (or the configured base branch).
+2. Other features are being implemented in parallel. Stay strictly on this branch/worktree: do not modify unrelated features, branches, or worktrees, and keep all changes isolated to this feature.
 
-### 2. Interrogate the feature idea (discover)
+### 2. Check existing features and specs (no double work)
 
-2. Restate the feature idea in one sentence.
-3. Ask: what is the goal? Who is the user? What problem does it solve?
-4. Ask: what are the constraints? What must NOT change? What is out of scope?
-5. Ask: what are the edge cases? What could go wrong? What are the failure modes?
-6. Ask: what are the hidden requirements? What assumptions are being made?
-7. Ask: what are the scope boundaries? Where does this feature end?
-8. Capture the answers into a feature brief (goals, constraints, out-of-scope items, edge cases).
+3. Read the specs in `docs/specs/` (all features, including any spec already on the current branch) and the existing feature directories under `src/`.
+4. Determine what has already been built and what is planned elsewhere. If any part of this feature overlaps an existing or planned feature, reuse or extend that work instead of re-specifying it, and record the overlap in the feature brief.
 
-### 3. Write the specification
+### 3. Interrogate the feature idea (discover)
 
-9. Read the feature brief and the specification template.
-10. Identify every normative requirement. Assign each a stable `REQ-XXX` ID.
-11. For each requirement, write one or more acceptance criteria in Given/When/Then form. Assign each an `AC-XXX` ID.
-12. Identify invariants the system must always maintain. Assign each an `INV-XXX` ID.
-13. Identify edge cases and error conditions. Assign each an `EDGE-XXX` ID.
-14. Identify non-functional requirements (performance, security, usability, compliance). Assign each an `NFR-XXX` ID.
-15. Define the test strategy: map each AC/INV/EDGE to a test category (acceptance, integration, contract, property, unit) and a test function name.
-16. Write the complete specification to `docs/specs/[feature-name].md`.
+5. Restate the feature idea in one sentence.
+6. Ask: what is the goal? Who is the user? What problem does it solve?
+7. Ask: what are the constraints? What must NOT change? What is out of scope?
+8. Ask: what are the edge cases? What could go wrong? What are the failure modes?
+9. Ask: what are the hidden requirements? What assumptions are being made?
+10. Ask: what are the scope boundaries? Where does this feature end?
+11. Ask at least 20 questions in total. A single `ask_user_question` call accepts at most 4 questions — call it multiple times (batches of up to 4) until at least 20 questions have been asked, covering goals, users, constraints, out-of-scope, edge cases, failure modes, hidden requirements, assumptions, scope boundaries, and non-functional concerns.
+12. Capture the answers into a feature brief (goals, constraints, out-of-scope items, edge cases).
 
-### 4. Verify self-consistency
+### 4. Write the specification
 
-17. Run the self-consistency checklist (below) against the written specification. Fix every inconsistency in the spec itself — do NOT defer to implementation or review.
+13. Read the feature brief and the specification template.
+14. Identify every normative requirement. Assign each a stable `REQ-XXX` ID.
+15. For each requirement, write one or more acceptance criteria in Given/When/Then form. Assign each an `AC-XXX` ID.
+16. Identify invariants the system must always maintain. Assign each an `INV-XXX` ID.
+17. Identify edge cases and error conditions. Assign each an `EDGE-XXX` ID.
+18. Identify non-functional requirements (performance, security, usability, compliance). Assign each an `NFR-XXX` ID.
+19. Define the test strategy: map each AC/INV/EDGE to a test category (acceptance, integration, contract, property, unit) and a test function name.
+20. Build `docs/specs/[feature-name].md` incrementally with several small `write`/`edit` tool calls: write the first chunk (header + first sections) with `write`, then append subsequent sections with `edit` calls. Do NOT do one giant `write` call and do NOT rewrite the whole file multiple times.
 
-### 5. Present for approval
+### 5. Verify self-consistency
 
-18. Commit the specification file.
-19. Open a PR for human review.
-20. STOP and present the specification for human approval.
+21. Run the self-consistency checklist (below) against the written specification. Fix every inconsistency in the spec itself — do NOT defer to implementation or review.
+
+### 6. Present for approval
+
+22. Commit the specification file.
+23. Open a PR for human review.
+24. STOP and present the specification for human approval.
 
 ## Self-Consistency Checklist
 
@@ -75,7 +82,10 @@ Run this against the written specification before presenting it for approval. Fi
 ## Rules
 
 - A feature branch MUST be created before any brief or specification work.
+- Stay strictly on the feature's branch/worktree. Do not modify unrelated features, branches, or worktrees. Keep all changes isolated to this feature.
 - Ask MORE questions than feels necessary during interrogation.
+- Ask at least 20 questions during interrogation. Since one `ask_user_question` call accepts at most 4 questions, call it multiple times until the total reaches at least 20.
+- Check other features' specs and the current branch's specs before specifying. Reuse or extend existing/planned work — do not do double work.
 - The feature brief MUST capture goals, constraints, out-of-scope items, and edge cases.
 - Every normative requirement MUST have a stable `REQ-XXX` ID.
 - Every acceptance criterion MUST be in Given/When/Then form with an `AC-XXX` ID.
@@ -83,6 +93,7 @@ Run this against the written specification before presenting it for approval. Fi
 - Every edge case MUST have an `EDGE-XXX` ID.
 - Every non-functional requirement MUST have an `NFR-XXX` ID.
 - The specification MUST be committed to `docs/specs/`.
+- Build the specification file incrementally with several small `write`/`edit` calls — not one giant `write` call and not multiple full rewrites.
 - The specification MUST pass the self-consistency checklist before it is presented for approval.
 - The specification MUST be presented to a human for approval before implementation.
 - Do NOT write implementation code in this phase.
@@ -100,6 +111,8 @@ Run this against the written specification before presenting it for approval. Fi
 
 - The feature branch exists.
 - The feature brief captures goals, constraints, out-of-scope items, and edge cases.
+- At least 20 questions were asked during interrogation (multiple `ask_user_question` calls of up to 4 each).
+- Existing features' specs and the current branch's specs were checked for overlap; no work was double-specified.
 - The specification has stable IDs for every requirement, acceptance criterion, invariant, edge case, and non-functional requirement.
 - The specification passes the self-consistency checklist (no internal inconsistencies).
 - The specification is committed to `docs/specs/`.
