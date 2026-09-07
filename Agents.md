@@ -239,6 +239,31 @@ get_event_bus().publish(UserCreated(user_id="u1", email="e1"))
 
 ---
 
+## Using the Settings Feature
+
+New backend features that need typed, validated configuration values MUST use the shared settings registry at `src/backend/settings/` (spec: `docs/specs/settings.md`) instead of inventing their own configuration mechanism.
+
+- **Get the registry.** Use `get_settings_registry()` (the module singleton) or instantiate `SettingsRegistry(event_bus=..., template_repository=...)` for tests/DI. A `None` event bus uses the shared `get_event_bus()`; a `None` repository uses in-memory storage.
+- **Register settings.** Call `register(SettingDefinition(...))` for a single setting or `register_feature("name", [definitions])` for a feature's settings (each key must start with `"name."`).
+- **Read/write values.** Use `get_value(key)`, `set_value(key, value)` (validated), `reset(key)`, `reset_all()`. Values are always valid for their kind; invalid writes raise `SettingsValidationError`.
+- **Kinds.** Six kinds: TEXT, NUMBER, BOOLEAN, EMAIL, SLIDER, SELECT, each with kind-specific parameters and per-kind validation (see the spec).
+- **Views.** Use `to_view(key)`, `views()`, `grouped_views()` for renderable metadata (category/group hierarchy, status).
+- **Templates.** Use `create_template`/`load_template`/`update_template`/`delete_template`/`get_template`/`list_templates` for named value profiles scoped to a (category, group). Create/update require exact scope coverage; load sets the template's values and leaves others as-is.
+- **Storage.** Use `YamlTemplateRepository(directory)` for YAML persistence (one file per template, atomic writes) or `MemoryTemplateRepository()` for in-memory. Both implement the `TemplateRepository` ABC.
+- **Events.** Value changes publish `SettingChanged` (key, value, previous) to the event bus (best-effort).
+- **Errors.** Exceptions are the `SettingsError` hierarchy (from `backend.settings.exceptions`): `SettingsNotFoundError`, `SettingsValidationError`, `SettingsRegistrationError`, `TemplateNotFoundError`, `TemplateValidationError`, `TemplateStorageError`.
+- **Testing.** Use `reset_settings_registry()` to reset the module singleton between tests.
+
+```python
+from backend.settings import SettingDefinition, SettingKind, get_settings_registry
+
+reg = get_settings_registry()
+reg.register(SettingDefinition(key="app.name", kind=SettingKind.TEXT, default="default", category="app"))
+reg.set_value("app.name", "new")
+```
+
+---
+
 ## Dependencies and Existing Packages
 
 Prefer established, well-maintained packages over custom implementations when a package materially solves the problem and fits the project's requirements, architecture, licensing, and operational constraints.
