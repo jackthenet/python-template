@@ -17,6 +17,8 @@ dependencies = [
     "sqlmodel>=0.0.42",
     "argon2-cffi>=25.1.0",
     "email-validator>=2.3.0",
+    # Safe YAML serialization for template storage.
+    "pyyaml>=6.0.1",
 ]
 
 [dependency-groups]

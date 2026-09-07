@@ -828,6 +828,7 @@ dependencies = [
     { name = "loguru" },
     { name = "orjson" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "sqlmodel" },
 ]
 
@@ -852,6 +853,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "orjson", specifier = ">=3.11.8" },
     { name = "pydantic", specifier = ">=2.13.1" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "sqlmodel", specifier = ">=0.0.42" },
 ]
 
