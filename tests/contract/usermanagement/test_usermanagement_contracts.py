@@ -15,6 +15,8 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from usermanagement_test_helpers import db_url, valid_create
+
 from backend.usermanagement import (
     InvalidRoleError,
     LastAdminError,
@@ -27,7 +29,6 @@ from backend.usermanagement import (
     UserRead,
     UserRepository,
 )
-from usermanagement_test_helpers import db_url, valid_create
 
 _READ_BUDGET_MS = 5.0
 _WRITE_BUDGET_S = 1.0
@@ -199,7 +200,9 @@ def test_nfr_004_concurrent_repository_safety(tmp_path: Path) -> None:
     # A failed operation leaves no partial state.
     before = [u.id for u in manager.list_users(include_inactive=True)]
     with pytest.raises(UserAlreadyExistsError) as exc_info:
-        manager.create_user(UserCreate(**valid_create(username="t0x", email="t0@example.com")))
+        # Fresh email so only the username collides (a full duplicate would
+        # violate both UNIQUE constraints; SQLite reports an ambiguous one).
+        manager.create_user(UserCreate(**valid_create(username="t0x", email="fresh@example.com")))
     after = [u.id for u in manager.list_users(include_inactive=True)]
     assert before == after
     assert exc_info.value.field == "username"

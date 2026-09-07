@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pydantic
 import pytest
+from usermanagement_test_helpers import EventCollector, db_url, valid_create
+
 from backend.usermanagement import (
     SqliteUserRepository,
     UserAlreadyExistsError,
@@ -18,7 +20,6 @@ from backend.usermanagement import (
     UserNotFoundError,
     UserUpdate,
 )
-from usermanagement_test_helpers import EventCollector, db_url, valid_create
 
 
 @pytest.fixture
@@ -40,7 +41,8 @@ def test_edge_001_update_email_collision(manager: UserManager) -> None:
     a = manager.create_user(UserCreate(**valid_create(username="aa1")))
     manager.create_user(UserCreate(**valid_create(username="bb2", email="aa1@example.com")))
     with pytest.raises(UserAlreadyExistsError) as exc:
-        manager.update_user(a.id, UserUpdate(email="bb2@example.com"))
+        # b owns aa1@example.com, so taking it must collide (EDGE-001).
+        manager.update_user(a.id, UserUpdate(email="aa1@example.com"))
     assert exc.value.field == "email"
 
 
@@ -97,7 +99,7 @@ def test_edge_007_repo_creates_parent_dir(tmp_path: Path) -> None:
 
 
 def _manager_user(repo: SqliteUserRepository):
-    from datetime import datetime
+    from datetime import UTC, datetime
     from uuid import uuid4
 
     from backend.usermanagement import User
@@ -111,8 +113,8 @@ def _manager_user(repo: SqliteUserRepository):
         password_hash="$argon2id$fake",
         profile_picture_url=None,
         is_active=True,
-        created_at=datetime.now(datetime.UTC),
-        updated_at=datetime.now(datetime.UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     return repo.add(user)
 
@@ -120,7 +122,7 @@ def _manager_user(repo: SqliteUserRepository):
 def test_edge_008_memory_repository() -> None:
     repo1 = SqliteUserRepository("sqlite:///:memory:")
     repo2 = SqliteUserRepository("sqlite:///:memory:")
-    from datetime import datetime
+    from datetime import UTC, datetime
     from uuid import uuid4
 
     from backend.usermanagement import User
@@ -134,8 +136,8 @@ def test_edge_008_memory_repository() -> None:
         password_hash="$argon2id$fake",
         profile_picture_url=None,
         is_active=True,
-        created_at=datetime.now(datetime.UTC),
-        updated_at=datetime.now(datetime.UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     repo1.add(user)
     assert repo1.get_by_id(user.id) is not None
@@ -197,7 +199,7 @@ def test_edge_015_concurrent_duplicate_create(tmp_path: Path) -> None:
 
 def test_edge_016_delete_admin_with_two_admins(manager: UserManager) -> None:
     a = manager.create_user(UserCreate(**valid_create(username="root1", role="admin")))
-    manager.create_user(UserCreate(**valid_create(username="root2", role="admin")))
+    manager.create_user(UserCreate(**valid_create(username="root2", role="admin", email="root2@example.com")))
     manager.delete_user(a.id)
     with pytest.raises(UserNotFoundError):
         manager.get_user(a.id)

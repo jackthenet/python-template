@@ -14,6 +14,8 @@ from uuid import UUID, uuid4
 
 import pydantic
 import pytest
+from usermanagement_test_helpers import EventCollector, db_url, valid_create
+
 from backend.usermanagement import (
     InvalidRoleError,
     LastAdminError,
@@ -33,7 +35,6 @@ from backend.usermanagement import (
     UserUpdate,
     UserUpdated,
 )
-from usermanagement_test_helpers import EventCollector, db_url, valid_create
 
 
 @pytest.fixture
@@ -253,8 +254,8 @@ def test_ac_023_get_user_by_username(manager: UserManager) -> None:
 
 def test_ac_024_list_users_excludes_inactive(manager: UserManager) -> None:
     a = manager.create_user(UserCreate(**valid_create(username="aa1")))
-    b = manager.create_user(UserCreate(**valid_create(username="bb2")))
-    c = manager.create_user(UserCreate(**valid_create(username="cc3")))
+    b = manager.create_user(UserCreate(**valid_create(username="bb2", email="bb2@example.com")))
+    c = manager.create_user(UserCreate(**valid_create(username="cc3", email="cc3@example.com")))
     manager.deactivate_user(c.id)
     active = {u.id for u in manager.list_users()}
     assert active == {a.id, b.id}
@@ -341,12 +342,15 @@ class _FakeUserStore:
 def test_ac_028_service_with_fake_repository() -> None:
     from backend.usermanagement import UserRepository
 
-    class FakeRepository(UserRepository, _FakeUserStore):
+    # _FakeUserStore must precede UserRepository in the bases: otherwise the
+    # ABC's own abstract-method namespace shadows the fake's implementations
+    # in the MRO and instantiation fails (all methods stay abstract).
+    class FakeRepository(_FakeUserStore, UserRepository):
         pass
 
     manager = UserManager(FakeRepository())
     a = manager.create_user(UserCreate(**valid_create(username="aa1", role="admin")))
-    b = manager.create_user(UserCreate(**valid_create(username="bb2")))
+    b = manager.create_user(UserCreate(**valid_create(username="bb2", email="bb2@example.com")))
     assert manager.get_user(a.id).username == "aa1"
     assert manager.get_user_by_username("bb2").id == b.id
     assert {u.id for u in manager.list_users()} == {a.id, b.id}

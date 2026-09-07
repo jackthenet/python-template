@@ -5,6 +5,11 @@ Hypothesis-based tests for the invariants INV-001 .. INV-006.
 
 from __future__ import annotations
 
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
+from hypothesis.strategies import SearchStrategy
+from usermanagement_test_helpers import EventCollector, valid_create
+
 from backend.usermanagement import (
     InvalidRoleError,
     LastAdminError,
@@ -21,10 +26,6 @@ from backend.usermanagement import (
     UserUpdate,
     UserUpdated,
 )
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
-from hypothesis.strategies import SearchStrategy
-from usermanagement_test_helpers import EventCollector, valid_create
 
 _MAX_EXAMPLES = 20
 
@@ -42,7 +43,7 @@ def _password() -> SearchStrategy[str]:
         lambda letters, digits: letters + digits,
         st.text(
             alphabet=st.sampled_from("abcdefghijklmnopqrstuvwxyz"),
-            min_size=4,
+            min_size=7,
             max_size=10,
         ),
         st.text(alphabet=st.sampled_from("0123456789"), min_size=1, max_size=4),
@@ -96,6 +97,7 @@ def test_inv_001_create_read_consistency(user: UserCreate) -> None:
 @settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
 @given(p1=_password(), p2=_password())
 def test_inv_002_password_round_trip(p1: str, p2: str) -> None:
+    assume(p1 != p2)  # changing to the same password keeps the old one valid
     _, manager, _ = _memory_manager()
     created = manager.create_user(UserCreate(**valid_create(password=p1)))
     assert manager.verify_password(created.id, p1) is True
@@ -250,6 +252,7 @@ def test_inv_006_event_correspondence(ops: list[str]) -> None:
     for op in ops:
         counter += 1
         if op == "create" or user_id is None:
+            before = len(collector.of_type(UserCreated))
             created = manager.create_user(
                 UserCreate(
                     **valid_create(
@@ -259,7 +262,6 @@ def test_inv_006_event_correspondence(ops: list[str]) -> None:
                 )
             )
             user_id = created.id
-            before = len(collector.of_type(UserCreated))
             assert len(collector.of_type(UserCreated)) == before + 1
             continue
         try:
@@ -267,18 +269,24 @@ def test_inv_006_event_correspondence(ops: list[str]) -> None:
                 manager.update_user(user_id, UserUpdate(display_name=f"upd{counter}"))
                 ev = UserUpdated
             elif op == "password":
-                manager.change_password(user_id, f"pass{counter}-1")
+                manager.change_password(user_id, f"pass{counter}-1x")
                 ev = UserPasswordChanged
             elif op == "role":
                 new_role = "admin" if manager.get_user(user_id).role == "member" else "member"
                 manager.set_role(user_id, new_role)
                 ev = UserRoleChanged
             elif op == "deactivate":
+                was_active = manager.get_user(user_id).is_active
                 manager.deactivate_user(user_id)
                 ev = UserDeactivated
+                if not was_active:
+                    continue  # idempotent no-op: no event (REQ-009)
             elif op == "activate":
+                was_inactive = not manager.get_user(user_id).is_active
                 manager.activate_user(user_id)
                 ev = UserActivated
+                if not was_inactive:
+                    continue  # idempotent no-op: no event (REQ-009)
             else:
                 continue
         except LastAdminError, InvalidRoleError, UserNotFoundError:

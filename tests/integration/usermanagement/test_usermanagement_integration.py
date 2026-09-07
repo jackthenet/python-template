@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from usermanagement_test_helpers import EventCollector, db_url, valid_create
+
 from backend.usermanagement import (
     SqliteUserRepository,
     UserActivated,
@@ -24,7 +26,6 @@ from backend.usermanagement import (
     UserUpdate,
     UserUpdated,
 )
-from usermanagement_test_helpers import EventCollector, db_url, valid_create
 
 
 def test_full_user_lifecycle(tmp_path: Path) -> None:
@@ -36,6 +37,12 @@ def test_full_user_lifecycle(tmp_path: Path) -> None:
     user = manager.create_user(UserCreate(**valid_create()))
     # Creation is observable through the read API.
     assert manager.get_user(user.id).username == "alice"
+
+    # A guardian admin so the primary user's admin deactivation/activation/
+    # deletion never leave zero active admins (REQ-008).
+    guardian = manager.create_user(
+        UserCreate(**valid_create(username="guardian", email="guardian@example.com", role="admin"))
+    )
 
     # Update (username stays immutable).
     updated = manager.update_user(user.id, UserUpdate(display_name="Alice A.", email="alice.a@example.com"))
@@ -65,7 +72,8 @@ def test_full_user_lifecycle(tmp_path: Path) -> None:
         manager.get_user(user.id)
 
     # Every successful mutation published exactly one event.
-    assert len(collector.of_type(UserCreated)) == 1
+    created_events = collector.of_type(UserCreated)
+    assert {e.user_id for e in created_events} == {user.id, guardian.id}
     assert len(collector.of_type(UserPasswordChanged)) == 1
     assert len(collector.of_type(UserRoleChanged)) == 1
     assert len(collector.of_type(UserDeactivated)) == 1
