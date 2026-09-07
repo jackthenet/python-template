@@ -36,6 +36,15 @@ Convert an approved specification into executable acceptance tests.
 - **Async event-bus tests:** the bus dispatches queued events to handlers registered *at dispatch time*. So subscribe BEFORE any setup writes, wait for the setup events to be delivered, then clear the collector — so no setup event is in flight when asserting on the operation under test. Never publish setup events and then subscribe (racy).
 - Commit the tests: `test(<feature>): add acceptance tests`.
 
+### Test contract sanity check (before confirming RED)
+
+A valid RED is an **assertion failure on unimplemented behavior** — not an error in test setup. Before confirming RED, verify the test contract is correct. A test that errors in setup is RED for the wrong reason and MUST NOT pass the gate.
+
+- **Failure mode.** Run the suite and inspect each red test. It must FAIL (`AssertionError`) on the unimplemented behavior. If it ERRORS in setup/fixture/collection/import (e.g., `AttributeError` in a helper, a bad import, a fixture collision), that is a broken test contract — fix the test, do not confirm RED.
+- **Strategy/domain match.** Every Hypothesis strategy must match the spec's domain (min/max length, value ranges, types). A strategy that generates out-of-domain input (e.g., a 5-char password when the spec requires 8–128) is a contract bug — fix the strategy.
+- **Fixture uniqueness.** Setup fixtures must not collide on unique fields (e.g., two users sharing one email in a test that asserts UNIQUE). Give each fixture distinct unique values.
+- **Record the failure mode** (assertion vs error) in the RED evidence so the gate is auditable.
+
 ## MUST-NOT
 
 - Implement missing behavior.
@@ -64,7 +73,7 @@ Commit:
 ## Verification
 
 - Tests exist and reference `AC-XXX` IDs.
-- Tests fail (RED confirmed) before implementation.
-- RED evidence recorded.
+- Tests fail (RED confirmed) before implementation — each as an **assertion failure**, not a setup error (test contract sanity check passed).
+- RED evidence recorded (including failure mode per test).
 - Traceability matrix updated.
 - Tests committed.

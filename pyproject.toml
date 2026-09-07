@@ -37,8 +37,9 @@ dev = [
     "py-spy>=0.4.2",
     # Unit and integration test runner.
     "pytest>=8.3",
+    # Coverage reporting for the verify phase (spec/branch coverage evidence).
+    "pytest-cov>=6.0",
     # Randomized pytest ordering to expose order-dependent test coupling.
-    "pytest-cov>=5.0",
     "pytest-random>=0.2",
     # Parallel pytest execution for faster focused and full-suite runs.
     "pytest-xdist>=3.8.0",
