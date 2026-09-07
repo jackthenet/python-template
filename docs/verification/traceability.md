@@ -169,6 +169,87 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | — | — | `test_multi_feature_reactive_settings` (integration) | GREEN |
 | — | — | `test_template_capture_restore_workflow` (integration) | GREEN |
 
+## User Management Matrix
+
+The user-management feature (`docs/specs/user-management.md`) uses its own REQ/AC ID space (REQ-001..017, AC-001..038) that overlaps the other features' IDs, so the matrix is kept separate.
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_ac_001_create_valid_user` | RED |
+| REQ-002 | AC-001 | `test_ac_001_create_valid_user` | RED |
+| REQ-002 | AC-004 | `test_ac_004_username_too_short` | RED |
+| REQ-002 | AC-005 | `test_ac_005_password_too_short` | RED |
+| REQ-002 | AC-006 | `test_ac_006_invalid_email` | RED |
+| REQ-002 | AC-007 | `test_ac_007_non_http_profile_picture_url` | RED |
+| REQ-003 | AC-002 | `test_ac_002_duplicate_username` | RED |
+| REQ-003 | AC-003 | `test_ac_003_duplicate_email_case_insensitive` | RED |
+| REQ-004 | AC-010 | `test_ac_010_argon2_hash_stored_not_exposed` | RED |
+| REQ-005 | AC-011 | `test_ac_011_change_password` | RED |
+| REQ-005 | AC-012 | `test_ac_012_verify_password` | RED |
+| REQ-005 | AC-013 | `test_ac_013_change_password_weak` | RED |
+| REQ-005 | AC-014 | `test_ac_014_password_ops_unknown_user` | RED |
+| REQ-006 | AC-008 | `test_ac_008_role_not_in_set_create` | RED |
+| REQ-006 | AC-009 | `test_ac_009_custom_role_set` | RED |
+| REQ-006 | AC-016 | `test_ac_016_set_role_not_in_set` | RED |
+| REQ-007 | AC-015 | `test_ac_015_set_role` | RED |
+| REQ-008 | AC-017 | `test_ac_017_delete_last_admin` | RED |
+| REQ-008 | AC-018 | `test_ac_018_deactivate_last_admin` | RED |
+| REQ-008 | AC-019 | `test_ac_019_demote_last_admin` | RED |
+| REQ-009 | AC-020 | `test_ac_020_deactivate_activate` | RED |
+| REQ-009 | AC-021 | `test_ac_021_activate_idempotent` | RED |
+| REQ-010 | AC-022 | `test_ac_022_get_user` | RED |
+| REQ-010 | AC-023 | `test_ac_023_get_user_by_username` | RED |
+| REQ-010 | AC-024 | `test_ac_024_list_users_excludes_inactive` | RED |
+| REQ-011 | AC-025 | `test_ac_025_update_user` | RED |
+| REQ-012 | AC-026 | `test_ac_026_delete_user` | RED |
+| REQ-013 | AC-027 | `test_ac_027_persistence_across_instances` | RED |
+| REQ-013 | AC-028 | `test_ac_028_service_with_fake_repository` | RED |
+| REQ-014 | AC-029 | `test_ac_029_error_hierarchy_context` | RED |
+| REQ-015 | — | `test_nfr_005_operations_logged` | RED |
+| REQ-016 | AC-030 | `test_ac_030_event_user_created` | RED |
+| REQ-016 | AC-031 | `test_ac_031_event_user_updated` | RED |
+| REQ-016 | AC-032 | `test_ac_032_event_user_deleted` | RED |
+| REQ-016 | AC-033 | `test_ac_033_event_password_changed` | RED |
+| REQ-016 | AC-034 | `test_ac_034_event_role_changed` | RED |
+| REQ-016 | AC-035 | `test_ac_035_event_activated` | RED |
+| REQ-016 | AC-036 | `test_ac_036_event_deactivated` | RED |
+| REQ-017 | AC-037 | `test_ac_037_no_event_on_failure` | RED |
+| REQ-017 | AC-038 | `test_ac_038_no_publisher` | RED |
+| INV-001 | — | `test_inv_001_create_read_consistency` | RED |
+| INV-002 | — | `test_inv_002_password_round_trip` | RED |
+| INV-003 | — | `test_inv_003_last_admin_invariant` | RED |
+| INV-004 | — | `test_inv_004_update_semantics` | RED |
+| INV-005 | — | `test_inv_005_uniqueness` | RED |
+| INV-006 | — | `test_inv_006_event_correspondence` | RED |
+| EDGE-001 | — | `test_edge_001_update_email_collision` | RED |
+| EDGE-002 | — | `test_edge_002_empty_update_noop` | RED |
+| EDGE-003 | — | `test_edge_003_double_delete` | RED |
+| EDGE-004 | — | `test_edge_004_deactivate_already_inactive` | RED |
+| EDGE-005 | — | `test_edge_005_set_role_same` | RED |
+| EDGE-006 | — | `test_edge_006_verify_unknown` | RED |
+| EDGE-007 | — | `test_edge_007_repo_creates_parent_dir` | RED |
+| EDGE-008 | — | `test_edge_008_memory_repository` | RED |
+| EDGE-009 | — | `test_edge_009_empty_roles` | RED |
+| EDGE-010 | — | `test_edge_010_uppercase_role` | RED |
+| EDGE-011 | — | `test_edge_011_username_whitespace` | RED |
+| EDGE-012 | — | `test_edge_012_password_no_digit` | RED |
+| EDGE-013 | — | `test_edge_013_password_no_letter` | RED |
+| EDGE-014 | — | `test_edge_014_list_empty` | RED |
+| EDGE-015 | — | `test_edge_015_concurrent_duplicate_create` | RED |
+| EDGE-016 | — | `test_edge_016_delete_admin_with_two_admins` | RED |
+| EDGE-017 | — | `test_edge_017_update_unknown` | RED |
+| EDGE-018 | — | `test_edge_018_display_name_whitespace` | RED |
+| EDGE-019 | — | `test_edge_019_optional_fields_none` | RED |
+| EDGE-020 | — | `test_edge_020_publisher_raises` | RED |
+| EDGE-021 | — | `test_edge_021_case_sensitive_usernames` | RED |
+| NFR-001 | — | `test_nfr_001_performance_budgets` | RED |
+| NFR-002 | — | `test_nfr_002_no_plaintext_or_hash_exposed` | RED |
+| NFR-003 | — | `test_nfr_003_api_backward_compatible` | RED |
+| NFR-004 | — | `test_nfr_004_concurrent_repository_safety` | RED |
+| NFR-005 | — | `test_nfr_005_operations_logged` | RED |
+| — | — | `test_full_user_lifecycle` (integration) | RED |
+| — | — | `test_events_and_persistence_across_instances` (integration) | RED |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:
