@@ -50,7 +50,7 @@
         "Edge tests for EDGE-011, EDGE-012, EDGE-013, EDGE-018 pass"
       ],
       "dependencies": [],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-002",
@@ -92,7 +92,7 @@
       "dependencies": [
         "T-001"
       ],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-003",
@@ -174,7 +174,7 @@
         "T-001",
         "T-002"
       ],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-004",
@@ -241,7 +241,7 @@
       "dependencies": [
         "T-003"
       ],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-005",
@@ -310,7 +310,7 @@
       "dependencies": [
         "T-004"
       ],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     }
   ]
 }
