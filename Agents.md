@@ -264,6 +264,30 @@ reg.set_value("app.name", "new")
 
 ---
 
+## Using the User Management Feature
+
+New backend features that need to manage user account records MUST use the shared user-management feature at `src/backend/usermanagement/` (spec: `docs/specs/user-management.md`) instead of inventing their own user storage.
+
+- **Service entry point.** Use `UserManager` (the use-case service). Construct it with a `UserRepository`, an optional `roles` iterable (default `("admin", "member")`), and an optional `event_bus` — any object with a `publish(event)` method (structural `EventPublisher` protocol, no base class required).
+- **Core operations.** `create_user(UserCreate)`, `get_user(id)`, `get_user_by_username(name)`, `list_users(include_inactive)`, `update_user(id, UserUpdate)`, `delete_user(id)`, `change_password(id, new_password)`, `verify_password(id, password)`, `set_role(id, role)`, `activate_user(id)`, `deactivate_user(id)`. All reads return the read-only `UserRead` representation.
+- **Guard.** Deactivating, deleting, or demoting the last active admin raises `LastAdminError` (REQ-008).
+- **Events.** Mutations publish `UserCreated`/`UserUpdated`/`UserDeleted`/`UserPasswordChanged`/`UserRoleChanged`/`UserActivated`/`UserDeactivated` to the publisher (best-effort; a publisher failure never breaks the mutation).
+- **Errors.** Exceptions are the `UserManagerError` hierarchy (from `backend.usermanagement.errors`): `UserNotFoundError`, `UserAlreadyExistsError`, `InvalidRoleError`, `LastAdminError`.
+- **Passwords.** Hashed with argon2id (ADR-019); plaintext is never stored. `verify_password` is the only way to check a password.
+- **Storage.** Use `SqliteUserRepository("sqlite:///...")` for SQLite persistence. `UserRepository` is an ABC if you need a custom/fake repository (e.g., in tests).
+
+```python
+from backend.usermanagement import SqliteUserRepository, UserCreate, UserManager
+
+repo = SqliteUserRepository("sqlite:///./users.db")
+manager = UserManager(repo, event_bus=event_bus)
+
+user = manager.create_user(UserCreate(username="alice", email="alice@example.com", password="s3cret!x", role="member"))
+manager.verify_password(user.id, "s3cret!x")
+```
+
+---
+
 ## Dependencies and Existing Packages
 
 Prefer established, well-maintained packages over custom implementations when a package materially solves the problem and fits the project's requirements, architecture, licensing, and operational constraints.
