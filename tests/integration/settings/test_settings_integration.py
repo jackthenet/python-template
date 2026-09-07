@@ -16,7 +16,7 @@ from backend.settings import (
     SettingChanged,
     SettingDefinition,
     SettingKind,
-    SettingRegistry,
+    SettingsRegistry,
 )
 
 

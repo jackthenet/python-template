@@ -18,7 +18,7 @@ from backend.settings import (
     SelectSpec,
     SettingDefinition,
     SettingKind,
-    SettingRegistry,
+    SettingsRegistry,
     SliderSpec,
 )
 from backend.settings.exceptions import (

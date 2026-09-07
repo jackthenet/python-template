@@ -18,7 +18,7 @@ from settings_test_helpers import EventCollector
 from backend.settings import (
     SettingDefinition,
     SettingKind,
-    SettingRegistry,
+    SettingsRegistry,
     TemplateRepository,
     YamlTemplateRepository,
 )
@@ -51,10 +51,11 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     assert _median_ms(lambda: registry.reset(key)) < 1.0
     assert _median_ms(lambda: registry.to_view(key)) < 1.0
     assert _median_ms(lambda: registry.get_status(key)) < 1.0
-    extra = iter(range(1000, 1020))
+    register_counter = iter(range(1000, 1020))
+    create_counter = iter(range(1000, 1010))
 
     def _register_once() -> None:
-        registry.register(_text(f"app.extra{next(extra)}"))
+        registry.register(_text(f"app.extra{next(register_counter)}"))
 
     assert _median_ms(_register_once, n=20) < 1.0
 
@@ -72,10 +73,17 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     for i in range(100):
         yaml_registry.register(_text(f"y.s{i}", category="y"))
     assert _median_ms(
-        lambda: yaml_registry.create_template(f"ct{next(extra)}", "y", None, None), n=10
+        lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10
     ) < 50.0
     assert _median_ms(lambda: yaml_registry.update_template("ct1000", {f"y.s{i}": "v" for i in range(100)}), n=10) < 50.0
-    assert _median_ms(lambda: yaml_registry.delete_template("ct1001"), n=10) < 50.0
+    delete_counter = iter(range(2000, 2010))
+
+    def _delete_once() -> None:
+        name = f"dt{next(delete_counter)}"
+        yaml_registry.create_template(name, "y", None, None)
+        yaml_registry.delete_template(name)
+
+    assert _median_ms(_delete_once, n=10) < 50.0
     assert _median_ms(lambda: yaml_registry.list_templates(), n=20) < 500.0
 
 
@@ -127,12 +135,12 @@ def test_nfr_003_resource_contract(tmp_path: Path) -> None:
 def test_nfr_004_observability(log_records: list, tmp_path: Path) -> None:
     collector = EventCollector()
     registry = SettingsRegistry(event_bus=collector)
-    registry.register(_text("app.name", default="orig"))
+    registry.register(_text("app.name", default="orig", category="app"))
     registry.set_value("app.name", "new")
     registry.create_template("t1", "app", None, {"app.name": "new"})
 
     def _levels(key: str) -> list[str]:
-        return [r["level"] for r in log_records if key in str(r)]
+        return [r["level"].name for r in log_records if key in str(r)]
 
     # Registration, value change, and template creation are logged at DEBUG.
     assert "DEBUG" in _levels("app.name"), "registration/value change not logged at DEBUG"
@@ -147,4 +155,4 @@ def test_nfr_004_observability(log_records: list, tmp_path: Path) -> None:
     repo = YamlTemplateRepository(tmp_path)
     with pytest.raises(Exception):
         repo.get("bad")
-    assert any(r["level"] == "ERROR" for r in log_records), "storage failure not logged at ERROR"
+    assert any(r["level"].name == "ERROR" for r in log_records), "storage failure not logged at ERROR"

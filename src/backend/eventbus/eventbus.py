@@ -59,7 +59,9 @@ class EventBus:
                 if et is event_type and h is handler:
                     return
             self._registry.append((event_type, handler))
-            logger.debug("event bus: subscribed handler '{}' for event type '{}'", _handler_name(handler), event_type.__name__)
+            logger.debug(
+                "event bus: subscribed handler '{}' for event type '{}'", _handler_name(handler), event_type.__name__
+            )
 
     def unsubscribe(self, event_type: type[T], handler: Callable[[T], None]) -> None:
         """Remove ``handler`` for ``event_type``. No-op if not subscribed."""
@@ -67,7 +69,11 @@ class EventBus:
             for i, (et, h) in enumerate(self._registry):
                 if et is event_type and h is handler:
                     del self._registry[i]
-                    logger.debug("event bus: unsubscribed handler '{}' for event type '{}'", _handler_name(handler), event_type.__name__)
+                    logger.debug(
+                        "event bus: unsubscribed handler '{}' for event type '{}'",
+                        _handler_name(handler),
+                        event_type.__name__,
+                    )
                     return
 
     def publish(self, event: T) -> None:
@@ -87,7 +93,9 @@ class EventBus:
             with self._lock:
                 self._dropped += 1
                 dropped = self._dropped
-            logger.warning("event bus: queue full; dropping event type '{}' (dropped={})", type(event).__name__, dropped)
+            logger.warning(
+                "event bus: queue full; dropping event type '{}' (dropped={})", type(event).__name__, dropped
+            )
 
     def start(self) -> None:
         """Start the background worker. Idempotent."""
@@ -162,11 +170,19 @@ class EventBus:
             registry = list(self._registry)
         for event_type, handler in registry:
             if isinstance(event, event_type):
-                logger.debug("event bus: dispatching event type '{}' to handler '{}'", type(event).__name__, _handler_name(handler))
+                logger.debug(
+                    "event bus: dispatching event type '{}' to handler '{}'",
+                    type(event).__name__,
+                    _handler_name(handler),
+                )
                 try:
                     handler(event)
                 except Exception:
-                    logger.exception("event bus: handler '{}' raised for event type '{}'", _handler_name(handler), type(event).__name__)
+                    logger.exception(
+                        "event bus: handler '{}' raised for event type '{}'",
+                        _handler_name(handler),
+                        type(event).__name__,
+                    )
 
 
 _default_bus: list[EventBus | None] = [None]

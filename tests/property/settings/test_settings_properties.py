@@ -5,11 +5,10 @@ Hypothesis-based tests for the invariants INV-001 .. INV-010.
 
 from __future__ import annotations
 
-from collections.abc import SearchStrategy
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from hypothesis.strategies import SearchStrategy
 
 from settings_test_helpers import EventCollector
 
@@ -18,7 +17,7 @@ from backend.settings import (
     SelectSpec,
     SettingDefinition,
     SettingKind,
-    SettingRegistry,
+    SettingsRegistry,
     SettingStatus,
     SliderSpec,
     Template,

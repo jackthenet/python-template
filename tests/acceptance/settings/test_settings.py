@@ -24,7 +24,7 @@ from backend.settings import (
     SettingChanged,
     SettingDefinition,
     SettingKind,
-    SettingRegistry,
+    SettingsRegistry,
     SettingStatus,
     SettingView,
     SliderSpec,
@@ -476,10 +476,15 @@ def test_ac_037_custom_bus() -> None:
 def test_ac_039_reset_publishes_events(registry_with_bus) -> None:
     registry, bus = registry_with_bus
     _register_app_scope(registry)  # app.a (default "a0"), app.b (default 0)
-    registry.set_value("app.a", "x")
-    registry.set_value("app.b", 5)
+    # Subscribe BEFORE the setup writes so their events are delivered to the
+    # handler; we then wait for and clear them, so no setup event is in flight
+    # when we assert on the reset events (the bus is asynchronous).
     received: list[SettingChanged] = []
     bus.subscribe(SettingChanged, lambda e: received.append(e))
+    registry.set_value("app.a", "x")
+    registry.set_value("app.b", 5)
+    assert wait_for(lambda: len(received) == 2)  # setup events delivered
+    received.clear()
     # reset(key) publishes value=default, previous=old
     registry.reset("app.a")
     assert wait_for(lambda: len(received) == 1)
