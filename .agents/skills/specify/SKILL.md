@@ -70,6 +70,7 @@ Run this against the written specification before presenting it for approval. Fi
 - **Test strategy coverage**: every normative ID (REQ/AC/INV/EDGE/NFR) appears in the test strategy with a test category and test function.
 - **ID references**: every cross-reference (e.g., "see REQ-005", "per AC-011") points to an ID that exists.
 - **Scope consistency**: every in-scope item has at least one REQ; every out-of-scope item is not accidentally covered by a REQ/AC.
+- **Performance budget vs. observability**: every performance budget that covers an operation which the observability table requires to log must (a) be achievable *including* that per-call logging overhead, and (b) state the logging context (e.g., synchronous console sink) under which the budget is measured. A budget that only holds with logging disabled (or that is unachievable with the mandated logging) is inconsistent.
 
 ## Rules
 

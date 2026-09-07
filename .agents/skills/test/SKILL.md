@@ -33,6 +33,7 @@ Convert an approved specification into executable acceptance tests.
 - Write property tests for every `INV-XXX` using Hypothesis in `tests/property/<feature>/`.
 - Write unit tests for `EDGE-XXX` cases in `tests/unit/<feature>/`.
 - Write contract tests for `NFR-XXX` requirements in `tests/contract/<feature>/`.
+- **Async event-bus tests:** the bus dispatches queued events to handlers registered *at dispatch time*. So subscribe BEFORE any setup writes, wait for the setup events to be delivered, then clear the collector — so no setup event is in flight when asserting on the operation under test. Never publish setup events and then subscribe (racy).
 - Commit the tests: `test(<feature>): add acceptance tests`.
 
 ## MUST-NOT
