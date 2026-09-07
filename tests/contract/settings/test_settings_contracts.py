@@ -67,15 +67,13 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     assert _median_ms(lambda: scope_registry.load_template("t1"), n=50) < 10.0
 
     # create/update/delete (YAML file I/O) < 50 ms; list < 500 ms with 100 stored.
-    yaml_registry = SettingsRegistry(
-        event_bus=collector, template_repository=YamlTemplateRepository(tmp_path)
-    )
+    yaml_registry = SettingsRegistry(event_bus=collector, template_repository=YamlTemplateRepository(tmp_path))
     for i in range(100):
         yaml_registry.register(_text(f"y.s{i}", category="y"))
-    assert _median_ms(
-        lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10
-    ) < 50.0
-    assert _median_ms(lambda: yaml_registry.update_template("ct1000", {f"y.s{i}": "v" for i in range(100)}), n=10) < 50.0
+    assert _median_ms(lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10) < 50.0
+    assert (
+        _median_ms(lambda: yaml_registry.update_template("ct1000", {f"y.s{i}": "v" for i in range(100)}), n=10) < 50.0
+    )
     delete_counter = iter(range(2000, 2010))
 
     def _delete_once() -> None:
@@ -91,10 +89,20 @@ def test_nfr_002_api_and_repository_contract() -> None:
     import backend.settings as s
 
     public = [
-        "SettingsRegistry", "SettingDefinition", "SettingKind", "SettingStatus",
-        "SettingView", "SliderSpec", "SelectSpec", "SelectOption", "Template",
-        "SettingChanged", "get_settings_registry", "reset_settings_registry",
-        "TemplateRepository", "YamlTemplateRepository",
+        "SettingsRegistry",
+        "SettingDefinition",
+        "SettingKind",
+        "SettingStatus",
+        "SettingView",
+        "SliderSpec",
+        "SelectSpec",
+        "SelectOption",
+        "Template",
+        "SettingChanged",
+        "get_settings_registry",
+        "reset_settings_registry",
+        "TemplateRepository",
+        "YamlTemplateRepository",
     ]
     for name in public:
         assert hasattr(s, name), f"missing public API: {name}"
@@ -102,9 +110,13 @@ def test_nfr_002_api_and_repository_contract() -> None:
     from backend.settings import exceptions as ex
 
     for name in [
-        "SettingsError", "SettingsNotFoundError", "SettingsValidationError",
-        "SettingsRegistrationError", "TemplateNotFoundError",
-        "TemplateValidationError", "TemplateStorageError",
+        "SettingsError",
+        "SettingsNotFoundError",
+        "SettingsValidationError",
+        "SettingsRegistrationError",
+        "TemplateNotFoundError",
+        "TemplateValidationError",
+        "TemplateStorageError",
     ]:
         assert hasattr(ex, name), f"missing exception: {name}"
 
@@ -149,9 +161,9 @@ def test_nfr_004_observability(log_records: list, tmp_path: Path) -> None:
     # Storage failure is logged at ERROR.
     import yaml as _yaml
 
-    (tmp_path / "bad.yaml").write_text(_yaml.safe_dump(
-        {"name": "bad", "category": "app", "group": None, "values": ["x"]}
-    ))
+    (tmp_path / "bad.yaml").write_text(
+        _yaml.safe_dump({"name": "bad", "category": "app", "group": None, "values": ["x"]})
+    )
     repo = YamlTemplateRepository(tmp_path)
     with pytest.raises(Exception):
         repo.get("bad")

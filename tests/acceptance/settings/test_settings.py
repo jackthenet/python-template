@@ -60,14 +60,18 @@ def _email(key: str, default: str = "a@b.com") -> SettingDefinition:
 
 def _slider(key: str, default: float = 0) -> SettingDefinition:
     return SettingDefinition(
-        key=key, kind=SettingKind.SLIDER, default=default,
+        key=key,
+        kind=SettingKind.SLIDER,
+        default=default,
         slider=SliderSpec(min=0, max=10, step=2),
     )
 
 
 def _select(key: str, default: str = "a") -> SettingDefinition:
     return SettingDefinition(
-        key=key, kind=SettingKind.SELECT, default=default,
+        key=key,
+        kind=SettingKind.SELECT,
+        default=default,
         select=SelectSpec(options=[SelectOption(value="a"), SelectOption(value="b")]),
     )
 
@@ -161,7 +165,9 @@ def test_ac_010_missing_kind_params() -> None:
     # A slider spec on a TEXT setting.
     with pytest.raises(SettingsValidationError):
         SettingDefinition(
-            key="app.s3", kind=SettingKind.TEXT, default="x",
+            key="app.s3",
+            kind=SettingKind.TEXT,
+            default="x",
             slider=SliderSpec(min=0, max=1, step=1),
         )
 
@@ -203,14 +209,24 @@ def test_ac_014_unknown_key(registry: SettingsRegistry) -> None:
 
 
 def test_ac_015_grouped_views(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="logging.file_level", kind=SettingKind.TEXT, default="INFO",
-        category="logging", group="file",
-    ))
-    registry.register(SettingDefinition(
-        key="logging.console_level", kind=SettingKind.TEXT, default="DEBUG",
-        category="logging", group="console",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="logging.file_level",
+            kind=SettingKind.TEXT,
+            default="INFO",
+            category="logging",
+            group="file",
+        )
+    )
+    registry.register(
+        SettingDefinition(
+            key="logging.console_level",
+            kind=SettingKind.TEXT,
+            default="DEBUG",
+            category="logging",
+            group="console",
+        )
+    )
     grouped = registry.grouped_views()
     assert "logging" in grouped
     assert "file" in grouped["logging"]
@@ -220,9 +236,14 @@ def test_ac_015_grouped_views(registry: SettingsRegistry) -> None:
 
 
 def test_ac_016_to_view(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="app.name", kind=SettingKind.TEXT, default="orig", title="Name",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.name",
+            kind=SettingKind.TEXT,
+            default="orig",
+            title="Name",
+        )
+    )
     view = registry.to_view("app.name")
     assert isinstance(view, SettingView)
     assert view.key == "app.name"
@@ -261,12 +282,22 @@ def test_ac_018_singleton() -> None:
 
 
 def _register_app_scope(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="app.a", kind=SettingKind.TEXT, default="a0", category="app",
-    ))
-    registry.register(SettingDefinition(
-        key="app.b", kind=SettingKind.NUMBER, default=0, category="app",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.a",
+            kind=SettingKind.TEXT,
+            default="a0",
+            category="app",
+        )
+    )
+    registry.register(
+        SettingDefinition(
+            key="app.b",
+            kind=SettingKind.NUMBER,
+            default=0,
+            category="app",
+        )
+    )
 
 
 def test_ac_019_create_template_explicit(registry: SettingsRegistry) -> None:
@@ -291,9 +322,14 @@ def test_ac_021_create_template_incomplete(registry: SettingsRegistry) -> None:
     with pytest.raises(TemplateValidationError):
         registry.create_template("t1", "app", None, {"app.a": "x"})
     # Out-of-scope key.
-    registry.register(SettingDefinition(
-        key="other.c", kind=SettingKind.TEXT, default="z", category="other",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="other.c",
+            kind=SettingKind.TEXT,
+            default="z",
+            category="other",
+        )
+    )
     with pytest.raises(TemplateValidationError):
         registry.create_template("t2", "app", None, {"app.a": "x", "app.b": 1, "other.c": "z"})
 
@@ -315,14 +351,24 @@ def test_ac_023_load_template_sets_values(registry: SettingsRegistry) -> None:
 
 def test_ac_024_load_template_leave_as_is(registry: SettingsRegistry) -> None:
     # Create the template for scope {app.a} before app.b is registered.
-    registry.register(SettingDefinition(
-        key="app.a", kind=SettingKind.TEXT, default="a0", category="app",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.a",
+            kind=SettingKind.TEXT,
+            default="a0",
+            category="app",
+        )
+    )
     registry.create_template("t1", "app", None, {"app.a": "snap"})
     # Now register app.b (scope grows) and set it to a non-template value.
-    registry.register(SettingDefinition(
-        key="app.b", kind=SettingKind.NUMBER, default=0, category="app",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.b",
+            kind=SettingKind.NUMBER,
+            default=0,
+            category="app",
+        )
+    )
     registry.set_value("app.b", 42)
     registry.load_template("t1")
     assert registry.get_value("app.a") == "snap"

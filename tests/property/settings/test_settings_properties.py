@@ -32,7 +32,7 @@ def _text_value() -> SearchStrategy[str]:
 
 
 def _number_value() -> SearchStrategy[int]:
-    return st.integers(min_value=-10**6, max_value=10**6)
+    return st.integers(min_value=-(10**6), max_value=10**6)
 
 
 def _email_value() -> SearchStrategy[str]:
@@ -42,10 +42,18 @@ def _email_value() -> SearchStrategy[str]:
 @st.composite
 def _setting_with_valid_value(draw):
     """A fully-valid (SettingDefinition, value) pair for a random kind."""
-    kind = draw(st.sampled_from([
-        SettingKind.TEXT, SettingKind.NUMBER, SettingKind.BOOLEAN,
-        SettingKind.EMAIL, SettingKind.SLIDER, SettingKind.SELECT,
-    ]))
+    kind = draw(
+        st.sampled_from(
+            [
+                SettingKind.TEXT,
+                SettingKind.NUMBER,
+                SettingKind.BOOLEAN,
+                SettingKind.EMAIL,
+                SettingKind.SLIDER,
+                SettingKind.SELECT,
+            ]
+        )
+    )
     key = "app.k"
     if kind is SettingKind.TEXT:
         default = draw(_text_value())
@@ -67,13 +75,17 @@ def _setting_with_valid_value(draw):
         maxv = draw(st.integers(min_value=1, max_value=100))
         value = draw(st.integers(min_value=0, max_value=maxv))
         definition = SettingDefinition(
-            key=key, kind=kind, default=0,
+            key=key,
+            kind=kind,
+            default=0,
             slider=SliderSpec(min=0, max=maxv, step=1),
         )
     else:  # SELECT
         value = draw(st.sampled_from(["a", "b"]))
         definition = SettingDefinition(
-            key=key, kind=kind, default="a",
+            key=key,
+            kind=kind,
+            default="a",
             select=SelectSpec(options=[SelectOption(value="a"), SelectOption(value="b")]),
         )
     return definition, value
@@ -139,7 +151,9 @@ def test_inv_004_select_options_valid(n_options: int) -> None:
     """INV-004: every option value of a SELECT setting is a valid value."""
     options = [SelectOption(value=f"opt{i}") for i in range(n_options)]
     definition = SettingDefinition(
-        key="app.sel", kind=SettingKind.SELECT, default="opt0",
+        key="app.sel",
+        kind=SettingKind.SELECT,
+        default="opt0",
         select=SelectSpec(options=options),
     )
     registry = _make_registry()
@@ -153,7 +167,9 @@ def test_inv_004_select_options_valid(n_options: int) -> None:
 def test_inv_005_slider_grid_valid(maxv: int) -> None:
     """INV-005: min, max, and every grid point are valid SLIDER values."""
     definition = SettingDefinition(
-        key="app.sld", kind=SettingKind.SLIDER, default=0,
+        key="app.sld",
+        kind=SettingKind.SLIDER,
+        default=0,
         slider=SliderSpec(min=0, max=maxv, step=1),
     )
     registry = _make_registry()
@@ -175,9 +191,7 @@ def test_inv_006_views_match_values(pair) -> None:
     assert len(match) == 1
     view = match[0]
     assert view.value == registry.get_value(definition.key)
-    expected_status = (
-        SettingStatus.MODIFIED if view.value != definition.default else SettingStatus.DEFAULT
-    )
+    expected_status = SettingStatus.MODIFIED if view.value != definition.default else SettingStatus.DEFAULT
     assert view.status == expected_status
 
 
@@ -187,9 +201,14 @@ def test_inv_007_load_scope_valid(n: int) -> None:
     """INV-007: after load_template, every in-scope setting is valid."""
     registry = _make_registry()
     for i in range(n):
-        registry.register(SettingDefinition(
-            key=f"app.s{i}", kind=SettingKind.TEXT, default=f"d{i}", category="app",
-        ))
+        registry.register(
+            SettingDefinition(
+                key=f"app.s{i}",
+                kind=SettingKind.TEXT,
+                default=f"d{i}",
+                category="app",
+            )
+        )
     values = {f"app.s{i}": f"v{i}" for i in range(n)}
     registry.create_template("t1", "app", None, values)
     registry.load_template("t1")

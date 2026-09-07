@@ -58,11 +58,7 @@ def test_edge_003_logged_nonexistent_setting(log_records: list[Any]) -> None:
     edge_003_fn()
 
     # No escalation: no WARNING end-of-call line for this function.
-    warnings = [
-        m
-        for m in log_records
-        if "<<" in str(m) and "edge_003_fn" in str(m) and m["level"].name == "WARNING"
-    ]
+    warnings = [m for m in log_records if "<<" in str(m) and "edge_003_fn" in str(m) and m["level"].name == "WARNING"]
     assert not warnings
 
 

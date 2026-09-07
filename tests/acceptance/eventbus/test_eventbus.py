@@ -198,6 +198,7 @@ def test_ac_012_bounded_queue_drop() -> None:
     """AC-012: the queue never exceeds max_queue_size; excess events are dropped."""
     b = EventBus(max_queue_size=3)
     try:
+
         def slow_handler(event: object) -> None:
             time.sleep(0.05)  # keep the worker busy so the queue fills
 
