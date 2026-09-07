@@ -149,3 +149,57 @@ signal; specification coverage is the primary evidence and is complete.
 **VERIFIED.** All verification checks pass for the usermanagement feature.
 Spec coverage = 100%. The two findings are non-blocking (pre-existing
 repo-wide lint in another feature; a dev dependency addition).
+
+---
+
+## Phase 6 — Review Report
+
+**Date:** 2026-09-07
+**Reviewer:** AI agent (spec-driven review)
+
+### Review order results
+
+| # | Review dimension | Result |
+|---|---|---|
+| 1 | Specification (no more, no less) | CLEAN — public API matches spec exactly (all 21 names, none missing/extra); all REQ-001…017 implemented |
+| 2 | Traceability | CLEAN — REQ→AC→test, INV→property test (verify_spec.py PASS, no orphaned tests) |
+| 3 | Acceptance tests (not weakened/deleted) | CLEAN — all 13 test modifications are genuine bug fixes (setup defects, MRO, ambiguous collision, invalid scenarios); the `UserCreated` assertion was strengthened; no assertion removed or loosened |
+| 4 | Implementation (correct, minimal, bounded) | CLEAN — correct, minimal, within `src/backend/usermanagement/` |
+| 5 | Architecture (dependencies) | CLEAN — only stdlib, third-party, `backend.logging` (shared, spec-mandated), own modules; no `eventbus`, no cross-feature internals |
+| 6 | Quality (lint, types, naming) | CLEAN — feature files lint 0 errors, mypy clean (18 src files), consistent naming |
+| 7 | Observability | CLEAN — `@logged_class` on `UserManager` traces entry points, exit (elapsed), and exceptions |
+
+### Acceptance-test modification audit (RED baseline `eca4424` → current)
+
+All 13 modifications reviewed; each is a test-side defect fix, not a
+weakening. No modification was made to make an incorrect implementation
+pass — the implementation was correct throughout. Details:
+
+- Import reordering (`ruff --fix`): no behavioral change.
+- Duplicate default emails (AC-024, AC-028, EDGE-016): unique emails; assertions unchanged.
+- MRO base order (AC-028): ABC namespace was shadowing the fake's methods.
+- NFR-004 fresh email: unambiguous username collision; `field == "username"` preserved.
+- Guardian admin (integration): valid lifecycle; `UserCreated` assertion strengthened.
+- `assume(p1 != p2)` (inv_002): invariant applies to distinct passwords only.
+- inv_006: `before` snapshot timing, 8-char password (NFR-001), no-op event skip (REQ-009).
+- EDGE-001: targets b's actual email; `field == "email"` preserved.
+- EDGE-007/008: `datetime.now(UTC)` (was `datetime.now(datetime.UTC)` — AttributeError).
+
+### Unspecified-behavior check
+
+No unspecified behavior introduced. The implementation covers exactly the
+spec's public API and requirements.
+
+### AGENTS.md documentation
+
+The usermanagement feature is a **domain feature** (user account record
+management), not shared infrastructure. It does not get a "Using the X
+Feature" section (those are reserved for shared infrastructure features
+other features MUST use, e.g. logging/event-bus/settings). The feature is
+documented in its spec (`docs/specs/user-management.md`) and this
+verification report.
+
+### Verdict
+
+**REVIEW CLEAN.** All review dimensions pass. No findings require
+resolution. The feature is ready for a PR to `main` for human review/merge.
