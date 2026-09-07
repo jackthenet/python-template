@@ -84,7 +84,11 @@ def main() -> int:
     print("\u2500" * 25)
 
     for req in spec_ids["requirements"]:
-        print(f"\u2713 {req} has acceptance criteria" if spec_ids["acceptance_criteria"] else f"\u2717 {req} has no acceptance criteria")
+        print(
+            f"\u2713 {req} has acceptance criteria"
+            if spec_ids["acceptance_criteria"]
+            else f"\u2717 {req} has no acceptance criteria"
+        )
 
     all_test_funcs = [f for funcs in test_funcs.values() for f in funcs]
     property_funcs = test_funcs.get("property", [])

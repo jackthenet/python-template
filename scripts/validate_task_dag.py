@@ -95,7 +95,9 @@ def check_sync(docs_path: Path, runner_path: Path) -> list[str]:
             failures.append(f"Tasks missing in docs: {sorted(missing_in_docs)}")
     for tid in set(docs_tasks) & set(runner_tasks):
         if docs_tasks[tid].get("status") != runner_tasks[tid].get("status"):
-            failures.append(f"{tid} status mismatch: docs={docs_tasks[tid].get('status')} runner={runner_tasks[tid].get('status')}")
+            failures.append(
+                f"{tid} status mismatch: docs={docs_tasks[tid].get('status')} runner={runner_tasks[tid].get('status')}"
+            )
     return failures
 
 

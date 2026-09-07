@@ -173,11 +173,7 @@ def test_ac_011_logged_slow_threshold(log_records: list[Any]) -> None:
 
     ac_011_slow_fn()
 
-    exits = [
-        m
-        for m in log_records
-        if "<<" in str(m) and "ac_011_slow_fn" in str(m) and m["level"].name == "WARNING"
-    ]
+    exits = [m for m in log_records if "<<" in str(m) and "ac_011_slow_fn" in str(m) and m["level"].name == "WARNING"]
     assert exits
 
 

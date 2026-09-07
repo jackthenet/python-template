@@ -43,10 +43,15 @@ def _text(key: str, default: str = "x") -> SettingDefinition:
     return SettingDefinition(key=key, kind=SettingKind.TEXT, default=default)
 
 
-def _number(key: str, default: int = 1, min_value: float | None = None, max_value: float | None = None) -> SettingDefinition:
+def _number(
+    key: str, default: int = 1, min_value: float | None = None, max_value: float | None = None
+) -> SettingDefinition:
     return SettingDefinition(
-        key=key, kind=SettingKind.NUMBER, default=default,
-        min_value=min_value, max_value=max_value,
+        key=key,
+        kind=SettingKind.NUMBER,
+        default=default,
+        min_value=min_value,
+        max_value=max_value,
     )
 
 
@@ -79,10 +84,14 @@ def test_edge_004_bool_for_numeric(registry: SettingsRegistry) -> None:
     registry.register(_number("app.count"))
     with pytest.raises(SettingsValidationError):
         registry.set_value("app.count", True)
-    registry.register(SettingDefinition(
-        key="app.sld", kind=SettingKind.SLIDER, default=0,
-        slider=SliderSpec(min=0, max=10, step=1),
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.sld",
+            kind=SettingKind.SLIDER,
+            default=0,
+            slider=SliderSpec(min=0, max=10, step=1),
+        )
+    )
     with pytest.raises(SettingsValidationError):
         registry.set_value("app.sld", False)
 
@@ -102,44 +111,67 @@ def test_edge_006_invalid_email(registry: SettingsRegistry) -> None:
 
 
 def test_edge_007_slider_off_grid(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="app.sld", kind=SettingKind.SLIDER, default=0,
-        slider=SliderSpec(min=0, max=10, step=2),
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.sld",
+            kind=SettingKind.SLIDER,
+            default=0,
+            slider=SliderSpec(min=0, max=10, step=2),
+        )
+    )
     with pytest.raises(SettingsValidationError):
         registry.set_value("app.sld", 3)  # off the step grid
 
 
 def test_edge_008_slider_out_of_range(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="app.sld", kind=SettingKind.SLIDER, default=0,
-        slider=SliderSpec(min=0, max=10, step=2),
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.sld",
+            kind=SettingKind.SLIDER,
+            default=0,
+            slider=SliderSpec(min=0, max=10, step=2),
+        )
+    )
     with pytest.raises(SettingsValidationError):
         registry.set_value("app.sld", 12)
 
 
 def test_edge_009_select_not_an_option(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="app.sel", kind=SettingKind.SELECT, default="a",
-        select=SelectSpec(options=[SelectOption(value="a"), SelectOption(value="b")]),
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.sel",
+            kind=SettingKind.SELECT,
+            default="a",
+            select=SelectSpec(options=[SelectOption(value="a"), SelectOption(value="b")]),
+        )
+    )
     with pytest.raises(SettingsValidationError):
         registry.set_value("app.sel", "c")
 
 
 def test_edge_010_text_pattern(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="app.code", kind=SettingKind.TEXT, default="abc", pattern=r"^[a-z]+$",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.code",
+            kind=SettingKind.TEXT,
+            default="abc",
+            pattern=r"^[a-z]+$",
+        )
+    )
     with pytest.raises(SettingsValidationError):
         registry.set_value("app.code", "ABC123")
 
 
 def test_edge_011_text_length(registry: SettingsRegistry) -> None:
-    registry.register(SettingDefinition(
-        key="app.name", kind=SettingKind.TEXT, default="abc", min_length=2, max_length=4,
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.name",
+            kind=SettingKind.TEXT,
+            default="abc",
+            min_length=2,
+            max_length=4,
+        )
+    )
     with pytest.raises(SettingsValidationError):
         registry.set_value("app.name", "a")  # too short
     with pytest.raises(SettingsValidationError):
@@ -187,7 +219,9 @@ def test_edge_018_kind_param_mismatch() -> None:
     # slider spec on a TEXT setting
     with pytest.raises(SettingsValidationError):
         SettingDefinition(
-            key="app.t", kind=SettingKind.TEXT, default="x",
+            key="app.t",
+            kind=SettingKind.TEXT,
+            default="x",
             slider=SliderSpec(min=0, max=1, step=1),
         )
     # pattern on a NUMBER setting
@@ -261,9 +295,14 @@ def test_edge_027_load_unregistered_settings(tmp_path: Path) -> None:
     shared_repo = YamlTemplateRepository(tmp_path)
     bus_a = EventBus()
     reg_a = SettingsRegistry(event_bus=bus_a, template_repository=shared_repo)
-    reg_a.register(SettingDefinition(
-        key="app.a", kind=SettingKind.TEXT, default="a0", category="app",
-    ))
+    reg_a.register(
+        SettingDefinition(
+            key="app.a",
+            kind=SettingKind.TEXT,
+            default="a0",
+            category="app",
+        )
+    )
     reg_a.create_template("t1", "app", None, {"app.a": "x"})
     bus_a.shutdown()
 

@@ -32,12 +32,18 @@ def test_multi_feature_reactive_settings() -> None:
     """Two features register settings; a reactive consumer tracks changes."""
     bus = EventBus()
     registry = SettingsRegistry(event_bus=bus)
-    registry.register_feature("logging", [
-        SettingDefinition(key="logging.level", kind=SettingKind.TEXT, default="INFO"),
-    ])
-    registry.register_feature("app", [
-        SettingDefinition(key="app.name", kind=SettingKind.TEXT, default="orig"),
-    ])
+    registry.register_feature(
+        "logging",
+        [
+            SettingDefinition(key="logging.level", kind=SettingKind.TEXT, default="INFO"),
+        ],
+    )
+    registry.register_feature(
+        "app",
+        [
+            SettingDefinition(key="app.name", kind=SettingKind.TEXT, default="orig"),
+        ],
+    )
     latest: dict[str, object] = {}
     bus.subscribe(SettingChanged, lambda e: latest.__setitem__(e.key, e.value))
     registry.set_value("logging.level", "DEBUG")
@@ -49,12 +55,22 @@ def test_multi_feature_reactive_settings() -> None:
 
 def test_template_capture_restore_workflow(registry: SettingsRegistry) -> None:
     """Capture current values into a template, modify, then restore."""
-    registry.register(SettingDefinition(
-        key="app.a", kind=SettingKind.TEXT, default="a0", category="app",
-    ))
-    registry.register(SettingDefinition(
-        key="app.b", kind=SettingKind.NUMBER, default=0, category="app",
-    ))
+    registry.register(
+        SettingDefinition(
+            key="app.a",
+            kind=SettingKind.TEXT,
+            default="a0",
+            category="app",
+        )
+    )
+    registry.register(
+        SettingDefinition(
+            key="app.b",
+            kind=SettingKind.NUMBER,
+            default=0,
+            category="app",
+        )
+    )
     registry.set_value("app.a", "x")
     registry.set_value("app.b", 5)
     registry.create_template("snapshot", "app", None, None)

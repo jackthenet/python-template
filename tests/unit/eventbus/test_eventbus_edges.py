@@ -30,6 +30,7 @@ def test_edge_002_drop_on_full() -> None:
     """EDGE-002: when the queue is full, the event is dropped and counted; publish() doesn't block."""
     bus = EventBus(max_queue_size=2)
     try:
+
         def slow_handler(event: object) -> None:
             time.sleep(0.05)  # keep the worker busy so the queue fills
 
@@ -65,6 +66,7 @@ def test_edge_005_unsubscribe_not_subscribed() -> None:
     """EDGE-005: unsubscribe() for a handler that is not subscribed is a no-op."""
     bus = EventBus()
     try:
+
         def handler(event: object) -> None:
             pass
 
