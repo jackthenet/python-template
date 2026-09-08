@@ -288,6 +288,41 @@ manager.verify_password(user.id, "s3cret!x")
 
 ---
 
+## Using the Authentication Feature
+
+New backend features that need login, sessions, or password recovery MUST use the shared authentication feature at `src/backend/authentication/` (spec: `docs/specs/authentication.md`) instead of inventing their own auth.
+
+- **Service entry point.** Use `AuthService` (the use-case service). Construct it with the three repository ABCs and a `UserManager` (password verification + user reads are delegated to user-management), then keyword args: `webauthn_provider`, `event_bus`, `attempt_tracker`, `session_ttl` (default 7 days), `reset_token_ttl` (default 15 minutes), `max_failed_attempts` (default 5), `lockout_duration` (default 15 minutes), `rp_id`/`rp_name`/`origin` (relying-party settings). A `None` event bus or attempt tracker uses the shared defaults.
+- **Core operations.** `login(LoginRequest) -> LoginResult` (username/email + password), `session_info(token)`, `logout(token)` (idempotent no-op for an invalid token), `request_password_reset(PasswordResetRequest) -> str | None` (returns the raw token exactly once for a registered email, `None` otherwise), `complete_password_reset(PasswordResetComplete)`. Passkey: `begin_passkey_registration`/`complete_passkey_registration`, `begin_passkey_login`/`complete_passkey_login`, `list_passkeys`, `delete_passkey`. Password and passkey coexist — a user can log in with either.
+- **Sessions.** Server-side, opaque 256-bit URL-safe tokens; only the SHA-256 hash is stored. A password change or completed reset revokes all existing sessions.
+- **Throttling.** Brute-force lockout via the `AttemptTracker` (default `InMemoryAttemptTracker`); a locked identifier is rejected even with a correct password.
+- **Events.** Mutations publish `LoginSucceeded`/`LoginFailed`/`Logout`/`PasswordResetRequested`/`PasswordResetCompleted`/`PasskeyRegistered`/`PasskeyDeleted` to the publisher (best-effort; a publisher failure never breaks the operation).
+- **Errors.** Exceptions are the `AuthenticationError` hierarchy (from `backend.authentication.errors`): `InvalidCredentialsError`, `InvalidSessionError`, `InvalidResetTokenError`, `PasskeyCredentialNotFoundError`, `InvalidPasskeyResponseError`, `PasskeyHijackError`.
+- **Passkey provider.** Use `PyWebAuthnProvider` (real `py-webauthn`) for production; the `WebAuthnProvider` ABC is the seam for a fake in tests.
+- **Storage.** Use `SqliteSessionRepository`/`SqlitePasswordResetRepository`/`SqliteWebAuthnCredentialRepository` (same SQLite database as user-management). The repository ABCs are the seam for custom/fake storage.
+- **Tracing.** The class is traced via `@logged_class` (shared logging feature); `include_args` stays `False` so passwords and tokens never appear in log records.
+
+```python
+from backend.authentication import (
+    AuthService, PyWebAuthnProvider, SqlitePasswordResetRepository,
+    SqliteSessionRepository, SqliteWebAuthnCredentialRepository,
+)
+from backend.usermanagement import SqliteUserRepository, UserManager
+
+user_repo = SqliteUserRepository("sqlite:///./app.db")
+user_manager = UserManager(user_repo, event_bus=event_bus)
+service = AuthService(
+    SqliteSessionRepository("sqlite:///./app.db"),
+    SqlitePasswordResetRepository("sqlite:///./app.db"),
+    SqliteWebAuthnCredentialRepository("sqlite:///./app.db"),
+    user_manager,
+    event_bus=event_bus,
+)
+result = service.login(LoginRequest(identifier="alice", password="s3cret!x"))
+```
+
+---
+
 ## Dependencies and Existing Packages
 
 Prefer established, well-maintained packages over custom implementations when a package materially solves the problem and fits the project's requirements, architecture, licensing, and operational constraints.

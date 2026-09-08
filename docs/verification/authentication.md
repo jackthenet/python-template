@@ -164,3 +164,32 @@ all features) also passes, confirming no regression.
 - Verification report: this change.
 
 ---
+
+## Phase 6 — Review Report
+
+**Date:** 2026-09-08
+**Scope:** diff `main..feature/authentication` (spec already merged via PR #9/#10; under review: RED tests `4ef5ae9`, GREEN implementation `c37c7db`, verification `b1e15da`).
+
+Review order: specification → traceability → acceptance tests → implementation → architecture → quality → observability.
+
+| # | Dimension | Finding | Status |
+|---|---|---|---|
+| 1 | Specification | Implementation exposes exactly the 11 `AuthService` methods specified (spec lines 278–288) and the public API (`AuthService`, `PyWebAuthnProvider`, `InMemoryAttemptTracker`, `Sqlite*` repos). No more, no less. | ✅ Clean |
+| 2 | Traceability | Every `REQ-XXX` → `AC-XXX` → executable test; every `INV-XXX` → property test; no orphaned tests (`verify_spec.py` exit 0). | ✅ Clean |
+| 3 | Acceptance tests | No test deleted or weakened. Phase 4/5 edits to test files were bug fixes (sign_count 0→1, separate store for second-service tests, `deadline=None`) and lint fixes (import sort, unused imports, named constants) — none change asserted behavior. | ✅ Clean |
+| 4 | Implementation | Code is correct, minimal, within feature boundaries; no unspecified behavior introduced. | ✅ Clean |
+| 5 | Architecture | Feature boundary respected (`src/backend/authentication/`); no cross-feature internal imports — only public APIs from `backend.usermanagement` and `backend.logging`. | ✅ Clean |
+| 6 | Quality | `ruff check src/` clean; `mypy src/` clean (29 files); naming/duplication/complexity acceptable. | ✅ Clean |
+| 7 | Observability | Class traced via `@logged_class` (shared logging feature); lifecycle events published: `LoginSucceeded` (password + passkey), `LoginFailed`, `Logout`, `PasswordResetRequested`, `PasswordResetCompleted`, `PasskeyRegistered`, `PasskeyDeleted`. | ✅ Clean |
+
+**Overall: REVIEW CLEAN** — no findings.
+
+### Feature Reuse Note
+
+The authentication feature is a reusable shared capability (password + passkey login, server-side sessions, password recovery). A "how to use this feature" note has been added to `AGENTS.md`.
+
+### Next Step
+
+Open a PR for `feature/authentication` → `main` and present for human review/merge (the agent does not merge).
+
+---
