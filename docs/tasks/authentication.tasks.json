@@ -250,7 +250,7 @@
       ],
       "red_command": "uv run pytest tests/acceptance/authentication/ tests/property/authentication/ tests/unit/authentication/ tests/contract/authentication/ tests/integration/authentication/ -v",
       "implementation_steps": [
-        "Implement request_password_reset(request: PasswordResetRequest) -> None on AuthService: look up the user by email (lowercased); if found invalidate all existing reset tokens for the user (reset_repository.invalidate_all_for_user), create the token (new_token + hash_token), persist a PasswordReset (email lowercased, created_at=now, expires_at=now+reset_token_ttl, used=False), and publish PasswordResetRequested (email); if not found do nothing (no error, no token) — the request always succeeds",
+        "Implement request_password_reset(request: PasswordResetRequest) -> str | None on AuthService: look up the user by email (lowercased); if found invalidate all existing reset tokens for the user (reset_repository.invalidate_all_for_user), create the token (new_token + hash_token), persist a PasswordReset (email lowercased, created_at=now, expires_at=now+reset_token_ttl, used=False), and return the raw token exactly once; if not found return None (no error, no token); publish PasswordResetRequested (email) for every request — the request always succeeds",
         "Implement complete_password_reset(request: PasswordResetComplete) -> None: new_password is schema-validated with the shared user-management password rules (violations raise pydantic.ValidationError); hash the token and look up the reset; unknown raises InvalidResetTokenError(reason='unknown'); expired (expires_at <= now) raises InvalidResetTokenError(reason='expired'); used raises InvalidResetTokenError(reason='used')",
         "On a valid token: mark it used, change the password via user_manager.change_password(user_id, new_password), revoke all sessions for the user (session_repository.revoke_all_for_user), and publish PasswordResetCompleted (user_id)",
         "Update the public API export in __init__.py if needed"
@@ -258,6 +258,7 @@
       "green_command": "uv run pytest tests/acceptance/authentication/ tests/property/authentication/ tests/unit/authentication/ tests/contract/authentication/ tests/integration/authentication/ -v",
       "design_constraints": [
         "request_password_reset always succeeds (no user enumeration); a token is created only for registered emails (D6, ADR-030)",
+        "the raw reset token is returned exactly once to the caller (the in-process email feature); None is returned when no token is created (REQ-010 v2)",
         "Reset tokens are single-use, expire after reset_token_ttl, and are superseded on a new request for the same email (REQ-011)",
         "complete_password_reset changes the password via user-management (shared rules) and revokes all sessions for the user (REQ-012, ADR-027)",
         "Invalid tokens raise InvalidResetTokenError with reason 'unknown' | 'expired' | 'used' (REQ-013)",
