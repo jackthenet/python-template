@@ -1,6 +1,7 @@
 # Spec: Authentication (Backend)
 
 ## Changelog
+- v2 (2026-09-07): REQ-010 amended — `request_password_reset` now returns the raw reset token exactly once to the in-process caller (`str | None`; `None` when no token is created) so the email feature can deliver it; the token is still stored only as a SHA-256 hash.
 - v1 (2026-09-07): Initial specification.
 
 ## 1. Overview & Objectives
@@ -25,7 +26,7 @@
   - D3: Password verification reuses user-management — `UserManager.verify_password` for found users; a dummy Argon2id verification for unknown users (timing equalization). Password changes on reset completion go through `UserManager.change_password` (shared password rules, re-hashing, `UserPasswordChanged` event).
   - D4: Unified invalid-credentials error — unknown user, wrong password, and inactive user all raise `InvalidCredentialsError`; locked identifiers also raise `InvalidCredentialsError` (no lock-state signal).
   - D5: In-memory brute-force throttling — `InMemoryAttemptTracker` (per-identifier failure count, lockout window, success clears); injectable; resets on process restart (documented, acceptable for simple auth).
-  - D6: Password recovery — `request_password_reset` always succeeds (no enumeration); a token is created only for registered emails; tokens are single-use, expire after the reset TTL, and a new request for the same email invalidates prior tokens; completed reset changes the password and revokes all sessions for the user.
+  - D6: Password recovery — `request_password_reset` always succeeds (no enumeration); a token is created only for registered emails; the raw token is returned exactly once to the caller (the in-process email feature) and `None` is returned when no token is created; tokens are single-use, expire after the reset TTL, and a new request for the same email invalidates prior tokens; completed reset changes the password and revokes all sessions for the user.
   - D7: Passkey/WebAuthn — full registration + login via a `WebAuthnProvider` ABC; the default `PyWebAuthnProvider` wraps `py-webauthn` (`generate_registration_options`, `verify_registration_response`, `generate_authentication_options`, `verify_authentication_response`); RP settings (`rp_id`, `rp_name`, `origin`) are constructor parameters with sensible defaults; credentials stored in a `webauthn_credentials` table; sign-count regression is rejected as hijack.
   - D8: Password and passkey coexist — a user may log in with either method; neither method disables the other.
   - D9: Field-format validation is schema-level (Pydantic models → `pydantic.ValidationError`); domain failures are service-level (exception hierarchy rooted at `AuthenticationError`).
@@ -277,7 +278,7 @@ class AuthService:
     def login(self, request: LoginRequest) -> LoginResult: ...
     def logout(self, token: str) -> None: ...
     def session_info(self, token: str) -> SessionInfo: ...
-    def request_password_reset(self, request: PasswordResetRequest) -> None: ...
+    def request_password_reset(self, request: PasswordResetRequest) -> str | None: ...
     def complete_password_reset(self, request: PasswordResetComplete) -> None: ...
     def begin_passkey_registration(self, request: PasskeyRegistrationBegin) -> dict[str, Any]: ...
     def complete_passkey_registration(self, request: PasskeyRegistrationComplete) -> WebAuthnCredentialRead: ...
@@ -292,6 +293,7 @@ Notes on the schema:
 - `InMemoryAttemptTracker` (default) is thread-safe; it tracks per-identifier failure counts and lock-until timestamps, and `record_success` clears the identifier's state.
 - `PyWebAuthnProvider` (default) is constructed with `rp_id`, `rp_name`, and `origin`; its `verify_*` methods raise `InvalidPasskeyResponseError` when the underlying `py-webauthn` verification fails.
 - `complete_password_reset` validates `new_password` with the shared user-management password rules (8..128 chars, at least one letter and one digit); violations raise `pydantic.ValidationError`.
+- `request_password_reset` returns the raw reset token exactly once to the caller (the in-process email feature) for registered emails; `None` is returned when no token is created (unregistered email). The token is stored only as a SHA-256 hash.
 - `delete_passkey` raises `PasskeyCredentialNotFoundError` when the credential id is unknown or does not belong to the user.
 - `begin_passkey_login` raises `PasskeyCredentialNotFoundError` when the credential id is not stored.
 - `complete_passkey_login` with a verified assertion updates the stored sign count to the response's sign count before issuing the session.
@@ -309,7 +311,7 @@ Notes on the schema:
 | REQ-007 | A session expires `session_ttl` (default 7 days, configurable) after creation; expired sessions are invalid. |
 | REQ-008 | `session_info(token)` returns the `SessionInfo` for a valid, unexpired, unrevoked session; unknown, revoked, or expired tokens raise `InvalidSessionError`. |
 | REQ-009 | `logout(token)` revokes the session server-side so the token becomes immediately unusable; `logout` with an unknown, revoked, or expired token is an idempotent no-op. |
-| REQ-010 | `request_password_reset(email)` always succeeds (no user enumeration); a reset token is created only when the email is registered. |
+| REQ-010 | `request_password_reset(email)` always succeeds (no user enumeration); a reset token is created only when the email is registered, and the raw token is returned exactly once to the caller (the in-process email feature); `None` is returned when no token is created. |
 | REQ-011 | Reset tokens are single-use, expire after `reset_token_ttl` (default 15 minutes, configurable), and a new reset request for the same email invalidates all prior tokens for that email. |
 | REQ-012 | `complete_password_reset(token, new_password)` with a valid token changes the password via the user-management feature (shared password rules), consumes the token, and revokes all sessions for the user. |
 | REQ-013 | `complete_password_reset` with an unknown, expired, or used token raises `InvalidResetTokenError` with the corresponding `reason` (`"unknown"`, `"expired"`, `"used"`). |
@@ -341,8 +343,8 @@ Notes on the schema:
 | AC-012 | REQ-008 | **Given** a valid session, **When** `session_info(token)` is called, **Then** `SessionInfo(user_id, created_at, expires_at)` is returned. |
 | AC-013 | REQ-009 | **Given** a valid session, **When** `logout(token)` is called, **Then** the token is immediately unusable (`session_info` raises `InvalidSessionError`). |
 | AC-014 | REQ-009 | **Given** an unknown, revoked, or expired token, **When** `logout(token)` is called, **Then** no error is raised (idempotent no-op). |
-| AC-015 | REQ-010 | **Given** a registered email, **When** `request_password_reset` is called, **Then** no error is raised **and** a reset token is created. |
-| AC-016 | REQ-010 | **Given** an unregistered email, **When** `request_password_reset` is called, **Then** no error is raised **and** no reset token is created. |
+| AC-015 | REQ-010 | **Given** a registered email, **When** `request_password_reset` is called, **Then** no error is raised **and** a reset token is created **and** the raw token is returned. |
+| AC-016 | REQ-010 | **Given** an unregistered email, **When** `request_password_reset` is called, **Then** no error is raised **and** no reset token is created **and** `None` is returned. |
 | AC-017 | REQ-011 | **Given** a created reset token, **When** `complete_password_reset` is called with it, **Then** the token is consumed **and** a second completion with the same token raises `InvalidResetTokenError` with `reason="used"`. |
 | AC-018 | REQ-011 | **Given** a created reset token, **When** a new reset request is made for the same email, **Then** the prior token is invalidated. |
 | AC-019 | REQ-012 | **Given** a valid reset token, **When** `complete_password_reset` is called with a strong new password, **Then** the password is changed (login with the new password succeeds, login with the old password fails) **and** all sessions for the user are revoked. |
