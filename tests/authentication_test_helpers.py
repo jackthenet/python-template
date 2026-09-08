@@ -90,7 +90,10 @@ class FakeWebAuthnProvider(WebAuthnProvider):
         self.transports: list[str] = ["internal"]
         self.registration_options: dict[str, Any] = {"type": "registration-options"}
         self.authentication_options: dict[str, Any] = {"type": "authentication-options"}
-        self.sign_count = 0
+        # The sign count the browser reports in the assertion (the new count
+        # after the use). AC-025/AC-026 expect the stored sign count to become
+        # 1 after a login; a lower value (e.g. 0) is a hijack regression.
+        self.sign_count = 1
         self.fail_registration = False
         self.fail_assertion = False
 

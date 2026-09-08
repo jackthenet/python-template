@@ -16,7 +16,7 @@ from backend.authentication import InvalidSessionError, LoginRequest
 _MAX_EXAMPLES = 10
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(phase=st.sampled_from(["unexpired", "expired", "revoked"]), ttl_ms=st.integers(min_value=100, max_value=300))
 def test_inv_002_session_validity_iff_unexpired_unrevoked(phase: str, ttl_ms: int) -> None:
     fixture = build_memory_auth_service(session_ttl=timedelta(milliseconds=ttl_ms))

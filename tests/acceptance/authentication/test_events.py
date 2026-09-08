@@ -63,6 +63,7 @@ def test_ac_033_lifecycle_events_and_none_publisher(auth, tmp_path: Path) -> Non
     assert len(auth.collector.of_type(PasskeyDeleted)) == 1
 
     # a None publisher: no event is published and no error is raised
-    fixture = build_auth_service(tmp_path)
+    # (separate store: the auth fixture already owns tmp_path)
+    fixture = build_auth_service(tmp_path / "none-publisher")
     create_user(fixture.user_manager)
     fixture.service.login(LoginRequest(**valid_login("alice")))

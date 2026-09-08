@@ -63,8 +63,8 @@ def test_ac_014_logout_invalid_noop(auth, tmp_path: Path) -> None:
     result = auth.service.login(LoginRequest(**valid_login("alice")))
     auth.service.logout(result.token)
     auth.service.logout(result.token)
-    # expired token
-    fixture = build_auth_service(tmp_path, session_ttl=timedelta(milliseconds=100))
+    # expired token (separate store: the auth fixture already owns tmp_path)
+    fixture = build_auth_service(tmp_path / "expired", session_ttl=timedelta(milliseconds=100))
     create_user(fixture.user_manager)
     expired = fixture.service.login(LoginRequest(**valid_login("alice")))
     time.sleep(0.15)

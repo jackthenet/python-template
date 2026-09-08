@@ -65,3 +65,65 @@ user-management helper pattern.
 - RED baseline: see Phase 3 commit `test(authentication): add acceptance tests` (RED).
 
 ---
+
+## Phase 4 — GREEN Evidence
+
+**Date:** 2026-09-08
+**Command:** `uv run pytest tests/acceptance/authentication/ tests/property/authentication/ tests/unit/authentication/ tests/contract/authentication/ tests/integration/authentication/ -q`
+
+**Result: 67 passed** — the full authentication suite is GREEN.
+
+The feature module `src/backend/authentication/` now exists and implements the
+specification. All 67 spec-derived tests (10 acceptance, 5 property, 5 unit,
+4 contract, 2 integration) pass. The full repository suite (282 tests across
+all features) also passes, confirming no regression.
+
+### Quality Gates
+
+| Gate | Command | Result |
+|---|---|---|
+| Lint | `uv run ruff check src/backend/authentication/` | All checks passed |
+| Format | `uv run ruff format --check src/backend/authentication/` | 11 files already formatted |
+| Types | `uv run mypy src/backend/authentication/` | Success: no issues found in 11 source files |
+| Full suite | `uv run pytest tests/ -q` | 282 passed |
+
+### Implementation Summary
+
+| Task | Module(s) | Status |
+|---|---|---|
+| T-001 (foundation) | `errors.py`, `tokens.py`, `models.py`, `protocols.py`, `repositories.py`, `events.py`, `__init__.py` | VERIFIED |
+| T-002 (SQLite repositories) | `repository.py` (`SqliteSessionRepository`, `SqlitePasswordResetRepository`, `SqliteWebAuthnCredentialRepository`) | VERIFIED |
+| T-003 (attempt tracker) | `tracker.py` (`InMemoryAttemptTracker`) | VERIFIED |
+| T-004 (login/sessions) | `service.py` (`AuthService.login`, `session_info`, `logout`, `_issue_session`) | VERIFIED |
+| T-005 (password recovery) | `service.py` (`AuthService.request_password_reset`, `complete_password_reset`) | VERIFIED |
+| T-006 (passkey/WebAuthn) | `service.py` (passkey methods), `webauthn.py` (`PyWebAuthnProvider`) | VERIFIED |
+| T-007 (integration/cross-cutting) | `service.py` (events, `@logged_class`, timing), full suite | VERIFIED |
+
+### Refactor Notes
+
+- `delete_expired` uses SQLModel `select()` so `s.exec` yields mapped objects
+  (a raw `sa_select` returned rows, raising `UnmappedInstanceError`).
+- `_dummy_verify` uses `contextlib.suppress(Argon2Error)` (SIM105).
+- The class is traced via `@logged_class` (shared logging feature); `include_args`
+  stays `False` so passwords and tokens never appear in log records (REQ-022).
+
+### Test Fixes (Phase 3 helper/test bugs, not weakenings)
+
+- `tests/authentication_test_helpers.py`: `FakeWebAuthnProvider.sign_count` was
+  `0`; the AC-025/AC-026 contract expects the stored sign count to become `1`
+  after a login ("the fake provider's assertion sign count"). Set to `1` so the
+  standard WebAuthn logic (`stored = assertion.sign_count`) holds; a lower value
+  (e.g. `0`) is the hijack regression.
+- `tests/acceptance/authentication/test_sessions.py` (AC-014) and
+  `tests/acceptance/authentication/test_events.py` (AC-033): the second service
+  was built on the same `tmp_path` as the `auth` fixture, violating the `users`
+  UNIQUE constraint. The second service now uses a separate subdirectory.
+- `tests/property/authentication/test_sessions.py` (INV-002): added
+  `deadline=None` to `@settings` — the test intentionally sleeps 150–350 ms for
+  the expired phase, exceeding Hypothesis's default 200 ms per-case deadline.
+
+### Commit
+
+- GREEN: see Phase 4 commit (this change).
+
+---
