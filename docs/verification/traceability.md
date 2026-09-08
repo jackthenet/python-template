@@ -250,6 +250,78 @@ The user-management feature (`docs/specs/user-management.md`) uses its own REQ/A
 | — | — | `test_full_user_lifecycle` (integration) | GREEN |
 | — | — | `test_events_and_persistence_across_instances` (integration) | GREEN |
 
+## Authentication Matrix
+
+The authentication feature (`docs/specs/authentication.md`) uses its own REQ/AC ID space (REQ-001..022, AC-001..035) that overlaps the other features' IDs, so the matrix is kept separate.
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_ac_001_login_by_username_success` | RED |
+| REQ-001 | AC-002 | `test_ac_002_login_by_email_success` | RED |
+| REQ-002 | AC-003 | `test_ac_003_login_wrong_password_rejected` | RED |
+| REQ-003 | AC-003 | `test_ac_003_login_wrong_password_rejected` | RED |
+| REQ-003 | AC-004 | `test_ac_004_login_unknown_user_rejected` | RED |
+| REQ-003 | AC-005 | `test_ac_005_login_inactive_user_rejected` | RED |
+| REQ-004 | AC-006 | `test_ac_006_below_max_failures_not_locked` | RED |
+| REQ-004 | AC-007 | `test_ac_007_locked_identifier_rejected_even_correct_password` | RED |
+| REQ-004 | AC-008 | `test_ac_008_lockout_expires_and_success_clears` | RED |
+| REQ-005 | AC-009 | `test_ac_009_dummy_verify_on_unknown_user` | RED |
+| REQ-006 | AC-010 | `test_ac_010_token_format_and_hashed_at_rest` | RED |
+| REQ-007 | AC-011 | `test_ac_011_session_expiry` | RED |
+| REQ-008 | AC-012 | `test_ac_012_session_info_valid` | RED |
+| REQ-009 | AC-013 | `test_ac_013_logout_revokes` | RED |
+| REQ-009 | AC-014 | `test_ac_014_logout_invalid_noop` | RED |
+| REQ-010 | AC-015 | `test_ac_015_reset_request_registered_email` | RED |
+| REQ-010 | AC-016 | `test_ac_016_reset_request_unknown_email` | RED |
+| REQ-011 | AC-017 | `test_ac_017_reset_token_single_use` | RED |
+| REQ-011 | AC-018 | `test_ac_018_new_request_supersedes` | RED |
+| REQ-012 | AC-019 | `test_ac_019_reset_completes_and_revokes_sessions` | RED |
+| REQ-013 | AC-020 | `test_ac_020_reset_expired_token` | RED |
+| REQ-013 | AC-021 | `test_ac_021_reset_unknown_token` | RED |
+| REQ-014 | AC-022 | `test_ac_022_begin_registration_options` | RED |
+| REQ-014 | AC-023 | `test_ac_023_complete_registration_stores` | RED |
+| REQ-015 | AC-024 | `test_ac_024_begin_login_options` | RED |
+| REQ-015 | AC-025 | `test_ac_025_complete_login_issues_session` | RED |
+| REQ-016 | AC-026 | `test_ac_026_hijack_detected` | RED |
+| REQ-017 | AC-027 | `test_ac_027_list_passkeys` | RED |
+| REQ-017 | AC-028 | `test_ac_028_delete_passkey` | RED |
+| REQ-018 | AC-029 | `test_ac_029_password_and_passkey_coexist` | RED |
+| REQ-019 | AC-030 | `test_ac_030_empty_identifier_validation_error` | RED |
+| REQ-020 | AC-031 | `test_ac_031_login_success_event` | RED |
+| REQ-020 | AC-032 | `test_ac_032_login_failed_event` | RED |
+| REQ-020 | AC-033 | `test_ac_033_lifecycle_events_and_none_publisher` | RED |
+| REQ-021 | AC-034 | `test_ac_034_no_hash_in_representations` | RED |
+| REQ-022 | AC-035 | `test_ac_035_no_secrets_in_log_records` | RED |
+| INV-001 | — | `test_inv_001_token_hash_uniqueness` | RED |
+| INV-002 | — | `test_inv_002_session_validity_iff_unexpired_unrevoked` | RED |
+| INV-003 | — | `test_inv_003_reset_token_at_most_once` | RED |
+| INV-004 | — | `test_inv_004_lockout_threshold` | RED |
+| INV-005 | — | `test_inv_005_no_password_in_observable_output` | RED |
+| EDGE-001 | — | `test_edge_001_login_neither_username_nor_email` | RED |
+| EDGE-002 | — | `test_edge_002_login_inactive_user` | RED |
+| EDGE-003 | — | `test_edge_003_login_while_locked` | RED |
+| EDGE-004 | — | `test_edge_004_session_info_expired` | RED |
+| EDGE-005 | — | `test_edge_005_session_info_revoked` | RED |
+| EDGE-006 | — | `test_edge_006_logout_twice_noop` | RED |
+| EDGE-007 | — | `test_edge_007_reset_unknown_email_no_token` | RED |
+| EDGE-008 | — | `test_edge_008_reset_expired_token` | RED |
+| EDGE-009 | — | `test_edge_009_reset_used_token` | RED |
+| EDGE-010 | — | `test_edge_010_reset_unknown_token` | RED |
+| EDGE-011 | — | `test_edge_011_new_request_supersedes` | RED |
+| EDGE-012 | — | `test_edge_012_reset_weak_password` | RED |
+| EDGE-013 | — | `test_edge_013_registration_invalid_response` | RED |
+| EDGE-014 | — | `test_edge_014_begin_login_unregistered_credential` | RED |
+| EDGE-015 | — | `test_edge_015_hijack_detected` | RED |
+| EDGE-016 | — | `test_edge_016_login_failed_assertion` | RED |
+| EDGE-017 | — | `test_edge_017_session_info_no_token` | RED |
+| EDGE-018 | — | `test_edge_018_empty_identifier` | RED |
+| NFR-001 | — | `test_nfr_001_login_performance_budget` | RED |
+| NFR-002 | — | `test_nfr_002_no_secrets_in_logs_or_events` | RED |
+| NFR-003 | — | `test_nfr_003_public_api_stable` | RED |
+| NFR-004 | — | `test_nfr_004_service_traced` | RED |
+| NFR-005 | — | `test_nfr_005_concurrent_login_thread_safety` | RED |
+| — | — | `test_session_repository_roundtrip`, `test_reset_repository_roundtrip`, `test_webauthn_repository_roundtrip`, `test_full_flow_login_reset_logout` (integration) | RED |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:

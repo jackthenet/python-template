@@ -47,7 +47,7 @@
         "Property test for INV-001 passes"
       ],
       "dependencies": [],
-      "status": "SPECIFIED"
+      "status": "RED_CONFIRMED"
     },
     {
       "task_id": "T-002",
@@ -87,7 +87,7 @@
       "dependencies": [
         "T-001"
       ],
-      "status": "SPECIFIED"
+      "status": "RED_CONFIRMED"
     },
     {
       "task_id": "T-003",
@@ -121,7 +121,7 @@
       "dependencies": [
         "T-001"
       ],
-      "status": "SPECIFIED"
+      "status": "RED_CONFIRMED"
     },
     {
       "task_id": "T-004",
@@ -212,7 +212,7 @@
         "T-002",
         "T-003"
       ],
-      "status": "SPECIFIED"
+      "status": "RED_CONFIRMED"
     },
     {
       "task_id": "T-005",
@@ -250,7 +250,7 @@
       ],
       "red_command": "uv run pytest tests/acceptance/authentication/ tests/property/authentication/ tests/unit/authentication/ tests/contract/authentication/ tests/integration/authentication/ -v",
       "implementation_steps": [
-        "Implement request_password_reset(request: PasswordResetRequest) -> str | None on AuthService: look up the user by email (lowercased); if found invalidate all existing reset tokens for the user (reset_repository.invalidate_all_for_user), create the token (new_token + hash_token), persist a PasswordReset (email lowercased, created_at=now, expires_at=now+reset_token_ttl, used=False), and return the raw token exactly once; if not found return None (no error, no token); publish PasswordResetRequested (email) for every request — the request always succeeds",
+        "Implement request_password_reset(request: PasswordResetRequest) -> str | None on AuthService: look up the user by email (lowercased); if found invalidate all existing reset tokens for the user (reset_repository.invalidate_all_for_user), create the token (new_token + hash_token), persist a PasswordReset (email lowercased, created_at=now, expires_at=now+reset_token_ttl, used=False), and return the raw token exactly once; if not found return None (no error, no token); publish PasswordResetRequested (email) for every request \u00e2\u20ac\u201d the request always succeeds",
         "Implement complete_password_reset(request: PasswordResetComplete) -> None: new_password is schema-validated with the shared user-management password rules (violations raise pydantic.ValidationError); hash the token and look up the reset; unknown raises InvalidResetTokenError(reason='unknown'); expired (expires_at <= now) raises InvalidResetTokenError(reason='expired'); used raises InvalidResetTokenError(reason='used')",
         "On a valid token: mark it used, change the password via user_manager.change_password(user_id, new_password), revoke all sessions for the user (session_repository.revoke_all_for_user), and publish PasswordResetCompleted (user_id)",
         "Update the public API export in __init__.py if needed"
@@ -272,7 +272,7 @@
       "dependencies": [
         "T-004"
       ],
-      "status": "SPECIFIED"
+      "status": "RED_CONFIRMED"
     },
     {
       "task_id": "T-006",
@@ -334,7 +334,7 @@
       "dependencies": [
         "T-004"
       ],
-      "status": "SPECIFIED"
+      "status": "RED_CONFIRMED"
     },
     {
       "task_id": "T-007",
@@ -386,7 +386,7 @@
         "T-005",
         "T-006"
       ],
-      "status": "SPECIFIED"
+      "status": "RED_CONFIRMED"
     }
   ]
 }
