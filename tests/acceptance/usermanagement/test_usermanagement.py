@@ -146,7 +146,7 @@ def test_ac_010_argon2_hash_stored_not_exposed(manager: UserManager, repo: Sqlit
     assert stored is not None
     assert stored.password_hash.startswith("$argon2id$")
     assert stored.password_hash != data["password"]
-    assert "password_hash" not in created.model_fields
+    assert "password_hash" not in type(created).model_fields
     assert "password_hash" not in created.model_dump()
 
 
