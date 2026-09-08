@@ -43,7 +43,7 @@ Discover and specify a new feature end to end: create a feature branch, adversar
 9. Ask: what are the hidden requirements? What assumptions are being made?
 10. Ask: what are the scope boundaries? Where does this feature end?
 11. Ask at least 20 questions in total. A single `ask_user_question` call accepts at most 4 questions — call it multiple times (batches of up to 4) until at least 20 questions have been asked, covering goals, users, constraints, out-of-scope, edge cases, failure modes, hidden requirements, assumptions, scope boundaries, and non-functional concerns.
-12. Capture the answers into a feature brief (goals, constraints, out-of-scope items, edge cases).
+12. Capture the answers into a feature brief (goals, constraints, out-of-scope items, edge cases). The brief is an **intermediate artifact** — do **not** save it as a separate `.brief.md` file; it feeds the spec, which is the single kept artifact.
 
 ### 4. Write the specification
 
@@ -86,7 +86,7 @@ Run this against the written specification before presenting it for approval. Fi
 - Ask MORE questions than feels necessary during interrogation.
 - Ask at least 20 questions during interrogation. Since one `ask_user_question` call accepts at most 4 questions, call it multiple times until the total reaches at least 20.
 - Check other features' specs and the current branch's specs before specifying. Reuse or extend existing/planned work — do not do double work.
-- The feature brief MUST capture goals, constraints, out-of-scope items, and edge cases.
+- The feature brief MUST capture goals, constraints, out-of-scope items, and edge cases. The brief is intermediate — do **not** commit it as a separate `.brief.md` file; fold it into the spec.
 - Every normative requirement MUST have a stable `REQ-XXX` ID.
 - Every acceptance criterion MUST be in Given/When/Then form with an `AC-XXX` ID.
 - Every invariant MUST have an `INV-XXX` ID.
@@ -102,7 +102,7 @@ Run this against the written specification before presenting it for approval. Fi
 ## Outputs
 
 - A feature branch `feature/[feature-name]`.
-- A feature brief (goals, constraints, out-of-scope items, edge cases).
+- A feature brief (goals, constraints, out-of-scope items, edge cases) — intermediate, not a separate committed file.
 - A committed specification file at `docs/specs/[feature-name].md`.
 - A PR open for human review.
 - A clear statement that the specification is awaiting human approval.
@@ -110,7 +110,7 @@ Run this against the written specification before presenting it for approval. Fi
 ## Definition of Done
 
 - The feature branch exists.
-- The feature brief captures goals, constraints, out-of-scope items, and edge cases.
+- The feature brief captures goals, constraints, out-of-scope items, and edge cases (intermediate — folded into the spec, not a separate file).
 - At least 20 questions were asked during interrogation (multiple `ask_user_question` calls of up to 4 each).
 - Existing features' specs and the current branch's specs were checked for overlap; no work was double-specified.
 - The specification has stable IDs for every requirement, acceptance criterion, invariant, edge case, and non-functional requirement.
