@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pydantic
 import pytest
-
 from authentication_test_helpers import build_auth_service, create_user
 
 from backend.authentication import (

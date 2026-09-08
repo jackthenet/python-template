@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 
+from authentication_test_helpers import build_memory_auth_service, create_user, valid_login
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from authentication_test_helpers import build_memory_auth_service, create_user, valid_login
 from backend.authentication import LoginRequest, PasswordResetRequest
 
 _MAX_EXAMPLES = 10

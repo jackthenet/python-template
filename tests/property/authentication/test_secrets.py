@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from authentication_test_helpers import build_memory_auth_service, create_user, valid_login
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from authentication_test_helpers import build_memory_auth_service, create_user, valid_login
 from backend.authentication import InvalidCredentialsError, LoginRequest
 
 _MAX_EXAMPLES = 10

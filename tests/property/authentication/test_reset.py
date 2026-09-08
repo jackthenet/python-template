@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from authentication_test_helpers import build_memory_auth_service, create_user
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from authentication_test_helpers import build_memory_auth_service, create_user
 from backend.authentication import InvalidResetTokenError, PasswordResetComplete, PasswordResetRequest
 
 _MAX_EXAMPLES = 10

@@ -7,10 +7,10 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from authentication_test_helpers import build_memory_auth_service, create_user, valid_login
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from authentication_test_helpers import build_memory_auth_service, create_user, valid_login
 from backend.authentication import InvalidSessionError, LoginRequest
 
 _MAX_EXAMPLES = 10

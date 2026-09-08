@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import statistics
 import time
 from pathlib import Path
-
-import pytest
 
 from authentication_test_helpers import build_auth_service, create_user, valid_login
 
@@ -19,10 +18,8 @@ def test_nfr_001_login_performance_budget(tmp_path: Path) -> None:
     fixture = build_auth_service(tmp_path)
     create_user(fixture.user_manager)
     # warm up (SQLite page cache, etc.)
-    try:
+    with contextlib.suppress(InvalidCredentialsError):
         fixture.service.login(LoginRequest(**valid_login("alice", "warmup-1")))
-    except InvalidCredentialsError:
-        pass
     samples: list[float] = []
     for _ in range(15):
         start = time.monotonic()

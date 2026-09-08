@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from authentication_test_helpers import create_user, valid_login
 
 from backend.authentication import (

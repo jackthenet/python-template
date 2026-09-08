@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from authentication_test_helpers import build_auth_service, create_user, valid_login
 
 from backend.authentication import (
@@ -15,8 +14,8 @@ from backend.authentication import (
     LoginSucceeded,
     Logout,
     PasskeyDeleted,
-    PasskeyRegistrationComplete,
     PasskeyRegistered,
+    PasskeyRegistrationComplete,
     PasswordResetComplete,
     PasswordResetCompleted,
     PasswordResetRequest,

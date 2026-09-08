@@ -6,8 +6,7 @@ import statistics
 import time
 
 import pytest
-
-from authentication_test_helpers import create_user, valid_login
+from authentication_test_helpers import create_user
 
 from backend.authentication import AuthService, InvalidCredentialsError, LoginRequest
 from backend.usermanagement import UserManager

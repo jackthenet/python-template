@@ -7,7 +7,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from authentication_test_helpers import build_auth_service, create_user, valid_login
 
 from backend.authentication import (
@@ -19,6 +18,8 @@ from backend.authentication import (
     Session,
     WebAuthnCredential,
 )
+
+_NEW_SIGN_COUNT = 5
 
 
 def test_session_repository_roundtrip(tmp_path: Path) -> None:
@@ -125,8 +126,8 @@ def test_webauthn_repository_roundtrip(tmp_path: Path) -> None:
     listed = fixture.webauthn_repository.list_for_user(user_id)
     assert {c.credential_id for c in listed} == {"cred-1", "cred-2"}
     # update_sign_count
-    fixture.webauthn_repository.update_sign_count("cred-1", 5)
-    assert fixture.webauthn_repository.get_by_credential_id("cred-1").sign_count == 5
+    fixture.webauthn_repository.update_sign_count("cred-1", _NEW_SIGN_COUNT)
+    assert fixture.webauthn_repository.get_by_credential_id("cred-1").sign_count == _NEW_SIGN_COUNT
     # delete
     fixture.webauthn_repository.delete("cred-2")
     assert fixture.webauthn_repository.get_by_credential_id("cred-2") is None

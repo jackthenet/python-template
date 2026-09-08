@@ -7,7 +7,6 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-
 from authentication_test_helpers import build_auth_service, create_user, valid_login
 
 from backend.authentication import InvalidSessionError, LoginRequest
