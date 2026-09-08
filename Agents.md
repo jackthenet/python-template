@@ -38,7 +38,7 @@ This repository utilizes modern Python tooling managed via `uv`:
 ### Phase 1: DISCOVER & SPECIFY (`docs/specs/`)
 Before writing task files or code:
 1. Create a feature branch `feature/[feature-name]` from `main`.
-2. Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief.
+2. Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief. The brief is an **intermediate artifact** of the interrogation — do **not** save it as a separate `.brief.md` file. Fold it into the spec (goals/overview, scope boundaries, out-of-scope, edge cases); the spec is the single kept artifact.
 3. Search and read existing codebase files to understand current context and patterns.
 4. Check `docs/specs/template.md` for formatting requirements.
 5. Draft a complete feature spec at `docs/specs/[feature-name].md`.
@@ -205,6 +205,7 @@ New backend features MUST use the shared logging feature at `src/backend/logging
 - **Trace classes with `@logged_class`.** Decorate a class to apply `@logged` to every public method (private methods are skipped).
 - **Simple statements.** The feature configures loguru's sinks, so feature code may also use loguru's `logger` directly (e.g., `logger.info("...")`) for one-off statements.
 - **Conventions.** `diagnose=False` is enforced (no local variable leakage). Import the public API only (`from backend.logging import logged, logged_class, setup_logger, Settings, get_settings`); do not import the private `_setup` / `_decorator` modules. The logger MUST be set up before any `@logged` call or log statement.
+- **Tracing policy (default).** Public service/registry/repository/provider classes MUST be traced with `@logged_class` by default, and public module-level functions MUST be traced with `@logged`. Direct loguru (`logger.info(...)`) is reserved for one-off statements (business decisions, lifecycle, warnings) and MUST NOT be used to hand-log entry/exit that the decorator already provides. Use `include_args=False` for methods that handle passwords/tokens/credentials. Set a sensible `slow_threshold_ms` on traced classes. Use semantic log levels (DEBUG for routine tracing, INFO for significant lifecycle, WARNING for recoverable issues, ERROR for failures). `setup_logger(Settings(...))` MUST be called exactly once in the application entrypoint, before any feature code runs.
 
 ```python
 from backend.logging import Settings, logged, setup_logger
