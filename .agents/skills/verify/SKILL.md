@@ -32,7 +32,7 @@ Verification report at `docs/verification/<feature>.md`.
 - Verify every `INV-XXX` has a property test where appropriate.
 - Run all acceptance tests and confirm they pass.
 - Run the full regression suite and confirm it passes.
-- Run lint (`uv run ruff check src/ tests/`) and confirm it passes.
+- Run lint (`uv run ruff check .`) and confirm it passes. This must match CI exactly (`.github/workflows/lint.yml` runs `uv run ruff check .` on the whole repo). Pre-existing lint errors anywhere in the repo are in scope: fix them before marking the feature verified, never as out of scope.
 - Run type checks (`uv run mypy src/`) and confirm they pass.
 - Run coverage (`uv run pytest tests/ --cov`) and confirm threshold passes.
 - Run architecture rules (`uv run pytest tests/architecture/ -v`) and confirm they pass.
