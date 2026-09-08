@@ -9,7 +9,6 @@ from __future__ import annotations
 import statistics
 import threading
 import time
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -20,8 +19,13 @@ from backend.settings import (
     SettingKind,
     SettingsRegistry,
     TemplateRepository,
+    TemplateStorageError,
     YamlTemplateRepository,
 )
+
+_LOAD_MS = 10.0
+_YAML_MS = 50.0
+_LIST_MS = 500.0
 
 
 def _text(key: str, default: str = "d", category: str | None = None) -> SettingDefinition:
@@ -64,15 +68,15 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     for i in range(100):
         scope_registry.register(_text(f"scope.s{i}", category="scope"))
     scope_registry.create_template("t1", "scope", None, None)
-    assert _median_ms(lambda: scope_registry.load_template("t1"), n=50) < 10.0
+    assert _median_ms(lambda: scope_registry.load_template("t1"), n=50) < _LOAD_MS
 
     # create/update/delete (YAML file I/O) < 50 ms; list < 500 ms with 100 stored.
     yaml_registry = SettingsRegistry(event_bus=collector, template_repository=YamlTemplateRepository(tmp_path))
     for i in range(100):
         yaml_registry.register(_text(f"y.s{i}", category="y"))
-    assert _median_ms(lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10) < 50.0
+    assert _median_ms(lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10) < _YAML_MS
     assert (
-        _median_ms(lambda: yaml_registry.update_template("ct1000", {f"y.s{i}": "v" for i in range(100)}), n=10) < 50.0
+        _median_ms(lambda: yaml_registry.update_template("ct1000", {f"y.s{i}": "v" for i in range(100)}), n=10) < _YAML_MS
     )
     delete_counter = iter(range(2000, 2010))
 
@@ -81,8 +85,12 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
         yaml_registry.create_template(name, "y", None, None)
         yaml_registry.delete_template(name)
 
-    assert _median_ms(_delete_once, n=10) < 50.0
-    assert _median_ms(lambda: yaml_registry.list_templates(), n=20) < 500.0
+    assert _median_ms(_delete_once, n=10) < _YAML_MS
+
+    def _list_templates() -> None:
+        yaml_registry.list_templates()
+
+    assert _median_ms(_list_templates, n=20) < _LIST_MS
 
 
 def test_nfr_002_api_and_repository_contract() -> None:
@@ -165,6 +173,6 @@ def test_nfr_004_observability(log_records: list, tmp_path: Path) -> None:
         _yaml.safe_dump({"name": "bad", "category": "app", "group": None, "values": ["x"]})
     )
     repo = YamlTemplateRepository(tmp_path)
-    with pytest.raises(Exception):
+    with pytest.raises(TemplateStorageError):
         repo.get("bad")
     assert any(r["level"].name == "ERROR" for r in log_records), "storage failure not logged at ERROR"

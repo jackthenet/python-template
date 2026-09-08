@@ -41,6 +41,12 @@ from backend.settings.exceptions import (
 )
 from backend.settings.repository import YamlTemplateRepository
 
+_COUNT_VALUE = 42
+_VOLUME_VALUE = 4
+_TEMPLATE_B_VALUE = 7
+_SNAPSHOT_B_VALUE = 42
+_EVENT_COUNT = 2
+
 
 def _text(key: str, default: str = "x") -> SettingDefinition:
     return SettingDefinition(key=key, kind=SettingKind.TEXT, default=default)
@@ -105,8 +111,8 @@ def test_ac_001_text_roundtrip(registry: SettingsRegistry) -> None:
 
 def test_ac_002_number_roundtrip(registry: SettingsRegistry) -> None:
     registry.register(_number("app.count"))
-    assert registry.set_value("app.count", 42) == 42
-    assert registry.get_value("app.count") == 42
+    assert registry.set_value("app.count", _COUNT_VALUE) == _COUNT_VALUE
+    assert registry.get_value("app.count") == _COUNT_VALUE
 
 
 def test_ac_003_boolean_roundtrip(registry: SettingsRegistry) -> None:
@@ -123,8 +129,8 @@ def test_ac_004_email_roundtrip(registry: SettingsRegistry) -> None:
 
 def test_ac_005_slider_roundtrip(registry: SettingsRegistry) -> None:
     registry.register(_slider("app.volume"))
-    assert registry.set_value("app.volume", 4) == 4
-    assert registry.get_value("app.volume") == 4
+    assert registry.set_value("app.volume", _VOLUME_VALUE) == _VOLUME_VALUE
+    assert registry.get_value("app.volume") == _VOLUME_VALUE
 
 
 def test_ac_006_select_roundtrip(registry: SettingsRegistry) -> None:
@@ -343,10 +349,10 @@ def test_ac_022_create_template_duplicate(registry: SettingsRegistry) -> None:
 
 def test_ac_023_load_template_sets_values(registry: SettingsRegistry) -> None:
     _register_app_scope(registry)
-    registry.create_template("t1", "app", None, {"app.a": "loaded", "app.b": 7})
+    registry.create_template("t1", "app", None, {"app.a": "loaded", "app.b": _TEMPLATE_B_VALUE})
     registry.load_template("t1")
     assert registry.get_value("app.a") == "loaded"
-    assert registry.get_value("app.b") == 7
+    assert registry.get_value("app.b") == _TEMPLATE_B_VALUE
 
 
 def test_ac_024_load_template_leave_as_is(registry: SettingsRegistry) -> None:
@@ -369,10 +375,10 @@ def test_ac_024_load_template_leave_as_is(registry: SettingsRegistry) -> None:
             category="app",
         )
     )
-    registry.set_value("app.b", 42)
+    registry.set_value("app.b", _SNAPSHOT_B_VALUE)
     registry.load_template("t1")
     assert registry.get_value("app.a") == "snap"
-    assert registry.get_value("app.b") == 42  # left as-is
+    assert registry.get_value("app.b") == _SNAPSHOT_B_VALUE  # left as-is
 
 
 def test_ac_025_load_template_unknown(registry: SettingsRegistry) -> None:
@@ -482,7 +488,9 @@ def test_ac_035_set_value_publishes_event(registry_with_bus) -> None:
     registry, bus = registry_with_bus
     registry.register(_text("app.name", default="orig"))
     received: list[SettingChanged] = []
-    bus.subscribe(SettingChanged, lambda e: received.append(e))
+    def _on_event(e: SettingChanged) -> None:
+        received.append(e)
+    bus.subscribe(SettingChanged, _on_event)
     registry.set_value("app.name", "new")
     assert wait_for(lambda: len(received) == 1), "SettingChanged not published"
     assert received[0].key == "app.name"
@@ -495,9 +503,11 @@ def test_ac_036_load_template_publishes_events(registry_with_bus) -> None:
     _register_app_scope(registry)
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     received: list[SettingChanged] = []
-    bus.subscribe(SettingChanged, lambda e: received.append(e))
+    def _on_event(e: SettingChanged) -> None:
+        received.append(e)
+    bus.subscribe(SettingChanged, _on_event)
     registry.load_template("t1")
-    assert wait_for(lambda: len(received) == 2), "expected one event per setting set"
+    assert wait_for(lambda: len(received) == _EVENT_COUNT), "expected one event per setting set"
     keys = {e.key for e in received}
     assert keys == {"app.a", "app.b"}
 
@@ -509,8 +519,12 @@ def test_ac_037_custom_bus() -> None:
     registry.register(_text("app.name", default="orig"))
     on_custom: list[SettingChanged] = []
     on_shared: list[SettingChanged] = []
-    custom.subscribe(SettingChanged, lambda e: on_custom.append(e))
-    shared.subscribe(SettingChanged, lambda e: on_shared.append(e))
+    def _on_custom(e: SettingChanged) -> None:
+        on_custom.append(e)
+    def _on_shared(e: SettingChanged) -> None:
+        on_shared.append(e)
+    custom.subscribe(SettingChanged, _on_custom)
+    shared.subscribe(SettingChanged, _on_shared)
     registry.set_value("app.name", "new")
     assert wait_for(lambda: len(on_custom) == 1), "event not on custom bus"
     time.sleep(0.2)  # give the shared bus a chance to (wrongly) deliver
@@ -526,10 +540,12 @@ def test_ac_039_reset_publishes_events(registry_with_bus) -> None:
     # handler; we then wait for and clear them, so no setup event is in flight
     # when we assert on the reset events (the bus is asynchronous).
     received: list[SettingChanged] = []
-    bus.subscribe(SettingChanged, lambda e: received.append(e))
+    def _on_event(e: SettingChanged) -> None:
+        received.append(e)
+    bus.subscribe(SettingChanged, _on_event)
     registry.set_value("app.a", "x")
     registry.set_value("app.b", 5)
-    assert wait_for(lambda: len(received) == 2)  # setup events delivered
+    assert wait_for(lambda: len(received) == _EVENT_COUNT)  # setup events delivered
     received.clear()
     # reset(key) publishes value=default, previous=old
     registry.reset("app.a")
@@ -542,7 +558,7 @@ def test_ac_039_reset_publishes_events(registry_with_bus) -> None:
     # is already at its default.
     received.clear()
     registry.reset_all()
-    assert wait_for(lambda: len(received) == 2)
+    assert wait_for(lambda: len(received) == _EVENT_COUNT)
     by_key = {e.key: e for e in received}
     assert set(by_key) == {"app.a", "app.b"}
     assert by_key["app.a"].value == "a0"  # its default
@@ -560,7 +576,7 @@ def test_ac_038_thread_safe_registration() -> None:
     def worker(i: int) -> None:
         try:
             registry.register(_text(f"app.k{i}"))
-        except BaseException as e:  # noqa: BLE001
+        except BaseException as e:
             errors.append(e)
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(32)]

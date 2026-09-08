@@ -19,6 +19,8 @@ from backend.settings import (
     SettingsRegistry,
 )
 
+_SNAPSHOT_B = 5
+
 
 @pytest.fixture
 def registry() -> Iterator[SettingsRegistry]:
@@ -81,4 +83,4 @@ def test_template_capture_restore_workflow(registry: SettingsRegistry) -> None:
     # Restore from the template.
     registry.load_template("snapshot")
     assert registry.get_value("app.a") == "x"
-    assert registry.get_value("app.b") == 5
+    assert registry.get_value("app.b") == _SNAPSHOT_B

@@ -30,6 +30,8 @@ from backend.settings.exceptions import (
 )
 from backend.settings.repository import YamlTemplateRepository
 
+_EVENT_COUNT = 2
+
 
 @pytest.fixture
 def registry() -> Iterator[SettingsRegistry]:
@@ -246,7 +248,7 @@ def test_edge_021_unchanged_value_event() -> None:
     registry.register(_text("app.name", default="orig"))
     registry.set_value("app.name", "same")
     registry.set_value("app.name", "same")  # value equals the current value
-    assert len(collector.events) == 2
+    assert len(collector.events) == _EVENT_COUNT
     event = collector.events[-1]
     assert event.value == "same"
     assert event.previous == "same"
