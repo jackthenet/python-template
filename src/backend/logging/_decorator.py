@@ -16,8 +16,6 @@ from typing import Any
 
 from loguru import logger
 
-from backend.logging.settings import get_settings
-
 
 def _format_args(func: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
     """Build a readable argument representation from the call signature."""
@@ -54,6 +52,10 @@ def _resolve_slow_threshold(
     if slow_threshold_ms is not None:
         return float(slow_threshold_ms)
     if slow_threshold_setting is not None:
+        # Imported here (not at module level) to avoid a circular import:
+        # backend.logging.settings imports ``logged`` from this module.
+        from backend.logging.settings import get_settings
+
         value = getattr(get_settings(), slow_threshold_setting, None)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)
@@ -163,22 +165,51 @@ def logged(
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         threshold = _resolve_slow_threshold(slow_threshold_ms, slow_threshold_setting)
         if inspect.iscoroutinefunction(f):
-            return _wrap_async(f, level, threshold, include_args, context_getter, depth)
-        return _wrap_sync(f, level, threshold, include_args, context_getter, depth)
+            wrapper = _wrap_async(f, level, threshold, include_args, context_getter, depth)
+        else:
+            wrapper = _wrap_sync(f, level, threshold, include_args, context_getter, depth)
+        # Mark the wrapper as traced and expose the resolved threshold so callers
+        # (and the logging-coverage suite) can inspect it (REQ-005/REQ-007).
+        wrapper.__logged__ = True  # type: ignore[attr-defined]
+        wrapper.slow_threshold_ms = threshold  # type: ignore[attr-defined]
+        return wrapper
 
     if func is None:
         return decorator
     return decorator(func)
 
 
-def logged_class(cls: type) -> type:
+def logged_class(
+    cls: type | None = None,
+    *,
+    slow_threshold_ms: float | None = None,
+    include_args: bool = False,
+) -> type | Callable[[type], type]:
     """Apply :func:`logged` to every public (non-private) method of a class.
 
-    Private methods (underscore-prefixed, or named ``...private``) are left
-    unchanged, matching AC-012/AC-013 and EDGE-004.
+    ``slow_threshold_ms`` is the concrete slow-call threshold applied to every
+    traced method and stored on the class (REQ-007/AC-007); ``include_args``
+    controls whether arguments are formatted into the entry record (secret
+    handlers MUST use ``False``). Private methods (underscore-prefixed, or named
+    ``...private``) are left unchanged, matching AC-012/AC-013 and EDGE-004.
+
+    Usable as ``@logged_class`` or ``@logged_class(slow_threshold_ms=...,
+    include_args=...)``.
     """
-    for name, method in inspect.getmembers(cls, inspect.isfunction):
-        if _is_private_method(name):
-            continue
-        setattr(cls, name, logged(method))
-    return cls
+
+    def decorator(c: type) -> type:
+        c.__logged_class__ = True  # type: ignore[attr-defined]
+        c.slow_threshold_ms = slow_threshold_ms  # type: ignore[attr-defined]
+        for name, method in inspect.getmembers(c, inspect.isfunction):
+            if _is_private_method(name):
+                continue
+            setattr(
+                c,
+                name,
+                logged(method, slow_threshold_ms=slow_threshold_ms, include_args=include_args),
+            )
+        return c
+
+    if cls is None:
+        return decorator
+    return decorator(cls)

@@ -19,6 +19,8 @@ from typing import TypeVar
 
 from loguru import logger
 
+from backend.logging import logged, logged_class
+
 T = TypeVar("T")
 
 # Sentinel placed in the queue to tell the worker to stop after draining.
@@ -31,8 +33,13 @@ def _handler_name(handler: Callable[..., None]) -> str:
     return qualname if qualname is not None else repr(handler)
 
 
+@logged_class(slow_threshold_ms=250)
 class EventBus:
-    """A bounded, thread-safe, asynchronous in-memory event bus."""
+    """A bounded, thread-safe, asynchronous in-memory event bus.
+
+    The class is traced via the shared logging feature (``@logged_class``);
+    each public method produces entry and exit log records.
+    """
 
     def __init__(self, max_queue_size: int = 1000) -> None:
         self._max_queue_size = max_queue_size
@@ -188,6 +195,7 @@ class EventBus:
 _default_bus: list[EventBus | None] = [None]
 
 
+@logged(slow_threshold_ms=5)
 def get_event_bus() -> EventBus:
     """Return the shared default event bus (singleton)."""
     bus = _default_bus[0]
@@ -198,6 +206,7 @@ def get_event_bus() -> EventBus:
     return bus
 
 
+@logged(slow_threshold_ms=5)
 def reset_event_bus() -> None:
     """Reset the shared default event bus (for tests)."""
     bus = _default_bus[0]

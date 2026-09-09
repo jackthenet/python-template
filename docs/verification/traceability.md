@@ -322,6 +322,44 @@ The authentication feature (`docs/specs/authentication.md`) uses its own REQ/AC 
 | NFR-005 | — | `test_nfr_005_concurrent_login_thread_safety` | GREEN |
 | — | — | `test_session_repository_roundtrip`, `test_reset_repository_roundtrip`, `test_webauthn_repository_roundtrip`, `test_full_flow_login_reset_logout` (integration) | GREEN |
 
+## Logging Coverage Matrix
+
+The logging-coverage feature (`docs/specs/logging-coverage.md`) traces all existing backend classes and module functions with the enhanced logging decorators; it uses its own REQ/AC ID space that overlaps the other features' IDs, so the matrix is kept separate.
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_inventory_covers_all_public_classes` | GREEN |
+| REQ-002 | AC-002 | `test_service_registry_classes_traced` | GREEN |
+| REQ-003 | AC-003 | `test_abc_traced_subclass_inherits` | GREEN |
+| REQ-004 | AC-004 | `test_concrete_repo_provider_traced` | GREEN |
+| REQ-005 | AC-005 | `test_module_functions_traced` | GREEN |
+| REQ-006 | AC-006 | `test_secret_handler_args_not_logged` | GREEN |
+| REQ-007 | AC-007 | `test_traced_classes_have_concrete_threshold` | GREEN |
+| REQ-008 | AC-008 | `test_semantic_log_levels` | GREEN |
+| REQ-009 | AC-009 | `test_traced_class_docstrings_mention_tracing` | GREEN |
+| REQ-010 | AC-010 | `test_existing_direct_loguru_kept` | GREEN |
+| REQ-011 | AC-011 | `test_entrypoint_calls_setup_logger_once` | GREEN |
+| REQ-012 | AC-012 | `test_new_public_classes_traced_by_default` | GREEN |
+| REQ-013 | AC-013 | `test_sink_failure_does_not_interrupt` | GREEN |
+| REQ-014 | AC-014 | `test_slow_call_logs_warning_not_interrupted` | GREEN |
+| REQ-015 | AC-015 | `test_no_raw_secrets_in_any_log_record` | GREEN |
+| REQ-016 | AC-016 | `test_tracing_does_not_change_behavior` | GREEN |
+| INV-001 | — | `test_one_entry_one_exit_per_call` | GREEN |
+| INV-002 | — | `test_secret_args_never_logged` | GREEN |
+| INV-003 | — | `test_elapsed_ms_non_negative` | GREEN |
+| INV-004 | — | `test_tracing_never_interrupts_call` | GREEN |
+| EDGE-001 | — | `test_slow_threshold_exceeded` | GREEN |
+| EDGE-002 | — | `test_sink_failure_graceful` | GREEN |
+| EDGE-003 | — | `test_abc_subclass_traced` | GREEN |
+| EDGE-004 | — | `test_traced_method_exception_propagates` | GREEN |
+| EDGE-005 | — | `test_setup_logger_idempotent` | GREEN |
+| EDGE-006 | — | `test_traced_method_no_args` | GREEN |
+| NFR-001 | — | `test_slow_call_logs_warning_not_interrupted` | GREEN |
+| NFR-002 | — | `test_no_raw_secrets_in_any_log_record` | GREEN |
+| NFR-003 | — | `test_semantic_log_levels` | GREEN |
+| NFR-004 | — | `test_tracing_does_not_change_behavior` | GREEN |
+| NFR-005 | — | `test_semantic_log_levels` | GREEN |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:

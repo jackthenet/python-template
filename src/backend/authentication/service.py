@@ -75,9 +75,13 @@ from backend.usermanagement import EventPublisher, UserManager, UserRead, UserRe
 _DUMMY_HASH = PasswordHasher().hash("dummy-password-for-timing-equalization")
 
 
-@logged_class
+@logged_class(slow_threshold_ms=250, include_args=False)
 class AuthService:
-    """The authentication use-case service."""
+    """The authentication use-case service.
+
+    The class is traced via the shared logging feature (``@logged_class``) with
+    ``include_args=False`` so passwords and tokens never appear in log records.
+    """
 
     def __init__(
         self,

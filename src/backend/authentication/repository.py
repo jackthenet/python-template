@@ -29,6 +29,7 @@ from backend.authentication.repositories import (
     SessionRepository,
     WebAuthnCredentialRepository,
 )
+from backend.logging import logged_class
 
 _MEMORY_URL = "sqlite:///:memory:"
 
@@ -58,8 +59,13 @@ def _sqlite_file_path(database_url: str) -> str | None:
     return None
 
 
+@logged_class(slow_threshold_ms=100, include_args=False)
 class SqliteSessionRepository(SessionRepository):
-    """A SQLite/SQLModel implementation of :class:`SessionRepository`."""
+    """A SQLite/SQLModel implementation of :class:`SessionRepository`.
+
+    The class is traced via the shared logging feature (``@logged_class``) with
+    ``include_args=False`` so token hashes never appear in log records.
+    """
 
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url
@@ -116,8 +122,13 @@ class SqliteSessionRepository(SessionRepository):
         return len(rows)
 
 
+@logged_class(slow_threshold_ms=100, include_args=False)
 class SqlitePasswordResetRepository(PasswordResetRepository):
-    """A SQLite/SQLModel implementation of :class:`PasswordResetRepository`."""
+    """A SQLite/SQLModel implementation of :class:`PasswordResetRepository`.
+
+    The class is traced via the shared logging feature (``@logged_class``) with
+    ``include_args=False`` so token hashes never appear in log records.
+    """
 
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url
@@ -164,8 +175,12 @@ class SqlitePasswordResetRepository(PasswordResetRepository):
                 s.commit()
 
 
+@logged_class(slow_threshold_ms=100)
 class SqliteWebAuthnCredentialRepository(WebAuthnCredentialRepository):
-    """A SQLite/SQLModel implementation of :class:`WebAuthnCredentialRepository`."""
+    """A SQLite/SQLModel implementation of :class:`WebAuthnCredentialRepository`.
+
+    The class is traced via the shared logging feature (``@logged_class``).
+    """
 
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url

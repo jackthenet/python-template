@@ -53,9 +53,13 @@ def _to_read(user: User) -> UserRead:
     return UserRead.model_validate(user.model_dump())
 
 
-@logged_class
+@logged_class(slow_threshold_ms=250)
 class UserManager:
-    """Use-case entry point for managing user account records."""
+    """Use-case entry point for managing user account records.
+
+    The class is traced via the shared logging feature (``@logged_class``);
+    each public method produces entry and exit log records.
+    """
 
     def __init__(
         self,

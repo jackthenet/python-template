@@ -17,6 +17,7 @@ from typing import Any
 
 from loguru import logger
 
+from backend.logging._decorator import logged
 from backend.logging.settings import Settings, get_settings
 
 # Standard stdlib level numbers -> loguru level names. Unknown level numbers
@@ -89,6 +90,7 @@ def _file_sink_options(settings: Settings) -> dict[str, Any]:
     }
 
 
+@logged(slow_threshold_ms=5)
 def setup_logger(settings: Settings | None = None) -> None:
     """Configure loguru sinks and install the stdlib intercept handler.
 
@@ -96,6 +98,8 @@ def setup_logger(settings: Settings | None = None) -> None:
     standard-stream console sink (stderr) and a rotating file sink; later
     calls return without re-configuring. The stdlib intercept handler is
     installed on the root stdlib logger exactly once (REQ-003).
+
+    Traced via the shared logging feature (``@logged``).
     """
     if _setup_done.is_set():
         return

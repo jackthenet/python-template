@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from backend.logging._decorator import logged
+
 
 class Settings(BaseModel):
     """Logging settings (stub).
@@ -28,6 +30,10 @@ class Settings(BaseModel):
     profiling_include_arguments: bool = False
 
 
+@logged(slow_threshold_ms=5)
 def get_settings() -> Settings:
-    """Return the current Settings instance (defaults for the stub)."""
+    """Return the current Settings instance (defaults for the stub).
+
+    Traced via the shared logging feature (``@logged``).
+    """
     return Settings()
