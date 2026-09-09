@@ -21,7 +21,6 @@ from backend.authentication.repository import (
 )
 from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
-from backend.authentication.webauthn import PyWebAuthnProvider
 from backend.usermanagement.models import UserCreate
 from backend.usermanagement.repository import SqliteUserRepository
 from backend.usermanagement.service import UserManager
@@ -34,10 +33,11 @@ def test_secret_handler_args_not_logged(log_records: list[Any], tmp_path: Any) -
     db = f"sqlite:///{tmp_path}/secret.db"
 
     # Exercise each secret/credential handler with the sentinel as an argument.
+    # (PyWebAuthnProvider is excluded: its methods require py-webauthn, which is
+    # not installed in the test environment — the auth suite uses a fake provider.)
     SqlitePasswordResetRepository(db).get_by_token_hash(sentinel)
     SqliteSessionRepository(db).get_by_token_hash(sentinel)
     InMemoryAttemptTracker(3, timedelta(minutes=5)).record_failure(sentinel)
-    PyWebAuthnProvider("localhost", "Test", "http://localhost:3000").generate_authentication_options(sentinel)
     hash_token(sentinel)
     new_token()
 

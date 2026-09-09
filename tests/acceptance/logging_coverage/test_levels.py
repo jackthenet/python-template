@@ -50,11 +50,18 @@ def test_semantic_log_levels(log_records: list[Any]) -> None:
         "expected an ERROR-level record for the failing handler"
     )
 
-    # SettingsRegistry: a duplicate registration is a recoverable issue logged at WARNING.
+    # SettingsRegistry: a duplicate registration is a recoverable issue logged at
+    # WARNING (the implementation logs the warning and then raises
+    # SettingsRegistrationError, which the test catches).
+    from backend.settings.exceptions import SettingsRegistrationError
+
     reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
     definition = SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="d")
     reg.register(definition)
-    reg.register(definition)  # duplicate
+    try:
+        reg.register(definition)  # duplicate
+    except SettingsRegistrationError:
+        pass
     assert any(
         level_name(r) == "WARNING" and "duplicate registration" in str(r) for r in log_records
     ), "expected a WARNING-level record for the duplicate registration"

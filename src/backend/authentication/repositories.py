@@ -11,10 +11,16 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from backend.authentication.models import PasswordReset, Session, WebAuthnCredential
+from backend.logging import logged_class
 
 
+@logged_class(slow_threshold_ms=100)
 class SessionRepository(ABC):
-    """Persistence for opaque session rows."""
+    """Persistence for opaque session rows.
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
 
     @abstractmethod
     def add(self, session: Session) -> Session:
@@ -37,8 +43,13 @@ class SessionRepository(ABC):
         """Delete expired sessions and return the count."""
 
 
+@logged_class(slow_threshold_ms=100)
 class PasswordResetRepository(ABC):
-    """Persistence for password-reset token rows."""
+    """Persistence for password-reset token rows.
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
 
     @abstractmethod
     def add(self, reset: PasswordReset) -> PasswordReset:
@@ -57,8 +68,13 @@ class PasswordResetRepository(ABC):
         """Mark a reset row used (single-use consumption)."""
 
 
+@logged_class(slow_threshold_ms=100)
 class WebAuthnCredentialRepository(ABC):
-    """Persistence for stored WebAuthn (passkey) credentials."""
+    """Persistence for stored WebAuthn (passkey) credentials.
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
 
     @abstractmethod
     def add(self, credential: WebAuthnCredential) -> WebAuthnCredential:

@@ -15,6 +15,7 @@ from uuid import UUID
 from backend.authentication.errors import InvalidPasskeyResponseError
 from backend.authentication.models import VerifiedAssertion, VerifiedCredential
 from backend.authentication.protocols import WebAuthnProvider
+from backend.logging import logged_class
 
 
 def _webauthn():
@@ -28,8 +29,12 @@ def _webauthn():
     return webauthn
 
 
+@logged_class(slow_threshold_ms=500, include_args=False)
 class PyWebAuthnProvider(WebAuthnProvider):
     """A WebAuthn provider backed by py-webauthn.
+
+    The class is traced via the shared logging feature (``@logged_class``) with
+    ``include_args=False`` so credentials never appear in log records.
 
     The registration and authentication challenges are tracked per user id and
     credential id respectively, so the ``verify_*`` methods (which receive only

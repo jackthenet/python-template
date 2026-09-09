@@ -34,8 +34,13 @@ from backend.usermanagement.repository import SqliteUserRepository
 
 
 def _subjects(tmp_path: Path) -> list[tuple[str, Callable[[], Any]]]:
-    """Lightweight (qualname, zero-arg callable) pairs over the inventory."""
-    db = f"sqlite:///{tmp_path}/prop.db"
+    """Lightweight (qualname, zero-arg callable) pairs over the inventory.
+
+    Uses ``sqlite:///:memory:`` (no file) so the ``TemporaryDirectory`` cleanup
+    does not hit a Windows SQLite file-lock ``PermissionError`` — the in-memory
+    connection is never locked on disk.
+    """
+    db = "sqlite:///:memory:"
     reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
     tracker = InMemoryAttemptTracker(3, timedelta(minutes=5))
     urepo = SqliteUserRepository(db)

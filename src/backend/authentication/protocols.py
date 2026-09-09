@@ -13,10 +13,16 @@ from typing import Any
 from uuid import UUID
 
 from backend.authentication.models import VerifiedAssertion, VerifiedCredential
+from backend.logging import logged_class
 
 
+@logged_class(slow_threshold_ms=10)
 class AttemptTracker(ABC):
-    """Brute-force throttling for login identifiers."""
+    """Brute-force throttling for login identifiers.
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
 
     @abstractmethod
     def record_failure(self, identifier: str) -> None:
@@ -31,8 +37,13 @@ class AttemptTracker(ABC):
         """Return whether ``identifier`` is currently locked out."""
 
 
+@logged_class(slow_threshold_ms=500)
 class WebAuthnProvider(ABC):
-    """WebAuthn (passkey) registration and login backend."""
+    """WebAuthn (passkey) registration and login backend.
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
 
     @abstractmethod
     def generate_registration_options(self, user_id: UUID, username: str, display_name: str | None) -> dict[str, Any]:

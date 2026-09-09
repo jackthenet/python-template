@@ -9,6 +9,8 @@ from typing import Any
 
 from loguru import logger
 
+from backend.logging import logged, logged_class
+
 from backend.eventbus import EventBus, get_event_bus
 from backend.settings.exceptions import (
     SettingsNotFoundError,
@@ -31,8 +33,13 @@ from backend.settings.repository import MemoryTemplateRepository, TemplateReposi
 _registry: list[SettingsRegistry | None] = [None]
 
 
+@logged_class(slow_threshold_ms=250)
 class SettingsRegistry:
-    """Central registry of typed settings with template support."""
+    """Central registry of typed settings with template support.
+
+    The class is traced via the shared logging feature (``@logged_class``);
+    each public method produces entry and exit log records.
+    """
 
     def __init__(
         self,
@@ -278,6 +285,7 @@ class SettingsRegistry:
         self._event_bus.publish(SettingChanged(key=key, value=value, previous=previous))
 
 
+@logged(slow_threshold_ms=5)
 def get_settings_registry() -> SettingsRegistry:
     """Return the shared default registry (singleton)."""
     reg = _registry[0]
@@ -287,6 +295,7 @@ def get_settings_registry() -> SettingsRegistry:
     return reg
 
 
+@logged(slow_threshold_ms=5)
 def reset_settings_registry() -> None:
     """Reset the shared default registry (for tests)."""
     _registry[0] = None

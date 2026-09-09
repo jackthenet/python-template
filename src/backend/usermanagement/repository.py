@@ -31,6 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from backend.logging import logged_class
 from backend.usermanagement.errors import UserAlreadyExistsError
 from backend.usermanagement.models import User
 
@@ -62,8 +63,13 @@ def _sqlite_file_path(database_url: str) -> str | None:
     return None
 
 
+@logged_class(slow_threshold_ms=100)
 class UserRepository(ABC):
-    """The persistence contract the service depends on (REQ-013)."""
+    """The persistence contract the service depends on (REQ-013).
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
 
     @abstractmethod
     def add(self, user: User) -> User:
@@ -93,8 +99,12 @@ class UserRepository(ABC):
     def count_active_by_role(self, role: str) -> int: ...
 
 
+@logged_class(slow_threshold_ms=100)
 class SqliteUserRepository(UserRepository):
-    """A SQLite/SQLModel implementation of :class:`UserRepository`."""
+    """A SQLite/SQLModel implementation of :class:`UserRepository`.
+
+    The class is traced via the shared logging feature (``@logged_class``).
+    """
 
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url

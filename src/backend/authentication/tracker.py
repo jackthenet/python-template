@@ -13,6 +13,8 @@ import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from backend.logging import logged_class
+
 
 @dataclass
 class _AttemptState:
@@ -20,8 +22,13 @@ class _AttemptState:
     lock_until: datetime | None = None
 
 
+@logged_class(slow_threshold_ms=10, include_args=False)
 class InMemoryAttemptTracker:
-    """A thread-safe in-memory attempt tracker."""
+    """A thread-safe in-memory attempt tracker.
+
+    The class is traced via the shared logging feature (``@logged_class``) with
+    ``include_args=False`` so identifiers never appear in log records.
+    """
 
     def __init__(self, max_failed_attempts: int, lockout_duration: timedelta) -> None:
         self._max_failed_attempts = max_failed_attempts

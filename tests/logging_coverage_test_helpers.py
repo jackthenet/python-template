@@ -127,20 +127,46 @@ def parse_elapsed_ms(message: str) -> float | None:
 
 
 # --- Record capture for Hypothesis property tests -------------------------
+class _LiveMessages:
+    """A live view of captured records as message-text strings.
+
+    Reflects records added while the underlying capture block is active, so a
+    test can read it after the traced calls. Each element is the record's
+    message text, matching the suite's ``entry_records``/``exit_records``
+    helpers (which filter on ``str(record)``).
+    """
+
+    def __init__(self, raw: list[Any]) -> None:
+        self._raw = raw
+
+    def _texts(self) -> list[str]:
+        return [str(r.get("message", "")) for r in self._raw]
+
+    def __len__(self) -> int:
+        return len(self._raw)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._texts())
+
+    def __getitem__(self, i: int) -> str:
+        return self._texts()[i]
+
+
 @contextmanager
-def capture_records(level: str = "DEBUG") -> Iterator[list[Any]]:
+def capture_records(level: str = "DEBUG") -> Iterator[_LiveMessages]:
     """Capture loguru records for the duration of the ``with`` block.
 
-    Yields a fresh list of raw record dicts per invocation, so Hypothesis
-    iterations do not accumulate across each other.
+    Yields a fresh live view of message-text strings per invocation, so
+    Hypothesis iterations do not accumulate across each other. The view
+    reflects records added while the block is active.
     """
-    records: list[Any] = []
+    raw: list[Any] = []
 
     def _sink(message: Any) -> None:
-        records.append(message.record)
+        raw.append(message.record)
 
     handler_id = logger.add(_sink, level=level, catch=False)
     try:
-        yield records
+        yield _LiveMessages(raw)
     finally:
         logger.remove(handler_id)

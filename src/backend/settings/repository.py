@@ -17,12 +17,18 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from backend.logging import logged_class
 from backend.settings.exceptions import TemplateStorageError
 from backend.settings.models import Template
 
 
+@logged_class(slow_threshold_ms=100)
 class TemplateRepository(ABC):
-    """Storage-agnostic interface for named templates."""
+    """Storage-agnostic interface for named templates.
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
 
     @abstractmethod
     def save(self, template: Template) -> None:
@@ -41,8 +47,12 @@ class TemplateRepository(ABC):
         """Return all stored templates, name-ordered."""
 
 
+@logged_class(slow_threshold_ms=100)
 class MemoryTemplateRepository(TemplateRepository):
-    """In-memory template storage (the default when none is supplied)."""
+    """In-memory template storage (the default when none is supplied).
+
+    The class is traced via the shared logging feature (``@logged_class``).
+    """
 
     def __init__(self) -> None:
         self._store: dict[str, Template] = {}
@@ -65,8 +75,11 @@ class MemoryTemplateRepository(TemplateRepository):
             return [self._store[n] for n in sorted(self._store)]
 
 
+@logged_class(slow_threshold_ms=100)
 class YamlTemplateRepository(TemplateRepository):
     """YAML file storage: one ``<name>.yaml`` file per template.
+
+    The class is traced via the shared logging feature (``@logged_class``).
 
     Writes are atomic (a temp file in the same directory is renamed over the
     target), so a template file is always either absent or valid YAML.
