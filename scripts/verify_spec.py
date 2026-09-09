@@ -66,6 +66,14 @@ def check_traceability(spec_ids: dict[str, list[str]], test_funcs: dict[str, lis
 
 
 def main() -> int:
+    # Force UTF-8 stdout so the box-drawing/check-mark characters below print on
+    # Windows (the Windows console defaults to cp1252, which can't encode them,
+    # crashing the verify phase with a UnicodeEncodeError).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError, OSError):
+        pass
+
     spec_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("docs/specs/template.md")
     if not spec_path.exists():
         print(f"Spec file not found: {spec_path}")

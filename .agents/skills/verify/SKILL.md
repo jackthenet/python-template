@@ -32,6 +32,7 @@ Verification report at `docs/verification/<feature>.md`.
 - Verify every `INV-XXX` has a property test where appropriate.
 - Run all acceptance tests and confirm they pass.
 - Run the full regression suite and confirm it passes.
+- When the full regression suite has a failure, classify it before proceeding: run the failing test against the feature's base commit (without the feature's changes, e.g. `git stash` the feature's `src/` changes or `git checkout <base> -- <failing-test-file>`). If it fails on the base too, it is a **pre-existing failure** (out of scope — record it in the verification report and do NOT fix it as part of this feature). If it passes on the base, it is a **regression** introduced by this feature (fix it before marking the feature verified). Never spend time debugging a pre-existing failure as if it were a regression.
 - Run lint (`uv run ruff check .`) and confirm it passes. This must match CI exactly (`.github/workflows/lint.yml` runs `uv run ruff check .` on the whole repo). Pre-existing lint errors anywhere in the repo are in scope: fix them before marking the feature verified, never as out of scope.
 - Run type checks (`uv run mypy src/`) and confirm they pass.
 - Run coverage (`uv run pytest tests/ --cov`) and confirm threshold passes.
