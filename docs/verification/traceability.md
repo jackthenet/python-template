@@ -360,6 +360,63 @@ The logging-coverage feature (`docs/specs/logging-coverage.md`) traces all exist
 | NFR-004 | — | `test_tracing_does_not_change_behavior` | GREEN |
 | NFR-005 | — | `test_semantic_log_levels` | GREEN |
 
+## Settings Coverage Matrix
+
+The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own REQ/AC ID space that overlaps the other features' IDs, so the matrix is kept separate.
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_register_settings_registers` | RED |
+| REQ-001 | AC-002 | `test_no_import_side_effects` | RED |
+| REQ-002 | AC-003 | `test_main_wires_all_features` | RED |
+| REQ-003 | AC-004 | `test_set_value_affects_running_feature` | RED |
+| REQ-004 | AC-005 | `test_constructor_default_registry_value` | RED |
+| REQ-005 | AC-006 | `test_unregistered_key_fallback` | RED |
+| REQ-006 | AC-007 | `test_list_definition_accepted` | RED |
+| REQ-007 | AC-008 | `test_list_value_validation` | RED |
+| REQ-007 | AC-009 | `test_list_min_items` | RED |
+| REQ-007 | AC-010 | `test_list_no_duplicates` | RED |
+| REQ-008 | AC-011 | `test_list_min_gt_max_rejected` | RED |
+| REQ-008 | AC-012 | `test_list_spec_on_text_rejected` | RED |
+| REQ-009 | AC-013 | `test_set_value_persists` | RED |
+| REQ-010 | AC-014 | `test_yaml_value_repository` | RED |
+| REQ-011 | AC-015 | `test_persisted_precedence` | RED |
+| REQ-012 | AC-016 | `test_guarded_read_no_side_effect` | RED |
+| REQ-013 | AC-017 | `test_eventbus_no_registry_default` | RED |
+| REQ-013 | AC-018 | `test_eventbus_registry_value` | RED |
+| REQ-014 | AC-019 | `test_setup_logger_reads_registry` | RED |
+| REQ-015 | AC-020 | `test_sink_reconfigured_on_change` | RED |
+| REQ-016 | AC-021 | `test_logging_stub_removed` | RED |
+| REQ-017 | AC-022 | `test_key_prefix` | RED |
+| REQ-018 | AC-023 | `test_category_group` | RED |
+| REQ-019 | AC-024 | `test_inventory_matches` | RED |
+| REQ-020 | AC-025 | `test_tracing` | RED |
+| REQ-021 | AC-026 | `test_no_env_vars` | RED |
+| REQ-022 | AC-027 | `test_settings_registers_nothing` | RED |
+| INV-001 | — | `test_get_value_valid_for_kind` | RED |
+| INV-002 | — | `test_list_round_trip` | RED |
+| INV-003 | — | `test_live_read_after_set` | RED |
+| INV-004 | — | `test_register_idempotent_fresh` | RED |
+| INV-005 | — | `test_persisted_precedence_invariant` | RED |
+| EDGE-001 | — | `test_eventbus_bootstrap_cycle` | RED |
+| EDGE-002 | — | `test_unregistered_key_warning` | RED |
+| EDGE-003 | — | `test_corrupted_values_yaml` | RED |
+| EDGE-004 | — | `test_missing_values_yaml` | RED |
+| EDGE-005 | — | `test_list_item_pattern_mismatch` | RED |
+| EDGE-006 | — | `test_list_min_gt_max` | RED |
+| EDGE-007 | — | `test_setup_logger_idempotent` | RED |
+| EDGE-008 | — | `test_sink_reconfigured_rotation` | RED |
+| EDGE-009 | — | `test_persist_all_values` | RED |
+| EDGE-010 | — | `test_live_read_no_trace_on_same` | RED |
+| EDGE-011 | — | `test_guarded_read_none` | RED |
+| EDGE-012 | — | `test_list_non_string_rejected` | RED |
+| NFR-001 | — | `test_live_read_in_memory` | RED |
+| NFR-002 | — | `test_no_secret_settings` | RED |
+| NFR-003 | — | `test_inventory_backward_compatible` | RED |
+| NFR-004 | — | `test_observability_tracing` | RED |
+| NFR-005 | — | `test_atomic_write` | RED |
+| NFR-006 | — | `test_thread_safety` | RED |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:
