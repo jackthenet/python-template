@@ -244,16 +244,18 @@ get_event_bus().publish(UserCreated(user_id="u1", email="e1"))
 
 New backend features that need typed, validated configuration values MUST use the shared settings registry at `src/backend/settings/` (spec: `docs/specs/settings.md`) instead of inventing their own configuration mechanism.
 
-- **Get the registry.** Use `get_settings_registry()` (the module singleton) or instantiate `SettingsRegistry(event_bus=..., template_repository=...)` for tests/DI. A `None` event bus uses the shared `get_event_bus()`; a `None` repository uses in-memory storage.
+- **Get the registry.** Use `get_settings_registry()` (the module singleton) or `get_settings_registry(required=False)` (returns `None` without creating if the singleton doesn't exist) or instantiate `SettingsRegistry(event_bus=..., template_repository=..., value_repository=...)` for tests/DI. A `None` event bus uses the shared `get_event_bus()`; a `None` repository uses in-memory storage; a `None` value repository defaults to `YamlValueRepository('settings')`.
 - **Register settings.** Call `register(SettingDefinition(...))` for a single setting or `register_feature("name", [definitions])` for a feature's settings (each key must start with `"name."`).
+- **Feature-owned registration.** Each feature exposes `register_settings(registry)` in its `feature_settings.py` module (e.g., `from backend.logging import register_settings`). Call it at startup to register the feature's settings. The feature then reads its settings live via `_read_setting(registry, key, fallback)` on each use.
 - **Read/write values.** Use `get_value(key)`, `set_value(key, value)` (validated), `reset(key)`, `reset_all()`. Values are always valid for their kind; invalid writes raise `SettingsValidationError`.
-- **Kinds.** Six kinds: TEXT, NUMBER, BOOLEAN, EMAIL, SLIDER, SELECT, each with kind-specific parameters and per-kind validation (see the spec).
+- **Kinds.** Seven kinds: TEXT, NUMBER, BOOLEAN, EMAIL, SLIDER, SELECT, LIST, each with kind-specific parameters and per-kind validation (see the spec). LIST uses `ListSpec(item_pattern, min_items, max_items, allow_duplicates)`.
+- **Value persistence.** Use `YamlValueRepository(directory)` for YAML persistence of values (single `values.yaml`, atomic writes) or `MemoryValueRepository()` for in-memory. Persisted values load at registry construction and override newly registered defaults (REQ-022).
 - **Views.** Use `to_view(key)`, `views()`, `grouped_views()` for renderable metadata (category/group hierarchy, status).
 - **Templates.** Use `create_template`/`load_template`/`update_template`/`delete_template`/`get_template`/`list_templates` for named value profiles scoped to a (category, group). Create/update require exact scope coverage; load sets the template's values and leaves others as-is.
 - **Storage.** Use `YamlTemplateRepository(directory)` for YAML persistence (one file per template, atomic writes) or `MemoryTemplateRepository()` for in-memory. Both implement the `TemplateRepository` ABC.
 - **Events.** Value changes publish `SettingChanged` (key, value, previous) to the event bus (best-effort).
-- **Errors.** Exceptions are the `SettingsError` hierarchy (from `backend.settings.exceptions`): `SettingsNotFoundError`, `SettingsValidationError`, `SettingsRegistrationError`, `TemplateNotFoundError`, `TemplateValidationError`, `TemplateStorageError`.
-- **Testing.** Use `reset_settings_registry()` to reset the module singleton between tests.
+- **Errors.** Exceptions are the `SettingsError` hierarchy (from `backend.settings.exceptions`): `SettingsNotFoundError`, `SettingsValidationError`, `SettingsRegistrationError`, `TemplateNotFoundError`, `TemplateValidationError`, `TemplateStorageError`, `ValueStorageError`.
+- **Testing.** Use `reset_settings_registry()` to reset the module singleton between tests. Test registries MUST pass an explicit isolated value repository (e.g., `YamlValueRepository(tempfile.mkdtemp())`) to avoid cross-test contamination from the shared default directory.
 
 ```python
 from backend.settings import SettingDefinition, SettingKind, get_settings_registry
