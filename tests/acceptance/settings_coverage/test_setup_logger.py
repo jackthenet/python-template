@@ -15,6 +15,7 @@ def _run(code: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,
+        check=False,
     )
 
 

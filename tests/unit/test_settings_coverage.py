@@ -27,11 +27,11 @@ from backend.settings import (
     reset_settings_registry,
 )
 from backend.settings.exceptions import (
-    SettingsRegistrationError,
     SettingsValidationError,
-    ValueStorageError,
 )
 
+_DEFAULT_QUEUE_SIZE = 1000
+_CUSTOM_QUEUE_SIZE = 500
 
 # --- AC-002: no import side effects ---
 
@@ -66,7 +66,7 @@ def test_unregistered_key_fallback() -> None:
     """AC-006: reading an unregistered key returns the hardcoded default + warning."""
     # The feature's live-read helper falls back to the original hardcoded default
     # and logs a warning when the key is unregistered.
-    from backend.logging import _read_setting  # noqa: F401  (the new helper)
+    from backend.logging import _read_setting
 
     # A fresh registry has no logging.* settings registered.
     reg = get_settings_registry()
@@ -183,7 +183,7 @@ def test_eventbus_no_registry_default() -> None:
 
     # No registry exists (the guarded read returns None).
     bus = EventBus()
-    assert bus.max_queue_size == 1000
+    assert bus.max_queue_size == _DEFAULT_QUEUE_SIZE
 
 
 # --- AC-018: EventBus registry value ---
@@ -196,9 +196,9 @@ def test_eventbus_registry_value() -> None:
     reg.register(
         SettingDefinition(key="eventbus.max_queue_size", kind=SettingKind.NUMBER, default=1000)
     )
-    reg.set_value("eventbus.max_queue_size", 500)
+    reg.set_value("eventbus.max_queue_size", _CUSTOM_QUEUE_SIZE)
     bus = EventBus()
-    assert bus.max_queue_size == 500
+    assert bus.max_queue_size == _CUSTOM_QUEUE_SIZE
 
 
 # --- AC-021: logging stub removed ---
@@ -228,6 +228,7 @@ def test_tracing() -> None:
 def test_no_env_vars() -> None:
     """AC-026: the settings feature reads no environment variables."""
     import inspect as _inspect
+
     import backend.settings as _settings_mod
 
     source = _inspect.getsource(_settings_mod)
@@ -253,7 +254,7 @@ def test_eventbus_bootstrap_cycle() -> None:
 
     # Constructing EventBus does not recurse (no infinite recursion).
     bus = EventBus()
-    assert bus.max_queue_size == 1000
+    assert bus.max_queue_size == _DEFAULT_QUEUE_SIZE
 
 
 # --- EDGE-003: corrupted values.yaml ---
@@ -400,7 +401,7 @@ def test_live_read_in_memory() -> None:
 def test_observability_tracing() -> None:
     """NFR-004: register_settings and change-detection live reads are logged."""
     # The register_settings functions and the live-read helper are traced.
-    from backend.logging import register_settings, _read_setting
+    from backend.logging import _read_setting, register_settings
 
     assert hasattr(register_settings, "__wrapped__") or hasattr(
         inspect.unwrap(register_settings), "__wrapped__"
@@ -421,7 +422,7 @@ def test_thread_safety() -> None:
             for j in range(100):
                 reg.set_value("a", i * 100 + j)
                 reg.get_value("a")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             errors.append(e)
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]

@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-
-from backend.settings import SettingDefinition, SettingKind, SettingsRegistry
 from settings_test_helpers import make_registry
 
 

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 @logged(slow_threshold_ms=5)
-def register_settings(registry: "SettingsRegistry") -> None:
+def register_settings(registry: SettingsRegistry) -> None:
     """Register the authentication feature's settings with ``registry`` (REQ-001)."""
     from backend.settings import SettingDefinition, SettingKind
 

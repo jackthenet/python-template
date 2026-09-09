@@ -6,9 +6,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from usermanagement_test_helpers import db_url, valid_create
 
 from backend.settings import ListSpec, SettingDefinition, SettingKind
-from usermanagement_test_helpers import db_url, valid_create
 
 
 @pytest.fixture(autouse=True)

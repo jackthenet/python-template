@@ -124,9 +124,7 @@ def is_valid_value(  # noqa: PLR0911, PLR0912
             return False
         if spec.max_items is not None and len(value) > spec.max_items:
             return False
-        if not spec.allow_duplicates and len(set(value)) != len(value):
-            return False
-        return True
+        return spec.allow_duplicates or len(set(value)) == len(value)
     return False
 
 

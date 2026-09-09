@@ -24,6 +24,7 @@ def test_main_wires_all_features() -> None:
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip().endswith("[True, True, True, True]"), result.stdout

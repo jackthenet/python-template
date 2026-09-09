@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 @logged(slow_threshold_ms=5)
-def register_settings(registry: "SettingsRegistry") -> None:
+def register_settings(registry: SettingsRegistry) -> None:
     """Register the user-management feature's settings with ``registry`` (REQ-001)."""
     from backend.settings import ListSpec, SettingDefinition, SettingKind
 

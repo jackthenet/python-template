@@ -30,9 +30,8 @@ def _settings_from_registry() -> Settings:
     shared registry. When the registry does not exist or a key is
     unregistered, the original hardcoded default is used.
     """
-    from backend.settings import get_settings_registry
-
     from backend.logging.feature_settings import _read_setting
+    from backend.settings import get_settings_registry
 
     defaults = Settings()
     registry = get_settings_registry(required=False)

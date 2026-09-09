@@ -10,9 +10,14 @@ differs from the feature's previously observed value for that key.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from loguru import logger
 
 from backend.logging._decorator import logged
+
+if TYPE_CHECKING:
+    from backend.settings import SettingsRegistry
 
 # Track the previously observed value per key so a live read is traced only
 # when the value changes (REQ-020).
@@ -20,7 +25,7 @@ _previously_observed: dict[str, str] = {}
 
 
 @logged(slow_threshold_ms=5)
-def _read_setting(registry: "SettingsRegistry", key: str, fallback: str) -> str:
+def _read_setting(registry: SettingsRegistry, key: str, fallback: str) -> str:
     """Read a setting live from ``registry`` (REQ-005).
 
     If ``key`` is registered, return the current value (traced when it
@@ -39,7 +44,7 @@ def _read_setting(registry: "SettingsRegistry", key: str, fallback: str) -> str:
 
 
 @logged(slow_threshold_ms=5)
-def register_settings(registry: "SettingsRegistry") -> None:
+def register_settings(registry: SettingsRegistry) -> None:
     """Register the logging feature's settings with ``registry`` (REQ-001).
 
     The backend.settings import is deferred to the call site: importing it at

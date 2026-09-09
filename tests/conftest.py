@@ -26,7 +26,8 @@ def _logging_session_setup(tmp_path_factory: pytest.TempPathFactory) -> Iterator
     path. Settings is imported lazily so the RED state (module missing) shows
     up as a fixture error rather than a collection error.
     """
-    from backend.logging import Settings, register_settings as logging_register
+    from backend.logging import Settings
+    from backend.logging import register_settings as logging_register
     from backend.settings import get_settings_registry
 
     session_dir = tmp_path_factory.mktemp("logging_session")

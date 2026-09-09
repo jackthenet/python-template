@@ -28,7 +28,9 @@ def test_constructor_default_registry_value() -> None:
 
     from backend.eventbus import EventBus
 
+    _REGISTRY_VALUE = 500
+    _EXPLICIT_VALUE = 777
     # No explicit argument: the registry value is used.
-    assert EventBus().max_queue_size == 500
+    assert EventBus().max_queue_size == _REGISTRY_VALUE
     # Explicit argument: it wins over the registry value.
-    assert EventBus(777).max_queue_size == 777
+    assert EventBus(_EXPLICIT_VALUE).max_queue_size == _EXPLICIT_VALUE

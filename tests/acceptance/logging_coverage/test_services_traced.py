@@ -54,10 +54,11 @@ def test_service_registry_classes_traced(log_records: list[Any]) -> None:
     # Note: the EventBus() constructor above also calls SettingsRegistry.has
     # (checking if eventbus.max_queue_size is registered), so we expect 2 entry
     # records total (one from the EventBus constructor, one from the test's call).
+    _EXPECTED_HAS_RECORDS = 2
     reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
     reg.has("some.key")
-    assert len([r for r in entry_records(log_records) if "SettingsRegistry.has" in str(r)]) == 2
-    assert len([r for r in exit_records(log_records) if "SettingsRegistry.has" in str(r)]) == 2
+    assert len([r for r in entry_records(log_records) if "SettingsRegistry.has" in str(r)]) == _EXPECTED_HAS_RECORDS
+    assert len([r for r in exit_records(log_records) if "SettingsRegistry.has" in str(r)]) == _EXPECTED_HAS_RECORDS
 
 
 def test_concrete_repo_provider_traced(log_records: list[Any], tmp_path: Any) -> None:

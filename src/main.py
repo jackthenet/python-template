@@ -8,8 +8,8 @@ re-import) is a no-op.
 
 from backend.authentication import register_settings as register_authentication_settings
 from backend.eventbus import register_settings as register_eventbus_settings
-from backend.logging import setup_logger
 from backend.logging import register_settings as register_logging_settings
+from backend.logging import setup_logger
 from backend.settings import get_settings_registry
 from backend.usermanagement import register_settings as register_usermanagement_settings
 

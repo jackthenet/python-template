@@ -6,9 +6,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from settings_test_helpers import make_registry
 
 from backend.settings import SettingDefinition, SettingKind, YamlValueRepository
-from settings_test_helpers import make_registry
 
 
 @pytest.fixture(autouse=True)

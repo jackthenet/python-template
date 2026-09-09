@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
+from settings_test_helpers import make_registry
 
 from backend.settings import SettingsRegistry
-from settings_test_helpers import make_registry
 
 # The complete inventory from spec section 3.5:
 # key -> (kind, default, category, group)
