@@ -51,7 +51,7 @@
         "Edge tests for EDGE-005, EDGE-006, EDGE-012 pass"
       ],
       "dependencies": [],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-002",
@@ -110,7 +110,7 @@
       "dependencies": [
         "T-001"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-003",
@@ -143,7 +143,7 @@
         "Edge test for EDGE-011 passes"
       ],
       "dependencies": [],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-004",
@@ -181,7 +181,7 @@
       "dependencies": [
         "T-003"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-005",
@@ -251,7 +251,7 @@
       "dependencies": [
         "T-001"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-006",
@@ -295,7 +295,7 @@
       "dependencies": [
         "T-005"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-007",
@@ -342,7 +342,7 @@
         "T-005",
         "T-006"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     }
   ]
 }
