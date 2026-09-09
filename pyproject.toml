@@ -57,9 +57,10 @@ max-complexity-allowed = 30
 
 [tool.coverage.run]
 branch = true
-# Only include valid Python package names (no hyphens). Keep the canonical
-# package module name used by the project (the src/ layout exposes `backend`).
-source = ["backend"]
+# Cover both runtime boundaries (src/ layout). Paths (not module names) so the
+# empty `frontend` placeholder is covered once implemented without a
+# "never imported" warning.
+source = ["src/backend", "src/frontend"]
 
 [tool.mypy]
 python_version = "3.14"
