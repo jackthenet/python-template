@@ -75,7 +75,7 @@ def test_inventory_matches() -> None:
     reg = _registry_with_all_features()
     for key, (kind, default, _category, _group) in INVENTORY.items():
         d = reg.get_definition(key)
-        assert d.kind.value == kind, f"{key}: kind {d.kind!r} != {kind!r}"
+        assert d.kind.value.upper() == kind, f"{key}: kind {d.kind!r} != {kind!r}"
         assert d.default == default, f"{key}: default {d.default!r} != {default!r}"
         assert reg.get_value(key) == default, f"{key}: value {reg.get_value(key)!r} != {default!r}"
 

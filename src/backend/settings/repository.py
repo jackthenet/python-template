@@ -4,6 +4,10 @@
 implementation is ``YamlTemplateRepository`` (one file per template, safe
 YAML, atomic writes). Alternative format implementations (JSON, etc.) must
 satisfy the same interface and observable behavior.
+
+``ValueRepository`` is the stable interface for persisting the registry's
+current values. The first implementation is ``YamlValueRepository`` (a single
+``values.yaml``, safe YAML, atomic writes).
 """
 
 from __future__ import annotations
@@ -18,8 +22,74 @@ import yaml
 from loguru import logger
 
 from backend.logging import logged_class
-from backend.settings.exceptions import TemplateStorageError
+from backend.settings.exceptions import TemplateStorageError, ValueStorageError
 from backend.settings.models import Template
+
+
+@logged_class(slow_threshold_ms=100)
+class ValueRepository(ABC):
+    """Persists the registry's current values (REQ-010).
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete subclasses inherit the tracing.
+    """
+
+    @abstractmethod
+    def load(self) -> dict[str, Any] | None:
+        """Return the persisted values, or None if none are persisted."""
+
+    @abstractmethod
+    def save(self, values: dict[str, Any]) -> None:
+        """Persist ``values`` (overwriting any existing values)."""
+
+
+@logged_class(slow_threshold_ms=100)
+class YamlValueRepository(ValueRepository):
+    """Single ``values.yaml`` file, safe YAML, atomic write, thread-safe (REQ-010).
+
+    The class is traced via the shared logging feature (``@logged_class``).
+
+    Writes are atomic (a temp file in the same directory is renamed over the
+target), so the file is always either absent or valid YAML.
+    """
+
+    def __init__(self, directory: str) -> None:
+        self._directory = Path(directory)
+        self._directory.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+
+    def _path(self) -> Path:
+        return self._directory / "values.yaml"
+
+    def save(self, values: dict[str, Any]) -> None:
+        with self._lock:
+            text = yaml.safe_dump(values, sort_keys=True, default_flow_style=False)
+            tmp = self._directory / ".values.yaml.tmp"
+            tmp.write_text(text, encoding="utf-8")
+            os.replace(tmp, self._path())
+        logger.debug("values saved to storage: count={}", len(values))
+
+    def load(self) -> dict[str, Any] | None:
+        try:
+            with self._lock:
+                path = self._path()
+                if not path.exists():
+                    return None
+                data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                result = self._parse(data)
+        except yaml.YAMLError as e:
+            logger.error("value storage failure: reason={}", e)
+            raise ValueStorageError(f"corrupted values file: {e}") from e
+        except ValueStorageError as e:
+            logger.error("value storage failure: reason={}", e)
+            raise
+        logger.debug("values loaded from storage: count={}", len(result))
+        return result
+
+    def _parse(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise ValueStorageError("values file is not a mapping")
+        return {str(k): v for k, v in data.items()}
 
 
 @logged_class(slow_threshold_ms=100)

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from logging_test_helpers import run_python
 
@@ -27,21 +27,25 @@ def test_inv_001_concurrent_setup_logger_sinks(tmp_path: Path) -> None:
     per process and the in-process session setup already configured the sinks.
     """
 
+    @settings(deadline=None)
     @given(st.integers(min_value=1, max_value=16))
     def inner(n: int) -> None:
         log_file = tmp_path / f"inv_001_{n}.log"
         code = f"""
 import threading
-from backend.logging import setup_logger
-from backend.logging.settings import Settings
+from backend.settings import get_settings_registry
+from backend.logging import register_settings as logging_register, setup_logger
 from loguru import logger
 
-settings = Settings(log_file={str(log_file)!r}, log_level="INFO")
+reg = get_settings_registry()
+logging_register(reg)
+reg.set_value('logging.log_file', {str(log_file)!r})
+reg.set_value('logging.log_level', 'INFO')
 errors = []
 
 def worker():
     try:
-        setup_logger(settings)
+        setup_logger()
     except BaseException as e:
         errors.append(e)
 

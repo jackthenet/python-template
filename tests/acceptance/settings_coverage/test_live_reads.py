@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from backend.settings import ListSpec, SettingDefinition, SettingKind
-from settings_test_helpers import make_registry
 from usermanagement_test_helpers import db_url, valid_create
 
 
@@ -23,7 +22,9 @@ def _reset_registry() -> Iterator[None]:
 
 def test_set_value_affects_running_feature(tmp_path: Path) -> None:
     """AC-004: a running feature reads its settings live; set_value affects the next operation."""
-    reg, _bus = make_registry()
+    from backend.settings import get_settings_registry
+
+    reg = get_settings_registry()
     reg.register(
         SettingDefinition(
             key="usermanagement.roles",

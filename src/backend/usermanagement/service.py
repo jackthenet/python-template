@@ -64,19 +64,48 @@ class UserManager:
     def __init__(
         self,
         repository: UserRepository,
-        roles: Iterable[str] = ("admin", "member"),
+        roles: Iterable[str] | None = None,
         event_bus: EventPublisher | None = None,
     ) -> None:
-        role_tuple = tuple(roles)
-        if not role_tuple:
-            raise ValueError("roles must be non-empty")
-        for role in role_tuple:
-            if not _ROLE_RE.fullmatch(role):
-                raise ValueError(f"role {role!r} must match ^[a-z0-9_-]{{1,32}}$")
         self._repository = repository
-        self._roles = frozenset(role_tuple)
         self._event_bus = event_bus
         self._hasher = PasswordHasher()
+        # AC-004: when no explicit roles are provided, the role set is read
+        # live from the settings registry (usermanagement.roles) on each
+        # operation, so set_value affects the next operation. An explicit
+        # role set is fixed at construction time.
+        if roles is None:
+            self._explicit_roles: frozenset[str] | None = None
+            self._roles = frozenset(self._read_registry_roles())
+        else:
+            role_tuple = tuple(roles)
+            if not role_tuple:
+                raise ValueError("roles must be non-empty")
+            for role in role_tuple:
+                if not _ROLE_RE.fullmatch(role):
+                    raise ValueError(f"role {role!r} must match ^[a-z0-9_-]{{1,32}}$")
+            self._explicit_roles = frozenset(role_tuple)
+            self._roles = self._explicit_roles
+
+    def _read_registry_roles(self) -> tuple[str, ...]:
+        """Read usermanagement.roles from the settings registry (AC-004).
+
+        Falls back to the original hardcoded default when the registry does
+        not exist or the key is unregistered.
+        """
+        from backend.settings import get_settings_registry
+
+        registry = get_settings_registry(required=False)
+        if registry is not None and registry.has("usermanagement.roles"):
+            return tuple(registry.get_value("usermanagement.roles"))
+        return ("admin", "member")
+
+    def _current_roles(self) -> frozenset[str]:
+        """The current role set (live from the registry when not explicit)."""
+        if self._explicit_roles is not None:
+            return self._explicit_roles
+        self._roles = frozenset(self._read_registry_roles())
+        return self._roles
 
     # --- reads ---
 
@@ -99,8 +128,9 @@ class UserManager:
     # --- create ---
 
     def create_user(self, data: UserCreate) -> UserRead:
-        if data.role not in self._roles:
-            raise InvalidRoleError(role=data.role, allowed=self._roles)
+        roles = self._current_roles()
+        if data.role not in roles:
+            raise InvalidRoleError(role=data.role, allowed=roles)
         now = _utcnow()
         user = User(
             id=uuid4(),
@@ -180,8 +210,8 @@ class UserManager:
         user = self._repository.get_by_id(user_id)
         if user is None:
             raise UserNotFoundError(f"user {user_id} not found")
-        if role not in self._roles:
-            raise InvalidRoleError(role=role, allowed=self._roles)
+        if role not in self._current_roles():
+            raise InvalidRoleError(role=role, allowed=self._current_roles())
         if user.role == role:
             # Same role: idempotent no-op — no event.
             return _to_read(user)
@@ -225,7 +255,7 @@ class UserManager:
         """Raise :class:`LastAdminError` if the operation would leave zero
         active admins (only while ``admin`` is in the configured role set,
         ADR-022)."""
-        if "admin" not in self._roles:
+        if "admin" not in self._current_roles():
             return
         if user.role != "admin" or not user.is_active:
             return

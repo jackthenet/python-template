@@ -41,7 +41,19 @@ class EventBus:
     each public method produces entry and exit log records.
     """
 
-    def __init__(self, max_queue_size: int = 1000) -> None:
+    def __init__(self, max_queue_size: int | None = None) -> None:
+        if max_queue_size is None:
+            # AC-017/AC-018: read eventbus.max_queue_size from the settings
+            # registry when it exists; otherwise fall back to the original
+            # hardcoded default. The guarded read (required=False) never
+            # creates the singleton, so there is no import side effect.
+            from backend.settings import get_settings_registry
+
+            registry = get_settings_registry(required=False)
+            if registry is not None and registry.has("eventbus.max_queue_size"):
+                max_queue_size = registry.get_value("eventbus.max_queue_size")
+            else:
+                max_queue_size = 1000
         self._max_queue_size = max_queue_size
         self._queue: queue.Queue = queue.Queue(maxsize=max_queue_size)
         self._registry: list[tuple[type, Callable[..., None]]] = []
@@ -49,6 +61,11 @@ class EventBus:
         self._worker: threading.Thread | None = None
         self._shutdown = False
         self._dropped = 0
+
+    @property
+    def max_queue_size(self) -> int:
+        """The configured maximum queue size."""
+        return self._max_queue_size
 
     def subscribe(self, event_type: type[T], handler: Callable[[T], None]) -> None:
         """Register ``handler`` for ``event_type``.

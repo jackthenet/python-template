@@ -21,7 +21,7 @@ from logging_coverage_test_helpers import (
 from loguru import logger
 
 from backend.authentication.tracker import InMemoryAttemptTracker
-from backend.logging import Settings, logged, setup_logger
+from backend.logging import logged, setup_logger
 from backend.usermanagement.errors import UserNotFoundError
 from backend.usermanagement.repository import SqliteUserRepository, UserRepository
 from backend.usermanagement.service import UserManager
@@ -102,9 +102,9 @@ def test_traced_method_exception_propagates(log_records: list[Any], tmp_path: An
 def test_setup_logger_idempotent() -> None:
     """EDGE-005: ``setup_logger`` is idempotent — a second call adds no sinks; the
     entrypoint relies on this (it calls ``setup_logger`` exactly once)."""
-    setup_logger(Settings(log_level="DEBUG"))
+    setup_logger()
     first = len(logger._core.handlers)
-    setup_logger(Settings(log_level="DEBUG"))
+    setup_logger()
     second = len(logger._core.handlers)
     assert first == second, "a second setup_logger call must be a no-op"
     # The entrypoint relies on this idempotency: main.py calls setup_logger exactly once.

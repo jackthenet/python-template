@@ -5,12 +5,14 @@ hierarchy/views, and template CRUD.
 from __future__ import annotations
 
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from backend.eventbus import EventBus, get_event_bus
 from backend.logging import logged, logged_class
+
+if TYPE_CHECKING:
+    from backend.eventbus import EventBus
 from backend.settings.exceptions import (
     SettingsNotFoundError,
     SettingsRegistrationError,
@@ -27,7 +29,12 @@ from backend.settings.models import (
     is_template_name_valid,
     value_valid_for,
 )
-from backend.settings.repository import MemoryTemplateRepository, TemplateRepository
+from backend.settings.repository import (
+    MemoryTemplateRepository,
+    TemplateRepository,
+    ValueRepository,
+    YamlValueRepository,
+)
 
 _registry: list[SettingsRegistry | None] = [None]
 
@@ -44,12 +51,24 @@ class SettingsRegistry:
         self,
         event_bus: EventBus | None = None,
         template_repository: TemplateRepository | None = None,
+        value_repository: ValueRepository | None = None,
     ) -> None:
+        # Lazy import: backend.eventbus imports backend.settings (via its
+        # feature_settings module), so importing it at module level here would
+        # create a circular import.
+        from backend.eventbus import get_event_bus
+
         self._event_bus = event_bus if event_bus is not None else get_event_bus()
         self._repository = template_repository if template_repository is not None else MemoryTemplateRepository()
+        self._value_repository = (
+            value_repository if value_repository is not None else YamlValueRepository("settings")
+        )
         self._definitions: dict[str, SettingDefinition] = {}
         self._values: dict[str, Any] = {}
         self._lock = threading.Lock()
+        # Persisted values are loaded once at construction (REQ-009 / NFR-001);
+        # they take precedence over definition defaults (REQ-011).
+        self._persisted: dict[str, Any] = self._value_repository.load() or {}
 
     # -- Registration --
 
@@ -60,8 +79,17 @@ class SettingsRegistry:
                 logger.warning("duplicate registration: key={}", definition.key)
                 raise SettingsRegistrationError(f"duplicate key {definition.key}")
             self._definitions[definition.key] = definition
-            self._values[definition.key] = definition.default
+            # Persisted values take precedence over definition defaults (REQ-011).
+            self._values[definition.key] = self._persisted.get(
+                definition.key, definition.default
+            )
         logger.debug("setting registered: key={} kind={}", definition.key, definition.kind)
+        self._persist_values()
+
+    @property
+    def value_repository(self) -> ValueRepository:
+        """The value repository backing this registry (REQ-010)."""
+        return self._value_repository
 
     def register_feature(self, feature: str, definitions: list[SettingDefinition]) -> None:
         """Register a feature's settings; each key must start with ``f"{feature}."``."""
@@ -101,6 +129,7 @@ class SettingsRegistry:
             previous = self._values[key]
             self._values[key] = value
         logger.debug("value set: key={}", key)
+        self._persist_values()
         self._publish_setting_changed(key, value, previous)
         return value
 
@@ -113,6 +142,7 @@ class SettingsRegistry:
             previous = self._values[key]
             self._values[key] = d.default
         logger.debug("value reset: key={}", key)
+        self._persist_values()
         self._publish_setting_changed(key, d.default, previous)
 
     def reset_all(self) -> None:
@@ -125,6 +155,7 @@ class SettingsRegistry:
                 self._values[key] = d.default
             logger.debug("value reset: key={}", key)
             self._publish_setting_changed(key, d.default, previous)
+        self._persist_values()
 
     # -- Status / views --
 
@@ -151,6 +182,7 @@ class SettingsRegistry:
                 status=SettingStatus.DEFAULT if self._values[key] == d.default else SettingStatus.MODIFIED,
                 slider=d.slider,
                 select=d.select,
+                list_spec=d.list_spec,
                 pattern=d.pattern,
                 min_length=d.min_length,
                 max_length=d.max_length,
@@ -220,6 +252,7 @@ class SettingsRegistry:
             self.set_value(key, value)
             count += 1
         logger.debug("template loaded: name={} count={}", name, count)
+        self._persist_values()
 
     def update_template(self, name: str, values: dict[str, Any]) -> None:
         """Replace the stored values of a template (must cover the scope)."""
@@ -283,12 +316,26 @@ class SettingsRegistry:
         # Publishing is best-effort: the bus drops events when shut down.
         self._event_bus.publish(SettingChanged(key=key, value=value, previous=previous))
 
+    def _persist_values(self) -> None:
+        # All current values are persisted (REQ-009), including those equal
+        # to their defaults (EDGE-009).
+        with self._lock:
+            values = dict(self._values)
+        self._value_repository.save(values)
+
 
 @logged(slow_threshold_ms=5)
-def get_settings_registry() -> SettingsRegistry:
-    """Return the shared default registry (singleton)."""
+def get_settings_registry(required: bool = True) -> SettingsRegistry | None:
+    """Return the shared default registry (singleton).
+
+    With ``required=True`` (default) the singleton is created on first use.
+    With ``required=False`` the existing singleton is returned, or ``None`` if
+    it has not been created yet (no side effect).
+    """
     reg = _registry[0]
     if reg is None:
+        if not required:
+            return None
         reg = SettingsRegistry()
         _registry[0] = reg
     return reg

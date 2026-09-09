@@ -58,6 +58,7 @@ from backend.authentication.repository import (
     SqliteWebAuthnCredentialRepository,
 )
 from backend.authentication.service import AuthService
+from backend.authentication.feature_settings import register_settings
 from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
@@ -92,6 +93,7 @@ __all__ = [
     "PasswordResetRequest",
     "PasswordResetRequested",
     "PyWebAuthnProvider",
+    "register_settings",
     "Session",
     "SessionInfo",
     "SessionRepository",

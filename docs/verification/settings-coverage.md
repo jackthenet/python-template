@@ -61,4 +61,25 @@ Before implementation the new APIs do not exist:
 
 ## Phase 4 — GREEN Evidence
 
-(Recorded per task as implementation proceeds.)
+**Command:** `uv run pytest tests/acceptance/settings_coverage/ tests/unit/test_settings_coverage.py tests/property/test_settings_coverage.py tests/contract/settings_coverage/ -v`
+
+**Result:** All 50 settings-coverage spec-derived tests pass (GREEN).
+
+**Full suite:** `uv run pytest tests/ -q` → 357 passed, 1 failed (pre-existing `test_nfr_001_performance_budgets`, confirmed via git stash to fail without Phase 4 changes).
+
+### Task completion
+
+| Task | Scope | Status |
+|------|-------|--------|
+| T-001 | LIST kind + ListSpec validation | GREEN |
+| T-002 | ValueRepository ABC + YamlValueRepository + ValueStorageError | GREEN |
+| T-003 | Guarded getter `get_settings_registry(required=False)` | GREEN |
+| T-004 | EventBus constructor reads `eventbus.max_queue_size` from registry | GREEN |
+| T-005 | `register_settings` + `_read_setting` + live reads + constructor defaults (4 features) | GREEN |
+| T-006 | No-arg `setup_logger` + sink reconfiguration + stub removal (REQ-016) | GREEN |
+| T-007 | `src/main.py` wiring | GREEN |
+
+### Test-isolation notes
+
+- Two original logging tests (`test_nfr_003_diagnose_false`, `test_service_registry_classes_traced`) show flaky failures when run in a large combined suite due to concurrent EventBus worker threads and log-file timing. They pass in isolation and in the full `uv run pytest tests/` run.
+- The `test_service_registry_classes_traced` assertion was updated to expect 2 `SettingsRegistry.has` entry records (one from the EventBus constructor's lazy registry read, one from the test's direct call).

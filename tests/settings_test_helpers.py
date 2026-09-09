@@ -7,11 +7,12 @@ helper pattern (async delivery is observed via ``wait_for``).
 
 from __future__ import annotations
 
+import tempfile
 import time
 from collections.abc import Callable
 
 from backend.eventbus import EventBus
-from backend.settings import SettingsRegistry
+from backend.settings import SettingsRegistry, YamlValueRepository
 
 
 def wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> bool:
@@ -34,9 +35,14 @@ def make_registry(event_bus: EventBus | None = None) -> tuple[SettingsRegistry, 
 
     Returns ``(registry, bus)``. The caller is responsible for shutting the
     bus down when it created the bus (or always, to be safe).
+
+    The registry is backed by a fresh ``YamlValueRepository`` in a temp
+    directory so value persistence does not leak between tests (each test
+    gets isolated persisted state).
     """
     bus = event_bus if event_bus is not None else EventBus()
-    registry = SettingsRegistry(event_bus=bus)
+    value_repository = YamlValueRepository(tempfile.mkdtemp(prefix="settings_values_"))
+    registry = SettingsRegistry(event_bus=bus, value_repository=value_repository)
     return registry, bus
 
 

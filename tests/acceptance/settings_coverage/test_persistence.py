@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -32,11 +33,9 @@ def test_set_value_persists() -> None:
     assert loaded["a"] == "y"
 
 
-def test_persisted_precedence() -> None:
+def test_persisted_precedence(tmp_path: Path) -> None:
     """AC-015: persisted values take precedence over definition defaults."""
-    from pathlib import Path
-
-    directory = Path("test_precedence_dir")
+    directory = tmp_path / "values"
     repo = YamlValueRepository(str(directory))
     repo.save({"a": "persisted"})
 

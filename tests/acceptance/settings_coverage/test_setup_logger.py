@@ -31,8 +31,9 @@ reg.set_value('logging.log_file', {str(log_file)!r})
 reg.set_value('logging.log_level', 'WARNING')
 setup_logger()
 from loguru import logger
-sinks = [str(h['sink']) for h in logger._core.handlers]
-print(sinks)
+for h in logger._core.handlers.values():
+    sink = h._sink
+    print(sink._file.name if hasattr(sink, '_file') else sink)
 """
     result = _run(code)
     assert result.returncode == 0, result.stderr
@@ -55,12 +56,12 @@ deadline = time.monotonic() + 5
 levels = []
 while time.monotonic() < deadline:
     from loguru import logger
-    levels = [h['level'].name for h in logger._core.handlers]
-    if 'DEBUG' in levels:
+    levels = [h._levelno for h in logger._core.handlers.values()]
+    if 10 in levels:
         break
     time.sleep(0.05)
 print(levels)
 """
     result = _run(code)
     assert result.returncode == 0, result.stderr
-    assert "DEBUG" in result.stdout, result.stdout
+    assert "10" in result.stdout, result.stdout

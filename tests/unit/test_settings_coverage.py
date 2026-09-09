@@ -17,6 +17,8 @@ import pytest
 
 from backend.settings import (
     ListSpec,
+    SelectOption,
+    SelectSpec,
     SettingDefinition,
     SettingKind,
     SettingsRegistry,
@@ -256,11 +258,11 @@ def test_eventbus_bootstrap_cycle() -> None:
 
 # --- EDGE-003: corrupted values.yaml ---
 
-def test_corrupted_values_yaml() -> None:
+def test_corrupted_values_yaml(tmp_path: Path) -> None:
     """EDGE-003: a corrupted values.yaml raises ValueStorageError on load."""
-    repo = YamlValueRepository(str(Path("test_corrupted_dir")))
+    repo = YamlValueRepository(str(tmp_path / "values"))
     # Write corrupted content.
-    d = Path("test_corrupted_dir")
+    d = tmp_path / "values"
     d.mkdir(exist_ok=True)
     (d / "values.yaml").write_text("not: [valid: yaml", encoding="utf-8")
     with pytest.raises(ValueError):  # ValueStorageError is a ValueError subclass
@@ -269,9 +271,9 @@ def test_corrupted_values_yaml() -> None:
 
 # --- EDGE-004: missing values.yaml ---
 
-def test_missing_values_yaml() -> None:
+def test_missing_values_yaml(tmp_path: Path) -> None:
     """EDGE-004: a missing values.yaml returns None from load()."""
-    repo = YamlValueRepository(str(Path("test_missing_dir")))
+    repo = YamlValueRepository(str(tmp_path / "values"))
     assert repo.load() is None
 
 
@@ -349,7 +351,14 @@ def test_live_read_no_trace_on_same() -> None:
     from backend.logging import _read_setting
 
     reg = get_settings_registry()
-    reg.register(SettingDefinition(key="logging.log_level", kind=SettingKind.SELECT, default="INFO"))
+    reg.register(
+        SettingDefinition(
+            key="logging.log_level",
+            kind=SettingKind.SELECT,
+            default="INFO",
+            select=SelectSpec(options=[SelectOption(value="INFO"), SelectOption(value="DEBUG")]),
+        )
+    )
     # Reading the same value twice logs no trace on the second read.
     assert _read_setting(reg, "logging.log_level", fallback="INFO") == "INFO"
     assert _read_setting(reg, "logging.log_level", fallback="INFO") == "INFO"

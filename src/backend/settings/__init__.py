@@ -10,8 +10,10 @@ from backend.settings.exceptions import (
     TemplateNotFoundError,
     TemplateStorageError,
     TemplateValidationError,
+    ValueStorageError,
 )
 from backend.settings.models import (
+    ListSpec,
     SelectOption,
     SelectSpec,
     SettingChanged,
@@ -30,10 +32,13 @@ from backend.settings.registry import (
 from backend.settings.repository import (
     MemoryTemplateRepository,
     TemplateRepository,
+    ValueRepository,
     YamlTemplateRepository,
+    YamlValueRepository,
 )
 
 __all__ = [
+    "ListSpec",
     "MemoryTemplateRepository",
     "SelectOption",
     "SelectSpec",
@@ -53,7 +58,10 @@ __all__ = [
     "TemplateRepository",
     "TemplateStorageError",
     "TemplateValidationError",
+    "ValueRepository",
+    "ValueStorageError",
     "YamlTemplateRepository",
+    "YamlValueRepository",
     "get_settings_registry",
     "reset_settings_registry",
 ]

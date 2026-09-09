@@ -7,7 +7,6 @@ from collections.abc import Iterator
 import pytest
 
 from backend.settings import SettingDefinition, SettingKind
-from settings_test_helpers import make_registry
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +20,9 @@ def _reset_registry() -> Iterator[None]:
 
 def test_constructor_default_registry_value() -> None:
     """AC-005: without explicit arguments the registry value is used; an explicit argument wins."""
-    reg, _bus = make_registry()
+    from backend.settings import get_settings_registry
+
+    reg = get_settings_registry()
     reg.register(SettingDefinition(key="eventbus.max_queue_size", kind=SettingKind.NUMBER, default=1000))
     reg.set_value("eventbus.max_queue_size", 500)
 

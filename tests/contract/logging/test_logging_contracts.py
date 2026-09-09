@@ -28,11 +28,14 @@ def test_nfr_001_setup_time_budget(tmp_path: Path) -> None:
     log_file = tmp_path / "nfr_001.log"
     code = f"""
 import time
-from backend.logging import setup_logger
-from backend.logging.settings import Settings
-
+from backend.settings import get_settings_registry
+from backend.logging import register_settings as logging_register, setup_logger
+reg = get_settings_registry()
+logging_register(reg)
+reg.set_value('logging.log_file', {str(log_file)!r})
+reg.set_value('logging.log_level', 'INFO')
 start = time.perf_counter()
-setup_logger(Settings(log_file={str(log_file)!r}, log_level="INFO"))
+setup_logger()
 elapsed_ms = (time.perf_counter() - start) * 1000
 print(f"SETUP_MS {{elapsed_ms:.2f}}")
 """
@@ -109,6 +112,6 @@ def test_nfr_004_backward_compatible_api() -> None:
         assert param in logged_params, f"logged missing parameter {param}"
 
     setup_sig = inspect.signature(logging_feature.setup_logger)
-    assert "settings" in setup_sig.parameters
-    # setup_logger() must be callable with no arguments (spec consumer example).
-    assert setup_sig.parameters["settings"].default is not inspect.Parameter.empty
+    # setup_logger() is no-arg (REQ-014): it reads the logging settings from the
+    # shared registry, so it must be callable with no arguments.
+    assert len(setup_sig.parameters) == 0
