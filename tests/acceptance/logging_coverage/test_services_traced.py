@@ -7,16 +7,18 @@ assert the produced records).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import timedelta
-from typing import Any, Callable
+from typing import Any
 
 from logging_coverage_test_helpers import (
     INVENTORY_MODULE_FUNCTIONS,
-    exit_records,
     entry_records,
+    exit_records,
     for_qualname,
     parse_elapsed_ms,
 )
+
 from backend.authentication.repository import (
     SqlitePasswordResetRepository,
     SqliteSessionRepository,
@@ -29,6 +31,11 @@ from backend.logging import Settings
 from backend.settings.registry import SettingsRegistry
 from backend.settings.repository import MemoryTemplateRepository, YamlTemplateRepository
 from backend.usermanagement.repository import SqliteUserRepository
+
+# PyWebAuthnProvider's configured slow threshold (spec section 3.3); verified
+# via the decorator attribute because its methods require py-webauthn (not
+# installed in the test environment).
+_WEBAUTHN_SLOW_THRESHOLD_MS = 500
 
 
 def test_service_registry_classes_traced(log_records: list[Any]) -> None:
@@ -83,7 +90,7 @@ def test_concrete_repo_provider_traced(log_records: list[Any], tmp_path: Any) ->
     # installed in the test environment — the auth suite uses a fake provider),
     # so tracing is verified via the decorator attributes instead of a call.
     assert getattr(PyWebAuthnProvider, "__logged_class__", False) is True, "PyWebAuthnProvider: not traced"
-    assert getattr(PyWebAuthnProvider, "slow_threshold_ms", None) == 500, "PyWebAuthnProvider: wrong slow threshold"
+    assert getattr(PyWebAuthnProvider, "slow_threshold_ms", None) == _WEBAUTHN_SLOW_THRESHOLD_MS, "PyWebAuthnProvider: wrong slow threshold"
 
 
 def test_module_functions_traced(log_records: list[Any]) -> None:

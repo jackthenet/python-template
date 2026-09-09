@@ -11,13 +11,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from logging_coverage_test_helpers import (
     INVENTORY_CLASSES,
-    exit_records,
     entry_records,
+    exit_records,
     for_qualname,
 )
+
 from backend.usermanagement.repository import SqliteUserRepository, UserRepository
 
 

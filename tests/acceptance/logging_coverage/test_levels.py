@@ -8,6 +8,7 @@ significant lifecycle events are logged at INFO/WARNING/ERROR, not only DEBUG.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import Any
 
@@ -15,6 +16,7 @@ from logging_coverage_test_helpers import (
     INVENTORY_CLASSES,
     level_name,
 )
+
 from backend.eventbus.eventbus import EventBus
 from backend.settings.models import SettingDefinition, SettingKind
 from backend.settings.registry import SettingsRegistry
@@ -58,10 +60,8 @@ def test_semantic_log_levels(log_records: list[Any]) -> None:
     reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
     definition = SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="d")
     reg.register(definition)
-    try:
+    with contextlib.suppress(SettingsRegistrationError):
         reg.register(definition)  # duplicate
-    except SettingsRegistrationError:
-        pass
     assert any(
         level_name(r) == "WARNING" and "duplicate registration" in str(r) for r in log_records
     ), "expected a WARNING-level record for the duplicate registration"

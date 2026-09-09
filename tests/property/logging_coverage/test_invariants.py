@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import tempfile
 import time
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from loguru import logger
-
 from logging_coverage_test_helpers import (
     capture_records,
     entry_records,
@@ -25,6 +24,8 @@ from logging_coverage_test_helpers import (
     for_qualname,
     parse_elapsed_ms,
 )
+from loguru import logger
+
 from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.logging import logged

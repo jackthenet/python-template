@@ -13,23 +13,23 @@ where secrets are handled.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 from loguru import logger
 
 # --- The normative inventory: classes (spec section 3.1) -----------------
 from backend.authentication.protocols import AttemptTracker, WebAuthnProvider
-from backend.authentication.repository import (
-    SqlitePasswordResetRepository,
-    SqliteSessionRepository,
-    SqliteWebAuthnCredentialRepository,
-)
 from backend.authentication.repositories import (
     PasswordResetRepository,
     SessionRepository,
     WebAuthnCredentialRepository,
+)
+from backend.authentication.repository import (
+    SqlitePasswordResetRepository,
+    SqliteSessionRepository,
+    SqliteWebAuthnCredentialRepository,
 )
 from backend.authentication.service import AuthService
 from backend.authentication.tokens import hash_token, new_token

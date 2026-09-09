@@ -12,6 +12,7 @@ import uuid
 from typing import Any
 
 from logging_coverage_test_helpers import INVENTORY_CLASSES
+
 from backend.eventbus.eventbus import EventBus
 from backend.settings.models import SettingDefinition, SettingKind
 from backend.settings.registry import SettingsRegistry
@@ -52,8 +53,12 @@ def test_tracing_does_not_change_behavior(log_records: list[Any], tmp_path: Any)
 
     bus = EventBus()
     received: list[Any] = []
+
+    def _handler(e: Any) -> None:
+        received.append(e)
+
     try:
-        bus.subscribe(UserCreated, lambda e: received.append(e))
+        bus.subscribe(UserCreated, _handler)
         bus.publish(UserCreated(user_id="u1", email="e1"))
         assert wait_for(lambda: len(received) == 1)
     finally:

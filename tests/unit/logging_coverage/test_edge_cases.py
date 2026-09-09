@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from loguru import logger
-
 from logging_coverage_test_helpers import (
     INVENTORY_CLASSES,
     entry_records,
@@ -20,6 +18,8 @@ from logging_coverage_test_helpers import (
     exit_records,
     level_name,
 )
+from loguru import logger
+
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.logging import Settings, logged, setup_logger
 from backend.usermanagement.errors import UserNotFoundError

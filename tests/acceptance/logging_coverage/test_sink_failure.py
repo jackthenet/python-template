@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from loguru import logger
-
 from logging_coverage_test_helpers import (
     INVENTORY_CLASSES,
     entry_records,
     exit_records,
     for_qualname,
 )
+from loguru import logger
+
 from backend.usermanagement.repository import SqliteUserRepository
 
 

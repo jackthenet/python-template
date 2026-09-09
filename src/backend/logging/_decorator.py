@@ -170,8 +170,8 @@ def logged(
             wrapper = _wrap_sync(f, level, threshold, include_args, context_getter, depth)
         # Mark the wrapper as traced and expose the resolved threshold so callers
         # (and the logging-coverage suite) can inspect it (REQ-005/REQ-007).
-        wrapper.__logged__ = True
-        wrapper.slow_threshold_ms = threshold
+        wrapper.__logged__ = True  # type: ignore[attr-defined]
+        wrapper.slow_threshold_ms = threshold  # type: ignore[attr-defined]
         return wrapper
 
     if func is None:
@@ -184,7 +184,7 @@ def logged_class(
     *,
     slow_threshold_ms: float | None = None,
     include_args: bool = False,
-) -> type:
+) -> type | Callable[[type], type]:
     """Apply :func:`logged` to every public (non-private) method of a class.
 
     ``slow_threshold_ms`` is the concrete slow-call threshold applied to every
@@ -193,13 +193,13 @@ def logged_class(
     handlers MUST use ``False``). Private methods (underscore-prefixed, or named
     ``...private``) are left unchanged, matching AC-012/AC-013 and EDGE-004.
 
-    Usable as ``@logged_class`` or ``@logged_class(slow_threshold_ms=..., 
+    Usable as ``@logged_class`` or ``@logged_class(slow_threshold_ms=...,
     include_args=...)``.
     """
 
     def decorator(c: type) -> type:
-        c.__logged_class__ = True
-        c.slow_threshold_ms = slow_threshold_ms
+        c.__logged_class__ = True  # type: ignore[attr-defined]
+        c.slow_threshold_ms = slow_threshold_ms  # type: ignore[attr-defined]
         for name, method in inspect.getmembers(c, inspect.isfunction):
             if _is_private_method(name):
                 continue

@@ -9,9 +9,8 @@ from typing import Any
 
 from loguru import logger
 
-from backend.logging import logged, logged_class
-
 from backend.eventbus import EventBus, get_event_bus
+from backend.logging import logged, logged_class
 from backend.settings.exceptions import (
     SettingsNotFoundError,
     SettingsRegistrationError,

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from logging_coverage_test_helpers import INVENTORY_CLASSES, messages
+
 from backend.eventbus.eventbus import EventBus
 from backend.settings.models import SettingDefinition, SettingKind
 from backend.settings.registry import SettingsRegistry
