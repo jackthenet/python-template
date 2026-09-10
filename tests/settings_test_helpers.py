@@ -34,9 +34,17 @@ def make_registry(event_bus: EventBus | None = None) -> tuple[SettingsRegistry, 
 
     Returns ``(registry, bus)``. The caller is responsible for shutting the
     bus down when it created the bus (or always, to be safe).
+
+    Uses an isolated value repository (temp directory) to prevent cross-test
+    contamination from the shared default ``settings/`` directory.
     """
+    import tempfile
+
+    from backend.settings import YamlValueRepository
+
     bus = event_bus if event_bus is not None else EventBus()
-    registry = SettingsRegistry(event_bus=bus)
+    repo = YamlValueRepository(tempfile.mkdtemp(prefix="settings_values_"))
+    registry = SettingsRegistry(event_bus=bus, value_repository=repo)
     return registry, bus
 
 
