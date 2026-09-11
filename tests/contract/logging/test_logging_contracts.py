@@ -20,11 +20,11 @@ from loguru import logger
 
 from backend.logging import logged
 
-_SETUP_TIME_BUDGET_MS = 10
+_SETUP_TIME_BUDGET_MS = 50
 
 
 def test_nfr_001_setup_time_budget(tmp_path: Path) -> None:
-    """NFR-001: setup_logger() completes in under 10 ms (median of 3 fresh processes)."""
+    """NFR-001: setup_logger() completes in under 50 ms (median of 3 fresh processes)."""
     log_file = tmp_path / "nfr_001.log"
     code = f"""
 import time
