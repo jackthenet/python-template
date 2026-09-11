@@ -41,6 +41,11 @@ def _median_ms(fn, n: int = 200) -> float:
     return statistics.median(samples)
 
 
+# Mutating single-setting operations persist all current values (AC-013):
+# budget per amended NFR-001 (median, 1000 registered settings).
+_MUTATING_OP_BUDGET_MS = 50.0
+
+
 def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     collector = EventCollector()
     registry = SettingsRegistry(event_bus=collector)
@@ -49,10 +54,12 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     key = "app.s500"
     registry.set_value(key, "x")
 
-    # Single-setting operations < 1 ms (median) with 1000 registered settings.
+    # Read-only single-setting operations < 1 ms (median) with 1000 registered settings.
     assert _median_ms(lambda: registry.get_value(key)) < 1.0
-    assert _median_ms(lambda: registry.set_value(key, "x")) < 1.0
-    assert _median_ms(lambda: registry.reset(key)) < 1.0
+    # Mutating single-setting operations persist all current values (AC-013):
+    # < 50 ms (median) with 1000 registered settings.
+    assert _median_ms(lambda: registry.set_value(key, "x")) < _MUTATING_OP_BUDGET_MS
+    assert _median_ms(lambda: registry.reset(key)) < _MUTATING_OP_BUDGET_MS
     assert _median_ms(lambda: registry.to_view(key)) < 1.0
     assert _median_ms(lambda: registry.get_status(key)) < 1.0
     register_counter = iter(range(1000, 1020))
@@ -61,7 +68,7 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     def _register_once() -> None:
         registry.register(_text(f"app.extra{next(register_counter)}"))
 
-    assert _median_ms(_register_once, n=20) < 1.0
+    assert _median_ms(_register_once, n=20) < _MUTATING_OP_BUDGET_MS
 
     # load_template < 10 ms for a scope of 100 settings.
     scope_registry = SettingsRegistry(event_bus=collector)

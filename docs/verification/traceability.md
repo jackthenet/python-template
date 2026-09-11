@@ -36,7 +36,7 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 | EDGE-003 | — | `test_edge_003_logged_nonexistent_setting` | RED |
 | EDGE-004 | — | `test_edge_004_logged_class_no_public_methods` | RED |
 | EDGE-005 | — | `test_edge_005_intercept_unknown_level` | RED |
-| NFR-001 | — | `test_nfr_001_setup_time_budget` | RED |
+| NFR-001 | — | `test_nfr_001_setup_time_budget` | GREEN |
 | NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | RED |
 | NFR-003 | — | `test_nfr_003_diagnose_false` | RED |
 | NFR-004 | — | `test_nfr_004_backward_compatible_api` | RED |
