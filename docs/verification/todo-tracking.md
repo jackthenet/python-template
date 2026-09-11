@@ -16,3 +16,8 @@ The Spec-TDD workflow in AGENTS.md did not reference the `todo` tool. This chang
 ### No-behavior confirmation
 - Only `.md` files are modified (AGENTS.md + 7 skill SKILL.md files).
 - No `src/`, `test/`, `pyproject.toml`, or CI changes. Externally observable behavior is unchanged.
+
+## Evidence
+- `git diff main --name-only` → only `.md` files (7 skill SKILL.md + `Agents.md` + `docs/verification/todo-tracking.md`).
+- `uv run ruff check .` → **All checks passed!** (repo still lints clean).
+- Internal consistency: every phase the type runs (per the Phase Matrix) has a todo item + a status order in the new section; skipped phases get no item (shown in the ISSUE example).
