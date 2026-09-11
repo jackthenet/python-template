@@ -24,9 +24,19 @@ Implement the change: turn failing tests (RED) into passing tests (GREEN) (FEATU
 - REFACTOR: the baseline + scope at `docs/verification/[name].md`.
 - DOCS/CHORE: the scope at `docs/verification/[name].md`.
 
+## Execution Context (Subagents)
+
+This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
+- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
+- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+
 ## Todo
 
-Per the AGENTS.md Todo Tracking Discipline: mark the Phase 4 item `in_progress` before starting; `completed` only when GREEN is achieved and recorded in `docs/verification/[name].md`.
+Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) manages the Phase 4 item: `in_progress` before launching this subagent; `completed` only after verifying the handoff that GREEN is achieved and recorded in `docs/verification/[name].md`.
 
 ## Process
 

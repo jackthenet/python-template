@@ -28,9 +28,19 @@ Single entry point for all change types. Classify the change (Phase 0), create i
 - Any existing codebase context relevant to the change.
 - The current state of the repository (to pick a clean base branch).
 
+## Execution Context (Subagents)
+
+This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
+- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
+- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+
 ## Todo
 
-Per the AGENTS.md Todo Tracking Discipline: create the change's full todo set here (one item per workflow step the type runs, linked by `blockedBy` in phase order). Mark the Phase 1 item `in_progress` before starting; `completed` when the type-specific output exists (spec PR opened / triage recorded / GREEN baseline / scope recorded).
+Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) creates the change's full todo set in Phase 0 and manages the Phase 1 item: `in_progress` before launching this subagent, `completed` after verifying the handoff (spec PR opened / triage recorded / GREEN baseline / scope recorded).
 
 ## Process
 
@@ -61,7 +71,7 @@ Per the AGENTS.md Todo Tracking Discipline: create the change's full todo set he
 10. Ask: what are the edge cases? What could go wrong? What are the failure modes?
 11. Ask: what are the hidden requirements? What assumptions are being made?
 12. Ask: what are the scope boundaries? Where does this feature end?
-13. Ask at least 20 questions in total. A single `ask_user_question` call accepts at most 4 questions — call it multiple times (batches of up to 4) until at least 20 questions have been asked, covering goals, users, constraints, out-of-scope, edge cases, failure modes, hidden requirements, assumptions, scope boundaries, and non-functional concerns.
+13. Ask at least 20 questions in total, covering goals, users, constraints, out-of-scope, edge cases, failure modes, hidden requirements, assumptions, scope boundaries, and non-functional concerns. Do NOT call `ask_user_question` yourself: return the questions in the handoff (`status: BLOCKED-USER`), in batches of up to 4 per round-trip; the orchestrator presents each batch to the user and resumes this subagent with the answers. Repeat until at least 20 questions have been asked.
 14. Capture the answers into a feature brief (goals, constraints, out-of-scope items, edge cases). The brief is an **intermediate artifact** — do **not** save it as a separate `.brief.md` file; it feeds the spec, which is the single kept artifact.
 
 #### 3. Write the specification
@@ -131,7 +141,7 @@ Run this against the written specification before presenting it for approval. Fi
 - The change type MUST be classified (Phase 0) before any other work, and recorded in `docs/verification/<name>.md`.
 - Stay strictly on the change's branch/worktree. Do not modify unrelated changes, branches, or worktrees. Keep all changes isolated to this change.
 - Ask MORE questions than feels necessary during interrogation (FEATURE/CROSS-CUTTING).
-- Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). Since one `ask_user_question` call accepts at most 4 questions, call it multiple times until the total reaches at least 20.
+- Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). Return them in the handoff in batches of up to 4 per round-trip (the orchestrator presents each batch to the user and resumes this subagent with the answers) until the total reaches at least 20.
 - Check other features' specs and the current branch's specs before specifying (FEATURE/CROSS-CUTTING). Reuse or extend existing/planned work — do not do double work.
 - The feature brief MUST capture goals, constraints, out-of-scope items, and edge cases. The brief is intermediate — do **not** commit it as a separate `.brief.md` file; fold it into the spec.
 - Every normative requirement MUST have a stable `REQ-XXX` ID.
