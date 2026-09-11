@@ -121,6 +121,48 @@ Which phases run for each type, and what each phase produces:
 | Phase 6: REVIEW | `review` | all | Reviews the change against its type-specific criteria before reviewing implementation style. |
 | (cross-cutting) | `git` | all | Branch/worktree creation, PR creation, post-merge cleanup. |
 
+### Todo Tracking Discipline (todo tool)
+
+The agent MUST track every in-flight change with the `todo` tool. The todo list is the change's live progress record: **one item per workflow step** the change type runs (per the Phase Matrix), **linked by dependency** in phase order, with **status orders** driven by the workflow gates.
+
+**Creating the todo set (Phase 0).** When starting a change, create one todo item per workflow step the change type executes, in phase order. Give each a short imperative subject naming the phase and its key output. A step the type skips (per the Phase Matrix) gets **no** todo item.
+
+**Linking dependencies.** Link each step to its predecessor with `blockedBy` so the list encodes the phase order: Phase 2 blocked by Phase 1, Phase 3 blocked by Phase 2, and so on. The final **Post-merge cleanup** item is blocked by Phase 6.
+
+**Status orders (at the right steps).**
+- **Before starting a step**, mark its todo `in_progress` (with a present-continuous `activeForm` label, e.g. "running the RED gate"). Exactly one step is `in_progress` at a time.
+- **Immediately when a step's type-specific gate passes**, mark its todo `completed` — never batch completions. A step is `completed` only when its gate is satisfied:
+  - Phase 1 — `completed` when the type-specific output exists (spec PR opened / triage recorded / GREEN baseline / scope recorded).
+  - Phase 2 — `completed` when the task DAG is initialized (copied to `.github/task-runner/tasks.json`).
+  - Phase 3 — `completed` only when **RED is observed** and recorded.
+  - Phase 4 — `completed` only when **GREEN is achieved** and recorded.
+  - Phase 5 — `completed` only when the type-specific gate set passes.
+  - Phase 6 — `completed` only when the review report is clean **and** the PR is open.
+  - Post-merge cleanup — `in_progress` after the human merges the PR; `completed` when the worktree is removed and the local + remote branches are deleted.
+
+**Reclassification (Escalation Rules).** When the change type changes, re-derive the todo set for the new type (add/remove items, relink with `blockedBy`) and record the reclassification in `docs/verification/[name].md`.
+
+**Example (FEATURE).**
+```text
+#1 Phase 1: Specify — spec + PR approval
+#2 Phase 2: Decompose — ADRs + task DAG            ⛓ #1
+#3 Phase 3: Test & RED — tests RED                 ⛓ #2
+#4 Phase 4: Implement — GREEN                       ⛓ #3
+#5 Phase 5: Verify — full gate set                 ⛓ #4
+#6 Phase 6: Review — clean report + PR             ⛓ #5
+#7 Post-merge cleanup — verify + remove + delete   ⛓ #6
+```
+
+**Example (ISSUE)** — Phase 2 is skipped, so it has no todo item:
+```text
+#1 Phase 1: Triage — affected REQ/AC + repro plan
+#2 Phase 3: Repro test — RED                       ⛓ #1
+#3 Phase 4: Minimal fix — GREEN                    ⛓ #2
+#4 Phase 5: Verify — regression + lint/types      ⛓ #3
+#5 Phase 6: Review — clean report + PR            ⛓ #4
+#6 Post-merge cleanup — verify + remove + delete  ⛓ #5
+```
+
 ### Phase 1: CLASSIFY & SPECIFY
 Single entry point for all change types (specify skill).
 
@@ -319,6 +361,7 @@ An agent MUST NOT:
 - Mark a requirement complete without executable evidence.
 - Skip the RED gate (transitioning from TESTS_WRITTEN to IMPLEMENTING without observing RED).
 - Let code coverage substitute for specification coverage.
+- Advance a workflow phase without the todo status discipline (the phase's todo must be `in_progress` before the step starts and `completed` only when its type-specific gate passes — see the Todo Tracking Discipline).
 
 ---
 
@@ -336,6 +379,7 @@ An agent MUST:
 9. Refactor without changing observable behavior.
 10. Run regression tests.
 11. Produce a traceability/evidence report.
+12. Track the change with the `todo` tool per the Todo Tracking Discipline: one item per workflow step the type runs, linked by `blockedBy`, `in_progress` before a step starts, `completed` only when its gate passes.
 
 ---
 
