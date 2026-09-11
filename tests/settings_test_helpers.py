@@ -7,12 +7,11 @@ helper pattern (async delivery is observed via ``wait_for``).
 
 from __future__ import annotations
 
-import tempfile
 import time
 from collections.abc import Callable
 
 from backend.eventbus import EventBus
-from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import SettingsRegistry
 
 
 def wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> bool:
