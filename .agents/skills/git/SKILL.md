@@ -22,6 +22,10 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 - Each change branch lives in exactly one worktree at a time.
 - Never check out a change branch in the primary worktree.
 
+## Todo
+
+Per the AGENTS.md Todo Tracking Discipline: mark the Post-merge cleanup item `in_progress` after the human merges the PR; `completed` when the worktree is removed and the local + remote branches are deleted.
+
 ## Operations
 
 ### Create change worktree (Phase 1)

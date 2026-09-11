@@ -24,6 +24,10 @@ Implement the change: turn failing tests (RED) into passing tests (GREEN) (FEATU
 - REFACTOR: the baseline + scope at `docs/verification/[name].md`.
 - DOCS/CHORE: the scope at `docs/verification/[name].md`.
 
+## Todo
+
+Per the AGENTS.md Todo Tracking Discipline: mark the Phase 4 item `in_progress` before starting; `completed` only when GREEN is achieved and recorded in `docs/verification/[name].md`.
+
 ## Process
 
 ### 1. Red (failing tests) — FEATURE/CROSS-CUTTING/ISSUE

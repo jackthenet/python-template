@@ -23,6 +23,10 @@ Spec + tests + implementation (FEATURE/CROSS-CUTTING); triage record + reproduct
 
 Verification report at `docs/verification/<name>.md`.
 
+## Todo
+
+Per the AGENTS.md Todo Tracking Discipline: mark the Phase 5 item `in_progress` before starting; `completed` only when the type-specific gate set passes.
+
 ## MUST
 
 ### FEATURE / CROSS-CUTTING

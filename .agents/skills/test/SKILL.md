@@ -23,6 +23,10 @@ Convert an approved specification into executable acceptance tests (FEATURE/CROS
 - FEATURE/CROSS-CUTTING: `tests/acceptance/<name>/test_<name>.py` (plus property/unit/contract tests)
 - ISSUE: the reproduction test(s) named in the triage plan (in the affected feature's test directory)
 
+## Todo
+
+Per the AGENTS.md Todo Tracking Discipline: mark the Phase 3 item `in_progress` before starting; `completed` only when RED is observed and recorded in `docs/verification/[name].md`.
+
 ## MUST
 
 - FEATURE/CROSS-CUTTING: derive one or more test functions per `AC-XXX`.

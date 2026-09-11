@@ -21,6 +21,10 @@ Decompose an approved specification into design decisions and a machine-readable
 - Any significant design decisions to record.
 - The existing task DAG format (see `docs/tasks/`).
 
+## Todo
+
+Per the AGENTS.md Todo Tracking Discipline: mark the Phase 2 item `in_progress` before starting; `completed` only when the task DAG is initialized (copied to `.github/task-runner/tasks.json`).
+
 ## Process
 
 1. Verify the specification is approved (merged into `main`).

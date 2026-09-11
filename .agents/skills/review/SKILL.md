@@ -33,6 +33,10 @@ Review findings ordered by severity.
 6. **Quality** — Lint, type checks, naming, duplication, complexity.
 7. **Observability** — Does the feature log meaningfully (entry points, errors, lifecycle) at appropriate levels with useful context? Shared infrastructure features MUST be observable.
 
+## Todo
+
+Per the AGENTS.md Todo Tracking Discipline: mark the Phase 6 item `in_progress` before starting; `completed` only when the review report is clean and the PR is open.
+
 ## MUST
 
 - Review behavior against the change's normative basis before reviewing implementation style.

@@ -28,6 +28,10 @@ Single entry point for all change types. Classify the change (Phase 0), create i
 - Any existing codebase context relevant to the change.
 - The current state of the repository (to pick a clean base branch).
 
+## Todo
+
+Per the AGENTS.md Todo Tracking Discipline: create the change's full todo set here (one item per workflow step the type runs, linked by `blockedBy` in phase order). Mark the Phase 1 item `in_progress` before starting; `completed` when the type-specific output exists (spec PR opened / triage recorded / GREEN baseline / scope recorded).
+
 ## Process
 
 ### 0. Classify the change type (Phase 0)
