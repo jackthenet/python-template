@@ -40,3 +40,25 @@
 - `[project] version` already exists; adding the `[tool.bumpversion]` table is tool configuration only — ignored by the build backend, uv, ruff, mypy, and pytest.
 - `AGENTS.md` and the review skill are workflow documentation.
 - The explicit `search`/`replace` patterns guarantee the bump only rewrites the `version = "..."` line.
+
+---
+
+## Phase 5 — Verification Evidence (light, DOCS/CHORE)
+
+**Date:** 2026-09-11
+
+### Tool validation (real tool, dry run)
+
+- `uvx bump-my-version show current_version` → `0.1.0` (config in `pyproject.toml` `[tool.bumpversion]` loads correctly).
+- `uvx bump-my-version bump patch --dry-run -vv` → finds `version = "0.1.0"` at line 4 of `pyproject.toml` and rewrites it to `version = "0.1.1"` (only the PEP 621 version line; no dependency strings touched).
+- Clean-tree guard verified: with uncommitted changes present, `bump patch` is rejected ("Git working directory is not clean") — matches the documented `allow_dirty`-off requirement.
+
+### Lint / types
+
+- `uv run ruff check .` → 4 errors, **all pre-existing and identical on `main`** (`tests/settings_test_helpers.py`: F401/F811). Zero new lint errors from this change.
+- `uv run mypy src/` → `Success: no issues found in 33 source files` (no `src/` files changed by this branch; baseline clean).
+
+### No behavior delta confirmed
+
+- Files changed vs. `main`: `pyproject.toml`, `Agents.md`, `.agents/skills/review/SKILL.md`, `docs/verification/bump-my-version.md` — exactly the scoped files.
+- No `src/` files, no `tests/` files, no dependency changes.
