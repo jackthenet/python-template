@@ -24,6 +24,7 @@ This repository utilizes modern Python tooling managed via `uv`:
 - **Test Runner:** `pytest` (`uv run pytest`)
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`
+- **Version Bumping:** `bump-my-version` (`uv tool install bump-my-version`; config in `pyproject.toml` under `[tool.bumpversion]`)
 
 ---
 
@@ -250,7 +251,8 @@ All types. After verification passes:
 7. Produce a review report documenting any findings and their resolutions.
 8. **The change is only considered complete when the review report is clean.**
 9. **When the review report is clean, document reusable shared capabilities in `AGENTS.md`** (FEATURE/CROSS-CUTTING only). If the change is a shared capability reusable by future changes (not a one-off), add a short "how to use this" note so future changes use it correctly. Skip this if the change is not applicable to other changes.
-10. **When the review report is clean, open a PR** for the change branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
+10. **When the review report is clean, bump the version per the change type** (Versioning section: ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE). Run `bump-my-version bump <level>` in the change worktree with a clean working tree; the bump commit is part of the PR.
+11. **When the review report is clean, open a PR** for the change branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
 
 ### Escalation Rules (Type Conversion)
 
@@ -365,6 +367,26 @@ An agent MUST:
 - **Testing Standard:** Framework `pytest`. Tests must precede implementation code. Never remove existing tests without explicit spec authorization.
 - **Property Testing:** Use `hypothesis` for invariant verification. Strategies must match the domain.
 - **Documentation:** Keep docstrings concise; explain *why* non-obvious logic exists rather than restating *what* the code does.
+
+---
+
+## Versioning
+
+The project version is a semantic version (major.minor.patch) stored in `pyproject.toml` (`[project] version`) — the single source of truth. Version bumps are made with the `bump-my-version` tool (config: `[tool.bumpversion]` in `pyproject.toml`).
+
+- **Install:** `uv tool install bump-my-version` (standalone tool; not a project dependency).
+- **Bump mapping (per change type):**
+
+  | Change type | Bump level |
+  |---|---|
+  | ISSUE | `patch` |
+  | FEATURE | `minor` |
+  | CROSS-CUTTING | `minor` (`major` if breaking) |
+  | REFACTOR / DOCS-CHORE | none |
+
+- **When:** Phase 6 (REVIEW), after the review report is clean and before the PR is opened. The working tree MUST be clean first (`allow_dirty` is off). The tool commits the version change with a templated message; that bump commit is part of the reviewed PR.
+- **Tagging:** `tag = false` — the workflow never creates version tags on change branches. Version tags (e.g., `v0.2.0`) are created on `main` at release time, outside the workflow.
+- **Dry run:** `bump-my-version bump <level> --dry-run` previews the file changes without touching anything.
 
 ---
 
