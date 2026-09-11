@@ -5,9 +5,14 @@ This repository strictly enforces a **Spec-Driven, Test-Driven Development (Spec
 ---
 
 ## Primary Constraint: No Direct Implementation Code
-**DO NOT write, modify, or scaffold implementation source code (`src/`, `lib/`, `app/`, etc.) without an approved Specification file and a validated Task Graph.**
+**DO NOT write, modify, or scaffold implementation source code (`src/`, `lib/`, `app/`, etc.) without the type-specific gates of the change type being worked on.**
 
-If asked to implement a new feature, refactor core components, or build a system, you MUST complete **Phase 1**, **Phase 2**, and **Phase 3** first.
+- **FEATURE / CROSS-CUTTING**: an approved Specification file and a validated Task Graph are required (Phases 1–3).
+- **ISSUE**: a triage record (affected REQ/AC) and a failing reproduction test (RED) are required before the fix.
+- **REFACTOR**: a GREEN baseline of the full suite is required before any restructuring.
+- **DOCS/CHORE**: a confirmed no-behavior-delta scope is required.
+
+If asked to implement a new feature, refactor core components, or build a system, you MUST complete the phases required by the change type first (see the Phase Matrix).
 
 ---
 
@@ -19,38 +24,144 @@ This repository utilizes modern Python tooling managed via `uv`:
 - **Test Runner:** `pytest` (`uv run pytest`)
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`
+- **Version Bumping:** `bump-my-version` (`uv tool install bump-my-version`; config in `pyproject.toml` under `[tool.bumpversion]`)
 
 ---
 
-## The 6-Phase Spec-TDD Workflow Protocol
+## Git Worktrees
+
+The workflow uses **git worktrees** to isolate each in-flight change in its own working directory. This keeps `main` permanently available and allows multiple changes to progress in parallel (e.g., feature A's spec is in human review while issue B is being implemented) without branch switching, stashing, or checkout conflicts.
+
+### Layout
+
+- **Primary worktree**: the repository itself. It is **always on `main` and never switched** to another branch.
+- **Change worktrees**: inside a central directory next to the repository, named `<repo-name>-worktrees`, with one subdirectory per change type, and one subdirectory per change (the plain change name, no type prefix):
+
+```text
+C:/workspace/active-projects/
+├── python-template_kopie/                  (primary worktree: main)
+└── python-template_kopie-worktrees/
+    ├── feature/
+    │   ├── settings-coverage/              (feature/settings-coverage)
+    │   └── authentication/                (feature/authentication)
+    └── issue/
+        └── login-lockout/                 (issue/login-lockout)
+```
+
+- Branch naming per change type: `feature/<name>`, `issue/<name>`, `crosscut/<name>`, `refactor/<name>`, `chore/<name>`.
+- Each change branch lives in **exactly one worktree at a time**.
+- All worktrees share the same repository refs, so `git log main -- ...` works from anywhere.
+
+### Lifecycle (mapped to the 6 phases)
+
+Exact commands, procedures, and edge cases for each operation live in the git skill (`.agents/skills/git/SKILL.md`).
+
+- **Phase 1 (specify)** — classify the change type, then create the change branch **and its worktree** (git skill: "Create change worktree"). All work from Phase 1 through Phase 6 is performed inside the change worktree.
+- **Phases 2–5** — decompose, test, implement, verify: all commands (`uv run ...`) run inside the change worktree. The primary worktree (`main`) is used for:
+  - spec-approval verification (`git log main -- docs/specs/[name].md`, FEATURE/CROSS-CUTTING only),
+  - running the full test suite against `main`,
+  - post-merge verification.
+- **Phase 6 (review)** — open the PR from the change worktree (git skill: "Create PR"). The agent MUST NOT merge the PR (human governance).
+- **Post-merge cleanup** — after the human merges the PR, the agent performs post-merge cleanup (git skill: "Post-merge cleanup"): verify the merge on `main`, remove the worktree, delete the local and remote change branches.
+
+### Rules
+
+- Never check out a change branch in the primary worktree.
+- Never create two worktrees for the same change branch.
+- Stay strictly inside the change's worktree: do not modify other changes' worktrees or branches.
+- Each worktree has its own `uv` environment; run `uv run <command>` inside the worktree (the global uv cache is shared, so no extra setup is needed).
+- `git worktree remove` fails on a dirty worktree: do NOT use `--force` on an unmerged change. Force-removal is only permitted when the changes are intentionally discarded.
+- If a worktree directory was deleted manually, run `git worktree prune`.
+- Check for leftovers with `git worktree list`; after cleanup, the only worktree should be the primary (`main`).
+
+---
+
+## The Spec-TDD Workflow Protocol (Change-Type Routed)
+
+Every change in this repository is one of five **change types**. The type determines which phases run, what each phase produces, and which gates apply. **Phase 1 is the single entry point for all types**: it classifies the change first (Phase 0), then executes the type-specific Phase 1.
+
+### Change Types & Classification (Phase 0)
+
+Classify the change **before any other work** (specify skill, step 0). Use the **first matching criterion, in this order**:
+
+| # | Type | Criterion |
+|---|------|-----------|
+| 1 | **ISSUE** | The change fixes a deviation from **approved spec behavior** (a defect). The approved spec is the source of truth; no new behavior is introduced. |
+| 2 | **FEATURE** | The change adds externally observable behavior or capability **not covered by an approved spec**. |
+| 3 | **CROSS-CUTTING** | The change intentionally spans **two or more features**: new shared capability, architecture change, or shared-infrastructure change. |
+| 4 | **REFACTOR** | The change restructures existing code **without altering externally observable behavior**. |
+| 5 | **DOCS/CHORE** | The change **does not alter behavior**: documentation, comments, configuration, CI, tooling. |
+
+Classification is a first pass. If a later phase reveals the change belongs to a different type, apply the **Escalation Rules** at the end of this section.
+
+### Phase Matrix
+
+Which phases run for each type, and what each phase produces:
+
+| Phase | FEATURE | ISSUE | CROSS-CUTTING | REFACTOR | DOCS/CHORE |
+|-------|---------|-------|---------------|----------|------------|
+| **1 Specify** | Adversarial interrogation → spec (REQ/AC/INV/EDGE/NFR) → **PR approval** | **Triage**: affected REQ/AC from existing specs, defect confirmation, reproduction plan. No spec, no PR. | Adversarial interrogation → spec **with per-feature impact analysis** → **PR approval** | **Baseline**: full suite GREEN + refactor scope. No spec, no PR. | **Scope**: exact non-behavior changes; confirm no behavior delta. No spec, no PR. |
+| **2 Decompose** | ADRs + task DAG | — (skip; the triage is the plan) | ADRs + task DAG **grouped by affected feature** | — (skip) | — (skip) |
+| **3 Test & RED** | Tests derived from spec → RED | **Reproduction test** → RED | Tests derived from spec → RED | — (skip; existing tests are the contract) | — (skip) |
+| **4 Implement** | GREEN from DAG + refactor | **Minimal fix** → GREEN | GREEN from DAG + refactor | Behavior-preserving steps; suite stays GREEN | Make the change |
+| **5 Verify** | Full gate set | Targeted tests + full regression + lint/types | Full gate set **+ per-feature traceability updates** | Full regression + architecture + lint/types (no spec coverage) | Light: lint/types where applicable |
+| **6 Review** | Full review → PR → merge → cleanup | Full review → PR → merge → cleanup | Full review → PR → merge → cleanup | Full review (**tests not weakened**) → PR → merge → cleanup | Light review → PR → merge → cleanup |
+
+"Full gate set" = the Phase 5 FEATURE checks below. Every type ends with a PR to `main` for human review/merge (human governance).
 
 ### Skill-to-Phase Mapping
 
-| Phase | Skill | Purpose |
-|-------|-------|---------|
-| Phase 1: DISCOVER & SPECIFY | `specify` | Creates a feature branch, adversarially interrogates the feature idea into a feature brief, and turns the brief into an approved-quality specification with stable REQ, AC, INV, EDGE, and NFR IDs. |
-| Phase 2: DECOMPOSE | `decompose` | Creates ADRs and decomposes the spec into a machine-readable JSON task DAG. |
-| Phase 3: TEST & RED | `test` | Converts an approved specification into executable acceptance tests, property tests, unit tests, and contract tests, and confirms RED state. |
-| Phase 4: IMPLEMENT | `implement` | Implements the minimum behavior required to turn failing acceptance tests (RED) into passing tests (GREEN), then refactors without changing specified behavior. |
-| Phase 5: VERIFY | `verify` | Produces evidence that the implementation satisfies the specification by running acceptance tests, regression suites, lint, type checks, coverage, and architecture rules. |
-| Phase 6: REVIEW | `review` | Reviews code changes against the specification before reviewing implementation style. Checks traceability, acceptance tests, feature boundaries, and architecture rules. |
+| Phase | Skill | Applies to | Purpose |
+|-------|-------|------------|---------|
+| Phase 0+1: CLASSIFY & SPECIFY | `specify` | all | Classifies the change type, creates the change branch and worktree, and executes the type-specific Phase 1 (spec, triage, baseline, or scope). |
+| Phase 2: DECOMPOSE | `decompose` | FEATURE, CROSS-CUTTING | Creates ADRs and decomposes the spec into a machine-readable JSON task DAG (per-feature grouping for CROSS-CUTTING). |
+| Phase 3: TEST & RED | `test` | FEATURE, CROSS-CUTTING, ISSUE | Derives tests from the spec (FEATURE/CROSS-CUTTING) or writes the reproduction test (ISSUE), and confirms RED state. |
+| Phase 4: IMPLEMENT | `implement` | all | Turns RED into GREEN (or performs behavior-preserving steps / makes the chore change), then refactors without changing specified behavior. |
+| Phase 5: VERIFY | `verify` | all | Produces evidence that the change satisfies its type-specific gates. |
+| Phase 6: REVIEW | `review` | all | Reviews the change against its type-specific criteria before reviewing implementation style. |
+| (cross-cutting) | `git` | all | Branch/worktree creation, PR creation, post-merge cleanup. |
 
-### Phase 1: DISCOVER & SPECIFY (`docs/specs/`)
-Before writing task files or code:
-1. Create a feature branch `feature/[feature-name]` from `main`.
-2. Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief. The brief is an **intermediate artifact** of the interrogation — do **not** save it as a separate `.brief.md` file. Fold it into the spec (goals/overview, scope boundaries, out-of-scope, edge cases); the spec is the single kept artifact.
-3. Search and read existing codebase files to understand current context and patterns.
-4. Check `docs/specs/template.md` for formatting requirements.
-5. Draft a complete feature spec at `docs/specs/[feature-name].md`.
-6. Include exact API schemas, Pydantic models, interface signatures, and non-functional requirements.
-7. Assign stable IDs to every normative requirement (`REQ-XXX`), acceptance criterion (`AC-XXX`), invariant (`INV-XXX`), edge case (`EDGE-XXX`), and NFR (`NFR-XXX`).
-8. Define the test strategy mapping each AC/INV/EDGE to a test category and test function.
-9. **STOP and present the spec for human approval via Git PR.**
+### Phase 1: CLASSIFY & SPECIFY
+Single entry point for all change types (specify skill).
+
+**Phase 0 — Classify (all types):**
+1. Create the change branch **and its worktree** from `main` per the "Git Worktrees" section. Branch: `<type>/<name>` (`feature/`, `issue/`, `crosscut/`, `refactor/`, `chore/`).
+2. Classify the change using the Change Types table. Record the type in the change's verification artifact (`docs/verification/[name].md`).
+
+**FEATURE:**
+3. Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief. The brief is an **intermediate artifact** of the interrogation — do **not** save it as a separate `.brief.md` file. Fold it into the spec (goals/overview, scope boundaries, out-of-scope, edge cases); the spec is the single kept artifact.
+4. Search and read existing codebase files to understand current context and patterns.
+5. Check `docs/specs/template.md` for formatting requirements.
+6. Draft a complete feature spec at `docs/specs/[feature-name].md`.
+7. Include exact API schemas, Pydantic models, interface signatures, and non-functional requirements.
+8. Assign stable IDs to every normative requirement (`REQ-XXX`), acceptance criterion (`AC-XXX`), invariant (`INV-XXX`), edge case (`EDGE-XXX`), and NFR (`NFR-XXX`).
+9. Define the test strategy mapping each AC/INV/EDGE to a test category and test function.
+10. **STOP and present the spec for human approval via Git PR.**
+
+**ISSUE (triage — no spec, no PR):**
+11. Identify the affected requirements (`REQ-XXX`) and acceptance criteria (`AC-XXX`) from the **existing approved specs** in `docs/specs/`; cite the spec files and IDs.
+12. Confirm the defect: the observed behavior deviates from what the spec requires (cite the spec ID and state the observed vs. required behavior).
+13. If the fix requires behavior the spec does not state, STOP: open a Spec Amendment PR (Spec Amendment Workflow) or reclassify as FEATURE.
+14. Write the reproduction plan: the failing test(s) that reproduce the defect, the fix scope, and the files expected to change.
+15. Record the triage in `docs/verification/[name].md` (type: ISSUE, affected REQ/AC, defect confirmation, reproduction plan).
+
+**CROSS-CUTTING:**
+16. Adversarially interrogate the change (goals, affected features, constraints, out-of-scope, edge cases).
+17. Draft the spec at `docs/specs/[name].md` with an **Impact Analysis** section: every affected feature, what changes in each, and which of their REQ/AC IDs are touched.
+18. Assign stable IDs (`REQ-XXX`, `AC-XXX`, `INV-XXX`, `EDGE-XXX`, `NFR-XXX`) and define the test strategy as for FEATURE.
+19. **STOP and present the spec for human approval via Git PR.**
+
+**REFACTOR (baseline — no spec, no PR):**
+20. Run the full suite (`uv run pytest tests/ -v`) and confirm it is GREEN. Record the baseline in `docs/verification/[name].md`.
+21. Define the refactor scope: which code moves/renames/simplifies, and the invariants that MUST hold (no observable behavior change, no test changes).
+
+**DOCS/CHORE (scope — no spec, no PR):**
+22. Define the exact non-behavior changes (files, content) and confirm they do not alter externally observable behavior. Record the scope in `docs/verification/[name].md`.
 
 ### Phase 2: DECOMPOSE (`docs/decisions/`, `docs/tasks/`)
-Once the specification file is merged into `main`:
+FEATURE and CROSS-CUTTING only. Once the specification file is merged into `main`:
 1. Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
-2. Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[feature-name].tasks.json`.
+2. Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[name].tasks.json`.
 3. Each task MUST specify:
    - `requirements`: REQ-XXX IDs covered by this task.
    - `acceptance_criteria`: AC-XXX IDs covered by this task.
@@ -60,28 +171,52 @@ Once the specification file is merged into `main`:
    - `green_command`: Command to confirm GREEN state.
    - `design_constraints`: Constraints that must be respected.
    - `completion_gates`: Gates that must pass before the task is complete.
-4. Copy `docs/tasks/[feature-name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
+4. CROSS-CUTTING: group tasks by affected feature so each feature's changes are independently verifiable.
+5. Copy `docs/tasks/[name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
 ### Phase 3: TEST & RED (`tests/`)
-After the task DAG is initialized:
+FEATURE, CROSS-CUTTING, and ISSUE.
+
+**FEATURE / CROSS-CUTTING** (after the task DAG is initialized):
 1. Write acceptance tests derived directly from the spec's acceptance criteria.
 2. Write property tests for every invariant (`INV-XXX`) using Hypothesis.
 3. Write unit tests for edge cases and error conditions.
 4. Write contract tests for NFR contract requirements.
 5. Write integration tests for multi-component interactions.
 6. **Run the test suite and confirm RED state** (tests must fail before implementation).
-7. Record RED evidence in `docs/verification/[feature-name].md`.
+7. Record RED evidence in `docs/verification/[name].md`.
 8. Update the traceability matrix in `docs/verification/traceability.md` with test references.
+
+**ISSUE** (after triage):
+1. Write the reproduction test(s) from the triage plan. They MUST fail on the current (defective) code — this is RED for the issue.
+2. **Run the reproduction tests and confirm RED state.**
+3. Record RED evidence in `docs/verification/[name].md`.
+4. Update the traceability matrix with the issue's test references (affected REQ/AC + reproduction test).
 ### Phase 4: IMPLEMENT
-When instructed to execute tasks:
+All types.
+
+**FEATURE / CROSS-CUTTING** (when instructed to execute tasks):
 1. Pick a ready task from the task DAG.
 2. **QA Agent (Red):** Write failing tests in `allowed_files.test_files`. Run `red_command`. Confirm tests FAIL.
-3. **Record RED evidence** in `docs/verification/[feature-name].md`.
+3. **Record RED evidence** in `docs/verification/[name].md`.
 4. **Coder Agent (Green):** Implement logic in `allowed_files.source_files` following `implementation_steps`. Run `green_command`. Confirm tests PASS 100%.
-5. **Record GREEN evidence** in `docs/verification/[feature-name].md`.
+5. **Record GREEN evidence** in `docs/verification/[name].md`.
 6. **Refactor:** Improve code without changing observable behavior. Re-run `green_command`.
-7. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[feature-name].tasks.json`.
+7. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`.
+
+**ISSUE** (after RED confirmed):
+8. Implement the **minimal fix** that turns the reproduction tests GREEN. No new behavior beyond the affected spec IDs.
+9. **Record GREEN evidence** in `docs/verification/[name].md`.
+
+**REFACTOR** (after baseline):
+10. Perform small, focused behavior-preserving steps. Re-run the full suite after every step; it MUST stay GREEN.
+11. Do not modify, weaken, or delete any test.
+
+**DOCS/CHORE** (after scope):
+12. Make the scoped non-behavior changes.
 ### Phase 5: VERIFY
-After all tasks are complete:    
+All types.
+
+**FEATURE / CROSS-CUTTING** (after all tasks are complete):    
 1. Run the full test suite: `uv run pytest tests/ -v`.
 2. Run acceptance tests: `uv run pytest tests/acceptance/ -v`.
 3. Run property tests: `uv run pytest tests/property/ -v`.
@@ -89,35 +224,63 @@ After all tasks are complete:
 5. Update the traceability matrix: every REQ must have at least one GREEN test.
 6. Produce a verification report: specification coverage, acceptance coverage, branch coverage.
 7. **Spec coverage = 100% is required.** Code coverage is a secondary quality signal, not evidence that the specification has been implemented.
-8. **If verification fails**, the agent MUST re-enter either Phase 4 (IMPLEMENT) to fix the failing behavior, or Phase 3 (TEST & RED) to re-derive failing tests from the specification. The agent MUST NOT mark the feature verified until spec coverage = 100% and all gates pass.
+8. **If verification fails**, the agent MUST re-enter either Phase 4 (IMPLEMENT) to fix the failing behavior, or Phase 3 (TEST & RED) to re-derive failing tests from the specification. The agent MUST NOT mark the change verified until spec coverage = 100% and all gates pass.
+   CROSS-CUTTING additionally: update the traceability matrix rows of every affected feature.
+
+**ISSUE**:
+9. Run the reproduction tests (GREEN) and the full regression suite (no new failures).
+10. Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`).
+11. Update the traceability matrix with the issue's evidence rows.
+12. If the regression suite shows a failure, classify it as in the FEATURE path (pre-existing vs regression).
+
+**REFACTOR**:
+13. Run the full regression suite (MUST be GREEN, zero test changes) and the architecture rules (`uv run pytest tests/architecture/ -v`).
+14. Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`).
+15. Confirm no observable behavior changed (suite result identical to baseline).
+
+**DOCS/CHORE**:
+16. Run lint and type checks where applicable; confirm no test files or behavior were touched.
 ### Phase 6: REVIEW
-After verification passes:
-1. Review all code changes against the approved specification.
+All types. After verification passes:
+1. Review all code changes against the change's normative basis: the approved spec (FEATURE/CROSS-CUTTING), the triage record + affected spec IDs (ISSUE), the baseline + scope (REFACTOR), or the scope (DOCS/CHORE).
 2. Check traceability: every REQ has at least one GREEN test, every acceptance test traces back to a normative requirement.
 3. Verify feature boundaries: code lives in the correct feature directory, no cross-feature internal imports.
 4. Verify architecture rules: `model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small.
 5. Verify acceptance tests were not weakened or deleted to achieve GREEN.
-6. Verify no behavior was introduced that is not represented in the specification.
+6. Verify no behavior was introduced that is not represented in the specification (FEATURE/CROSS-CUTTING), or that no behavior changed at all beyond the type's contract (ISSUE/REFACTOR/DOCS-CHORE).
 7. Produce a review report documenting any findings and their resolutions.
-8. **The feature is only considered complete when the review report is clean.**
-9. **When the review report is clean, document the feature in `AGENTS.md`.** If the feature is reusable by future features (a shared capability, not a one-off), add a short "how to use this feature" note to `AGENTS.md` so future features use it correctly. Skip this if the feature is not applicable to other features.
-10. **When the review report is clean, open a PR** for the feature branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
+8. **The change is only considered complete when the review report is clean.**
+9. **When the review report is clean, document reusable shared capabilities in `AGENTS.md`** (FEATURE/CROSS-CUTTING only). If the change is a shared capability reusable by future changes (not a one-off), add a short "how to use this" note so future changes use it correctly. Skip this if the change is not applicable to other changes.
+10. **When the review report is clean, bump the version per the change type** (Versioning section: ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE). Run `bump-my-version bump <level>` in the change worktree with a clean working tree; the bump commit is part of the PR.
+11. **When the review report is clean, open a PR** for the change branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
+
+### Escalation Rules (Type Conversion)
+
+Apply during any phase when the change's true nature is revealed:
+
+- **ISSUE → spec amendment or FEATURE**: the fix requires behavior the approved spec does not state. Open a Spec Amendment PR (if amending existing spec IDs) or reclassify as FEATURE (if it is a missing capability).
+- **ISSUE/FEATURE → CROSS-CUTTING**: impact analysis reveals the change spans two or more features.
+- **CROSS-CUTTING → FEATURE or ISSUE**: impact analysis reveals the change is confined to a single feature.
+- **REFACTOR → ISSUE or FEATURE**: a behavior change is discovered. Stop; reclassify (defect → ISSUE, new behavior → FEATURE).
+- **DOCS/CHORE → any**: a behavior change is discovered. Stop; reclassify.
+
+On reclassification: keep the same worktree, rename the branch to the new type (`git branch -m <old> <new>`), re-run the new type's Phase 1 from its first step, and record the reclassification in `docs/verification/[name].md`.
 
 ---
 
 ## Review Gate (Phase 6)
 
-A feature is considered **COMPLETE** if and only if the Phase 6 review report is clean. A clean review report means:
+A change is considered **COMPLETE** if and only if the Phase 6 review report is clean. A clean review report means (type-specific):
 
-- Every REQ-XXX has at least one GREEN test.
-- Every acceptance test traces back to a normative requirement.
-- No acceptance test was weakened or deleted to achieve GREEN.
-- No behavior was introduced that is not represented in the specification.
-- Feature boundaries and architecture rules are respected.
+- **FEATURE / CROSS-CUTTING**: every REQ-XXX has at least one GREEN test; every acceptance test traces back to a normative requirement; no behavior was introduced that is not represented in the specification; CROSS-CUTTING additionally has updated traceability rows for every affected feature.
+- **ISSUE**: the reproduction tests are GREEN; the fix introduces no behavior beyond the affected spec IDs; the full regression suite has no new failures.
+- **REFACTOR**: the full suite is GREEN with zero test changes; no observable behavior changed.
+- **DOCS/CHORE**: no behavior, test, or source-behavior changes beyond the scoped non-behavior changes.
+- **All types**: no acceptance test was weakened or deleted to achieve GREEN; feature boundaries and architecture rules are respected.
 
-If the review report is not clean, the agent MUST resolve every finding and re-run the review before declaring the feature complete. A feature with an open finding MUST NOT be merged or marked verified.
+If the review report is not clean, the agent MUST resolve every finding and re-run the review before declaring the change complete. A change with an open finding MUST NOT be merged or marked verified.
 
-When the review report IS clean, the feature branch MUST be merged into `main` via a GitHub pull request. The agent MUST open the PR and present it for human review/merge, then STOP — the agent MUST NOT merge the PR itself (human governance).
+When the review report IS clean, the change branch MUST be merged into `main` via a GitHub pull request. The agent MUST open the PR and present it for human review/merge, then STOP — the agent MUST NOT merge the PR itself (human governance).
 
 ---
 
@@ -129,7 +292,16 @@ Every task transitions through this state machine:
 SPECIFIED → TESTS_WRITTEN → RED_CONFIRMED → IMPLEMENTING → GREEN → REFACTORED → VERIFIED
 ```
 
-- An agent MUST NOT transition from `TESTS_WRITTEN` to `IMPLEMENTING` unless RED has been observed.
+Each change type enters at a different state (phases it skips are not entered):
+
+| Type | Entry state |
+|------|-------------|
+| FEATURE, CROSS-CUTTING | `SPECIFIED` (after spec approval + task DAG) |
+| ISSUE | `TESTS_WRITTEN` (after triage; RED is the reproduction test) |
+| REFACTOR | `IMPLEMENTING` (after GREEN baseline) |
+| DOCS/CHORE | `IMPLEMENTING` (after scope) |
+
+- An agent MUST NOT transition from `TESTS_WRITTEN` to `IMPLEMENTING` unless RED has been observed (FEATURE/CROSS-CUTTING/ISSUE).
 - An agent MUST NOT transition from `GREEN` to `VERIFIED` unless the traceability matrix is updated.
 
 ---
@@ -137,6 +309,8 @@ SPECIFIED → TESTS_WRITTEN → RED_CONFIRMED → IMPLEMENTING → GREEN → REF
 ## Agent Prohibitions
 
 An agent MUST NOT:
+- Start implementation work before classifying the change type (Phase 0).
+- Apply one change type's gates to a different type's change (use the Escalation Rules instead).
 - Write implementation before acceptance tests exist.
 - Modify an acceptance test merely to make implementation pass.
 - Delete or weaken a test to achieve GREEN.
@@ -151,16 +325,17 @@ An agent MUST NOT:
 ## Agent Obligations
 
 An agent MUST:
-1. Identify affected requirements (REQ-XXX).
-2. Identify acceptance criteria (AC-XXX).
-3. Create executable tests.
-4. Run them and demonstrate RED.
-5. Obtain approval if required.
-6. Implement the minimum behavior required.
-7. Achieve GREEN.
-8. Refactor without changing observable behavior.
-9. Run regression tests.
-10. Produce a traceability/evidence report.
+1. Classify the change type (Phase 0) and record it in `docs/verification/[name].md`.
+2. Identify affected requirements (REQ-XXX).
+3. Identify acceptance criteria (AC-XXX).
+4. Create executable tests.
+5. Run them and demonstrate RED.
+6. Obtain approval if required.
+7. Implement the minimum behavior required.
+8. Achieve GREEN.
+9. Refactor without changing observable behavior.
+10. Run regression tests.
+11. Produce a traceability/evidence report.
 
 ---
 
@@ -192,6 +367,26 @@ An agent MUST:
 - **Testing Standard:** Framework `pytest`. Tests must precede implementation code. Never remove existing tests without explicit spec authorization.
 - **Property Testing:** Use `hypothesis` for invariant verification. Strategies must match the domain.
 - **Documentation:** Keep docstrings concise; explain *why* non-obvious logic exists rather than restating *what* the code does.
+
+---
+
+## Versioning
+
+The project version is a semantic version (major.minor.patch) stored in `pyproject.toml` (`[project] version`) — the single source of truth. Version bumps are made with the `bump-my-version` tool (config: `[tool.bumpversion]` in `pyproject.toml`).
+
+- **Install:** `uv tool install bump-my-version` (standalone tool; not a project dependency).
+- **Bump mapping (per change type):**
+
+  | Change type | Bump level |
+  |---|---|
+  | ISSUE | `patch` |
+  | FEATURE | `minor` |
+  | CROSS-CUTTING | `minor` (`major` if breaking) |
+  | REFACTOR / DOCS-CHORE | none |
+
+- **When:** Phase 6 (REVIEW), after the review report is clean and before the PR is opened. The working tree MUST be clean first (`allow_dirty` is off). The tool commits the version change with a templated message; that bump commit is part of the reviewed PR.
+- **Tagging:** `tag = false` — the workflow never creates version tags on change branches. Version tags (e.g., `v0.2.0`) are created on `main` at release time, outside the workflow.
+- **Dry run:** `bump-my-version bump <level> --dry-run` previews the file changes without touching anything.
 
 ---
 
@@ -378,12 +573,12 @@ The spec-and-task workflow is bypassed **ONLY** for:
 - One-line bug fixes with an existing, failing test already in place.
 - Direct user commands explicitly containing the keyword `--skip-spec`.
 
-The boundary is concrete: if the change alters externally observable behavior, the full spec-and-task workflow applies regardless of how small the change appears.
+The boundary is concrete: if the change alters externally observable behavior, the full workflow for the change's type applies regardless of how small the change appears.
 ## Spec Approval Gate (GitHub Review)
-A specification file `docs/specs/[feature-name].md` is considered **HUMAN APPROVED** if and only if it has been merged through the repository's configured GitHub review process.
+A specification file `docs/specs/[name].md` is considered **HUMAN APPROVED** if and only if it has been merged through the repository's configured GitHub review process. This gate applies to FEATURE and CROSS-CUTTING changes (the only types that produce a spec).
 
 Before starting Phase 2, verify approval via:
-`git log main -- docs/specs/[feature-name].md`
+`git log main -- docs/specs/[name].md`
 
 - Output is empty: **STOP.** Prompt user to merge spec PR first.
 - Commit logs appear: Verify the commit was introduced by a merged PR (not a direct push to `main`). **PROCEED** only if the spec was reviewed.

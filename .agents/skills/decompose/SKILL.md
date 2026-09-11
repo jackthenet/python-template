@@ -1,23 +1,23 @@
 ---
 name: decompose
-description: Decomposes an approved specification into design decisions and a machine-readable JSON task DAG. Creates ADRs for significant design decisions and a task graph where each task covers specific requirements and acceptance criteria with explicit RED/GREEN commands. Use when an approved specification exists and needs to be broken into implementable tasks before acceptance testing.
+description: Decomposes an approved specification (FEATURE and CROSS-CUTTING changes) into design decisions and a machine-readable JSON task DAG. Creates ADRs for significant design decisions and a task graph where each task covers specific requirements and acceptance criteria with explicit RED/GREEN commands, grouped by affected feature for CROSS-CUTTING. Use when an approved specification exists and needs to be broken into implementable tasks before acceptance testing.
 ---
 
 # Decompose
 
 ## Purpose
 
-Decompose an approved specification into design decisions and a machine-readable JSON task DAG. Create ADRs for significant design decisions (WHY, not WHAT) and a task graph where each task covers specific requirements and acceptance criteria with explicit RED/GREEN commands. The task DAG is committed to `docs/tasks/` and copied to `.github/task-runner/tasks.json` to initialize the active build environment.
+Decompose an approved specification into design decisions and a machine-readable JSON task DAG. **Applies to FEATURE and CROSS-CUTTING changes** (the only types that produce a spec). Create ADRs for significant design decisions (WHY, not WHAT) and a task graph where each task covers specific requirements and acceptance criteria with explicit RED/GREEN commands. The task DAG is committed to `docs/tasks/` and copied to `.github/task-runner/tasks.json` to initialize the active build environment.
 
 ## When to Use
 
-- An approved specification exists (merged into `main`) and needs to be broken into implementable tasks.
+- An approved specification exists (merged into `main`) for a FEATURE or CROSS-CUTTING change and needs to be broken into implementable tasks.
 - Significant design decisions need to be recorded as ADRs.
 - A machine-readable task DAG is needed to drive the RED/GREEN implementation loop.
 
 ## Inputs
 
-- An approved specification at `docs/specs/[feature-name].md` (merged into `main`).
+- An approved specification at `docs/specs/[name].md` (merged into `main`).
 - Any significant design decisions to record.
 - The existing task DAG format (see `docs/tasks/`).
 
@@ -25,7 +25,7 @@ Decompose an approved specification into design decisions and a machine-readable
 
 1. Verify the specification is approved (merged into `main`).
 2. Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
-3. Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[feature-name].tasks.json`.
+3. Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[name].tasks.json`.
 4. For each task, specify:
    - `requirements`: REQ-XXX IDs covered by this task.
    - `acceptance_criteria`: AC-XXX IDs covered by this task.
@@ -35,8 +35,9 @@ Decompose an approved specification into design decisions and a machine-readable
    - `green_command`: Command to confirm GREEN state.
    - `design_constraints`: Constraints that must be respected.
    - `completion_gates`: Gates that must pass before the task is complete.
-5. Copy `docs/tasks/[feature-name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
-6. Commit the ADRs and the task DAG.
+5. CROSS-CUTTING: group tasks by affected feature so each feature's changes are independently verifiable.
+6. Copy `docs/tasks/[name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
+7. Commit the ADRs and the task DAG.
 
 ## Rules
 
@@ -47,6 +48,7 @@ Decompose an approved specification into design decisions and a machine-readable
 - Every task MUST specify `tests_to_create` (test functions, before implementation scope).
 - Every task MUST specify `red_command`, `implementation_steps`, `green_command`.
 - Every task MUST specify `design_constraints` and `completion_gates`.
+- CROSS-CUTTING: tasks MUST be grouped by affected feature so each feature's changes are independently verifiable.
 - The task DAG MUST be committed to `docs/tasks/`.
 - The task DAG MUST be copied to `.github/task-runner/tasks.json`.
 - Do NOT write implementation code in this phase.
@@ -55,7 +57,7 @@ Decompose an approved specification into design decisions and a machine-readable
 ## Outputs
 
 - ADRs in `docs/decisions/`.
-- A committed task DAG at `docs/tasks/[feature-name].tasks.json`.
+- A committed task DAG at `docs/tasks/[name].tasks.json`.
 - The task DAG copied to `.github/task-runner/tasks.json`.
 
 ## Definition of Done
