@@ -242,17 +242,21 @@ class SettingsRegistry:
         return template
 
     def load_template(self, name: str) -> None:
-        """Set each of the template's values (validated); others left as-is."""
+        """Set each of the template's values (validated at creation); others left as-is."""
         with self._lock:
             template = self._repository.get(name)
         if template is None:
             raise TemplateNotFoundError(f"unknown template {name}")
-        count = 0
-        for key, value in template.values.items():
-            self.set_value(key, value)
-            count += 1
-        logger.debug("template loaded: name={} count={}", name, count)
-        self._persist_values()
+        # Batch-apply values: skip re-validation (values were validated at
+        # template creation) but still check key registration.
+        with self._lock:
+            for key, value in template.values.items():
+                if key not in self._definitions:
+                    raise SettingsNotFoundError(f"unknown setting {key}")
+                previous = self._values[key]
+                self._values[key] = value
+                self._publish_setting_changed(key, value, previous)
+        logger.debug("template loaded: name={} count={}", name, len(template.values))
 
     def update_template(self, name: str, values: dict[str, Any]) -> None:
         """Replace the stored values of a template (must cover the scope)."""
