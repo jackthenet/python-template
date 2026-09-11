@@ -44,6 +44,21 @@ Change the phase workflow so that each workflow step is executed by a **new suba
 - No `src/`, `tests/`, `pyproject.toml`, CI, or tooling changes.
 - The runtime behavior of the project code is unchanged.
 
+## Verification Report (Phase 5 — DOCS/CHORE path)
+
+Commit under verification: `c3444ae` (`chore(subagent-phases): subagent-per-phase execution protocol`) on branch `chore/subagent-phases`.
+
+| # | Check | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | Diff vs `main` touches ONLY Markdown instruction files | PASS | `git diff main...HEAD --name-status` shows exactly: `M Agents.md`, `M .agents/skills/specify/SKILL.md`, `M .agents/skills/decompose/SKILL.md`, `M .agents/skills/test/SKILL.md`, `M .agents/skills/implement/SKILL.md`, `M .agents/skills/verify/SKILL.md`, `M .agents/skills/review/SKILL.md`, `M .agents/skills/git/SKILL.md`, `A docs/verification/subagent-phases.md` — 9 files, all Markdown instruction files. |
+| 2 | No `src/`, no `tests/`, no `pyproject.toml`, no CI, no tooling touched | PASS | The diff name-status above contains no path under `src/`, `tests/`, `.github/`, no `pyproject.toml`, and no tooling/config files. |
+| 3 | Lint: `uv run ruff check .` | PASS | `All checks passed!` |
+| 4 | Type checks: `uv run mypy src/` | PASS | `Success: no issues found in 33 source files` |
+| 5 | No test files or behavior touched | PASS | No `tests/` paths in the diff; only agent-instruction Markdown changed; no behavior delta (DOCS/CHORE scope confirmed in Phase 1). |
+
+**Gate result (DOCS/CHORE): PASS** — lint and type checks pass where applicable; no test files or behavior were touched; the diff is confined to the scoped Markdown instruction files.
+
 ## Evidence
 - Scope recorded (Phase 1, DOCS/CHORE path, specify skill section E, steps 40–41); no behavior delta confirmed.
-- Remaining phases (4 Implement, 5 Verify, 6 Review) will record their evidence here.
+- Phase 5 verification report recorded above; all DOCS/CHORE checks PASS (commit `c3444ae`).
+- Remaining phase (6 Review) will record its evidence here.
