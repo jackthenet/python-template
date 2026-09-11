@@ -14,6 +14,14 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 - After a PR is merged (human governance): post-merge cleanup.
 - Any time you need to inspect or recover worktree/branch state.
 
+## Execution Context (Subagents)
+
+Per "Phase Execution (Subagents)" in `AGENTS.md`:
+- **Create change worktree** — orchestrator (Phase 0), not a subagent.
+- **Create PR** — runs inside the Phase 6 (review) subagent.
+- **Post-merge cleanup** — runs in a **new subagent** (a workflow step launched by the orchestrator after the human merges the PR).
+- **Inspect / recover** — orchestrator or any step subagent, as needed.
+
 ## Conventions (from AGENTS.md — assumed)
 
 - Primary worktree (the repo) is always on `main`, never switched.

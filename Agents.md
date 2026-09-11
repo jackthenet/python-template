@@ -121,17 +121,49 @@ Which phases run for each type, and what each phase produces:
 | Phase 6: REVIEW | `review` | all | Reviews the change against its type-specific criteria before reviewing implementation style. |
 | (cross-cutting) | `git` | all | Branch/worktree creation, PR creation, post-merge cleanup. |
 
+### Phase Execution (Subagents)
+
+Every workflow step is executed by a **new subagent** launched via the `subagent` tool (type `general-purpose`). The orchestrating agent (the agent talking to the user) never executes a phase itself, and a step subagent never executes more than one phase.
+
+**Roles.**
+- **Orchestrator** — performs Phase 0 (classify, create branch/worktree, create the todo set); launches one subagent per workflow step; presents user questions and approval requests (spec approval, PR merge) to the user; manages the todo list; verifies each step's handoff before launching the next step.
+- **Step subagent** — reads its phase skill file and executes exactly one phase inside the change worktree. It never executes another phase, never launches a subagent, and never talks to the user.
+
+**Steps that get a subagent.** Phase 1 (specify), Phase 2 (decompose), Phase 3 (test), Phase 4 (implement), Phase 5 (verify), Phase 6 (review), and post-merge cleanup (git skill). **Phase 0 stays on the orchestrator** — classification, branch/worktree creation, and todo-set creation are required to route the phases.
+
+**Launch contract.** The orchestrator's launch prompt MUST contain:
+- the change name and type;
+- the change worktree path (all commands run there);
+- the phase skill file to read first (`.agents/skills/<skill>/SKILL.md`);
+- the previous step's handoff (the prior phase's status, gate result, artifacts, and evidence location);
+- the required handoff output (below).
+
+**Handoff output.** The step subagent MUST end with a structured handoff:
+- `status` — `DONE` (gate passed) | `BLOCKED-USER` (needs user input) | `BLOCKED-HUMAN` (needs human governance: spec approval, PR merge) | `FAILED` (gate failed, with reason).
+- `gate` — the type-specific gate result and where the evidence is recorded (`docs/verification/<name>.md`).
+- `artifacts` — the files, commits, and PRs created.
+- `questions` (BLOCKED-USER only) — the questions for the user.
+- `next` — the next step to launch per the Phase Matrix, or `STOP`.
+
+**User questions.** A step subagent MUST NOT call `ask_user_question` itself. It returns `BLOCKED-USER` with its questions. The orchestrator presents them to the user (in batches of up to 4 per `ask_user_question` call) and **resumes the same subagent** with the answers. Resuming continues the same step only — the next step always gets a new subagent.
+
+**One subagent per step execution.** Every time a step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4 or Phase 3) and reclassification re-runs of Phase 1 — the orchestrator launches a new subagent. A step subagent is never resumed to execute a different phase.
+
+**Handoff verification.** The orchestrator MUST verify a handoff before marking the step's todo `completed`: the evidence exists in `docs/verification/<name>.md` and the commits exist in the worktree. A subagent's self-report is not evidence.
+
+**Fast path.** Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing failing test, `--skip-spec`) bypass the workflow entirely — no phases, no subagents.
+
 ### Todo Tracking Discipline (todo tool)
 
-The agent MUST track every in-flight change with the `todo` tool. The todo list is the change's live progress record: **one item per workflow step** the change type runs (per the Phase Matrix), **linked by dependency** in phase order, with **status orders** driven by the workflow gates.
+The agent MUST track every in-flight change with the `todo` tool. The todo list is the change's live progress record: **one item per workflow step** the change type runs (per the Phase Matrix), **linked by dependency** in phase order, with **status orders** driven by the workflow gates. Todo management belongs to the **orchestrator** (see Phase Execution (Subagents)): step subagents never create, update, or read the todo list.
 
 **Creating the todo set (Phase 0).** When starting a change, create one todo item per workflow step the change type executes, in phase order. Give each a short imperative subject naming the phase and its key output. A step the type skips (per the Phase Matrix) gets **no** todo item.
 
 **Linking dependencies.** Link each step to its predecessor with `blockedBy` so the list encodes the phase order: Phase 2 blocked by Phase 1, Phase 3 blocked by Phase 2, and so on. The final **Post-merge cleanup** item is blocked by Phase 6.
 
 **Status orders (at the right steps).**
-- **Before starting a step**, mark its todo `in_progress` (with a present-continuous `activeForm` label, e.g. "running the RED gate"). Exactly one step is `in_progress` at a time.
-- **Immediately when a step's type-specific gate passes**, mark its todo `completed` — never batch completions. A step is `completed` only when its gate is satisfied:
+- **Before starting a step**, the orchestrator marks its todo `in_progress` (with a present-continuous `activeForm` label, e.g. "running the RED gate") **before launching the step's subagent**. Exactly one step is `in_progress` at a time.
+- **Immediately when a step's type-specific gate passes**, the orchestrator marks its todo `completed` **after verifying the step's handoff** — never batch completions. A step is `completed` only when its gate is satisfied:
   - Phase 1 — `completed` when the type-specific output exists (spec PR opened / triage recorded / GREEN baseline / scope recorded).
   - Phase 2 — `completed` when the task DAG is initialized (copied to `.github/task-runner/tasks.json`).
   - Phase 3 — `completed` only when **RED is observed** and recorded.
@@ -362,6 +394,7 @@ An agent MUST NOT:
 - Skip the RED gate (transitioning from TESTS_WRITTEN to IMPLEMENTING without observing RED).
 - Let code coverage substitute for specification coverage.
 - Advance a workflow phase without the todo status discipline (the phase's todo must be `in_progress` before the step starts and `completed` only when its type-specific gate passes — see the Todo Tracking Discipline).
+- Execute a workflow phase directly in the orchestrator's context — every workflow step runs in a new subagent (see Phase Execution (Subagents)).
 
 ---
 
@@ -380,6 +413,7 @@ An agent MUST:
 10. Run regression tests.
 11. Produce a traceability/evidence report.
 12. Track the change with the `todo` tool per the Todo Tracking Discipline: one item per workflow step the type runs, linked by `blockedBy`, `in_progress` before a step starts, `completed` only when its gate passes.
+13. Execute each workflow step in a new subagent via the `subagent` tool (see Phase Execution (Subagents)); verify each step's handoff before marking its todo `completed`.
 
 ---
 
