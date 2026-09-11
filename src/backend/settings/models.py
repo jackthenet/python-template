@@ -25,7 +25,7 @@ _STEP_EPSILON = 1e-9
 
 
 class SettingKind(StrEnum):
-    """The six supported setting kinds."""
+    """The seven supported setting kinds."""
 
     TEXT = "text"
     NUMBER = "number"
@@ -33,6 +33,7 @@ class SettingKind(StrEnum):
     EMAIL = "email"
     SLIDER = "slider"
     SELECT = "select"
+    LIST = "list"
 
 
 class SettingStatus(StrEnum):
@@ -78,6 +79,7 @@ def is_valid_value(  # noqa: PLR0911, PLR0912
     max_length: int | None = None,
     min_value: float | None = None,
     max_value: float | None = None,
+    list_spec: ListSpec | None = None,
 ) -> bool:
     """Return True iff ``value`` is valid for ``kind`` with the given params."""
     if kind is SettingKind.TEXT:
@@ -108,6 +110,21 @@ def is_valid_value(  # noqa: PLR0911, PLR0912
         if select_options is None:
             return False
         return isinstance(value, str) and value in select_options
+    if kind is SettingKind.LIST:
+        if not isinstance(value, list):
+            return False
+        if not all(isinstance(item, str) for item in value):
+            return False
+        spec = list_spec if list_spec is not None else ListSpec()
+        if spec.item_pattern is not None and any(
+            re.fullmatch(spec.item_pattern, item) is None for item in value
+        ):
+            return False
+        if spec.min_items is not None and len(value) < spec.min_items:
+            return False
+        if spec.max_items is not None and len(value) > spec.max_items:
+            return False
+        return spec.allow_duplicates or len(set(value)) == len(value)
     return False
 
 
@@ -140,6 +157,38 @@ class SelectSpec(BaseModel):
         values = [o.value for o in self.options]
         if len(set(values)) != len(values):
             raise SettingsValidationError("select option values must be unique")
+        return self
+
+
+class ListSpec(BaseModel):
+    """Kind-specific parameters for the LIST setting kind (REQ-006)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    item_pattern: str | None = None
+    min_items: int | None = None
+    max_items: int | None = None
+    allow_duplicates: bool = True
+
+    @model_validator(mode="after")
+    def _validate(self) -> ListSpec:
+        if self.min_items is not None and self.min_items < 0:
+            raise SettingsValidationError("list min_items must be >= 0")
+        if self.max_items is not None and self.max_items < 0:
+            raise SettingsValidationError("list max_items must be >= 0")
+        if (
+            self.min_items is not None
+            and self.max_items is not None
+            and self.min_items > self.max_items
+        ):
+            raise SettingsValidationError("list min_items must be <= max_items")
+        if self.item_pattern is not None:
+            try:
+                re.compile(self.item_pattern)
+            except re.error as e:
+                raise SettingsValidationError(
+                    f"list item_pattern is not a valid regex: {e}"
+                ) from e
         return self
 
 
@@ -178,6 +227,7 @@ class SettingDefinition(BaseModel):
     group: str | None = None
     slider: SliderSpec | None = None
     select: SelectSpec | None = None
+    list_spec: ListSpec | None = None
     pattern: str | None = None
     min_length: int | None = None
     max_length: int | None = None
@@ -200,11 +250,16 @@ class SettingDefinition(BaseModel):
                 raise SettingsValidationError("SELECT requires a select spec")
             if self.slider is not None:
                 raise SettingsValidationError("SELECT forbids a slider spec")
+        elif kind is SettingKind.LIST:
+            # LIST always accepts: a ListSpec is optional (defaults to ListSpec()).
+            pass
         else:
             if self.slider is not None:
                 raise SettingsValidationError(f"{kind} forbids a slider spec")
             if self.select is not None:
                 raise SettingsValidationError(f"{kind} forbids a select spec")
+            if self.list_spec is not None:
+                raise SettingsValidationError(f"{kind} forbids a list spec")
         # TEXT-only constraints are rejected on other kinds.
         if kind is not SettingKind.TEXT and (
             self.pattern is not None or self.min_length is not None or self.max_length is not None
@@ -233,6 +288,7 @@ def value_valid_for(d: SettingDefinition, value: Any) -> bool:
         max_length=d.max_length,
         min_value=d.min_value,
         max_value=d.max_value,
+        list_spec=d.list_spec,
     )
 
 
@@ -256,6 +312,7 @@ class SettingView(BaseModel):
     status: SettingStatus
     slider: SliderSpec | None
     select: SelectSpec | None
+    list_spec: ListSpec | None
     pattern: str | None
     min_length: int | None
     max_length: int | None

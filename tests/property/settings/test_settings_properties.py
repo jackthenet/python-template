@@ -5,6 +5,8 @@ Hypothesis-based tests for the invariants INV-001 .. INV-010.
 
 from __future__ import annotations
 
+import tempfile
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
@@ -19,6 +21,7 @@ from backend.settings import (
     SettingStatus,
     SliderSpec,
     Template,
+    YamlValueRepository,
 )
 from backend.settings.repository import YamlTemplateRepository
 
@@ -91,7 +94,9 @@ def _setting_with_valid_value(draw):
 
 def _make_registry() -> SettingsRegistry:
     collector = EventCollector()
-    return SettingsRegistry(event_bus=collector)
+    # Isolated value repository so value persistence does not leak between tests.
+    value_repository = YamlValueRepository(tempfile.mkdtemp(prefix="settings_values_"))
+    return SettingsRegistry(event_bus=collector, value_repository=value_repository)
 
 
 @settings(max_examples=_MAX_EXAMPLES)
@@ -220,7 +225,8 @@ def test_inv_007_load_scope_valid(n: int) -> None:
 def test_inv_008_exactly_one_event_per_change(values: list[str]) -> None:
     """INV-008: exactly one SettingChanged per setting changed (even no-op)."""
     collector = EventCollector()
-    registry = SettingsRegistry(event_bus=collector)
+    value_repository = YamlValueRepository(tempfile.mkdtemp(prefix="settings_values_"))
+    registry = SettingsRegistry(event_bus=collector, value_repository=value_repository)
     registry.register(SettingDefinition(key="app.name", kind=SettingKind.TEXT, default="orig"))
     previous = "orig"
     for i, v in enumerate(values):

@@ -29,6 +29,7 @@ from backend.authentication.events import (
     PasswordResetCompleted,
     PasswordResetRequested,
 )
+from backend.authentication.feature_settings import register_settings
 from backend.authentication.models import (
     LoginRequest,
     LoginResult,
@@ -106,4 +107,5 @@ __all__ = [
     "WebAuthnProvider",
     "hash_token",
     "new_token",
+    "register_settings",
 ]

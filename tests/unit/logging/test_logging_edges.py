@@ -24,10 +24,13 @@ def test_edge_001_log_file_parent_created(tmp_path: Path) -> None:
     """
     nested = tmp_path / "a" / "b" / "c" / "app.log"
     code = f"""
-from backend.logging import setup_logger
-from backend.logging.settings import Settings
-
-setup_logger(Settings(log_file={str(nested)!r}, log_level="INFO"))
+from backend.settings import get_settings_registry
+from backend.logging import register_settings as logging_register, setup_logger
+reg = get_settings_registry()
+logging_register(reg)
+reg.set_value('logging.log_file', {str(nested)!r})
+reg.set_value('logging.log_level', 'INFO')
+setup_logger()
 """
     result = run_python(code)
     assert result.returncode == 0, result.stderr

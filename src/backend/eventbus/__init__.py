@@ -7,5 +7,6 @@ communication. See ``docs/specs/event-bus.md``.
 from __future__ import annotations
 
 from backend.eventbus.eventbus import EventBus, get_event_bus, reset_event_bus
+from backend.eventbus.feature_settings import register_settings
 
-__all__ = ["EventBus", "get_event_bus", "reset_event_bus"]
+__all__ = ["EventBus", "get_event_bus", "register_settings", "reset_event_bus"]

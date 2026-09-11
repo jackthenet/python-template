@@ -18,7 +18,7 @@ from typing import Any
 from loguru import logger
 
 from backend.logging._decorator import logged
-from backend.logging.settings import Settings, get_settings
+from backend.logging._settings import Settings, _settings_from_registry
 
 # Standard stdlib level numbers -> loguru level names. Unknown level numbers
 # are passed through numerically so loguru keeps the exact number (EDGE-005).
@@ -91,13 +91,15 @@ def _file_sink_options(settings: Settings) -> dict[str, Any]:
 
 
 @logged(slow_threshold_ms=5)
-def setup_logger(settings: Settings | None = None) -> None:
+def setup_logger() -> None:
     """Configure loguru sinks and install the stdlib intercept handler.
 
-    Idempotent and thread-safe (REQ-002): the first call configures a
-    standard-stream console sink (stderr) and a rotating file sink; later
-    calls return without re-configuring. The stdlib intercept handler is
-    installed on the root stdlib logger exactly once (REQ-003).
+    No-arg (REQ-014): reads the logging settings from the shared registry
+    (AC-019), falling back to the original hardcoded defaults. Idempotent and
+    thread-safe (REQ-002): the first call configures a standard-stream console
+    sink (stderr) and a rotating file sink; later calls return without
+    re-configuring. A ``logging.*`` change reconfigures the sink at runtime
+    (AC-020).
 
     Traced via the shared logging feature (``@logged``).
     """
@@ -106,12 +108,24 @@ def setup_logger(settings: Settings | None = None) -> None:
     with _setup_lock:
         if _setup_done.is_set():
             return
-        _configure(settings)
+        _configure(_settings_from_registry())
         _setup_done.set()
+        _subscribe_to_setting_changes()
 
 
-def _configure(settings: Settings | None) -> None:
-    settings = settings if settings is not None else get_settings()
+def _subscribe_to_setting_changes() -> None:
+    """Reconfigure the sink when a logging.* setting changes (AC-020)."""
+    from backend.eventbus import get_event_bus
+    from backend.settings import SettingChanged
+
+    def _on_setting_changed(event: SettingChanged) -> None:
+        if event.key.startswith("logging."):
+            _configure(_settings_from_registry())
+
+    get_event_bus().subscribe(SettingChanged, _on_setting_changed)
+
+
+def _configure(settings: Settings) -> None:
 
     # Remove loguru's default sink so the handler set is exactly the two
     # configured sinks (REQ-001 / INV-001).

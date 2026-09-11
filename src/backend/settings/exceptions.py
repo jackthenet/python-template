@@ -29,3 +29,7 @@ class TemplateValidationError(SettingsError):
 
 class TemplateStorageError(SettingsError):
     """Raised when template storage is corrupted or schema-invalid."""
+
+
+class ValueStorageError(SettingsError, ValueError):
+    """Raised when value storage is corrupted or schema-invalid."""

@@ -53,8 +53,8 @@ def _resolve_slow_threshold(
         return float(slow_threshold_ms)
     if slow_threshold_setting is not None:
         # Imported here (not at module level) to avoid a circular import:
-        # backend.logging.settings imports ``logged`` from this module.
-        from backend.logging.settings import get_settings
+        # backend.logging._settings imports ``logged`` from this module.
+        from backend.logging._settings import get_settings
 
         value = getattr(get_settings(), slow_threshold_setting, None)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
