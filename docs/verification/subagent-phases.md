@@ -58,7 +58,20 @@ Commit under verification: `c3444ae` (`chore(subagent-phases): subagent-per-phas
 
 **Gate result (DOCS/CHORE): PASS** — lint and type checks pass where applicable; no test files or behavior were touched; the diff is confined to the scoped Markdown instruction files.
 
+## Review Report (Phase 6 — DOCS/CHORE path)
+
+**Review result: clean. Findings: none.**
+
+| # | Check | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | Changed files are exactly the scoped files | PASS | `git diff main...HEAD --name-status` = `M Agents.md`, `M .agents/skills/{specify,decompose,test,implement,verify,review,git}/SKILL.md`, `A docs/verification/subagent-phases.md` — 9 files, all Markdown instruction files. |
+| 2 | Content matches the scope | PASS | Full diff reviewed file by file: AGENTS.md "Phase Execution (Subagents)" section (roles, subagent steps, launch contract, handoff output, user-question routing, one subagent per step execution, handoff verification, fast path) + orchestrator-ownership notes in Todo Tracking Discipline + Agent Prohibitions bullet + Agent Obligations item 13; "Execution Context (Subagents)" section in all 7 skill files; orchestrator-routed `## Todo` bodies in the 6 phase skills; specify step 13 + Rules bullet re-routed to handoff batches (no direct `ask_user_question`); git skill execution-context note with the 4 operation routings. |
+| 3 | No behavior, test, or source-behavior changes beyond the scoped non-behavior changes | PASS | No `src/`, `tests/`, `pyproject.toml`, `.github/`, or tooling paths in the diff; all 11 deletions are re-routed Todo bodies / the specify interrogation re-route. |
+| 4 | No version bump | N/A | DOCS/CHORE — no bump per the Versioning section. |
+
+**Gate result (DOCS/CHORE, Phase 6): CLEAN** — the diff is confined to the scoped non-behavior Markdown changes; no behavior, test, or source-behavior changes are present.
+
 ## Evidence
 - Scope recorded (Phase 1, DOCS/CHORE path, specify skill section E, steps 40–41); no behavior delta confirmed.
 - Phase 5 verification report recorded above; all DOCS/CHORE checks PASS (commit `c3444ae`).
-- Remaining phase (6 Review) will record its evidence here.
+- Phase 6 review report recorded above: clean, no findings.
