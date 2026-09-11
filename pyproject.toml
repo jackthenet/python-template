@@ -51,6 +51,19 @@ dev = [
 package = true
 default-groups = ["dev"]
 
+[tool.bumpversion]
+current_version = "0.1.0"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+commit = true
+message = "Bump version: {current_version} → {new_version}"
+tag = false
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
 [tool.complexipy]
 paths = ["src", "tests"]
 max-complexity-allowed = 30

@@ -49,6 +49,7 @@ Review findings ordered by severity.
 - DOCS/CHORE: check that no behavior, test, or source-behavior changes are present beyond the scoped non-behavior changes.
 - Check that the feature is observable: it logs entry points, errors, and lifecycle events at appropriate levels with useful context (shared infrastructure features MUST be observable).
 - When the review is clean and the change is a reusable shared capability, add a short "how to use this" note to `AGENTS.md` (so future changes use it correctly).
+- Before opening the PR, bump the version per the change type (ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE): run `bump-my-version bump <level>` in the change worktree with a clean working tree; the bump commit is part of the PR (see the "Versioning" section in `AGENTS.md`).
 - When the review is clean, open a PR for the change branch to `main` and present it for human review/merge, then STOP (do NOT merge it yourself) — PR creation per the git skill (`.agents/skills/git/SKILL.md`, operation "Create PR").
 - After the PR is merged (human governance), perform post-merge cleanup per the git skill (`.agents/skills/git/SKILL.md`, operation "Post-merge cleanup").
 
