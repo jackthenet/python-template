@@ -23,19 +23,52 @@ Spec + tests + implementation (FEATURE/CROSS-CUTTING); triage record + reproduct
 
 Verification report at `docs/verification/<name>.md`.
 
-## Execution Context (Subagents)
+## Execution Context (Atomic Step, Synchronous Subagent)
 
-This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+This phase runs in a **new, synchronous subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`). The subagent is **never** run in the background — the workflow waits for it to complete and return its handoff.
 
-- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S5.1 Run full test suite** → **S5.2 Lint + types** → **S5.3 Update traceability** → **S5.4 Verification report (spec coverage = 100%)**. Each has a single objective, inputs, expected outputs, and a done criterion.
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
-- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
-- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
-- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
+- **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
 
 ## Todo
 
 Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) manages the Phase 5 item: `in_progress` before launching this subagent; `completed` only after verifying the handoff that the type-specific gate set passes.
+
+## Atomic Steps
+
+The verify phase is decomposed into four atomic steps. Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
+
+### S5.1 Run full test suite
+
+- **Objective:** Run the full test suite and confirm it passes (classifying any failure as pre-existing vs regression).
+- **Inputs:** the implementation; the full test suite.
+- **Outputs:** a passing full test suite (or a classified pre-existing failure, out of scope).
+- **Done-criteria:** the full test suite passes (`uv run pytest tests/ -v`); any failure is classified as pre-existing (fails on base, out of scope) or regression (passes on base, fix before verifying).
+
+### S5.2 Lint + types
+
+- **Objective:** Run lint and type checks and confirm they pass.
+- **Inputs:** the implementation.
+- **Outputs:** a clean lint run; a clean type-check run.
+- **Done-criteria:** lint is clean (`uv run ruff check .`, matching CI exactly); type checks pass (`uv run mypy src/`).
+
+### S5.3 Update traceability
+
+- **Objective:** Update the traceability matrix with the change's evidence rows.
+- **Inputs:** the passing tests; the traceability matrix.
+- **Outputs:** the traceability matrix updated in `docs/verification/traceability.md`.
+- **Done-criteria:** the traceability matrix is updated with the change's evidence rows (every REQ has at least one GREEN test); CROSS-CUTTING updates the rows of every affected feature.
+
+### S5.4 Verification report (spec coverage = 100%)
+
+- **Objective:** Produce the verification report and confirm spec coverage = 100%.
+- **Inputs:** the passing checks; the traceability matrix.
+- **Outputs:** a verification report at `docs/verification/<name>.md` (pass/fail per check, spec coverage = 100%).
+- **Done-criteria:** the verification report is produced and committed (`docs(<name>): add verification report`); spec coverage = 100% (every REQ-XXX has at least one GREEN test); `verify_spec.py` exits 0 (FEATURE/CROSS-CUTTING).
 
 ## MUST
 

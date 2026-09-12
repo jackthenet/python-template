@@ -24,19 +24,59 @@ Implement the change: turn failing tests (RED) into passing tests (GREEN) (FEATU
 - REFACTOR: the baseline + scope at `docs/verification/[name].md`.
 - DOCS/CHORE: the scope at `docs/verification/[name].md`.
 
-## Execution Context (Subagents)
+## Execution Context (Atomic Step, Synchronous Subagent)
 
-This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+This phase runs in a **new, synchronous subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`). The subagent is **never** run in the background — the workflow waits for it to complete and return its handoff.
 
-- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S4.1 Pick task + confirm RED** → **S4.2 Implement + confirm GREEN** → **S4.3 Ruff** → **S4.4 Refactor (keep GREEN)** → **S4.5 Commit + update status**. Repeat per task in the DAG. Each has a single objective, inputs, expected outputs, and a done criterion.
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
-- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
-- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
-- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
+- **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
 
 ## Todo
 
 Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) manages the Phase 4 item: `in_progress` before launching this subagent; `completed` only after verifying the handoff that GREEN is achieved and recorded in `docs/verification/[name].md`.
+
+## Atomic Steps
+
+The implement phase is decomposed into five atomic steps (repeated per task in the DAG). Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
+
+### S4.1 Pick task + confirm RED
+
+- **Objective:** Pick a ready task from the task DAG (FEATURE/CROSS-CUTTING) and confirm RED (the task's tests fail before implementation).
+- **Inputs:** the task DAG at `docs/tasks/[name].tasks.json`; the failing tests (RED).
+- **Outputs:** a picked ready task; RED confirmed (the task's tests fail).
+- **Done-criteria:** a ready task is picked from the task DAG; the task's tests are confirmed to FAIL (`red_command`); RED evidence is recorded in `docs/verification/<name>.md`.
+
+### S4.2 Implement + confirm GREEN
+
+- **Objective:** Implement the minimum behavior in `allowed_files.source_files` (following `implementation_steps` or the triage's fix scope) and confirm GREEN (the task's tests pass 100%).
+- **Inputs:** the picked task; the failing tests (RED).
+- **Outputs:** implemented logic in `allowed_files.source_files`; GREEN confirmed (the task's tests pass 100%).
+- **Done-criteria:** the implementation follows `implementation_steps` (FEATURE/CROSS-CUTTING) or the triage's fix scope (ISSUE); the task's tests PASS 100% (`green_command`); GREEN evidence is recorded in `docs/verification/<name>.md`.
+
+### S4.3 Ruff
+
+- **Objective:** Run ruff and fix any lint errors (formatting, unused imports, etc.) without changing behavior.
+- **Inputs:** the implemented code.
+- **Outputs:** a clean ruff run.
+- **Done-criteria:** ruff is clean (`uv run ruff check .`); no behavior changed.
+
+### S4.4 Refactor (keep GREEN)
+
+- **Objective:** Improve code structure (duplication, complexity, naming, boundaries) without changing observable behavior; keep GREEN.
+- **Inputs:** the implemented code.
+- **Outputs:** improved code structure; GREEN maintained.
+- **Done-criteria:** the code structure is improved (duplication, complexity, naming, boundaries); the full suite stays GREEN after every meaningful refactoring step; ruff stays clean; no observable behavior changed.
+
+### S4.5 Commit + update status
+
+- **Objective:** Commit the implementation and set the task status to `VERIFIED`.
+- **Inputs:** the committed-ready implementation.
+- **Outputs:** a committed implementation; the task status set to `VERIFIED` in `.github/task-runner/tasks.json` (synced to `docs/tasks/[name].tasks.json`).
+- **Done-criteria:** the implementation is committed; the task status is set to `VERIFIED` in `.github/task-runner/tasks.json`; the final statuses are synced back to `docs/tasks/[name].tasks.json`.
 
 ## Process
 
@@ -52,22 +92,26 @@ Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent)
 5. **Coder Agent (Green):** Implement logic in `allowed_files.source_files` following `implementation_steps` (FEATURE/CROSS-CUTTING) or the triage's fix scope (ISSUE). Run `green_command`. Confirm tests PASS 100%.
 6. **Record GREEN evidence** in `docs/verification/[name].md`.
 
-### 3. Refactor (improve structure, keep GREEN) — FEATURE/CROSS-CUTTING
+### 3. Ruff (lint gate) — FEATURE/CROSS-CUTTING/ISSUE
 
-7. **Refactor:** Identify code structure issues (duplication, complexity, naming, boundaries). Make small, focused refactoring changes without changing observable behavior. Re-run `green_command` after every meaningful refactoring step. Confirm GREEN is maintained.
+7. **Ruff:** run `uv run ruff check .` after implementation (S4.2) and after refactoring (S4.4). It MUST be clean before the other gates. Fix any lint errors (formatting, unused imports, etc.) without changing behavior.
 
-### 4. REFACTOR (behavior-preserving steps)
+### 4. Refactor (improve structure, keep GREEN) — FEATURE/CROSS-CUTTING
 
-8. Perform small, focused behavior-preserving steps per the refactor scope. Re-run the full suite (`uv run pytest tests/ -v`) after every step; it MUST stay GREEN.
-9. Do not modify, weaken, or delete any test.
+8. **Refactor:** Identify code structure issues (duplication, complexity, naming, boundaries). Make small, focused refactoring changes without changing observable behavior. Re-run `green_command` and `uv run ruff check .` after every meaningful refactoring step. Confirm GREEN is maintained and ruff stays clean.
 
-### 5. DOCS/CHORE (make the change)
+### 5. REFACTOR (behavior-preserving steps)
 
-10. Make the scoped non-behavior changes. Do not touch test files or behavior.
+9. Perform small, focused behavior-preserving steps per the refactor scope. Re-run the full suite (`uv run pytest tests/ -v`) after every step; it MUST stay GREEN.
+10. Do not modify, weaken, or delete any test.
 
-### 6. Commit & update status — FEATURE/CROSS-CUTTING
+### 6. DOCS/CHORE (make the change)
 
-11. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`.
+11. Make the scoped non-behavior changes. Do not touch test files or behavior.
+
+### 7. Commit & update status — FEATURE/CROSS-CUTTING
+
+12. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`.
 
 ## Rules
 
@@ -81,6 +125,7 @@ Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent)
 - DOCS/CHORE: only the scoped non-behavior changes; no test files, no behavior.
 - Refactoring MUST NOT change observable behavior.
 - Tests MUST be re-run after every meaningful refactoring step.
+- **Ruff MUST be clean** after implementation (S4.2) and after refactoring (S4.4) — run `uv run ruff check .` and require it to pass before the other gates.
 - GREEN MUST be maintained throughout refactoring.
 - The task status MUST be set to `VERIFIED` when complete (FEATURE/CROSS-CUTTING).
 - Do NOT modify the specification in this phase.

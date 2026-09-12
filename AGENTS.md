@@ -109,6 +109,93 @@ Which phases run for each type, and what each phase produces:
 
 "Full gate set" = the Phase 5 FEATURE checks below. Every type ends with a PR to `main` for human review/merge (human governance).
 
+### Workflow Diagram (atomic steps, dependencies, ownership, validation / user input)
+
+Legend: **[O]** = orchestrator (no subagent) · **[S]** = step subagent (**synchronous, never background**) · **◆** = gate (validation) · **⏸** = user input (workflow **stops** until answered)
+
+```text
+PHASE 0   [O] ORCHESTRATOR (no subagent)
+  S0.1   Classify + create worktree + create todo set
+             │
+             ▼
+PHASE 1   [S] SPECIFY (specify skill)
+  S1.1   Interrogate ────────────⏸──► AI_Questions.md (USER INPUT)
+             │
+             ▼
+  S1.2   Draft spec
+             │
+             ▼
+  S1.3   Verify self-consistency
+             │
+             ▼
+  S1.4   Present for approval ──► PR ──⏸──► HUMAN APPROVAL ◆
+             │
+             ▼
+PHASE 2   [S] DECOMPOSE (decompose skill)
+  S2.1   Create ADRs
+             │
+             ▼
+  S2.2   Decompose into task DAG ──► .github/task-runner/tasks.json ◆
+             │
+             ▼
+PHASE 3   [S] TEST & RED (test skill)
+  S3.1   Derive tests
+             │
+             ▼
+  S3.2   Ruff ◆ + confirm RED ◆ (tests FAIL on behavior)
+             │
+             ▼
+PHASE 4   [S] IMPLEMENT (implement skill)     [repeat per task in the DAG]
+  S4.1   Pick task + confirm RED
+             │
+             ▼
+  S4.2   Implement + confirm GREEN ◆
+             │
+             ▼
+  S4.3   Ruff ◆
+             │
+             ▼
+  S4.4   Refactor (keep GREEN)
+             │
+             ▼
+  S4.5   Commit + update status (VERIFIED)
+             │
+             ▼
+PHASE 5   [S] VERIFY (verify skill)
+  S5.1   Run full test suite ◆
+             │
+             ▼
+  S5.2   Lint + types ◆
+             │
+             ▼
+  S5.3   Update traceability
+             │
+             ▼
+  S5.4   Verification report (spec coverage = 100%) ◆
+             │
+             ▼
+PHASE 6   [S] REVIEW (review skill)
+  S6.1   Review vs. normative basis
+             │
+             ▼
+  S6.2   Traceability + boundaries
+             │
+             ▼
+  S6.3   Review report (clean) ◆
+             │
+             ▼
+  S6.4   Bump version + open PR ──► PR ──⏸──► HUMAN MERGE ◆
+             │
+             ▼
+POST-MERGE [S] CLEANUP (git skill)
+  S7.1   Verify merge + remove worktree + delete branches ◆
+```
+
+- **Dependencies:** steps run in order within a phase; a phase runs only after the previous phase's gate ◆ passes. A failed gate re-enters the same or an earlier step with a **new** subagent.
+- **Ownership:** Phase 0 is the orchestrator; every other step is a dedicated, **synchronous** subagent (one atomic step each).
+- **User input (⏸):** the workflow stops at S1.1 (questions → `AI_Questions.md`), S1.4 (spec approval), and S6.4 (PR merge). It never proceeds past a ⏸ until the user answers.
+- **Friction (Problem Log):** any step that fails / is relaunched / iterates / blocks is recorded in `docs/workflow/PROBLEMS.md`.
+
 ### Skill-to-Phase Mapping
 
 | Phase | Skill | Applies to | Purpose |
@@ -121,41 +208,87 @@ Which phases run for each type, and what each phase produces:
 | Phase 6: REVIEW | `review` | all | Reviews the change against its type-specific criteria before reviewing implementation style. |
 | (cross-cutting) | `git` | all | Branch/worktree creation, PR creation, post-merge cleanup. |
 
-### Phase Execution (Subagents)
+### Phase Execution (Atomic Steps, Synchronous Subagents)
 
-Every workflow step is executed by a **new subagent** launched via the `subagent` tool (type `general-purpose`). The orchestrating agent (the agent talking to the user) never executes a phase itself, and a step subagent never executes more than one phase.
+Every workflow step is executed by a **new subagent** launched via the `subagent` tool (type `general-purpose`). The orchestrating agent (the agent talking to the user) **never executes a step itself** — it only orchestrates. A step subagent executes **exactly one atomic step** and returns.
 
-**Roles.**
-- **Orchestrator** — performs Phase 0 (classify, create branch/worktree, create the todo set); launches one subagent per workflow step; presents user questions and approval requests (spec approval, PR merge) to the user; manages the todo list; verifies each step's handoff before launching the next step.
-- **Step subagent** — reads its phase skill file and executes exactly one phase inside the change worktree. It never executes another phase, never launches a subagent, and never talks to the user.
+#### Execution Model
 
-**Steps that get a subagent.** Phase 1 (specify), Phase 2 (decompose), Phase 3 (test), Phase 4 (implement), Phase 5 (verify), Phase 6 (review), and post-merge cleanup (git skill). **Phase 0 stays on the orchestrator** — classification, branch/worktree creation, and todo-set creation are required to route the phases.
+- **Synchronous — never background.** Every subagent is launched with `run_in_background: false` (the default). The orchestrator **waits for the subagent to complete its step and return a handoff** before proceeding to the next step. A subagent is never left running in the background and is never polled. If a subagent does not return (timeout / network / error), the orchestrator treats it as a **failed step**: it logs the problem (Problem Log), launches a **fresh** subagent for the same step (never resumes a stuck one), and continues.
+- **Atomic steps.** Each phase is broken into **atomic steps** (table below). An atomic step has a **single objective**, clear **inputs/outputs**, a **required skill**, a **dedicated subagent**, a clear **“done” definition**, and a **validation** before the next step. A step subagent executes **exactly one atomic step** — never more. Small steps exist so a subagent can actually **finish** its work.
+- **One subagent per atomic step.** Every time an atomic step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4/3) and reclassification re-runs — the orchestrator launches a **new** subagent. The only exception: a `BLOCKED-USER` subagent may be **resumed** to deliver the user's answers, which continues the **same** step (never a different one).
 
-**Launch contract.** The orchestrator's launch prompt MUST contain:
-- the change name and type;
-- the change worktree path (all commands run there);
-- the phase skill file to read first (`.agents/skills/<skill>/SKILL.md`);
-- the previous step's handoff (the prior phase's status, gate result, artifacts, and evidence location);
-- the required handoff output (below).
+#### Atomic Steps
 
-**Handoff output.** The step subagent MUST end with a structured handoff:
-- `status` — `DONE` (gate passed) | `BLOCKED-USER` (needs user input) | `BLOCKED-HUMAN` (needs human governance: spec approval, PR merge) | `FAILED` (gate failed, with reason).
-- `gate` — the type-specific gate result and where the evidence is recorded (`docs/verification/<name>.md`).
+The six phases are the **gates** (entry/exit criteria per the Phase Matrix). Within each phase, the work is done in atomic steps; **each atomic step is one subagent execution**. Phase 0 (classify + worktree + todo set) stays on the **orchestrator**.
+
+| Phase | Atomic steps (one subagent each, in order) |
+|-------|-------------------------------------------|
+| **1 Specify** | **S1.1 Interrogate** → **S1.2 Draft spec** → **S1.3 Verify self-consistency** → **S1.4 Present for approval** (commit + PR) |
+| **2 Decompose** | **S2.1 Create ADRs** → **S2.2 Decompose into task DAG** |
+| **3 Test & RED** | **S3.1 Derive tests** → **S3.2 Ruff + confirm RED** |
+| **4 Implement** | **S4.1 Pick task + confirm RED** → **S4.2 Implement + confirm GREEN** → **S4.3 Ruff** → **S4.4 Refactor** → **S4.5 Commit + update status** |
+| **5 Verify** | **S5.1 Run full test suite** → **S5.2 Lint + types** → **S5.3 Update traceability** → **S5.4 Verification report** |
+| **6 Review** | **S6.1 Review vs. normative basis** → **S6.2 Traceability + boundaries** → **S6.3 Review report** → **S6.4 Bump version + open PR** |
+| **Post-merge** | **S7.1 Cleanup** (verify merge + remove worktree + delete branches) |
+
+**Ruff gate.** Every atomic step that writes or modifies **tests or implementation code** MUST run `uv run ruff check .` before it returns and record the result in the handoff (`ruff` field). A step that leaves lint errors is **not done**.
+
+#### Task-Definition Contract
+
+The orchestrator's launch prompt for an atomic step MUST contain **exactly** what the step needs — the subagent must never have to infer it:
+- the **step ID** (e.g., `S4.2`) and its **single objective**;
+- the **change name and type**;
+- the **change worktree path** (all commands run there);
+- the **skill file** to read (`.agents/skills/<skill>/SKILL.md`) **and the specific skill section** that applies to this step;
+- the **inputs** — the prior step's handoff (status, gate result, artifacts, evidence location, and any user answers);
+- the **done criteria** (the step's validation, e.g., “GREEN confirmed and recorded in `docs/verification/<name>.md`”);
+- the **required handoff output** (below).
+
+#### Roles
+
+- **Orchestrator** — performs Phase 0 (classify, create worktree, create the todo set); launches one subagent per atomic step (**synchronously**); **waits** for each handoff; presents user questions and approval requests to the user; manages the todo list; verifies each step's handoff; logs problems (Problem Log). **The orchestrator does NOT execute a step, investigate a failure, or make an implementation decision.** When a step is blocked or fails, the orchestrator supplies more context (or the user's answer) and **relaunches the same step** — it never does the work itself.
+- **Step subagent** — reads its skill file and executes **exactly one atomic step** inside the change worktree. It never executes another step, never launches a subagent, never talks to the user, and never runs in the background.
+
+#### Handoff Output
+
+The step subagent MUST end with a structured handoff:
+- `step` — the step ID (e.g., `S4.2`).
+- `status` — `DONE` (done-criteria met) | `BLOCKED-USER` (needs user input) | `BLOCKED-HUMAN` (needs human governance: spec approval, PR merge) | `FAILED` (done-criteria not met, with reason).
+- `gate` — the step's validation result and where the evidence is recorded (`docs/verification/<name>.md`).
 - `artifacts` — the files, commits, and PRs created.
-- `questions` (BLOCKED-USER only) — the questions for the user.
-- `next` — the next step to launch per the Phase Matrix, or `STOP`.
+- `ruff` — the `uv run ruff check .` result (for steps that write tests/implementation), or `n/a`.
+- `questions` (BLOCKED-USER only) — the questions for the user (each also recorded in `AI_Questions.md`).
+- `problem` (optional) — a friction point to log (see Problem Log).
+- `next` — the next atomic step, or `STOP`.
 
-**User questions.** A step subagent MUST NOT call `ask_user_question` itself. It returns `BLOCKED-USER` with its questions. The orchestrator presents them to the user (in batches of up to 4 per `ask_user_question` call) and **resumes the same subagent** with the answers. Resuming continues the same step only — the next step always gets a new subagent.
+#### AI Questions Mechanism (`AI_Questions.md`)
 
-**One subagent per step execution.** Every time a step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4 or Phase 3) and reclassification re-runs of Phase 1 — the orchestrator launches a new subagent. A step subagent is never resumed to execute a different phase.
+Questions that need user input are recorded persistently in `AI_Questions.md` (repo root) so they are not lost between steps. Each entry has: the question, the generating step (step ID + phase), why it is needed, the context at the time, the user's answer, the date/status, and whether the answer has been incorporated.
 
-**Handoff verification.** The orchestrator MUST verify a handoff before marking the step's todo `completed`: the evidence exists in `docs/verification/<name>.md` and the commits exist in the worktree. A subagent's self-report is not evidence.
+- **MAY create questions:** any step, when it meets an ambiguity, a missing requirement, or a decision that requires user input.
+- **MUST create questions:** the **Interrogate** step (**S1.1**) MUST create a question for every ambiguity, missing requirement, edge case, and scope boundary it identifies — the spec phase is where user input is most needed. Any step that returns `BLOCKED-USER` MUST have its questions recorded in `AI_Questions.md`.
+- **Workflow stop:** when a step returns `BLOCKED-USER`, the orchestrator **stops the workflow**, presents the questions to the user (via `ask_user_question`), records the answers in `AI_Questions.md`, marks them **incorporated**, and **relaunches the same step** with the answers. The workflow never proceeds past a `BLOCKED-USER` step until the user has answered.
 
-**Fast path.** Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing failing test, `--skip-spec`) bypass the workflow entirely — no phases, no subagents.
+#### Problem Log (`docs/workflow/PROBLEMS.md`)
+
+Problems that take a lot of time (friction points) are recorded in `docs/workflow/PROBLEMS.md` so the **after-workflow-optimization** knows where the friction was. Each entry has: the problem, the step/phase, how long / how many iterations, the resolution, and the date.
+
+- **MUST log** when a step (a) fails and is relaunched, (b) takes more than one iteration to complete, (c) is blocked on a non-trivial user decision, or (d) takes disproportionately long relative to its objective.
+- **Who logs:** the orchestrator (it sees the relaunches, iterations, and blocks). A step subagent flags a problem in its handoff (`status: FAILED` with reason, or the `problem` field); the orchestrator records it.
+- **Purpose:** the after-workflow-optimization (a meta-task) reads `PROBLEMS.md` to find the friction and improve the workflow.
+
+#### Handoff Verification
+
+The orchestrator MUST verify a handoff before marking the step's todo `completed`: the evidence exists in `docs/verification/<name>.md`, the commits exist in the worktree, and the step's done-criteria are met. A subagent's self-report is not evidence.
+
+#### Fast Path
+
+Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing failing test, `--skip-spec`) bypass the workflow entirely — no phases, no subagents.
 
 ### Todo Tracking Discipline (todo tool)
 
-The agent MUST track every in-flight change with the `todo` tool. The todo list is the change's live progress record: **one item per workflow step** the change type runs (per the Phase Matrix), **linked by dependency** in phase order, with **status orders** driven by the workflow gates. Todo management belongs to the **orchestrator** (see Phase Execution (Subagents)): step subagents never create, update, or read the todo list.
+The agent MUST track every in-flight change with the `todo` tool. The todo list is the change's live progress record: **one item per phase** the change type runs (per the Phase Matrix), **linked by dependency** in phase order, with **status orders** driven by the workflow gates. Each phase is executed in **atomic steps** (see Phase Execution (Atomic Steps, Synchronous Subagents)); a phase's todo is `completed` only when **all of its atomic steps are done** and the phase's gate passes. Todo management belongs to the **orchestrator** (see Phase Execution (Atomic Steps, Synchronous Subagents)): step subagents never create, update, or read the todo list.
 
 **Creating the todo set (Phase 0).** When starting a change, create one todo item per workflow step the change type executes, in phase order. Give each a short imperative subject naming the phase and its key output. A step the type skips (per the Phase Matrix) gets **no** todo item.
 
@@ -394,7 +527,11 @@ An agent MUST NOT:
 - Skip the RED gate (transitioning from TESTS_WRITTEN to IMPLEMENTING without observing RED).
 - Let code coverage substitute for specification coverage.
 - Advance a workflow phase without the todo status discipline (the phase's todo must be `in_progress` before the step starts and `completed` only when its type-specific gate passes — see the Todo Tracking Discipline).
-- Execute a workflow phase directly in the orchestrator's context — every workflow step runs in a new subagent (see Phase Execution (Subagents)).
+- Execute a workflow step directly in the orchestrator's context — every workflow step runs in a new subagent (see Phase Execution (Atomic Steps, Synchronous Subagents)).
+- Run a step subagent in the **background** — step subagents are always synchronous; the workflow waits for the step to complete and return its handoff before proceeding.
+- Proceed past a `BLOCKED-USER` step until the user has answered the recorded question.
+- Skip the **ruff** gate after an implementation or test step (ruff must be clean before the step's other gates).
+- Let a step subagent call `ask_user_question` directly — questions are recorded in `AI_Questions.md` and presented by the orchestrator.
 
 ---
 
@@ -412,8 +549,11 @@ An agent MUST:
 9. Refactor without changing observable behavior.
 10. Run regression tests.
 11. Produce a traceability/evidence report.
-12. Track the change with the `todo` tool per the Todo Tracking Discipline: one item per workflow step the type runs, linked by `blockedBy`, `in_progress` before a step starts, `completed` only when its gate passes.
-13. Execute each workflow step in a new subagent via the `subagent` tool (see Phase Execution (Subagents)); verify each step's handoff before marking its todo `completed`.
+12. Track the change with the `todo` tool per the Todo Tracking Discipline: one item per phase the type runs, linked by `blockedBy`, `in_progress` before a phase starts, `completed` only when all of its atomic steps are done and its gate passes.
+13. Execute each workflow step in a new **synchronous** subagent via the `subagent` tool (see Phase Execution (Atomic Steps, Synchronous Subagents)); verify each step's handoff before marking its todo `completed`.
+14. Record every `BLOCKED-USER` question in `AI_Questions.md` (step, why needed, context, question, answer, status, incorporated) and present it to the user before proceeding.
+15. Run **ruff** after each implementation or test step and require it to be clean before the step's other gates.
+16. Log friction (failed/relaunched/iterating/blocked steps) in `docs/workflow/PROBLEMS.md` so the after-workflow-optimization can read it.
 
 ---
 

@@ -28,19 +28,53 @@ Single entry point for all change types. Classify the change (Phase 0), create i
 - Any existing codebase context relevant to the change.
 - The current state of the repository (to pick a clean base branch).
 
-## Execution Context (Subagents)
+## Execution Context (Atomic Step, Synchronous Subagent)
 
-This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+This phase runs in a **new, synchronous subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`). The subagent is **never** run in the background — the workflow waits for it to complete and return its handoff.
 
-- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S1.1 Interrogate** → **S1.2 Draft spec** → **S1.3 Verify self-consistency** → **S1.4 Present for approval**. Each has a single objective, inputs, expected outputs, and a done criterion.
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
-- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
-- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
-- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
+- **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
 
 ## Todo
 
 Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) creates the change's full todo set in Phase 0 and manages the Phase 1 item: `in_progress` before launching this subagent, `completed` after verifying the handoff (spec PR opened / triage recorded / GREEN baseline / scope recorded).
+
+## Atomic Steps (FEATURE / CROSS-CUTTING)
+
+The FEATURE/CROSS-CUTTING path is decomposed into four atomic steps. Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
+
+### S1.1 Interrogate
+
+- **Objective:** Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief.
+- **Inputs:** the feature idea; the existing features' specs in `docs/specs/` (to check overlap); the change worktree.
+- **Outputs:** a feature brief (goals, constraints, out-of-scope, edge cases) — intermediate, folded into the spec (not a separate `.brief.md`); the questions recorded in `AI_Questions.md`.
+- **Done-criteria:** at least 20 questions asked and recorded in `AI_Questions.md` (returned as `BLOCKED-USER` in batches of up to 4 per round-trip); the feature brief captures goals, constraints, out-of-scope, edge cases; existing features' specs checked for overlap (no double work).
+- **MUST create questions** (the trigger): record each question in `AI_Questions.md` (step S1.1, why needed, context, question, answer, status, incorporated). Do NOT call `ask_user_question`.
+
+### S1.2 Draft spec
+
+- **Objective:** Turn the feature brief into an approved-quality specification with stable IDs and Given/When/Then acceptance criteria (CROSS-CUTTING adds a per-feature Impact Analysis).
+- **Inputs:** the feature brief; the specification template at `docs/specs/template.md`.
+- **Outputs:** `docs/specs/<name>.md` with stable `REQ-XXX` / `AC-XXX` / `INV-XXX` / `EDGE-XXX` / `NFR-XXX` IDs and a test strategy.
+- **Done-criteria:** every normative requirement has a stable ID; every acceptance criterion is in Given/When/Then form; every invariant/edge/NFR has an ID; the test strategy maps each AC/INV/EDGE to a test category and test function; the file is built incrementally (several small `write`/`edit` calls, not one giant `write`).
+
+### S1.3 Verify self-consistency
+
+- **Objective:** Run the self-consistency checklist against the written specification and fix every inconsistency in the spec itself (never defer to implementation or review).
+- **Inputs:** the written specification; the Self-Consistency Checklist (below).
+- **Outputs:** a consistent specification (no internal inconsistencies).
+- **Done-criteria:** the specification passes the self-consistency checklist (configurability, parameter coverage, REQ↔AC wording, terminology drift, test strategy coverage, ID references, scope consistency, performance budget vs. observability).
+
+### S1.4 Present for approval
+
+- **Objective:** Commit the specification, open a PR for human review, and STOP (present for human approval).
+- **Inputs:** the consistent specification.
+- **Outputs:** a committed specification file at `docs/specs/<name>.md`; a PR open for human review.
+- **Done-criteria:** the specification is committed to `docs/specs/`; a PR is open for human review; the specification has NOT been approved yet (approval is a human action).
 
 ## Process
 
@@ -58,42 +92,9 @@ Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent)
 
 ### A. FEATURE path
 
-#### 1. Check existing features and specs (no double work)
+Execute the **Atomic Steps (FEATURE / CROSS-CUTTING)** in order: **S1.1 Interrogate** → **S1.2 Draft spec** → **S1.3 Verify self-consistency** → **S1.4 Present for approval**.
 
-5. Read the specs in `docs/specs/` (all features, including any spec already on the current branch) and the existing feature directories under `src/`.
-6. Determine what has already been built and what is planned elsewhere. If any part of this feature overlaps an existing or planned feature, reuse or extend that work instead of re-specifying it, and record the overlap in the feature brief.
-
-#### 2. Interrogate the feature idea (discover)
-
-7. Restate the feature idea in one sentence.
-8. Ask: what is the goal? Who is the user? What problem does it solve?
-9. Ask: what are the constraints? What must NOT change? What is out of scope?
-10. Ask: what are the edge cases? What could go wrong? What are the failure modes?
-11. Ask: what are the hidden requirements? What assumptions are being made?
-12. Ask: what are the scope boundaries? Where does this feature end?
-13. Ask at least 20 questions in total, covering goals, users, constraints, out-of-scope, edge cases, failure modes, hidden requirements, assumptions, scope boundaries, and non-functional concerns. Do NOT call `ask_user_question` yourself: return the questions in the handoff (`status: BLOCKED-USER`), in batches of up to 4 per round-trip; the orchestrator presents each batch to the user and resumes this subagent with the answers. Repeat until at least 20 questions have been asked.
-14. Capture the answers into a feature brief (goals, constraints, out-of-scope items, edge cases). The brief is an **intermediate artifact** — do **not** save it as a separate `.brief.md` file; it feeds the spec, which is the single kept artifact.
-
-#### 3. Write the specification
-
-15. Read the feature brief and the specification template.
-16. Identify every normative requirement. Assign each a stable `REQ-XXX` ID.
-17. For each requirement, write one or more acceptance criteria in Given/When/Then form. Assign each an `AC-XXX` ID.
-18. Identify invariants the system must always maintain. Assign each an `INV-XXX` ID.
-19. Identify edge cases and error conditions. Assign each an `EDGE-XXX` ID.
-20. Identify non-functional requirements (performance, security, usability, compliance). Assign each an `NFR-XXX` ID.
-21. Define the test strategy: map each AC/INV/EDGE to a test category (acceptance, integration, contract, property, unit) and a test function name.
-22. Build `docs/specs/<name>.md` incrementally with several small `write`/`edit` tool calls: write the first chunk (header + first sections) with `write`, then append subsequent sections with `edit` calls. Do NOT do one giant `write` call and do NOT rewrite the whole file multiple times.
-
-#### 4. Verify self-consistency
-
-23. Run the self-consistency checklist (below) against the written specification. Fix every inconsistency in the spec itself — do NOT defer to implementation or review.
-
-#### 5. Present for approval
-
-24. Commit the specification file.
-25. Open a PR for human review.
-26. STOP and present the specification for human approval.
+Before S1.1, check existing features and specs (no double work): read the specs in `docs/specs/` (all features, including any spec already on the current branch) and the existing feature directories under `src/`; determine what has already been built and what is planned elsewhere; if any part of this feature overlaps an existing or planned feature, reuse or extend that work instead of re-specifying it, and record the overlap in the feature brief.
 
 ### B. ISSUE path (triage — no spec, no PR)
 
@@ -105,11 +106,7 @@ Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent)
 
 ### C. CROSS-CUTTING path
 
-32. Interrogate the change adversarially (same depth as the FEATURE path; at least 20 questions): goals, affected features, constraints, out-of-scope, edge cases, failure modes.
-33. Draft the spec at `docs/specs/<name>.md` with an **Impact Analysis** section: every affected feature, what changes in each, and which of their REQ/AC IDs are touched.
-34. Assign stable IDs (`REQ-XXX`, `AC-XXX`, `INV-XXX`, `EDGE-XXX`, `NFR-XXX`) and define the test strategy (map each AC/INV/EDGE to a test category and test function), as for FEATURE.
-35. Run the self-consistency checklist (below) against the written specification. Fix every inconsistency.
-36. Commit the specification file. Open a PR for human review. STOP and present the specification for human approval.
+Execute the **Atomic Steps (FEATURE / CROSS-CUTTING)** in order: **S1.1 Interrogate** → **S1.2 Draft spec** → **S1.3 Verify self-consistency** → **S1.4 Present for approval**. S1.2 additionally requires an **Impact Analysis** section: every affected feature, what changes in each, and which of their REQ/AC IDs are touched.
 
 ### D. REFACTOR path (baseline — no spec, no PR)
 
@@ -141,7 +138,7 @@ Run this against the written specification before presenting it for approval. Fi
 - The change type MUST be classified (Phase 0) before any other work, and recorded in `docs/verification/<name>.md`.
 - Stay strictly on the change's branch/worktree. Do not modify unrelated changes, branches, or worktrees. Keep all changes isolated to this change.
 - Ask MORE questions than feels necessary during interrogation (FEATURE/CROSS-CUTTING).
-- Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). Return them in the handoff in batches of up to 4 per round-trip (the orchestrator presents each batch to the user and resumes this subagent with the answers) until the total reaches at least 20.
+- Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). **Record each in `AI_Questions.md`** and return them in the handoff in batches of up to 4 per round-trip (the orchestrator presents each batch to the user, records the answers in `AI_Questions.md`, and resumes this subagent with the answers) until the total reaches at least 20.
 - Check other features' specs and the current branch's specs before specifying (FEATURE/CROSS-CUTTING). Reuse or extend existing/planned work — do not do double work.
 - The feature brief MUST capture goals, constraints, out-of-scope items, and edge cases. The brief is intermediate — do **not** commit it as a separate `.brief.md` file; fold it into the spec.
 - Every normative requirement MUST have a stable `REQ-XXX` ID.
@@ -174,7 +171,7 @@ Run this against the written specification before presenting it for approval. Fi
 - The change type is classified and recorded in `docs/verification/<name>.md`.
 - FEATURE/CROSS-CUTTING:
   - The feature brief captures goals, constraints, out-of-scope items, and edge cases (intermediate — folded into the spec, not a separate file).
-  - At least 20 questions were asked during interrogation (multiple `ask_user_question` calls of up to 4 each).
+  - At least 20 questions were asked during interrogation and **recorded in `AI_Questions.md`** (multiple `BLOCKED-USER` round-trips of up to 4 each; the orchestrator presents each batch to the user and records the answers).
   - Existing features' specs and the current branch's specs were checked for overlap; no work was double-specified.
   - The specification has stable IDs for every requirement, acceptance criterion, invariant, edge case, and non-functional requirement.
   - The specification passes the self-consistency checklist (no internal inconsistencies).

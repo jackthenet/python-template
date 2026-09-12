@@ -33,19 +33,52 @@ Review findings ordered by severity.
 6. **Quality** — Lint, type checks, naming, duplication, complexity.
 7. **Observability** — Does the feature log meaningfully (entry points, errors, lifecycle) at appropriate levels with useful context? Shared infrastructure features MUST be observable.
 
-## Execution Context (Subagents)
+## Execution Context (Atomic Step, Synchronous Subagent)
 
-This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+This phase runs in a **new, synchronous subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`). The subagent is **never** run in the background — the workflow waits for it to complete and return its handoff.
 
-- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S6.1 Review vs. normative basis** → **S6.2 Traceability + boundaries** → **S6.3 Review report (clean)** → **S6.4 Bump version + open PR**. Each has a single objective, inputs, expected outputs, and a done criterion.
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
-- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
-- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
-- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
+- **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
 
 ## Todo
 
 Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) manages the Phase 6 item: `in_progress` before launching this subagent; `completed` only after verifying the handoff that the review report is clean and the PR is open.
+
+## Atomic Steps
+
+The review phase is decomposed into four atomic steps. Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
+
+### S6.1 Review vs. normative basis
+
+- **Objective:** Review the change's behavior against its normative basis (spec for FEATURE/CROSS-CUTTING, affected spec IDs for ISSUE, no behavior change for REFACTOR, no behavior delta for DOCS/CHORE) — no more, no less.
+- **Inputs:** the PR/diff; the change's normative basis; the tests.
+- **Outputs:** a normative-basis review (compliance confirmed or findings).
+- **Done-criteria:** the change implements what the normative basis says (no more, no less); no unspecified behavior was introduced (FEATURE/CROSS-CUTTING) or no behavior changed beyond the type's contract (ISSUE/REFACTOR/DOCS-CHORE); no acceptance test was modified, deleted, or weakened.
+
+### S6.2 Traceability + boundaries
+
+- **Objective:** Check traceability (every REQ → AC → executable test) and feature boundaries/architecture rules.
+- **Inputs:** the traceability matrix; the change's code.
+- **Outputs:** a traceability + boundaries check (intact or findings).
+- **Done-criteria:** every `REQ-XXX` maps to `AC-XXX` maps to executable tests; no orphaned tests; no missing traceability links; feature boundaries respected; dependencies follow the architecture rules; CROSS-CUTTING: the traceability rows of every affected feature are updated.
+
+### S6.3 Review report (clean)
+
+- **Objective:** Produce the review report and confirm it is clean (no unresolved findings).
+- **Inputs:** the review findings.
+- **Outputs:** a review report (clean or findings + resolutions).
+- **Done-criteria:** the review report is clean (no unresolved findings); every finding is resolved or accepted; the change is a reusable shared capability → a "how to use this" note is added to `AGENTS.md`.
+
+### S6.4 Bump version + open PR
+
+- **Objective:** Bump the version per the change type and open a PR for the change branch to `main` (present for human merge, then STOP).
+- **Inputs:** the clean review report.
+- **Outputs:** a version bump (per the change type); a PR open for the change branch to `main`.
+- **Done-criteria:** the version is bumped per the change type (ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE); a PR is open for the change branch to `main` (presented for human review/merge, NOT merged — human governance).
 
 ## MUST
 

@@ -14,13 +14,15 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 - After a PR is merged (human governance): post-merge cleanup.
 - Any time you need to inspect or recover worktree/branch state.
 
-## Execution Context (Subagents)
+## Execution Context (Atomic Step, Synchronous Subagent)
 
-Per "Phase Execution (Subagents)" in `AGENTS.md`:
+Per "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`:
 - **Create change worktree** — orchestrator (Phase 0), not a subagent.
-- **Create PR** — runs inside the Phase 6 (review) subagent.
-- **Post-merge cleanup** — runs in a **new subagent** (a workflow step launched by the orchestrator after the human merges the PR).
+- **Create PR** — runs inside the Phase 6 (review) subagent (atomic step **S6.4**).
+- **Post-merge cleanup** — runs in a **new, synchronous subagent** (atomic step **S7.1**, launched by the orchestrator after the human merges the PR).
 - **Inspect / recover** — orchestrator or any step subagent, as needed.
+
+Subagents are always **synchronous** (never background); the workflow waits for each to complete and return its handoff.
 
 ## Conventions (from AGENTS.md — assumed)
 
@@ -33,6 +35,24 @@ Per "Phase Execution (Subagents)" in `AGENTS.md`:
 ## Todo
 
 Per the AGENTS.md Todo Tracking Discipline: mark the Post-merge cleanup item `in_progress` after the human merges the PR; `completed` when the worktree is removed and the local + remote branches are deleted.
+
+## Atomic Steps
+
+The git skill's phase steps are decomposed into two atomic steps (S6.4 Create PR, S7.1 Post-merge cleanup). Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
+
+### S6.4 Create PR
+
+- **Objective:** Open a PR for the change branch to `main` and present it for human review/merge (then STOP — do NOT merge it).
+- **Inputs:** the change branch (with the review report clean).
+- **Outputs:** a PR open for the change branch to `main`.
+- **Done-criteria:** a PR is open for the change branch to `main` (via `gh pr create --head <type>/<name> --base main`); the PR is presented for human review/merge; the PR is NOT merged (human governance).
+
+### S7.1 Post-merge cleanup
+
+- **Objective:** After the human merges the PR, verify the merge on `main`, remove the worktree, and delete the local + remote branches.
+- **Inputs:** the merged PR.
+- **Outputs:** the merge verified on `main`; the worktree removed; the local + remote branches deleted.
+- **Done-criteria:** the merge commit is present on `main`; the worktree is removed (`git worktree remove`); the local branch is deleted (`git branch -d`); the remote branch is deleted (`git push origin --delete`); `git worktree list` shows only the primary (`main`) worktree.
 
 ## Operations
 

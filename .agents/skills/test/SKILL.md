@@ -23,19 +23,38 @@ Convert an approved specification into executable acceptance tests (FEATURE/CROS
 - FEATURE/CROSS-CUTTING: `tests/acceptance/<name>/test_<name>.py` (plus property/unit/contract tests)
 - ISSUE: the reproduction test(s) named in the triage plan (in the affected feature's test directory)
 
-## Execution Context (Subagents)
+## Execution Context (Atomic Step, Synchronous Subagent)
 
-This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+This phase runs in a **new, synchronous subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`). The subagent is **never** run in the background — the workflow waits for it to complete and return its handoff.
 
-- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S3.1 Derive tests** → **S3.2 Ruff + confirm RED**. Each has a single objective, inputs, expected outputs, and a done criterion.
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
-- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
-- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
-- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
+- **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
 
 ## Todo
 
 Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) manages the Phase 3 item: `in_progress` before launching this subagent; `completed` only after verifying the handoff that RED is observed and recorded in `docs/verification/[name].md`.
+
+## Atomic Steps
+
+The test phase is decomposed into two atomic steps. Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
+
+### S3.1 Derive tests
+
+- **Objective:** Derive the executable tests from the spec (FEATURE/CROSS-CUTTING: acceptance, property, unit, and contract tests per AC/INV/EDGE/NFR) or write the reproduction test (ISSUE).
+- **Inputs:** the approved specification (FEATURE/CROSS-CUTTING) or the triage record (ISSUE); the MUST list (below).
+- **Outputs:** `tests/acceptance/<name>/test_<name>.py` (plus property/unit/contract tests) (FEATURE/CROSS-CUTTING) or the reproduction test(s) (ISSUE).
+- **Done-criteria:** one or more test functions per `AC-XXX` (names reference the `AC-XXX` ID); property tests for every `INV-XXX` (Hypothesis); unit tests for `EDGE-XXX` cases; contract tests for `NFR-XXX` requirements; externally observable behavior only; the tests are committed.
+
+### S3.2 Ruff + confirm RED
+
+- **Objective:** Run ruff, confirm RED state (tests fail before implementation), and record RED evidence.
+- **Inputs:** the derived tests.
+- **Outputs:** a clean ruff run; RED confirmed (each red test is an assertion failure, not a setup error — test contract sanity check passed); RED evidence recorded in `docs/verification/<name>.md`; the traceability matrix updated.
+- **Done-criteria:** ruff is clean (`uv run ruff check .`); RED is observed and recorded in `docs/verification/<name>.md` (using `TDD-evidence-template.md`, including the failure mode per test); the traceability matrix is updated in `docs/verification/traceability.md`; the tests are committed.
 
 ## MUST
 
@@ -43,6 +62,7 @@ Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent)
 - Test names MUST reference the `AC-XXX` ID (e.g., `test_ac_001_valid_request`).
 - Test externally observable behavior only — not implementation details.
 - Run the test suite and confirm RED state (tests fail before implementation).
+- **Run ruff** (`uv run ruff check .`) after deriving the tests and require it to be clean before confirming RED (S3.2).
 - Record RED evidence in `docs/verification/<name>.md` using `TDD-evidence-template.md`.
 - Update the traceability matrix in `docs/verification/traceability.md`.
 - FEATURE/CROSS-CUTTING: write property tests for every `INV-XXX` using Hypothesis in `tests/property/<name>/`.
@@ -100,6 +120,7 @@ Commit:
 
 - Tests exist and reference `AC-XXX` IDs.
 - Tests fail (RED confirmed) before implementation — each as an **assertion failure**, not a setup error (test contract sanity check passed).
+- **Ruff is clean** (`uv run ruff check .`).
 - RED evidence recorded (including failure mode per test).
 - Traceability matrix updated.
 - Tests committed.

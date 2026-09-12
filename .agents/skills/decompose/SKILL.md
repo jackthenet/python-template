@@ -21,19 +21,38 @@ Decompose an approved specification into design decisions and a machine-readable
 - Any significant design decisions to record.
 - The existing task DAG format (see `docs/tasks/`).
 
-## Execution Context (Subagents)
+## Execution Context (Atomic Step, Synchronous Subagent)
 
-This phase runs in a **new subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Subagents)" in `AGENTS.md`).
+This phase runs in a **new, synchronous subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`). The subagent is **never** run in the background — the workflow waits for it to complete and return its handoff.
 
-- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, and the previous step's handoff (prior phase's status, gate result, artifacts, evidence location).
+- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S2.1 Create ADRs** → **S2.2 Decompose into task DAG** (copy to `.github/task-runner/tasks.json`). Each has a single objective, inputs, expected outputs, and a done criterion.
+- **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
-- **User questions:** do NOT call `ask_user_question`. Return the questions in the handoff (`status: BLOCKED-USER`); the orchestrator presents them to the user and resumes this subagent with the answers.
-- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `next`.
-- **Scope:** execute exactly this phase. Do not execute another phase, do not launch a subagent, do not talk to the user.
+- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
+- **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
+- **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
 
 ## Todo
 
 Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) manages the Phase 2 item: `in_progress` before launching this subagent; `completed` only after verifying the handoff that the task DAG is initialized (copied to `.github/task-runner/tasks.json`).
+
+## Atomic Steps
+
+The decompose phase is decomposed into two atomic steps. Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
+
+### S2.1 Create ADRs
+
+- **Objective:** Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
+- **Inputs:** the approved specification; the significant design decisions to record.
+- **Outputs:** ADRs in `docs/decisions/`.
+- **Done-criteria:** an ADR is created for every significant design decision (WHY, not WHAT); the ADRs are committed.
+
+### S2.2 Decompose into task DAG
+
+- **Objective:** Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[name].tasks.json`, then copy it to `.github/task-runner/tasks.json` to initialize the active build environment.
+- **Inputs:** the approved specification; the existing task DAG format (see `docs/tasks/`).
+- **Outputs:** a committed task DAG at `docs/tasks/[name].tasks.json`; the task DAG copied to `.github/task-runner/tasks.json`.
+- **Done-criteria:** the task DAG is machine-readable JSON; every task specifies `requirements`, `acceptance_criteria`, `tests_to_create`, `red_command`, `implementation_steps`, `green_command`, `design_constraints`, and `completion_gates`; CROSS-CUTTING tasks are grouped by affected feature; the task DAG is copied to `.github/task-runner/tasks.json`; the ADRs and the task DAG are committed.
 
 ## Process
 
