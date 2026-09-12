@@ -26,4 +26,10 @@ A step MUST log a problem when it:
 
 ## Problems
 
-(no problems logged yet)
+## P-1 — S7.1 done-criteria ambiguous when local `main` lags `origin/main`
+- **Problem:** `git branch -d feature/mail-service` emitted the warning "has been merged to 'refs/remotes/origin/feature/mail-service', but not yet merged to HEAD" because the local `main` ref (ff26c4d) lagged `origin/main` (which contains the PR #23 merge). Harmless, but the S7.1 done-criterion "the merge commit is present on `main`" is ambiguous: it must mean reachable from `origin/main` (after `git fetch`), not from the local `main` ref — otherwise a lagging local `main` makes a correct cleanup look incomplete.
+- **Step / Phase:** S7.1 Post-merge cleanup — Post-merge
+- **Change:** mail-service / FEATURE
+- **Duration / iterations:** single run, no relaunch
+- **Resolution:** verified against `origin/main` (`git merge-base --is-ancestor <merge-commit> origin/main`); cleanup completed correctly. Follow-up: amend the S7.1 done-criteria in AGENTS.md + git skill to say "reachable from `origin/main` (after fetch)" so future runs don't rely on the local `main` ref.
+- **Date:** 2026-09-12
