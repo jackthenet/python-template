@@ -385,7 +385,7 @@ The `backend.mail` feature package was implemented per the approved spec (`docs/
 - `__init__.py` — public API (NFR-003 contract).
 
 ### GREEN state
-`uv run pytest tests/acceptance/mail/ tests/property/mail/ tests/unit/mail/ tests/contract/mail/ tests/integration/mail/` → **31 passed, 8 failed**.
+`uv run pytest tests/acceptance/mail/ tests/property/mail/ tests/unit/mail/ tests/contract/mail/ tests/integration/mail/` → **31 passed, 8 failed** (initial implementation run; the 8 failures are the test-design issues documented below, resolved by the user-approved test-harness fixes + the logging-coverage data-model/tracing changes in the GREEN evidence).
 
 All 11 unit tests (EDGE-001..010) pass. All acceptance rendering/send/validation/settings/transport tests pass. All contract performance/public-API/logging tests pass. Property INV-001/002/005 pass.
 
@@ -397,8 +397,27 @@ All 11 unit tests (EDGE-001..010) pass. All acceptance rendering/send/validation
 **Category B — 6 tests fail due to cross-test settings persistence (test isolation).**
 `tests/acceptance/mail/test_settings.py::test_ac_001_register_settings`, `test_events.py::test_ac_015_non_sensitive_events`, `test_logging.py::test_ac_016_no_secrets_in_log_records`, `test_message.py::test_ac_019_multipart_alternative`, `tests/contract/mail/test_secrets.py::test_nfr_002_no_secrets_in_logs_or_events`, `tests/integration/mail/test_concurrency.py::test_nfr_005_concurrent_send_thread_safety`. Root cause: the settings singleton's default `YamlValueRepository("settings")` persists values to `settings/values.yaml` on disk. The per-test conftest (`tests/acceptance/mail/conftest.py`) calls `reset_settings_registry()`, which only nulls the module singleton (`_registry[0] = None`) — it does NOT clear the on-disk file. So when an earlier test in the same run writes a value (notably `test_ac_011_empty_smtp_host` sets `mail.smtp_host=""`), that value is reloaded from disk by the next test's freshly-created registry, overriding the registered default. Concretely, the later tests observe `mail.smtp_host==""` and `send_email` raises `MailConfigurationError(smtp_host_empty)`. Each of these 6 tests passes in isolation (clean `settings/` dir) and fails only within the full suite. This is a test-isolation gap in the test harness (the reset does not clear the YAML value store), not a defect in the mail implementation.
 
+### GREEN evidence (full suite)
+
+- **Full test suite:** `uv run pytest tests/` → **397 passed** (0 failed), including the 39 spec-derived mail tests and the logging feature's forward-looking trace policy test `tests/acceptance/logging_coverage/test_new_classes_traced.py::test_new_public_classes_traced_by_default`.
+- **Lint:** `uv run ruff check .` → **All checks passed!**
+- **Type checks:** `uv run mypy src/` → **Success: no issues found in 43 source files**.
+- **Commit:** `09da8be` — `feat(mail-service): achieve GREEN — MailConfig as pydantic model + test-harness isolation`.
+
+**Data-model / tracing changes (mail feature only; no cross-feature test edits):**
+
+- `MailConfig` (`src/backend/mail/feature_settings.py`) was changed from a frozen `@dataclass` to a **frozen pydantic `BaseModel`** (`model_config = ConfigDict(frozen=True)`, same 8 fields, same public name) — **user-approved**. This satisfies the logging feature's forward-looking trace policy (AC-012: every public class is traced or an excluded kind — pydantic `BaseModel` is the recognized data-model exclusion) without editing the logging feature's test, and is consistent with the codebase's dominant data-model type.
+- `RenderedTemplate` (`src/backend/mail/render.py`) was likewise converted to a frozen pydantic `BaseModel` (pure data model, same 3 fields, keyword construction unchanged).
+- `EventPublisher` (`src/backend/mail/models.py`), `SmtpTransport` and `SmtpTransportImpl` (`src/backend/mail/transport.py`) are traced with `@logged_class` (codebase convention for ABCs; `SmtpTransportImpl` uses `include_args=False` so the SMTP password never appears in log records — NFR-002). `functools.wraps` inside `@logged` preserves `__isabstractmethod__`, so the ABCs remain abstract.
+- `src/backend/mail/__init__.py`: `PasswordResetEmailRequest` added to `__all__` (public API, NFR-003) and `__all__` sorted (RUF022).
+
+**Test-harness fixes (mail tests only; no test weakened or deleted):**
+
+- `tests/property/mail/test_secrets.py`: the INV-003/INV-004 property strategies now draw from a high-entropy non-ASCII alphabet (`min_size=8`, `max_size=64`) — the invariant (the secret never appears in observable output) is preserved and is now satisfiable, since a high-entropy secret cannot collide with the ASCII `to`/`occurred_at` payload content. A `# noqa: RUF001` marks the intentionally ambiguous Greek letters.
+- `tests/mail_test_helpers.py` + the 5 mail conftests: a new `setup_isolated_registry()` backs the settings registry singleton with a temp-dir `YamlValueRepository`, so no mail test persists to the shared `settings/` directory and no value leaks across tests (resolves the 6 cross-test settings-persistence failures).
+
 ### Status
-BLOCKED-USER — the implementation is complete and spec-conformant, but 8 of the 39 Phase-3 tests cannot pass without test-harness changes (2 un-passable property strategies + 6 cross-test settings-persistence isolation gaps). Awaiting direction on how to proceed (see handoff `questions`).
+DONE — GREEN achieved and recorded: full suite 397 passed, lint clean, type checks clean (commit `09da8be`). The 8 Phase-4 findings are resolved by the user-approved test-harness fixes and the mail-feature data-model/tracing changes above; no test was weakened, deleted, or edited outside the mail feature.
 
 ## Phase history
 
@@ -408,4 +427,4 @@ BLOCKED-USER — the implementation is complete and spec-conformant, but 8 of th
 | 1 Specify | DONE | `docs/specs/mail-service.md` + PR #22 (this file) |
 | 2 Decompose | DONE | ADR-043..047 + `docs/tasks/mail-service.tasks.json` + `.github/task-runner/tasks.json` (this file) |
 | 3 Test & RED | DONE | 39 spec-derived tests RED (`ModuleNotFoundError: backend.mail`) + this file |
-| 4 Implement | BLOCKED-USER | `src/backend/mail/` implemented (31/39 GREEN); 8 failing tests are test-design issues (2 un-passable property strategies + 6 cross-test settings-persistence isolation gaps) — see Phase 4 section + this file |
+| 4 Implement | DONE | full suite **397 passed**, `ruff check .` clean, `mypy src/` clean — commit `09da8be` (this file) |
