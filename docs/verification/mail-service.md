@@ -368,6 +368,38 @@ RED:
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
   commit: f896479
 
+## Phase 4 (Implement)
+
+### Implementation
+The `backend.mail` feature package was implemented per the approved spec (`docs/specs/mail-service.md` section 3) and the task DAG (`docs/tasks/mail-service.tasks.json`). Files created under `src/backend/mail/`:
+
+- `errors.py` — `MailError` hierarchy (`MailConfigurationError`, `MailTransportError`, `MailTemplateError`), each storing a secret-free `reason` so `str(error) == reason`.
+- `templates.py` — `EmailTemplate` + built-in `PASSWORD_RESET_TEMPLATE` / `EMAIL_VERIFICATION_TEMPLATE`.
+- `models.py` — request schemas (`PasswordResetEmailRequest`, `EmailVerificationEmailRequest`), `EmailSendResult`, `EventPublisher` (ABC).
+- `render.py` — `render_template` (`{{name}}` substitution, `html.escape`, `missing_variable:<name>` / `malformed_template` errors), `RenderedTemplate`.
+- `message.py` — `build_message` (multipart/alternative, From from settings), `validate_recipient`.
+- `feature_settings.py` — `register_settings` (8 SettingDefinitions), `resolve_mail_config` (live read + hardcoded fallback), `MailConfig`.
+- `transport.py` — `SmtpTransport` ABC + `SmtpTransportImpl` (smtplib-backed, ordered exception mapping to secret-free reasons).
+- `events.py` — `MailEvent` / `EmailSent` / `EmailFailed` (frozen Pydantic, `occurred_at` default `now(UTC)`).
+- `service.py` — `MailService` (`@logged_class(slow_threshold_ms=5000, include_args=False)`): `send_email`, `send_password_reset_email`, `send_email_verification_email`.
+- `__init__.py` — public API (NFR-003 contract).
+
+### GREEN state
+`uv run pytest tests/acceptance/mail/ tests/property/mail/ tests/unit/mail/ tests/contract/mail/ tests/integration/mail/` → **31 passed, 8 failed**.
+
+All 11 unit tests (EDGE-001..010) pass. All acceptance rendering/send/validation/settings/transport tests pass. All contract performance/public-API/logging tests pass. Property INV-001/002/005 pass.
+
+### FINDINGS — 8 failing tests are test-design issues, not implementation defects
+
+**Category A — 2 tests fundamentally un-passable (property strategy too broad).**
+`tests/property/mail/test_secrets.py::test_inv_003_no_password_in_observable_output` and `::test_inv_004_no_body_in_events` use `@given(password=st.text(min_size=1, max_size=64))` / `@given(token=st.text(min_size=1, max_size=64))`. The strategy generates single characters. The assertion `password not in event_text(event)` (where `event_text` is `event.model_dump_json()`) then fails for any single character that appears in the event payload — e.g. `password='0'` appears in the `occurred_at` timestamp (`...T12:57:04.629778Z`), and `password='a'` appears in the `to` field (`a@example.com`). The spec (REQ-013) requires events to carry `to` + `occurred_at`, so the payload necessarily contains these characters. No implementation can make `password not in event_text` hold for `password='0'`/`'a'` while still carrying `to`/`occurred_at`. These two tests need a narrower strategy (e.g. a fixed high-entropy secret that cannot collide with the payload) — they cannot be satisfied as written.
+
+**Category B — 6 tests fail due to cross-test settings persistence (test isolation).**
+`tests/acceptance/mail/test_settings.py::test_ac_001_register_settings`, `test_events.py::test_ac_015_non_sensitive_events`, `test_logging.py::test_ac_016_no_secrets_in_log_records`, `test_message.py::test_ac_019_multipart_alternative`, `tests/contract/mail/test_secrets.py::test_nfr_002_no_secrets_in_logs_or_events`, `tests/integration/mail/test_concurrency.py::test_nfr_005_concurrent_send_thread_safety`. Root cause: the settings singleton's default `YamlValueRepository("settings")` persists values to `settings/values.yaml` on disk. The per-test conftest (`tests/acceptance/mail/conftest.py`) calls `reset_settings_registry()`, which only nulls the module singleton (`_registry[0] = None`) — it does NOT clear the on-disk file. So when an earlier test in the same run writes a value (notably `test_ac_011_empty_smtp_host` sets `mail.smtp_host=""`), that value is reloaded from disk by the next test's freshly-created registry, overriding the registered default. Concretely, the later tests observe `mail.smtp_host==""` and `send_email` raises `MailConfigurationError(smtp_host_empty)`. Each of these 6 tests passes in isolation (clean `settings/` dir) and fails only within the full suite. This is a test-isolation gap in the test harness (the reset does not clear the YAML value store), not a defect in the mail implementation.
+
+### Status
+BLOCKED-USER — the implementation is complete and spec-conformant, but 8 of the 39 Phase-3 tests cannot pass without test-harness changes (2 un-passable property strategies + 6 cross-test settings-persistence isolation gaps). Awaiting direction on how to proceed (see handoff `questions`).
+
 ## Phase history
 
 | Phase | Status | Evidence |
@@ -376,3 +408,4 @@ RED:
 | 1 Specify | DONE | `docs/specs/mail-service.md` + PR #22 (this file) |
 | 2 Decompose | DONE | ADR-043..047 + `docs/tasks/mail-service.tasks.json` + `.github/task-runner/tasks.json` (this file) |
 | 3 Test & RED | DONE | 39 spec-derived tests RED (`ModuleNotFoundError: backend.mail`) + this file |
+| 4 Implement | BLOCKED-USER | `src/backend/mail/` implemented (31/39 GREEN); 8 failing tests are test-design issues (2 un-passable property strategies + 6 cross-test settings-persistence isolation gaps) — see Phase 4 section + this file |
