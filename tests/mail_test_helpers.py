@@ -23,6 +23,26 @@ def reset_registry() -> None:
     reset_settings_registry()
 
 
+def setup_isolated_registry() -> None:
+    """Install a fresh settings registry backed by a temp-dir value repository.
+
+    Isolates the mail test suite's settings store so that no value is ever
+    persisted to the shared ``settings/`` directory and nothing written by one
+    mail test leaks into another (test isolation). The registry starts from
+    the registered defaults; this changes no test assertion.
+    """
+    import tempfile
+
+    from backend.settings import SettingsRegistry, YamlValueRepository
+    from backend.settings import registry as _settings_registry_module
+
+    _settings_registry_module.reset_settings_registry()
+    isolated = SettingsRegistry(
+        value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
+    _settings_registry_module._registry[0] = isolated
+
+
 def ensure_mail_settings() -> Any:
     """Return the settings registry with the mail settings registered.
 

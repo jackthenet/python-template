@@ -8,8 +8,9 @@ when the registry does not exist or a key is unregistered.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from pydantic import BaseModel, ConfigDict
 
 from backend.logging import logged
 
@@ -17,9 +18,10 @@ if TYPE_CHECKING:
     from backend.settings import SettingsRegistry
 
 
-@dataclass(frozen=True)
-class MailConfig:
+class MailConfig(BaseModel):
     """The resolved SMTP configuration (read live on each send)."""
+
+    model_config = ConfigDict(frozen=True)
 
     host: str
     port: int

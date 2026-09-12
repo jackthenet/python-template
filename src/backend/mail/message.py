@@ -9,8 +9,9 @@ recipient (REQ-008).
 
 from __future__ import annotations
 
-import email_validator
 from email.message import EmailMessage
+
+import email_validator
 
 from backend.mail.errors import MailTemplateError
 from backend.mail.render import RenderedTemplate

@@ -30,6 +30,7 @@ from backend.mail.transport import SmtpTransport, SmtpTransportImpl
 
 __all__ = [
     "EMAIL_VERIFICATION_TEMPLATE",
+    "PASSWORD_RESET_TEMPLATE",
     "EmailFailed",
     "EmailSendResult",
     "EmailSent",
@@ -43,7 +44,7 @@ __all__ = [
     "MailService",
     "MailTemplateError",
     "MailTransportError",
-    "PASSWORD_RESET_TEMPLATE",
+    "PasswordResetEmailRequest",
     "RenderedTemplate",
     "SmtpTransport",
     "SmtpTransportImpl",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import MailService, MailTransportError, PasswordResetEmailRequest
 from hypothesis import given
 from hypothesis import strategies as st
 from mail_test_helpers import (
@@ -15,8 +14,19 @@ from mail_test_helpers import (
     simple_template,
 )
 
+from backend.mail import MailService, MailTransportError, PasswordResetEmailRequest
 
-@given(password=st.text(min_size=1, max_size=64))
+# High-entropy secret alphabet (non-ASCII) guaranteed not to be a substring of
+# the observable output the tests build (ASCII to/template/occurred_at content),
+# while still exercising the invariant that the secret never leaks into the
+# result, error, or events.
+_HIGH_ENTROPY_ALPHABET = [
+    "Ω", "Σ", "Φ", "Ψ", "Δ", "Θ", "Λ", "Ξ", "Π", "Γ",
+    "μ", "ν", "ξ", "ρ", "σ", "τ", "φ", "χ", "ψ", "ω",  # noqa: RUF001
+]
+
+
+@given(password=st.text(alphabet=_HIGH_ENTROPY_ALPHABET, min_size=8, max_size=64))
 def test_inv_003_no_password_in_observable_output(password: str) -> None:
     """INV-003: the SMTP password never appears in the result, error message, or events."""
     ensure_mail_settings().set_value("mail.smtp_password", password)
@@ -40,7 +50,7 @@ def test_inv_003_no_password_in_observable_output(password: str) -> None:
         assert password not in event_text(event)
 
 
-@given(token=st.text(min_size=1, max_size=64))
+@given(token=st.text(alphabet=_HIGH_ENTROPY_ALPHABET, min_size=8, max_size=64))
 def test_inv_004_no_body_in_events(token: str) -> None:
     """INV-004: the email body (containing tokens) never appears in the published events."""
     reset_url = f"https://reset.example.com/reset?token={token}"

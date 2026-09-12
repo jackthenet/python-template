@@ -14,7 +14,6 @@ because the SMTP send is network-dependent) (REQ-014, ADR-047).
 from __future__ import annotations
 
 from backend.logging import logged_class
-
 from backend.mail.errors import MailConfigurationError, MailTemplateError, MailTransportError
 from backend.mail.events import EmailFailed, EmailSent, MailEvent
 from backend.mail.feature_settings import MailConfig, resolve_mail_config

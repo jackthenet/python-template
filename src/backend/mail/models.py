@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from backend.logging import logged_class
+
 
 class PasswordResetEmailRequest(BaseModel):
     """A request to send a password-reset email."""
@@ -38,8 +40,13 @@ class EmailSendResult(BaseModel):
     template: str
 
 
+@logged_class(slow_threshold_ms=10)
 class EventPublisher(ABC):
-    """Structural publisher protocol (satisfied by the shared event bus)."""
+    """Structural publisher protocol (satisfied by the shared event bus).
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete publishers inherit the tracing.
+    """
 
     @abstractmethod
     def publish(self, event: object) -> None: ...

@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import html
 import re
-from dataclasses import dataclass
+
+from pydantic import BaseModel, ConfigDict
 
 from backend.mail.errors import MailTemplateError
 from backend.mail.templates import EmailTemplate
@@ -27,9 +28,10 @@ from backend.mail.templates import EmailTemplate
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
-@dataclass(frozen=True)
-class RenderedTemplate:
+class RenderedTemplate(BaseModel):
     """The rendered subject and bodies (values HTML-escaped)."""
+
+    model_config = ConfigDict(frozen=True)
 
     subject: str
     body_html: str
