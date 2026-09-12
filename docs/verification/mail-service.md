@@ -419,6 +419,71 @@ All 11 unit tests (EDGE-001..010) pass. All acceptance rendering/send/validation
 ### Status
 DONE — GREEN achieved and recorded: full suite 397 passed, lint clean, type checks clean (commit `09da8be`). The 8 Phase-4 findings are resolved by the user-approved test-harness fixes and the mail-feature data-model/tracing changes above; no test was weakened, deleted, or edited outside the mail feature.
 
+## Phase 5 — Verify (FEATURE)
+
+- **Status:** DONE (full gate set green; spec coverage = 100%).
+- **Date:** 2026-09-12
+- **Gate-set result:** PASSED — full suite 397/397, acceptance 170/170, property 42/42, contract 32/32, lint clean, types clean, verify_spec PASS. Spec coverage = 100% (every REQ/AC has a GREEN test).
+
+### Specification coverage (MUST be 100%) — **100%**
+
+Every `REQ-XXX` has at least one GREEN test (traceability matrix `docs/verification/traceability.md`, "Mail Service Matrix"):
+
+| REQ | AC | GREEN test |
+|-----|----|-----------|
+| REQ-001 | AC-001 | `test_ac_001_register_settings` |
+| REQ-002 | AC-002, AC-003 | `test_ac_002_live_read_modified_host`, `test_ac_003_fallback_unregistered_host` |
+| REQ-003 | AC-004 | `test_ac_004_core_send_success` |
+| REQ-004 | AC-005 | `test_ac_005_password_reset_email` |
+| REQ-005 | AC-006 | `test_ac_006_email_verification_email` |
+| REQ-006 | AC-007 | `test_ac_007_feature_specific_template` |
+| REQ-007 | AC-008 | `test_ac_008_template_rendering` |
+| REQ-008 | AC-009 | `test_ac_009_invalid_recipient` |
+| REQ-009 | AC-010 | `test_ac_010_missing_variable` |
+| REQ-010 | AC-011 | `test_ac_011_empty_smtp_host` |
+| REQ-011 | AC-012 | `test_ac_012_transport_failure` |
+| REQ-012 | AC-013, AC-014 | `test_ac_013_email_sent_event`, `test_ac_014_email_failed_event` |
+| REQ-013 | AC-015 | `test_ac_015_non_sensitive_events` |
+| REQ-014 | AC-016 | `test_ac_016_no_secrets_in_log_records` |
+| REQ-015 | AC-017 | `test_ac_017_public_api_stable` |
+| REQ-016 | AC-018 | `test_ac_018_concurrent_send` |
+| REQ-017 | AC-019 | `test_ac_019_multipart_alternative` |
+
+All 17 REQ covered → **spec coverage = 100%**. All 19 AC have a GREEN acceptance test. In addition, 5 INV (property), 10 EDGE (unit), and 5 NFR (contract/integration) tests are GREEN.
+
+### Gate-set evidence
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Full suite | `uv run pytest tests/` | **397 passed** |
+| Acceptance | `uv run pytest tests/acceptance/` | **170 passed** |
+| Property | `uv run pytest tests/property/` | **42 passed** |
+| Contract | `uv run pytest tests/contract/` | **32 passed** |
+| Lint | `uv run ruff check .` | **All checks passed!** |
+| Type checks | `uv run mypy src/` | **Success: no issues found in 43 source files** |
+| Spec validation | `uv run python scripts/verify_spec.py docs/specs/mail-service.md` | **PASS** (17 REQ→AC, 19 AC→test, 5 INV→property) |
+| Coverage | `uv run pytest tests/ --cov` | **397 passed**; mail feature 88–100% (render 96%, service 96%, transport 88%, rest 100%); total 94% |
+| Architecture rules | `uv run pytest tests/architecture/` | **N/A** — no `tests/architecture/` category exists in this project (no test files, no CI reference) |
+
+**Commits:** `09da8be` (implementation: MailConfig as pydantic model + test-harness isolation), `391180b` (Phase 4 GREEN evidence).
+
+### Pre-existing flaky failures (other features — OUT OF SCOPE for mail-service)
+
+During the Phase 5 runs, two **one-off** property-test failures occurred in **other** features, not mail:
+
+- `tests/property/settings/test_settings_properties.py::test_inv_005_slider_grid_valid` (settings feature)
+- `tests/property/eventbus/test_eventbus_properties.py::test_inv_003_queue_bounded` (eventbus feature)
+
+Classification (pre-existing, not a regression from this change):
+- The mail change touched **zero** settings/eventbus source or tests — `git diff <merge-base>..HEAD -- src/backend/settings/ src/backend/eventbus/ tests/property/settings/ tests/property/eventbus/` is **empty** (byte-identical to base).
+- Both tests **pass in isolation** and on re-run (property suite stable 42/42 across two re-runs; the dedicated full-suite run passed 397/397).
+- These are hypothesis property tests with a random seed; the one-off failures are characteristic flakiness, not a defect introduced by mail-service.
+
+Per the verify protocol, pre-existing failures in other features are recorded here and are **not** fixed as part of this change. The mail-service gate set (all mail tests GREEN, spec coverage = 100%) is satisfied.
+
+### Status
+DONE — full gate set green, spec coverage = 100% (17/17 REQ, 19/19 AC GREEN). Two pre-existing flaky property tests in other features (settings, eventbus) recorded as out of scope. No test was weakened, deleted, or edited; no implementation source changed in this phase.
+
 ## Phase history
 
 | Phase | Status | Evidence |
@@ -428,3 +493,4 @@ DONE — GREEN achieved and recorded: full suite 397 passed, lint clean, type ch
 | 2 Decompose | DONE | ADR-043..047 + `docs/tasks/mail-service.tasks.json` + `.github/task-runner/tasks.json` (this file) |
 | 3 Test & RED | DONE | 39 spec-derived tests RED (`ModuleNotFoundError: backend.mail`) + this file |
 | 4 Implement | DONE | full suite **397 passed**, `ruff check .` clean, `mypy src/` clean — commit `09da8be` (this file) |
+| 5 Verify | DONE | full gate set green (397/397, 170, 42, 32; lint+types clean; verify_spec PASS), **spec coverage = 100%** (17/17 REQ, 19/19 AC GREEN) + this file |
