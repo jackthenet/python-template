@@ -138,235 +138,235 @@ GREEN records are filled in Phase 4.
 RED:
   command: uv run pytest tests/acceptance/mail/test_settings.py::test_ac_001_register_settings -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-002
 RED:
   command: uv run pytest tests/acceptance/mail/test_settings.py::test_ac_002_live_read_modified_host -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-003
 RED:
   command: uv run pytest tests/acceptance/mail/test_settings.py::test_ac_003_fallback_unregistered_host -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-004
 RED:
   command: uv run pytest tests/acceptance/mail/test_send.py::test_ac_004_core_send_success -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-005
 RED:
   command: uv run pytest tests/acceptance/mail/test_high_level.py::test_ac_005_password_reset_email -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-006
 RED:
   command: uv run pytest tests/acceptance/mail/test_high_level.py::test_ac_006_email_verification_email -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-007
 RED:
   command: uv run pytest tests/acceptance/mail/test_send.py::test_ac_007_feature_specific_template -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-008
 RED:
   command: uv run pytest tests/acceptance/mail/test_render.py::test_ac_008_template_rendering -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-009
 RED:
   command: uv run pytest tests/acceptance/mail/test_validation.py::test_ac_009_invalid_recipient -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-010
 RED:
   command: uv run pytest tests/acceptance/mail/test_validation.py::test_ac_010_missing_variable -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-011
 RED:
   command: uv run pytest tests/acceptance/mail/test_config.py::test_ac_011_empty_smtp_host -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-012
 RED:
   command: uv run pytest tests/acceptance/mail/test_transport.py::test_ac_012_transport_failure -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-013
 RED:
   command: uv run pytest tests/acceptance/mail/test_events.py::test_ac_013_email_sent_event -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-014
 RED:
   command: uv run pytest tests/acceptance/mail/test_events.py::test_ac_014_email_failed_event -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-015
 RED:
   command: uv run pytest tests/acceptance/mail/test_events.py::test_ac_015_non_sensitive_events -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-016
 RED:
   command: uv run pytest tests/acceptance/mail/test_logging.py::test_ac_016_no_secrets_in_log_records -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-017
 RED:
   command: uv run pytest tests/acceptance/mail/test_public_api.py::test_ac_017_public_api_stable -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-018
 RED:
   command: uv run pytest tests/acceptance/mail/test_concurrency.py::test_ac_018_concurrent_send -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### AC-019
 RED:
   command: uv run pytest tests/acceptance/mail/test_message.py::test_ac_019_multipart_alternative -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### INV-001
 RED:
   command: uv run pytest tests/property/mail/test_render.py::test_inv_001_rendering_deterministic -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### INV-002
 RED:
   command: uv run pytest tests/property/mail/test_render.py::test_inv_002_xss_safe_substitution -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### INV-003
 RED:
   command: uv run pytest tests/property/mail/test_secrets.py::test_inv_003_no_password_in_observable_output -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### INV-004
 RED:
   command: uv run pytest tests/property/mail/test_secrets.py::test_inv_004_no_body_in_events -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### INV-005
 RED:
   command: uv run pytest tests/property/mail/test_independence.py::test_inv_005_failure_independence -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-001
 RED:
   command: uv run pytest tests/unit/mail/test_validation.py::test_edge_001_invalid_recipient -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-002
 RED:
   command: uv run pytest tests/unit/mail/test_validation.py::test_edge_002_missing_variable -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-003
 RED:
   command: uv run pytest tests/unit/mail/test_validation.py::test_edge_003_malformed_template -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-004
 RED:
   command: uv run pytest tests/unit/mail/test_config.py::test_edge_004_empty_smtp_host -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-005
 RED:
   command: uv run pytest tests/unit/mail/test_transport.py::test_edge_005_connection_refused -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-006
 RED:
   command: uv run pytest tests/unit/mail/test_transport.py::test_edge_006_auth_failure -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-007
 RED:
   command: uv run pytest tests/unit/mail/test_transport.py::test_edge_007_protocol_error -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-008
 RED:
   command: uv run pytest tests/unit/mail/test_transport.py::test_edge_008_timeout -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-009
 RED:
   command: uv run pytest tests/unit/mail/test_events.py::test_edge_009_none_event_bus -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### EDGE-010
 RED:
   command: uv run pytest tests/unit/mail/test_independence.py::test_edge_010_failure_then_success -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### NFR-001
 RED:
   command: uv run pytest tests/contract/mail/test_performance.py::test_nfr_001_preparation_performance_budget -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### NFR-002
 RED:
   command: uv run pytest tests/contract/mail/test_secrets.py::test_nfr_002_no_secrets_in_logs_or_events -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### NFR-003
 RED:
   command: uv run pytest tests/contract/mail/test_public_api.py::test_nfr_003_public_api_stable -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### NFR-004
 RED:
   command: uv run pytest tests/contract/mail/test_logging.py::test_nfr_004_service_traced -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 #### NFR-005
 RED:
   command: uv run pytest tests/integration/mail/test_concurrency.py::test_nfr_005_concurrent_send_thread_safety -v
   result: FAILED (ModuleNotFoundError: No module named 'backend.mail')
-  commit: <phase-3 commit>
+  commit: f896479
 
 ## Phase history
 
