@@ -484,6 +484,97 @@ Per the verify protocol, pre-existing failures in other features are recorded he
 ### Status
 DONE — full gate set green, spec coverage = 100% (17/17 REQ, 19/19 AC GREEN). Two pre-existing flaky property tests in other features (settings, eventbus) recorded as out of scope. No test was weakened, deleted, or edited; no implementation source changed in this phase.
 
+## Phase 6 — Review (FEATURE)
+
+- **Status:** CLEAN (no unresolved findings)
+- **Date:** 2026-09-12
+- **Reviewer:** Phase 6 (REVIEW) subagent
+- **Normative basis:** approved spec `docs/specs/mail-service.md` (merged via PR #22; `git log main -- docs/specs/mail-service.md` non-empty; spec file byte-identical to `main`).
+- **Fresh evidence (this phase):** mail suites **39 passed** (`tests/{acceptance,property,unit,contract,integration}/mail/`); full suite **397 passed**; working tree clean.
+
+### 1. Normative basis compliance (spec compliance) — PASS
+
+The implementation matches the approved spec. Every normative requirement is implemented with no more and no less:
+
+| Area | Spec basis | Implementation | Match |
+|------|-----------|----------------|-------|
+| Core send | REQ-003, D4 | `MailService.send_email`: validate recipient → render → resolve live config → host check → build multipart/alternative → send → publish `EmailSent` → return `EmailSendResult`; on failure publish `EmailFailed` (kind) + re-raise | ✓ |
+| High-level ops | REQ-004/005, D5 | `send_password_reset_email` / `send_email_verification_email` compose the core send with `PASSWORD_RESET_TEMPLATE` / `EMAIL_VERIFICATION_TEMPLATE` | ✓ |
+| Feature-specific | REQ-006, D6 | A feature provides its own `EmailTemplate` and calls `send_email` | ✓ |
+| Rendering | REQ-007, D3 | `render_template`: `{{name}}` substitution, `html.escape` on values, `missing_variable:<name>` / `malformed_template` errors | ✓ |
+| Recipient validation | REQ-008 | `validate_recipient` (email-validator, format-only) → `MailTemplateError("invalid_recipient")` | ✓ |
+| Missing variable | REQ-009 | `render_template` → `MailTemplateError("missing_variable:<name>")` | ✓ |
+| SMTP config validation | REQ-010, D7 | `resolve_mail_config` (live read + fallback); empty host → `MailConfigurationError("smtp_host_empty")` | ✓ |
+| Transport | REQ-011, D1 | `SmtpTransport` ABC + `SmtpTransportImpl` (smtplib, connects per send, auth when username present, ordered exception mapping to secret-free reasons) | ✓ |
+| Events | REQ-012/013, D9 | `EmailSent`/`EmailFailed` (frozen, non-sensitive) published to the injected `EventPublisher`; `None` publisher = no events | ✓ |
+| Tracing | REQ-014, D10 | `MailService` traced `@logged_class(slow_threshold_ms=5000, include_args=False)` | ✓ |
+| Public API | REQ-015, NFR-003 | service, models, errors, transport ABC, events, built-in templates exposed | ✓ |
+| Concurrency | REQ-016, D13 | transport created per send; no long-lived connection | ✓ |
+| Message | REQ-017 | `build_message`: multipart/alternative (text + HTML), From from `mail.from_name`/`mail.smtp_from` | ✓ |
+| Invariants | INV-001..005 | deterministic render, XSS-safe substitution, secret-free output, body-free events, send independence | ✓ |
+| Edge cases | EDGE-001..010 | invalid recipient, missing/malformed template, empty host, connection/auth/protocol/timeout, None bus, failure-then-success | ✓ |
+| NFRs | NFR-001..005 | performance budget, security, contract, observability, reliability | ✓ |
+
+**No behavior beyond the spec.** The only surface beyond the spec's *minimum* public API is a set of internal helpers (see Observations) and the tracing of the transport/publisher ABCs (required by the logging feature's forward-looking trace policy). None introduces new externally-observable behavior.
+
+### 2. Traceability — PASS
+
+- **Every `REQ-XXX` has ≥1 GREEN test.** `docs/verification/traceability.md` "Mail Service Matrix": all 39 rows GREEN (19 AC, 5 INV, 10 EDGE, 5 NFR). All 17 REQ covered.
+- **Every acceptance test traces to a normative requirement.** Each test is named after and asserts its AC/INV/EDGE/NFR.
+- **No orphaned tests, no missing links.**
+
+### 3. Acceptance tests NOT weakened or deleted — PASS
+
+All **39** spec-derived tests exist and pass (verified by reading each test and running the mail suites: 39 passed). Compared against the Phase 3 RED commit (`f896479`), the only post-RED test modifications are (all within the mail feature; **none weaken or delete a test**):
+
+| File(s) | Change | Assessment |
+|---------|--------|------------|
+| 5 × `tests/*/mail/conftest.py` | autouse fixture `reset_registry()` → `setup_isolated_registry()` | **Stronger** isolation (temp-dir `YamlValueRepository`); no assertion changed. Prevents cross-test settings persistence. Not a weakening. |
+| `tests/mail_test_helpers.py` | added `setup_isolated_registry()` helper | New helper (no test logic removed). Not a weakening. |
+| `tests/property/mail/test_secrets.py` | INV-003/INV-004 strategy: `st.text(min_size=1, max_size=64)` → `st.text(alphabet=<high-entropy non-ASCII>, min_size=8, max_size=64)` | **Correctness fix, not a weakening** (see analysis below). |
+
+**INV-003/INV-004 strategy-change analysis.** The invariant under test is "the SMTP password / email body (with token) never appears in observable output (result, error, events)". The test sets the secret, performs a send, and asserts the secret is *not* a substring of the output. The original strategy (`st.text(min_size=1, ...)`) generates single/short characters that are substrings of the *fixed* ASCII payload content (e.g. `'a'` in `to='a@example.com'`, `'0'` in the `occurred_at` timestamp), so `secret not in output` failed **even with a correct implementation** (documented as "fundamentally un-passable" in the Phase 4 findings). The fix constrains the alphabet to high-entropy non-ASCII letters (`min_size=8`) that cannot collide with the ASCII payload, making the test correct while:
+- preserving the invariant (still asserts the secret never appears in the output),
+- **not reducing the ability to catch a real leak** (if the implementation leaks the secret, it appears in the output and the assertion fails, regardless of alphabet),
+- increasing `min_size` (1 → 8).
+
+Conclusion: no acceptance test was weakened, deleted, or edited to make the implementation pass. The single strategy change is a test-correctness fix (the original was un-passable), and the invariant is fully preserved.
+
+### 4. Feature boundaries — PASS
+
+- The mail feature imports **only public APIs** of `backend.logging` (`logged`, `logged_class`) and `backend.settings` (`SettingsRegistry`, `get_settings_registry`, `SettingDefinition`, `SettingKind`). No internal (`_`-module) imports.
+- The event bus is consumed via the **structural `EventPublisher` protocol** (the real bus is injected at wiring time), consistent with the spec and with user-management/authentication. The mail feature does not import `backend.eventbus`.
+- The change **does not modify** `src/backend/{settings,logging,eventbus,usermanagement,authentication}/` or `src/frontend/` (`git diff main...HEAD` over those paths is empty).
+- **No other feature imports `backend.mail`** (mail is a new provider; nothing consumes it yet).
+
+### 5. Architecture — PASS
+
+- The mail feature uses a **flat module layout** (`errors`, `events`, `feature_settings`, `message`, `models`, `render`, `service`, `templates`, `transport`) — no premature `model/`/`services/` directories.
+- This is **consistent with the other shared features** (`logging`, `settings`, `eventbus` all use flat modules) and appropriate for the feature's size/complexity (each module has a single responsibility).
+
+### 6. Observability — PASS
+
+- `MailService` is traced with `@logged_class(slow_threshold_ms=5000, include_args=False)` (REQ-014, ADR-047). The SMTP password and tokens never appear in log records (verified by AC-016 / NFR-002).
+- `SmtpTransport`/`SmtpTransportImpl` are traced with `include_args=False` (the password never appears in log records — NFR-002). `register_settings` is traced with `@logged(slow_threshold_ms=5)`.
+- The transport/publisher ABC tracing is required by the logging feature's forward-looking trace policy (`tests/acceptance/logging_coverage/test_new_public_classes_traced.py`), which the mail feature satisfies without editing the logging feature.
+
+### Observations (not findings; within the spec's design and codebase conventions)
+
+1. **Public API is a superset of the spec's minimum.** `__all__` additionally exposes internal helpers referenced by the spec's design decisions: `MailConfig`/`resolve_mail_config` (D7 live-read), `build_message`/`validate_recipient` (D4/REQ-008/REQ-017), `render_template`/`RenderedTemplate` (D3/REQ-007), and `SmtpTransportImpl` (D1 default). These do not introduce new externally-observable behavior; they are implementation helpers made importable. Acceptable.
+2. **`SmtpTransport`, `SmtpTransportImpl`, and `EventPublisher` are traced** (`@logged_class`). Required by the logging feature's forward-looking trace policy and consistent with codebase conventions; `include_args=False` on the secret-handling transport keeps the SMTP password out of log records.
+
+### Findings and resolutions
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | — | No blocking findings. | — |
+
+All review checks (spec compliance, traceability, acceptance-test integrity, feature boundaries, architecture, observability) **PASS**. The two observations are within the spec's design and codebase conventions and require no action.
+
+### Review gate
+
+**The review report is CLEAN** (no unresolved findings). Proceed to: (a) document the reusable shared capability in `AGENTS.md`, (b) bump the version (FEATURE → minor), (c) open a PR to `main` for human review/merge.
+
 ## Phase history
 
 | Phase | Status | Evidence |
@@ -494,3 +585,4 @@ DONE — full gate set green, spec coverage = 100% (17/17 REQ, 19/19 AC GREEN). 
 | 3 Test & RED | DONE | 39 spec-derived tests RED (`ModuleNotFoundError: backend.mail`) + this file |
 | 4 Implement | DONE | full suite **397 passed**, `ruff check .` clean, `mypy src/` clean — commit `09da8be` (this file) |
 | 5 Verify | DONE | full gate set green (397/397, 170, 42, 32; lint+types clean; verify_spec PASS), **spec coverage = 100%** (17/17 REQ, 19/19 AC GREEN) + this file |
+| 6 Review | DONE | review report CLEAN (no unresolved findings); spec compliance, traceability, acceptance-test integrity, feature boundaries, architecture, observability all PASS + this file |
