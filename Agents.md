@@ -599,6 +599,42 @@ result = service.login(LoginRequest(identifier="alice", password="s3cret!x"))
 
 ---
 
+## Using the Mail Service Feature
+
+New backend features that need to send emails MUST use the shared mail service at `src/backend/mail/` (spec: `docs/specs/mail-service.md`) instead of implementing their own SMTP/mail-sending logic.
+
+- **Service entry point.** Use `MailService` (the use-case service). Construct it with an optional `transport` (an `SmtpTransport`; when `None` it builds a `SmtpTransportImpl` from the live settings on each send) and an optional `event_bus` — any object with a `publish(event)` method (structural `EventPublisher` protocol, no base class required). A `None` event bus means no events.
+- **Core operations.** `send_email(to, template, context) -> EmailSendResult` (the core send: validate recipient → render template → build a `multipart/alternative` message → resolve SMTP config live → send → publish `EmailSent`). High-level: `send_password_reset_email(PasswordResetEmailRequest)` and `send_email_verification_email(EmailVerificationEmailRequest)` (built-in `PASSWORD_RESET_TEMPLATE` / `EMAIL_VERIFICATION_TEMPLATE`).
+- **Feature-specific emails.** A feature provides its own `EmailTemplate` and calls the core `send_email` — no need to own SMTP logic.
+- **Templates.** `EmailTemplate` is a frozen model: `name`, `subject`, `body_html`, `body_text`, all with `{{variable}}` placeholders. Rendering is `{{variable}}` substitution with HTML-escaped values (no Jinja2). A missing variable or a malformed template raises `MailTemplateError`.
+- **SMTP settings.** Registered via the feature-owned `register_settings(registry)` (call at startup); read live on each send. Keys: `mail.smtp_host`, `mail.smtp_port`, `mail.smtp_username`, `mail.smtp_password` (sensitive — never in logs/events), `mail.smtp_from`, `mail.smtp_tls`, `mail.smtp_timeout`, `mail.from_name`. Unregistered keys fall back to hardcoded defaults.
+- **Events.** A successful send publishes `EmailSent`; a failed send publishes `EmailFailed` (with the error kind: `"template"`, `"configuration"`, or `"transport"`) and re-raises the `MailError`. Events carry non-sensitive data only (no email body, no token, no SMTP password).
+- **Errors.** Exceptions are the `MailError` hierarchy (from `backend.mail.errors`): `MailConfigurationError` (SMTP settings missing/invalid at send time), `MailTransportError` (delivery failed: connection, authentication, SMTP protocol error, or timeout), `MailTemplateError` (invalid recipient, missing/unknown variable, malformed template). All messages are secret-free.
+- **Transport.** `SmtpTransport` is the ABC (a single `send(message)`); `SmtpTransportImpl` is the smtplib-backed default (connects per send, authenticates when a username is present). The ABC is the seam for a fake transport in tests.
+- **Tracing.** `MailService` is traced via `@logged_class` (`include_args=False`, `slow_threshold_ms=5000`); the SMTP password and tokens never appear in log records.
+
+```python
+from backend.mail import (
+    MailService,
+    PasswordResetEmailRequest,
+    register_settings,
+)
+from backend.settings import get_settings_registry
+
+register_settings(get_settings_registry())  # once at startup
+
+service = MailService(event_bus=event_bus)
+service.send_password_reset_email(
+    PasswordResetEmailRequest(
+        to="alice@example.com",
+        display_name="Alice",
+        reset_url="https://app.example.com/reset?token=...",
+    )
+)
+```
+
+---
+
 ## Dependencies and Existing Packages
 
 Prefer established, well-maintained packages over custom implementations when a package materially solves the problem and fits the project's requirements, architecture, licensing, and operational constraints.
