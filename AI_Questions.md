@@ -357,3 +357,18 @@ Each question is a section with the following fields:
 - **Date:** 2026-09-13
 - **Status:** ANSWERED
 - **Incorporated:** yes
+
+## Q-31 — Second pre-existing import bug: the `tests.` prefix in the 5 filemanagement test files blocks collection (S4.2)
+- **Step:** S4.2 Implement + confirm GREEN — Phase 4 (T-001)
+- **Change:** file-management, FEATURE
+- **Why needed:** After the Q-30 BinaryIO fix, the file-management test suite **still** cannot be collected — but for a different reason. All 5 filemanagement test files import the shared helper with a `tests.` prefix (`from tests.filemanagement_test_helpers import (...)`), which requires the repo root on `sys.path`. Under `uv run pytest` (and CI's `uv run pytest tests/ -v`), the repo root is **not** on `sys.path` (only `src/` is, via the editable install), so all 5 test files fail to collect with `ModuleNotFoundError: No module named 'tests'`. This blocks confirming T-001 GREEN (T-001's test `test_ac_051_error_hierarchy_context` lives in `tests/acceptance/filemanagement/test_filemanagement.py`). The task rules forbid "any OTHER changes to the test files" (only the Q-30 BinaryIO fix is authorized), so I cannot fix this without user input.
+- **Context:**
+  - The `tests.` prefix is an anomaly: every other suite in the repo (mail, logging, settings, usermanagement, authentication, eventbus) uses bare imports (`from mail_test_helpers import ...`), and the filemanagement `conftest.py` files themselves already use bare imports (`from filemanagement_test_helpers import ...`). Only the 5 filemanagement test files use the `tests.` prefix.
+  - This import was never exercised in Phase 3 (the per-directory `conftest.py` failed first with `ModuleNotFoundError: backend.filemanagement`, before the test module was imported), so it is a latent bug that would also break CI (`uv run pytest tests/ -v`).
+  - The T-001 implementation (`src/backend/filemanagement/{errors,events,models}.py`) is complete and matches the spec and T-001's test expectations (verified by reading all files: the error hierarchy, events, models, and constants all line up with `test_ac_051_error_hierarchy_context`). The **only** remaining blocker is the `tests.` prefix import.
+  - Two candidate fixes: (a) change `from tests.filemanagement_test_helpers import (...)` to `from filemanagement_test_helpers import (...)` in the 5 filemanagement test files (matches the conftest in the same directory and every other suite in the repo — an import-compatibility fix, no assertion changes); or (b) add repo-root-to-`sys.path` infrastructure (a root `conftest.py`, or `pythonpath = ["."]` under `[tool.pytest.ini_options]` in `pyproject.toml`) so no existing test file is modified.
+- **Question:** May I fix the `tests.` prefix import bug? **Recommended:** option (a) — change the `tests.` prefix to a bare `from filemanagement_test_helpers import (...)` in the 5 filemanagement test files (matching the conftest in the same directory and every other suite in the repo). This is an import-compatibility fix (it does NOT weaken, modify assertions, or delete any test). Alternatively, authorize option (b) (a root `conftest.py` or `pythonpath = ["."]` in `pyproject.toml`) so no existing test file is modified. Which do you authorize?
+- **Answer:** Option (a) — bare imports. Change `from tests.filemanagement_test_helpers import (...)` to `from filemanagement_test_helpers import (...)` in the 5 filemanagement test files. This matches the conftest in the same directory and every other suite in the repo (mail feature). Import-compatibility only — it does NOT weaken, modify assertions, or delete any test.
+- **Date:** 2026-09-13
+- **Status:** ANSWERED
+- **Incorporated:** yes
