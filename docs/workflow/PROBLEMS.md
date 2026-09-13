@@ -26,6 +26,14 @@ A step MUST log a problem when it:
 
 ## Problems
 
+## P-4 — Subagent probed/guessed at a ruff issue instead of using `ruff --fix`
+- **Problem:** The T-001 implementation subagent (Phase 4) spent tool calls probing/guessing at a ruff issue (probing the project's import-sort/classification behavior with minimal files) instead of just applying the fix. ruff has an auto-fix for most lint issues (import sorting, unused imports, formatting); the subagent should have run `uv run ruff check --fix .` (and `uv run ruff format .`) rather than diagnosing by hand.
+- **Step / Phase:** S4.3 Ruff — Phase 4 (T-001)
+- **Change:** file-management / FEATURE
+- **Duration / iterations:** 1 iteration (subagent stopped by user mid-probe)
+- **Resolution / guidance (for future steps):** Step subagents that write or modify tests/implementation MUST run `uv run ruff check --fix .` + `uv run ruff format .` (auto-fix) BEFORE diagnosing any lint issue by hand. Only if `ruff --fix` does not resolve an issue (or the issue is not auto-fixable) should the subagent investigate. The orchestrator's task-definitions for implementation/test steps MUST state this ("use `ruff check --fix .` + `ruff format .`; do not probe/guess at lint issues").
+- **Date:** 2026-09-13
+
 ## P-2 — S1.1 BLOCKED-USER resume unavailable after subagent retention window
 - **Problem:** S1.1 returned BLOCKED-USER (28 questions). The orchestrator completed the user round-trips (7 batches + 1 re-ask + user-initiated Q-29), recorded all answers in AI_Questions.md, and attempted to resume the BLOCKED-USER subagent to complete the step — but the subagent's session had been released after its retention window ("resume is unavailable"). Per the workflow, a non-returning subagent is re-entered with a fresh subagent for the same step.
 - **Step / Phase:** S1.1 Interrogate — Phase 1
