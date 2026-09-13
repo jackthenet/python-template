@@ -346,3 +346,14 @@ Each question is a section with the following fields:
 - **Date:** 2026-09-13
 - **Status:** ANSWERED
 - **Incorporated:** no
+
+## Q-30 — Pre-existing import bug in the Phase 3 test helper blocks collection (S4.1/S4.2)
+- **Step:** S4.1 Pick task + confirm RED / S4.2 Implement + confirm GREEN — Phase 4 (T-001)
+- **Change:** file-management, FEATURE
+- **Why needed:** T-001 (foundation: errors, events, models) is implemented and the module imports cleanly, but T-001's test (`test_ac_051_error_hierarchy_context`) cannot be collected: the committed Phase 3 test helper `tests/filemanagement_test_helpers.py` line 15 does `from collections.abc import BinaryIO, Sequence`, and `BinaryIO` is NOT in `collections.abc` (it lives in `typing`). This fails at import time and blocks collection of ALL file-management tests (the helper is imported at module level by every file-management conftest and test module). Fixing it requires modifying a test file, which the task rules forbid (“Do NOT weaken, modify, or delete any test”).
+- **Context:** `git status` shows only `src/backend/filemanagement/` (my T-001 implementation) as new; the helper is committed and unchanged (commit `b8765db`, Phase 3). `uv run python -c "from collections.abc import BinaryIO"` fails on Python 3.14.5; `from typing import BinaryIO` works. Other helpers correctly import only `Callable`/`Iterator` from `collections.abc`. The Phase 3 verification doc records the RED state as `ModuleNotFoundError: backend.filemanagement`, but with this import bug the actual collection error is the `BinaryIO` ImportError (so the Phase 3 RED signal was not the documented one).
+- **Question:** May I fix the pre-existing import bug in `tests/filemanagement_test_helpers.py` (change `from collections.abc import BinaryIO, Sequence` to `from collections.abc import Sequence` + `from typing import BinaryIO`) so the suite can be collected? This is a bug fix in test infrastructure (it does NOT weaken, modify assertions, or delete any test). Alternatively, should the Phase 3 test step be re-run to correct the helper?
+- **Answer:** Yes — fix the import bug in `tests/filemanagement_test_helpers.py` line 15 (change `from collections.abc import BinaryIO, Sequence` to `from collections.abc import Sequence` + `from typing import BinaryIO`). This is a compatibility fix in test infrastructure (it does NOT weaken, modify assertions, or delete any test). The suite can then be collected and T-001 can confirm GREEN.
+- **Date:** 2026-09-13
+- **Status:** ANSWERED
+- **Incorporated:** yes
