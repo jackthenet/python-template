@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import io
 import tempfile
-from collections.abc import BinaryIO, Sequence
+from collections.abc import Sequence
 from pathlib import Path
+from typing import BinaryIO
 from uuid import UUID
+
+from pydantic import BaseModel
 
 from backend.filemanagement import (
     FileRecord,
@@ -25,8 +28,6 @@ from backend.filemanagement import (
     StorageStat,
     register_settings,
 )
-from pydantic import BaseModel
-
 from backend.settings import SettingsRegistry, YamlValueRepository
 
 # --- Deterministic magic-byte content factories --------------------------------
@@ -39,11 +40,7 @@ def text_bytes(n: int = 1024) -> bytes:
 
 def pdf_bytes() -> bytes:
     """Minimal PDF content; magic-byte detection reports ``application/pdf``."""
-    return (
-        b"%PDF-1.4\n"
-        b"1 0 obj\n<< /Type /Catalog >>\nendobj\n"
-        b"trailer\n<< /Size 1 >>\n%%EOF\n"
-    )
+    return b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Size 1 >>\n%%EOF\n"
 
 
 def jpeg_bytes() -> bytes:

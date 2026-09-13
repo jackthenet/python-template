@@ -14,6 +14,22 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from filemanagement_test_helpers import (
+    DictFileRepository,
+    FailingAddRepository,
+    FailingPutBackend,
+    db_url,
+    gif_bytes,
+    isolated_registry,
+    jpeg_bytes,
+    make_service,
+    png_bytes,
+    text_bytes,
+    tiff_bytes,
+    truncated_png,
+)
+from logging_test_helpers import run_python
+
 from backend.filemanagement import (
     AVATAR_VARIANT_SIZES,
     AvatarDeleted,
@@ -35,23 +51,7 @@ from backend.filemanagement import (
     StorageError,
     register_settings,
 )
-from logging_test_helpers import run_python
-
 from backend.settings import SettingsRegistry
-from tests.filemanagement_test_helpers import (
-    DictFileRepository,
-    FailingAddRepository,
-    FailingPutBackend,
-    db_url,
-    gif_bytes,
-    isolated_registry,
-    jpeg_bytes,
-    make_service,
-    png_bytes,
-    text_bytes,
-    tiff_bytes,
-    truncated_png,
-)
 
 DEFAULT_MAX_FILE_SIZE = 10485760  # 10 MB
 DEFAULT_AVATAR_MAX_SIZE = 2097152  # 2 MB
@@ -86,7 +86,9 @@ def test_ac_003_upload_file_like_stream(service: FileService) -> None:
 
 
 @pytest.mark.parametrize("shape", ["bytes", "stream", "path"])
-def test_ac_004_zero_byte_rejected(tmp_path: Path, service: FileService, repo: SqliteFileRepository, events: Any, shape: str) -> None:
+def test_ac_004_zero_byte_rejected(
+    tmp_path: Path, service: FileService, repo: SqliteFileRepository, events: Any, shape: str
+) -> None:
     if shape == "bytes":
         source: str | bytes | io.BytesIO = b""
     elif shape == "stream":
@@ -247,7 +249,9 @@ def test_ac_021_download_missing(service: FileService) -> None:
         service.open("nope")
 
 
-def test_ac_022_delete(service: FileService, repo: SqliteFileRepository, backend: InMemoryStorageBackend, events: Any) -> None:
+def test_ac_022_delete(
+    service: FileService, repo: SqliteFileRepository, backend: InMemoryStorageBackend, events: Any
+) -> None:
     r = service.upload(text_bytes())
     service.delete(r.key)
     assert repo.get_by_key(r.key) is None
@@ -282,9 +286,13 @@ def test_ac_024_metadata_fields(service: FileService, repo: SqliteFileRepository
 
 def test_ac_025_persistence_across_instances(tmp_path: Path) -> None:
     db = db_url(tmp_path)
-    svc1 = make_service(SqliteFileRepository(db), backend=InMemoryStorageBackend(), event_bus=None, registry=isolated_registry())
+    svc1 = make_service(
+        SqliteFileRepository(db), backend=InMemoryStorageBackend(), event_bus=None, registry=isolated_registry()
+    )
     r = svc1.upload(text_bytes())
-    svc2 = make_service(SqliteFileRepository(db), backend=InMemoryStorageBackend(), event_bus=None, registry=isolated_registry())
+    svc2 = make_service(
+        SqliteFileRepository(db), backend=InMemoryStorageBackend(), event_bus=None, registry=isolated_registry()
+    )
     assert svc2.get_file(r.key).key == r.key
 
 
@@ -336,7 +344,9 @@ def test_ac_029_default_local_backend(tmp_path: Path) -> None:
 
 def test_ac_030_in_memory_backend(tmp_path: Path) -> None:
     backend = InMemoryStorageBackend()
-    svc = make_service(SqliteFileRepository(db_url(tmp_path)), backend=backend, event_bus=None, registry=isolated_registry())
+    svc = make_service(
+        SqliteFileRepository(db_url(tmp_path)), backend=backend, event_bus=None, registry=isolated_registry()
+    )
     r = svc.upload(text_bytes())
     assert svc.download(r.key) == text_bytes()
     svc.delete(r.key)
@@ -454,7 +464,9 @@ def test_ac_044_get_avatar_default(service: FileService) -> None:
     assert r.url == "https://files.example.com/files/default-avatar"
 
 
-def test_ac_045_avatar_variants_created(service: FileService, repo: SqliteFileRepository, backend: InMemoryStorageBackend) -> None:
+def test_ac_045_avatar_variants_created(
+    service: FileService, repo: SqliteFileRepository, backend: InMemoryStorageBackend
+) -> None:
     from PIL import Image
 
     r = service.upload_avatar("alice", png_bytes(128, 128))
@@ -479,9 +491,7 @@ def test_ac_046_avatar_variants_replaced(service: FileService, repo: SqliteFileR
     assert new.file_id != old.file_id
     assert repo.get_by_id(old.file_id) is None  # the old main file is deleted
     assert [rec for rec in repo.list_by_namespace("avatars") if rec.variant_of == old.file_id] == []
-    new_records = [
-        rec for rec in repo.list_by_namespace("avatars") if new.file_id in (rec.id, rec.variant_of)
-    ]
+    new_records = [rec for rec in repo.list_by_namespace("avatars") if new.file_id in (rec.id, rec.variant_of)]
     assert len(new_records) == len(AVATAR_VARIANT_SIZES) + 1  # the new main file and its variants
 
 
@@ -517,7 +527,10 @@ def test_ac_049_event_validation_failed(service: FileService, events: Any) -> No
 
 def test_ac_050_no_publisher(tmp_path: Path) -> None:
     svc = make_service(
-        SqliteFileRepository(db_url(tmp_path)), backend=InMemoryStorageBackend(), event_bus=None, registry=isolated_registry()
+        SqliteFileRepository(db_url(tmp_path)),
+        backend=InMemoryStorageBackend(),
+        event_bus=None,
+        registry=isolated_registry(),
     )
     r = svc.upload(text_bytes())  # works normally without a publisher
     assert svc.download(r.key) == text_bytes()

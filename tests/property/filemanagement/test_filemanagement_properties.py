@@ -13,6 +13,20 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from filemanagement_test_helpers import (
+    EventCollector,
+    FailingAddRepository,
+    FailingPutBackend,
+    db_url,
+    isolated_registry,
+    make_service,
+    png_bytes,
+    text_bytes,
+)
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+from hypothesis.strategies import SearchStrategy
+
 from backend.filemanagement import (
     AVATAR_VARIANT_SIZES,
     AvatarError,
@@ -26,27 +40,13 @@ from backend.filemanagement import (
     SqliteFileRepository,
     StorageError,
 )
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
-from hypothesis.strategies import SearchStrategy
-
-from tests.filemanagement_test_helpers import (
-    EventCollector,
-    FailingAddRepository,
-    FailingPutBackend,
-    db_url,
-    isolated_registry,
-    make_service,
-    png_bytes,
-    text_bytes,
-)
 
 _MAX_EXAMPLES = 20
 
 
 def _content() -> SearchStrategy[bytes]:
     """Non-empty ASCII content of varying size (allowed by the default policy)."""
-    return st.binary(min_size=1, max_size=4096, alphabet=b"abcdefghijklmnopqrstuvwxyz0123456789")
+    return st.lists(st.sampled_from(b"abcdefghijklmnopqrstuvwxyz0123456789"), min_size=1, max_size=4096).map(bytes)
 
 
 @settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])

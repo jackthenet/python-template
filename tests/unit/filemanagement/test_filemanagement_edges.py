@@ -10,6 +10,17 @@ import threading
 from pathlib import Path
 
 import pytest
+from filemanagement_test_helpers import (
+    EventCollector,
+    FailingVariantBackend,
+    RaisingPublisher,
+    isolated_registry,
+    make_service,
+    png_bytes,
+    text_bytes,
+    truncated_png,
+)
+
 from backend.filemanagement import (
     FileDeleted,
     FileService,
@@ -20,18 +31,7 @@ from backend.filemanagement import (
     SqliteFileRepository,
     StorageError,
 )
-
 from backend.settings import SettingsRegistry
-from tests.filemanagement_test_helpers import (
-    EventCollector,
-    FailingVariantBackend,
-    RaisingPublisher,
-    isolated_registry,
-    make_service,
-    png_bytes,
-    text_bytes,
-    truncated_png,
-)
 
 
 def test_edge_001_source_not_found(tmp_path: Path, service: FileService, events: EventCollector) -> None:

@@ -8,9 +8,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from backend.filemanagement import AVATAR_VARIANT_SIZES, InMemoryStorageBackend, SqliteFileRepository
-
-from tests.filemanagement_test_helpers import (
+from filemanagement_test_helpers import (
     EventCollector,
     db_url,
     isolated_registry,
@@ -18,6 +16,8 @@ from tests.filemanagement_test_helpers import (
     png_bytes,
     text_bytes,
 )
+
+from backend.filemanagement import AVATAR_VARIANT_SIZES, InMemoryStorageBackend, SqliteFileRepository
 
 
 def test_full_file_lifecycle(tmp_path: Path) -> None:

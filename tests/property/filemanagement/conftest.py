@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from backend.filemanagement import FileService, InMemoryStorageBackend, SqliteFileRepository
 from filemanagement_test_helpers import EventCollector, db_url, isolated_registry, make_service
 
+from backend.filemanagement import FileService, InMemoryStorageBackend, SqliteFileRepository
 from backend.settings import SettingsRegistry
 
 
@@ -32,5 +32,7 @@ def backend() -> InMemoryStorageBackend:
 
 
 @pytest.fixture()
-def service(repo: SqliteFileRepository, backend: InMemoryStorageBackend, events: EventCollector, registry: SettingsRegistry) -> FileService:
+def service(
+    repo: SqliteFileRepository, backend: InMemoryStorageBackend, events: EventCollector, registry: SettingsRegistry
+) -> FileService:
     return make_service(repo, backend=backend, event_bus=events, registry=registry)
