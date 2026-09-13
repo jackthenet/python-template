@@ -4,12 +4,13 @@ T-001 implements the foundation: the error hierarchy (``errors``), the typed
 lifecycle events + structural publisher (``events``), and the domain models and
 fixed constants (``models``).
 
-The later-task public names (``FileService``, the repository, the storage
-backends, and ``register_settings``) are present as **collection scaffolding**
-only: the derived test suite imports them at module level, so the package must
-export them for the tests to be collected. They raise ``NotImplementedError``
-when used — they carry no behavior. The real implementations land in
-T-002..T-008 and replace these placeholders.
+The later-task public names (``FileService``, the repository, and the storage
+backends) are present as **collection scaffolding** only: the derived test
+suite imports them at module level, so the package must export them for the
+tests to be collected. They raise ``NotImplementedError`` when used — they
+carry no behavior. The real implementations land in T-003..T-008 and replace
+these placeholders. ``register_settings`` (T-002) is a real implementation in
+``feature_settings``.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from backend.filemanagement.events import (
     FileUploaded,
     FileValidationFailed,
 )
+from backend.filemanagement.feature_settings import register_settings
 from backend.filemanagement.models import (
     AVATAR_ALLOWED_TYPES,
     AVATAR_MAX_HEIGHT,
@@ -87,11 +89,6 @@ class FileService:
 
     def __init__(self, repository, backend=None, event_bus=None, settings_registry=None) -> None:
         raise NotImplementedError("FileService is implemented in T-005")
-
-
-def register_settings(registry) -> None:
-    """Placeholder (implemented in T-002)."""
-    raise NotImplementedError("register_settings is implemented in T-002")
 
 
 __all__ = [
