@@ -384,7 +384,7 @@ Each question is a section with the following fields:
   - **Proposed fix (validated against Hypothesis 6.155.0, preserves the documented intent, changes NO assertion):** line 49 → `return st.lists(st.sampled_from(b"abcdefghijklmnopqrstuvwxyz0123456789"), min_size=1, max_size=4096).map(bytes)`. This is the only invalid call in the file (all other `st.` calls — `st.sampled_from`, `st.lists`, `st.integers`, `st.from_regex` — are valid API).
   - Alternative (weaker): `return st.binary(min_size=1, max_size=4096)` — drops the ASCII-alphabet restriction the docstring describes.
 - **Question:** May I fix the `st.binary(alphabet=...)` bug in `tests/property/filemanagement/test_filemanagement_properties.py` line 49? **Recommended:** `return st.lists(st.sampled_from(b"abcdefghijklmnopqrstuvwxyz0123456789"), min_size=1, max_size=4096).map(bytes)` (preserves the documented "non-empty ASCII content of varying size" intent; no assertion changes; no test weakened). This is a test-infrastructure bug fix (the test cannot run at all as written). Alternatively, authorize the weaker `st.binary(min_size=1, max_size=4096)`. Which do you authorize?
-- **Answer:** (pending)
+- **Answer:** Preserve ASCII intent — change line 49 to `return st.lists(st.sampled_from(b"abcdefghijklmnopqrstuvwxyz0123456789"), min_size=1, max_size=4096).map(bytes)`. This preserves the documented "non-empty ASCII content of varying size" intent, changes NO assertion, and weakens no test. Validated against Hypothesis 6.155.0.
 - **Date:** 2026-09-13
-- **Status:** OPEN — awaiting user
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes
