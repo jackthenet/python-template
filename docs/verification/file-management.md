@@ -39,6 +39,15 @@
 - **RED state confirmed:**
   - `uv run pytest tests/acceptance/filemanagement tests/property/filemanagement tests/unit/filemanagement tests/contract/filemanagement tests/integration/filemanagement -q` → **exit code 4** (collection error), failing with `ModuleNotFoundError: No module named 'backend.filemanagement'` (the feature is unimplemented; the helpers import the feature public API at module level).
   - `uv run pytest --collect-only` on the same paths shows the same `ModuleNotFoundError` at conftest import.
+  - **Failure mode per test category** (all five categories fail identically at collection — each per-directory `conftest.py` and `tests/filemanagement_test_helpers.py` import the feature public API `backend.filemanagement` at module level, so no individual test function is reached; this is the valid RED signal for a new, unimplemented FEATURE, not a broken test contract):
+
+    | Test category | Path | Failure mode |
+    |---------------|------|--------------|
+    | Acceptance | `tests/acceptance/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Property | `tests/property/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Unit | `tests/unit/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Contract | `tests/contract/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Integration | `tests/integration/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
 - **Ruff:** `uv run ruff check` on all six new file-management test paths → **All checks passed** (exit 0). Repo-wide `uv run ruff check .` additionally reports 23 pre-existing `I001` import-sort errors in `tests/**/mail/**` that also exist on `main` (out of scope for this step; recorded for the verify phase).
 - **Traceability:** `docs/verification/traceability.md` gained a **File Management Matrix** section mapping every REQ/AC/INV/EDGE/NFR to its test with status `RED`.
 
