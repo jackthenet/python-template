@@ -19,18 +19,18 @@
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
-        "Create src/backend/filemanagement/errors.py with the exception hierarchy rooted at FileManagementError: FileManagementNotFoundError(key), FileTooLargeError(key, size, limit), FileTypeNotAllowedError(key, detected, allowed), FileValidationError(key, reason, declared=None, detected=None, width=None, height=None), StorageError(key, reason), AvatarError(user_id, operation) — every context attribute documented (D11, ADR-059, REQ-023); reason values per spec: FileValidationError ('zero_byte_file' | 'type_conflict' | 'invalid_key' | 'invalid_namespace' | 'source_not_found' | 'source_not_a_file' | 'image_decode_failed' | 'dimensions_exceeded'), StorageError ('not_found' | 'io' | 'symlink' | 'path_escape' | 'variant_generation'), AvatarError.operation ('upload' | 'replace')",
-        "Create src/backend/filemanagement/events.py with FileEvent(occurred_at: datetime, UTC), FileUploaded(file_id, key, namespace, size, detected_mime_type, variant_of=None), FileDownloaded(file_id, key, size), FileDeleted(file_id, key, namespace), FileValidationFailed(key, namespace, reason), AvatarEvent(user_id), AvatarUploaded(file_id, url), AvatarDeleted(file_id), and the structural EventPublisher protocol (publish(event: object) -> None) (D10, ADR-058); events carry non-sensitive data only — never file content (REQ-022, NFR-002)",
+        "Create src/backend/filemanagement/errors.py with the exception hierarchy rooted at FileManagementError: FileManagementNotFoundError(key), FileTooLargeError(key, size, limit), FileTypeNotAllowedError(key, detected, allowed), FileValidationError(key, reason, declared=None, detected=None, width=None, height=None), StorageError(key, reason), AvatarError(user_id, operation) \u00e2\u20ac\u201d every context attribute documented (D11, ADR-059, REQ-023); reason values per spec: FileValidationError ('zero_byte_file' | 'type_conflict' | 'invalid_key' | 'invalid_namespace' | 'source_not_found' | 'source_not_a_file' | 'image_decode_failed' | 'dimensions_exceeded'), StorageError ('not_found' | 'io' | 'symlink' | 'path_escape' | 'variant_generation'), AvatarError.operation ('upload' | 'replace')",
+        "Create src/backend/filemanagement/events.py with FileEvent(occurred_at: datetime, UTC), FileUploaded(file_id, key, namespace, size, detected_mime_type, variant_of=None), FileDownloaded(file_id, key, size), FileDeleted(file_id, key, namespace), FileValidationFailed(key, namespace, reason), AvatarEvent(user_id), AvatarUploaded(file_id, url), AvatarDeleted(file_id), and the structural EventPublisher protocol (publish(event: object) -> None) (D10, ADR-058); events carry non-sensitive data only \u00e2\u20ac\u201d never file content (REQ-022, NFR-002)",
         "Create src/backend/filemanagement/models.py with the SQLModel table models FileRecord (id UUID pk, key str unique+indexed, original_filename str|None, declared_mime_type str|None, detected_mime_type str, size int, sha256 str required 64 lowercase hex chars, namespace str indexed, uploader str|None, variant_of UUID|None, created_at/updated_at datetime UTC) and UserAvatar (user_id str pk, file_id UUID FK files.id, updated_at datetime); the read-only Pydantic representations FileRead (same field set as FileRecord) and AvatarRead (user_id, url, file_id: UUID|None, is_default: bool, updated_at: datetime|None); StorageStat(size, updated_at); the fixed (NOT configurable) constants AVATAR_VARIANT_SIZES=(64, 256), AVATAR_MAX_WIDTH=4096, AVATAR_MAX_HEIGHT=4096, AVATAR_ALLOWED_TYPES=frozenset({'image/png', 'image/jpeg', 'image/webp'}), DEFAULT_AVATAR_PATH='default-avatar', KEY_PATTERN=r'^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$', NAMESPACE_PATTERN=r'^[a-z0-9][a-z0-9._-]{0,63}$' (REQ-012, REQ-019, REQ-020)",
         "Re-export the public API from src/backend/filemanagement/__init__.py (errors, events, models, constants)"
       ],
       "green_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "design_constraints": [
         "The error hierarchy is rooted at FileManagementError and every subclass carries its documented context attributes (D11, ADR-059, REQ-023)",
-        "Events carry non-sensitive data only — file content never appears in events (D10, REQ-022, NFR-002)",
+        "Events carry non-sensitive data only \u00e2\u20ac\u201d file content never appears in events (D10, REQ-022, NFR-002)",
         "sha256 is required and is 64 lowercase hex chars; all timestamps are UTC (REQ-012)",
-        "FileRead and AvatarRead are read-only and are the only representations returned by the service (spec §3)",
-        "The constants (variant sizes, max dimensions, allowed avatar types, default-avatar path, key/namespace patterns) are fixed, NOT configurable (spec §3)"
+        "FileRead and AvatarRead are read-only and are the only representations returned by the service (spec \u00c2\u00a73)",
+        "The constants (variant sizes, max dimensions, allowed avatar types, default-avatar path, key/namespace patterns) are fixed, NOT configurable (spec \u00c2\u00a73)"
       ],
       "completion_gates": [
         "Acceptance test for AC-051 passes"
@@ -45,28 +45,26 @@
         "REQ-024"
       ],
       "acceptance_criteria": [
-        "AC-052",
-        "AC-053"
+        "AC-052"
       ],
       "tests_to_create": [
-        "test_ac_052_register_settings",
-        "test_ac_053_unregistered_settings_defaults"
+        "test_ac_052_register_settings"
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
         "Create src/backend/filemanagement/feature_settings.py with register_settings(registry) (traced with @logged(slow_threshold_ms=5)) that calls registry.register_feature('filemanagement', [...]) registering the 5 SettingDefinitions (category 'application', group 'filemanagement'): filemanagement.storage_root (TEXT, default './data/files'), filemanagement.max_file_size (NUMBER, default 10485760), filemanagement.avatar_max_size (NUMBER, default 2097152), filemanagement.allowed_types (LIST, default ['application/octet-stream', 'application/pdf', 'application/zip', 'text/plain', 'text/csv', 'image/png', 'image/jpeg', 'image/gif', 'image/webp']), filemanagement.avatar_base_url (TEXT, default 'files.example.com') (REQ-024, ADR-057)",
-        "The registration name is 'filemanagement' (no hyphen — the settings key format forbids hyphens); the change/feature name remains 'file-management' (D12)",
+        "The registration name is 'filemanagement' (no hyphen \u00e2\u20ac\u201d the settings key format forbids hyphens); the change/feature name remains 'file-management' (D12)",
         "Re-export register_settings from src/backend/filemanagement/__init__.py"
       ],
       "green_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "design_constraints": [
         "No import side effects: register_settings is an explicit function called at wiring time, not at import (ADR-057)",
         "All settings are read live on each operation; unregistered keys fall back to the hardcoded defaults (REQ-024, ADR-057)",
-        "Repository/backend injection stays constructor args — it is NOT a setting (REQ-024)",
+        "Repository/backend injection stays constructor args \u00e2\u20ac\u201d it is NOT a setting (REQ-024)",
         "filemanagement.avatar_base_url is the host only (no scheme); the avatar URL is constructed as https://<host>/files/<file_id> (D7)"
       ],
       "completion_gates": [
-        "Acceptance tests for AC-052, AC-053 pass"
+        "Acceptance test for AC-052 passes"
       ],
       "dependencies": [],
       "status": "SPECIFIED"
@@ -90,18 +88,18 @@
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
-        "Create src/backend/filemanagement/storage.py with the StorageBackend ABC: put(key, data: bytes | BinaryIO) (atomically write the content to key, replacing any existing content — last-write-wins; raise StorageError with reason 'io' | 'symlink' | 'path_escape'), get(key) -> BinaryIO (file-like stream of the content; raise StorageError reason 'not_found' if the key is absent), delete(key) (delete the content; no-op if the key is absent), exists(key) -> bool, stat(key) -> StorageStat | None (size/updated time, or None if absent) (D1, ADR-050)",
-        "Implement LocalDiskStorageBackend(root: Path): flat layout (one file per key directly under root, the key is the filename); enforce KEY_PATTERN (a violating key → StorageError reason 'path_escape'); verify the resolved path stays inside root (a path resolving outside root → StorageError reason 'path_escape'); reject a symlink at the target path or any path component (StorageError reason 'symlink', never followed); put writes to a temp file in root then os.replace (atomic rename) (D4, D5, D13, ADR-050, ADR-053)",
-        "Implement InMemoryStorageBackend: a dict of key → bytes; public for tests/DI; instances are isolated (no shared state between instances) (REQ-015, EDGE-016)",
+        "Create src/backend/filemanagement/storage.py with the StorageBackend ABC: put(key, data: bytes | BinaryIO) (atomically write the content to key, replacing any existing content \u00e2\u20ac\u201d last-write-wins; raise StorageError with reason 'io' | 'symlink' | 'path_escape'), get(key) -> BinaryIO (file-like stream of the content; raise StorageError reason 'not_found' if the key is absent), delete(key) (delete the content; no-op if the key is absent), exists(key) -> bool, stat(key) -> StorageStat | None (size/updated time, or None if absent) (D1, ADR-050)",
+        "Implement LocalDiskStorageBackend(root: Path): flat layout (one file per key directly under root, the key is the filename); enforce KEY_PATTERN (a violating key \u00e2\u2020\u2019 StorageError reason 'path_escape'); verify the resolved path stays inside root (a path resolving outside root \u00e2\u2020\u2019 StorageError reason 'path_escape'); reject a symlink at the target path or any path component (StorageError reason 'symlink', never followed); put writes to a temp file in root then os.replace (atomic rename) (D4, D5, D13, ADR-050, ADR-053)",
+        "Implement InMemoryStorageBackend: a dict of key \u00e2\u2020\u2019 bytes; public for tests/DI; instances are isolated (no shared state between instances) (REQ-015, EDGE-016)",
         "Re-export StorageBackend, LocalDiskStorageBackend, InMemoryStorageBackend from src/backend/filemanagement/__init__.py"
       ],
       "green_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "design_constraints": [
         "Nothing can escape the storage root: key pattern + path containment + symlink rejection (defense in depth) (REQ-016, D13, ADR-050)",
         "put is atomic (temp file + os.replace) and last-write-wins (replaces existing content) (D4, D5, ADR-053, ADR-054)",
-        "get raises StorageError(reason='not_found') for an absent key; delete is a no-op for an absent key (spec §3, EDGE-007)",
+        "get raises StorageError(reason='not_found') for an absent key; delete is a no-op for an absent key (spec \u00c2\u00a73, EDGE-007)",
         "InMemoryStorageBackend is public and instance-isolated (REQ-015, EDGE-016)",
-        "Service code references only the StorageBackend ABC — both backends are swappable (D1, REQ-015)"
+        "Service code references only the StorageBackend ABC \u00e2\u20ac\u201d both backends are swappable (D1, REQ-015)"
       ],
       "completion_gates": [
         "Acceptance tests for AC-031, AC-032 pass",
@@ -129,13 +127,13 @@
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
-        "Create src/backend/filemanagement/repository.py with the FileRepository ABC: add(record: FileRecord) -> FileRecord (insert; if a record with the same key exists it is atomically replaced — last-write-wins, the replaced record is deleted), get_by_key(key) -> FileRecord | None, get_by_id(file_id: UUID) -> FileRecord | None, update(record) -> FileRecord, delete(file_id: UUID) -> None, list_by_namespace(namespace: str | None = None, limit: int = 100, offset: int = 0) -> Sequence[FileRecord] (records whose namespace starts with `namespace`, None → all, ordered by created_at, limit/offset pagination), set_user_avatar(user_id, file_id) -> None, get_user_avatar(user_id) -> UUID | None, clear_user_avatar(user_id) -> None (D1, D5, D6, ADR-051)",
+        "Create src/backend/filemanagement/repository.py with the FileRepository ABC: add(record: FileRecord) -> FileRecord (insert; if a record with the same key exists it is atomically replaced \u00e2\u20ac\u201d last-write-wins, the replaced record is deleted), get_by_key(key) -> FileRecord | None, get_by_id(file_id: UUID) -> FileRecord | None, update(record) -> FileRecord, delete(file_id: UUID) -> None, list_by_namespace(namespace: str | None = None, limit: int = 100, offset: int = 0) -> Sequence[FileRecord] (records whose namespace starts with `namespace`, None \u00e2\u2020\u2019 all, ordered by created_at, limit/offset pagination), set_user_avatar(user_id, file_id) -> None, get_user_avatar(user_id) -> UUID | None, clear_user_avatar(user_id) -> None (D1, D5, D6, ADR-051)",
         "Implement SqliteFileRepository(database_url: str): creates the DB file's parent directory (auto-created if missing) and all tables via create_all (no migration framework); thread-safe SQLite (REQ-013, NFR-004, EDGE-015)",
         "Re-export FileRepository, SqliteFileRepository from src/backend/filemanagement/__init__.py"
       ],
       "green_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "design_constraints": [
-        "The service depends only on the FileRepository ABC — the database can be changed later (D1, REQ-013, ADR-051)",
+        "The service depends only on the FileRepository ABC \u00e2\u20ac\u201d the database can be changed later (D1, REQ-013, ADR-051)",
         "add is an atomic same-key replacement (last-write-wins; the replaced record is deleted) (D5, ADR-054)",
         "The DB file's parent directory is auto-created; bootstrap via create_all only (no migration framework) (NFR-004, EDGE-015)",
         "The repository is safe for concurrent use from multiple threads (NFR-004)",
@@ -231,14 +229,14 @@
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
-        "Create src/backend/filemanagement/service.py with FileService(repository, backend=None, event_bus=None, settings_registry=None): backend None → a LocalDiskStorageBackend constructed from the live filemanagement.storage_root setting on each operation (default ./data/files, D14); settings_registry None → the shared get_settings_registry() (unregistered keys fall back to hardcoded defaults); event_bus None → no events, no error (D1, D12, D14, ADR-056, ADR-057)",
+        "Create src/backend/filemanagement/service.py with FileService(repository, backend=None, event_bus=None, settings_registry=None): backend None \u00e2\u2020\u2019 a LocalDiskStorageBackend constructed from the live filemanagement.storage_root setting on each operation (default ./data/files, D14); settings_registry None \u00e2\u2020\u2019 the shared get_settings_registry() (unregistered keys fall back to hardcoded defaults); event_bus None \u00e2\u2020\u2019 no events, no error (D1, D12, D14, ADR-056, ADR-057)",
         "Implement upload(source, *, key=None, namespace='general', original_filename=None, declared_mime_type=None, uploader=None) -> FileRead:",
-        "  - Input shapes (REQ-002): an existing filesystem path (str), raw bytes, or a file-like binary stream (fully consumed); when source is a path and original_filename is not given, it defaults to the path's basename; a str source that does not exist → FileValidationError(reason='source_not_found'); a str source pointing to a directory → FileValidationError(reason='source_not_a_file') (EDGE-001, EDGE-002)",
-        "  - Keys/namespaces (REQ-007): key None → the service generates a canonical UUID key; a caller-specified key must match KEY_PATTERN (no path separators, null bytes, absolute paths, traversal), else FileValidationError(reason='invalid_key') (EDGE-004, EDGE-005); namespace must match NAMESPACE_PATTERN, else FileValidationError(reason='invalid_namespace')",
-        "  - Size validation (REQ-003): zero-byte content → FileValidationError(reason='zero_byte_file'); content larger than the effective max size → FileTooLargeError(size=actual, limit=effective); the effective max size is filemanagement.avatar_max_size for the 'avatars' namespace and filemanagement.max_file_size for all other namespaces, read live on each operation (AC-006, AC-007); a stream exceeding the limit mid-stream is aborted and the temp file deleted (EDGE-003); size == limit is allowed (EDGE-019)",
-        "  - Type validation (REQ-004, REQ-005, REQ-006): magic-byte detection (python-magic) on the content is the source of truth and is recorded in the metadata; a declared MIME type differing from the detected type → FileValidationError(reason='type_conflict', declared, detected); an original-filename extension implying a different MIME type than the detected type → FileValidationError(reason='type_conflict') (AC-010); the detected type not in the effective allowed set → FileTypeNotAllowedError(detected, allowed); the effective allowed set is the fixed avatar set {image/png, image/jpeg, image/webp} for the 'avatars' namespace and the live filemanagement.allowed_types setting for all other namespaces (AC-012)",
-        "  - Atomicity (REQ-008): content is written via backend.put (temp file + atomic rename); if the storage write fails, no metadata record is created (StorageError); if the metadata record cannot be created, the storage content written by the upload is deleted (StorageError reason='io') — mutual rollback, a failed upload leaves no partial state (AC-016, AC-017, INV-001, ADR-053)",
-        "  - Concurrency (REQ-009): concurrent uploads to the same key are last-write-wins — atomic replacement, exactly one winner, no error (AC-018, INV-002, ADR-054)",
+        "  - Input shapes (REQ-002): an existing filesystem path (str), raw bytes, or a file-like binary stream (fully consumed); when source is a path and original_filename is not given, it defaults to the path's basename; a str source that does not exist \u00e2\u2020\u2019 FileValidationError(reason='source_not_found'); a str source pointing to a directory \u00e2\u2020\u2019 FileValidationError(reason='source_not_a_file') (EDGE-001, EDGE-002)",
+        "  - Keys/namespaces (REQ-007): key None \u00e2\u2020\u2019 the service generates a canonical UUID key; a caller-specified key must match KEY_PATTERN (no path separators, null bytes, absolute paths, traversal), else FileValidationError(reason='invalid_key') (EDGE-004, EDGE-005); namespace must match NAMESPACE_PATTERN, else FileValidationError(reason='invalid_namespace')",
+        "  - Size validation (REQ-003): zero-byte content \u00e2\u2020\u2019 FileValidationError(reason='zero_byte_file'); content larger than the effective max size \u00e2\u2020\u2019 FileTooLargeError(size=actual, limit=effective); the effective max size is filemanagement.avatar_max_size for the 'avatars' namespace and filemanagement.max_file_size for all other namespaces, read live on each operation (AC-006, AC-007); a stream exceeding the limit mid-stream is aborted and the temp file deleted (EDGE-003); size == limit is allowed (EDGE-019)",
+        "  - Type validation (REQ-004, REQ-005, REQ-006): magic-byte detection (python-magic) on the content is the source of truth and is recorded in the metadata; a declared MIME type differing from the detected type \u00e2\u2020\u2019 FileValidationError(reason='type_conflict', declared, detected); an original-filename extension implying a different MIME type than the detected type \u00e2\u2020\u2019 FileValidationError(reason='type_conflict') (AC-010); the detected type not in the effective allowed set \u00e2\u2020\u2019 FileTypeNotAllowedError(detected, allowed); the effective allowed set is the fixed avatar set {image/png, image/jpeg, image/webp} for the 'avatars' namespace and the live filemanagement.allowed_types setting for all other namespaces (AC-012)",
+        "  - Atomicity (REQ-008): content is written via backend.put (temp file + atomic rename); if the storage write fails, no metadata record is created (StorageError); if the metadata record cannot be created, the storage content written by the upload is deleted (StorageError reason='io') \u00e2\u20ac\u201d mutual rollback, a failed upload leaves no partial state (AC-016, AC-017, INV-001, ADR-053)",
+        "  - Concurrency (REQ-009): concurrent uploads to the same key are last-write-wins \u00e2\u20ac\u201d atomic replacement, exactly one winner, no error (AC-018, INV-002, ADR-054)",
         "  - Metadata (REQ-012): the FileRecord carries the full normative field set (id, key, original filename, declared MIME, detected MIME, size, sha256 64 lowercase hex, namespace, uploader, variant reference, created/updated UTC)",
         "  - Events (REQ-022): publish FileUploaded on success; publish FileValidationFailed(key, namespace, reason) before the domain error is raised on a validation failure; a None publisher means no events and no error (AC-050); a publisher that raises propagates to the caller after the operation is committed (EDGE-014)",
         "Trace FileService with @logged_class(slow_threshold_ms=5000, include_args=False) (REQ-025, ADR-060)",
@@ -308,7 +306,7 @@
         "Implement open(key) -> BinaryIO: return a file-like stream (usable as a context manager) whose content equals the stored bytes; a missing file raises FileManagementNotFoundError (REQ-010)",
         "Implement delete(key): remove the storage content and the metadata record; a missing file raises FileManagementNotFoundError; a file whose storage content is already missing still has its metadata record deleted (the storage delete is a no-op) (REQ-011, EDGE-007)",
         "Implement get_file(key) -> FileRead: return the metadata for a key; FileManagementNotFoundError when missing (REQ-014)",
-        "Implement list_files(namespace=None, limit=100, offset=0) -> list[FileRead]: files whose namespace starts with the given prefix (None → all), limit/offset pagination ordered by created_at; limit must be >= 1 and offset must be >= 0, otherwise ValueError; an empty store returns []; an offset beyond the last item returns [] (REQ-014, EDGE-008, EDGE-009)",
+        "Implement list_files(namespace=None, limit=100, offset=0) -> list[FileRead]: files whose namespace starts with the given prefix (None \u00e2\u2020\u2019 all), limit/offset pagination ordered by created_at; limit must be >= 1 and offset must be >= 0, otherwise ValueError; an empty store returns []; an offset beyond the last item returns [] (REQ-014, EDGE-008, EDGE-009)",
         "Publish FileDownloaded(file_id, key, size) per successful download/open and FileDeleted(file_id, key, namespace) per file record deleted (REQ-022)",
         "A download concurrent with a same-key upload completing returns a complete file (old or new content), never partial (EDGE-017)"
       ],
@@ -385,22 +383,22 @@
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
-        "Implement on FileService (namespace 'avatars'): upload_avatar(user_id, source, *, declared_mime_type=None) -> AvatarRead (creates the user's first avatar; an existing avatar → AvatarError(user_id, operation='upload')), replace_avatar(user_id, source, ...) -> AvatarRead (stores the new file, returns the new URL, deletes the old file and its variants; a missing avatar → AvatarError(user_id, operation='replace')), delete_avatar(user_id) (deletes the file and its variants and clears the user → file mapping; a missing avatar is a no-op — no event, no error), get_avatar(user_id) -> AvatarRead (REQ-017, ADR-055)",
-        "Avatar constraints (REQ-019, ADR-049): the effective allowed set is the fixed {image/png, image/jpeg, image/webp} (image/gif → FileTypeNotAllowedError); content must be decodable as an image by Pillow, else FileValidationError(reason='image_decode_failed') — decode validation is stricter than magic bytes (a truncated PNG detected as image/png still fails, EDGE-012); dimensions must be at most 4096×4096 (boundary inclusive, EDGE-018), else FileValidationError(reason='dimensions_exceeded', width, height)",
+        "Implement on FileService (namespace 'avatars'): upload_avatar(user_id, source, *, declared_mime_type=None) -> AvatarRead (creates the user's first avatar; an existing avatar \u00e2\u2020\u2019 AvatarError(user_id, operation='upload')), replace_avatar(user_id, source, ...) -> AvatarRead (stores the new file, returns the new URL, deletes the old file and its variants; a missing avatar \u00e2\u2020\u2019 AvatarError(user_id, operation='replace')), delete_avatar(user_id) (deletes the file and its variants and clears the user \u00e2\u2020\u2019 file mapping; a missing avatar is a no-op \u00e2\u20ac\u201d no event, no error), get_avatar(user_id) -> AvatarRead (REQ-017, ADR-055)",
+        "Avatar constraints (REQ-019, ADR-049): the effective allowed set is the fixed {image/png, image/jpeg, image/webp} (image/gif \u00e2\u2020\u2019 FileTypeNotAllowedError); content must be decodable as an image by Pillow, else FileValidationError(reason='image_decode_failed') \u00e2\u20ac\u201d decode validation is stricter than magic bytes (a truncated PNG detected as image/png still fails, EDGE-012); dimensions must be at most 4096\u00c3\u20144096 (boundary inclusive, EDGE-018), else FileValidationError(reason='dimensions_exceeded', width, height)",
         "Avatar URL (REQ-018, D7): https://<base>/files/<file_id> with <base> from the live filemanagement.avatar_base_url setting (host only); the https scheme is fixed, so the URL always satisfies user-management's profile_picture_url validation (AC-040, INV-005)",
         "Default avatar (REQ-020, D9): ship the built-in asset src/backend/filemanagement/assets/default_avatar.png; the module function get_default_avatar() -> bytes (traced with @logged) returns the asset's bytes; get_avatar returns the default avatar (is_default=True, file_id=None, URL https://<base>/files/default-avatar) when the user has no avatar",
         "Variants (REQ-021, D8, ADR-049): a successful upload/replace generates 64px and 256px variants (longest side, PNG) stored as separate files (separate keys, variant_of reference to the main file's id), each with its own metadata record (sha256, detected type image/png, namespace avatars); variants are deleted with the main file (replace/delete); a variant generation failure rolls back the entire upload (no main file, no variants, no records) and raises StorageError(reason='variant_generation') (EDGE-013, INV-008)",
-        "Dangling mapping (EDGE-011): if the user → file mapping points to a deleted file, get_avatar returns the default avatar AND the dangling mapping is cleared",
+        "Dangling mapping (EDGE-011): if the user \u00e2\u2020\u2019 file mapping points to a deleted file, get_avatar returns the default avatar AND the dangling mapping is cleared",
         "Events (REQ-022): publish AvatarUploaded(user_id, file_id, url) and AvatarDeleted(user_id, file_id); FileUploaded is published per file record created (the main file and each variant, AC-047)"
       ],
       "green_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "design_constraints": [
-        "No user-management dependency and no UserDeleted subscription — the caller owns the user record and cleans up the avatar on user deletion (D6, ADR-055)",
-        "Pillow decode validation is stricter than magic bytes; the dimension boundary 4096×4096 is inclusive (ADR-049, EDGE-012, EDGE-018)",
+        "No user-management dependency and no UserDeleted subscription \u00e2\u20ac\u201d the caller owns the user record and cleans up the avatar on user deletion (D6, ADR-055)",
+        "Pillow decode validation is stricter than magic bytes; the dimension boundary 4096\u00c3\u20144096 is inclusive (ADR-049, EDGE-012, EDGE-018)",
         "The avatar URL always starts with https:// (D7, INV-005, NFR-003)",
         "Exactly two variants (64/256 PNG, longest side) with a variant_of reference; variants are deleted with the main file (D8, INV-008)",
         "AvatarError semantics: upload on an existing avatar / replace on a missing avatar; delete on a missing avatar is a no-op (REQ-017)",
-        "A dangling user → file mapping is cleared and the default avatar is returned (EDGE-011)",
+        "A dangling user \u00e2\u2020\u2019 file mapping is cleared and the default avatar is returned (EDGE-011)",
         "Events: AvatarUploaded/AvatarDeleted; FileUploaded for the main file and each variant; no other event on failure (REQ-022, AC-047)"
       ],
       "completion_gates": [
@@ -422,7 +420,8 @@
       ],
       "acceptance_criteria": [
         "AC-054",
-        "AC-055"
+        "AC-055",
+        "AC-053"
       ],
       "tests_to_create": [
         "test_ac_054_operations_traced",
@@ -434,7 +433,8 @@
         "test_nfr_005_operations_logged",
         "test_full_file_lifecycle",
         "test_avatar_lifecycle_with_variants",
-        "test_concurrent_same_key_upload"
+        "test_concurrent_same_key_upload",
+        "test_ac_053_unregistered_settings_defaults"
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
@@ -444,7 +444,7 @@
         "Verify the public API backward-compatibility contract (NFR-003): the public API (FileService, FileRepository, SqliteFileRepository, StorageBackend, LocalDiskStorageBackend, InMemoryStorageBackend, schemas, events, errors, register_settings, get_default_avatar, constants) is present and stable; adding optional parameters must not break existing callers",
         "Verify repository thread safety (NFR-004): the SQLite repository is safe for concurrent use from multiple threads; a failed operation leaves no partial state (INV-001); the DB file's parent directory is auto-created",
         "Verify the layout convention (REQ-026, ADR-056): with the default settings the local backend's root is ./data/files under the common persistence root ./data/, and user files are stored there",
-        "Integration (spec §10): test_full_file_lifecycle (upload → download → get_file → list_files → delete), test_avatar_lifecycle_with_variants (upload → variants → replace → delete), test_concurrent_same_key_upload (concurrent same-key uploads, last-write-wins)"
+        "Integration (spec \u00c2\u00a710): test_full_file_lifecycle (upload \u00e2\u2020\u2019 download \u00e2\u2020\u2019 get_file \u00e2\u2020\u2019 list_files \u00e2\u2020\u2019 delete), test_avatar_lifecycle_with_variants (upload \u00e2\u2020\u2019 variants \u00e2\u2020\u2019 replace \u00e2\u2020\u2019 delete), test_concurrent_same_key_upload (concurrent same-key uploads, last-write-wins)"
       ],
       "green_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "design_constraints": [
@@ -453,12 +453,13 @@
         "The public API is a backward-compatibility contract (NFR-003)",
         "The SQLite repository is safe for concurrent use from multiple threads (NFR-004)",
         "Tracing: @logged_class on FileService (include_args=False, slow_threshold_ms=5000), @logged on module functions (REQ-025, NFR-005, ADR-060)",
-        "Layout convention: a common persistence root ./data/ — user files under ./data/files/ (REQ-026, ADR-056)"
+        "Layout convention: a common persistence root ./data/ \u00e2\u20ac\u201d user files under ./data/files/ (REQ-026, ADR-056)"
       ],
       "completion_gates": [
         "Acceptance tests for AC-054, AC-055 pass",
         "Contract tests for NFR-001, NFR-002, NFR-003, NFR-004, NFR-005 pass",
-        "Integration tests test_full_file_lifecycle, test_avatar_lifecycle_with_variants, test_concurrent_same_key_upload pass"
+        "Integration tests test_full_file_lifecycle, test_avatar_lifecycle_with_variants, test_concurrent_same_key_upload pass",
+        "Acceptance test for AC-053 passes"
       ],
       "dependencies": [
         "T-006",

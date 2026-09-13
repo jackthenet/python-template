@@ -61,6 +61,16 @@
 - **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-001).
 - **Task status:** `SPECIFIED → VERIFIED` for T-001 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
 
+## DAG Correction (T-002 gate, discovered in Phase 4)
+
+- **When:** 2026-09-13, during S4.1 (pick T-002 + confirm RED).
+- **Flaw:** T-002's completion gate ("Acceptance tests for AC-052, AC-053 pass") could not be satisfied by T-002 alone. `test_ac_052_register_settings` needs only `register_settings` (T-002), but `test_ac_053_unregistered_settings_defaults` is an integration-level test that also requires `InMemoryStorageBackend` (T-003), `SqliteFileRepository` (T-004), `FileService.upload` (T-005), and `FileService.upload_avatar` (T-007). Since T-005 depends on T-002 (must be VERIFIED), this created a deadlock: T-002 could not be VERIFIED until `test_ac_053` passed, but `test_ac_053` needs T-005/T-007.
+- **Correction (decomposition fix, NOT a test weakening — `test_ac_053` is preserved, only moved to the task that can make it pass):**
+  - T-002: `tests_to_create` → `[test_ac_052_register_settings]`; `acceptance_criteria` → `[AC-052]`; `completion_gates` → `["Acceptance test for AC-052 passes"]`.
+  - T-008 (final cross-cutting task; depends on T-006 + T-007, so the full stack is available): added `test_ac_053_unregistered_settings_defaults` to `tests_to_create`, `AC-053` to `acceptance_criteria`, and `"Acceptance test for AC-053 passes"` to `completion_gates`.
+  - Applied to both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (kept in sync).
+- **Rationale:** DAG ordering is T-001 → (T-002, T-003, T-004) → T-005 → (T-006, T-007) → T-008. `test_ac_053` can only pass after T-007, so T-008 is the earliest task where it is satisfiable. This respects "tests are the contract" (the test is neither weakened nor deleted).
+
 ## Evidence
 
 - Phase 1 (Specify): spec committed, PR #24 opened + merged on human delegation (see "Phase 1 — Spec approval").
