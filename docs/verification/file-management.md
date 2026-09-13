@@ -61,6 +61,17 @@
 - **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-001).
 - **Task status:** `SPECIFIED → VERIFIED` for T-001 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
 
+## Phase 4 — Implement (T-002)
+
+- **Step:** S4.5 (commit + update status), for task T-002, 2026-09-13.
+- **T-002 scope:** feature settings registration — `src/backend/filemanagement/feature_settings.py` with `register_settings(registry)` (traced with `@logged(slow_threshold_ms=5)`) that calls `registry.register_feature('filemanagement', [...])` registering the 5 `SettingDefinition`s (category `application`, group `filemanagement`): `filemanagement.storage_root` (TEXT, default `./data/files`), `filemanagement.max_file_size` (NUMBER, default `10485760`), `filemanagement.avatar_max_size` (NUMBER, default `2097152`), `filemanagement.allowed_types` (LIST, 9 MIME defaults), `filemanagement.avatar_base_url` (TEXT, default `files.example.com`); live-read pattern (settings read live on each operation, unregistered keys fall back to the hardcoded defaults); no import side effects (`register_settings` is an explicit function called at wiring time, not at import); re-exported from `src/backend/filemanagement/__init__.py` (REQ-024, ADR-057). Committed as `65425e0`.
+- **Gate (NARROWED by DAG correction P-5):** "Acceptance test for AC-052 passes." AC-053 / `test_ac_053_unregistered_settings_defaults` was moved to T-008 (see "DAG Correction (T-002 gate, discovered in Phase 4)").
+- **GREEN confirmed (T-002 gate — "Acceptance test for AC-052 passes"):**
+  - `uv run pytest tests/acceptance/filemanagement/test_filemanagement.py::test_ac_052_register_settings -v` → `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_052_register_settings PASSED [100%]` — **1 passed in 0.14s**.
+  - Note: the task's full-suite `green_command` (`uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v`) is NOT expected to be fully green at this point — later tasks T-003..T-008 are unimplemented, so their tests still fail with the unimplemented signal. The T-002 completion gate is specifically the AC-052 acceptance test, which passes.
+- **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-002).
+- **Task status:** `SPECIFIED → VERIFIED` for T-002 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
+
 ## DAG Correction (T-002 gate, discovered in Phase 4)
 
 - **When:** 2026-09-13, during S4.1 (pick T-002 + confirm RED).
@@ -76,3 +87,4 @@
 - Phase 1 (Specify): spec committed, PR #24 opened + merged on human delegation (see "Phase 1 — Spec approval").
 - Phase 3 (Test & RED): 90 tests derived from the spec, RED confirmed (`ModuleNotFoundError: backend.filemanagement`, pytest exit 4), ruff clean on the new files (see "Phase 3 — Test & RED").
 - Phase 4 (Implement, T-001): foundation (errors, events, models) committed as `c6b70c0`; AC-051 acceptance test `test_ac_051_error_hierarchy_context` PASSED (GREEN); ruff clean on file-management paths (23 pre-existing mail `I001`s remain, out of scope); task status `VERIFIED` in both task files (see "Phase 4 — Implement (T-001)").
+- Phase 4 (Implement, T-002): feature settings registration (`feature_settings.py` — `register_settings`, 5 `SettingDefinition`s, live-read pattern, no import side effects) committed as `65425e0`; AC-052 acceptance test `test_ac_052_register_settings` PASSED (GREEN; gate NARROWED by P-5 — AC-053 / `test_ac_053` moved to T-008); ruff clean on file-management paths (23 pre-existing mail `I001`s remain, out of scope); task status `VERIFIED` in both task files (see "Phase 4 — Implement (T-002)").

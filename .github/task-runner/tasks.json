@@ -67,7 +67,7 @@
         "Acceptance test for AC-052 passes"
       ],
       "dependencies": [],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-003",
