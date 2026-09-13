@@ -463,6 +463,103 @@ The mail-service feature (`docs/specs/mail-service.md`) uses its own REQ/AC ID s
 | NFR-004 | — | `test_nfr_004_service_traced` | GREEN |
 | NFR-005 | — | `test_nfr_005_concurrent_send_thread_safety` | GREEN |
 
+## File Management Matrix
+
+The file-management feature (`docs/specs/file-management.md`) uses its own REQ/AC ID space that overlaps the other features' IDs, so the matrix is kept separate. Status `RED`: tests are derived from the spec and confirmed failing (the feature is unimplemented; collection fails with `ModuleNotFoundError: backend.filemanagement`).
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001, REQ-002 | AC-001 | `test_ac_001_upload_bytes_round_trip` | RED |
+| REQ-002 | AC-002 | `test_ac_002_upload_file_path` | RED |
+| REQ-002 | AC-003 | `test_ac_003_upload_file_like_stream` | RED |
+| REQ-003 | AC-004 | `test_ac_004_zero_byte_rejected` | RED |
+| REQ-003 | AC-005 | `test_ac_005_general_size_limit` | RED |
+| REQ-003 | AC-006 | `test_ac_006_avatar_size_limit` | RED |
+| REQ-003 | AC-007 | `test_ac_007_live_max_file_size` | RED |
+| REQ-004 | AC-008 | `test_ac_008_magic_byte_detection` | RED |
+| REQ-005 | AC-009 | `test_ac_009_declared_type_conflict` | RED |
+| REQ-005 | AC-010 | `test_ac_010_filename_type_conflict` | RED |
+| REQ-006 | AC-011 | `test_ac_011_type_not_allowed` | RED |
+| REQ-006 | AC-012 | `test_ac_012_live_allowed_types` | RED |
+| REQ-007 | AC-013 | `test_ac_013_generated_uuid_key` | RED |
+| REQ-007 | AC-014 | `test_ac_014_caller_key` | RED |
+| REQ-007 | AC-015 | `test_ac_015_traversal_key_rejected` | RED |
+| REQ-008 | AC-016 | `test_ac_016_storage_failure_rollback` | RED |
+| REQ-008 | AC-017 | `test_ac_017_metadata_failure_rollback` | RED |
+| REQ-009 | AC-018 | `test_ac_018_concurrent_same_key_last_write_wins` | RED |
+| REQ-010 | AC-019 | `test_ac_019_download_bytes` | RED |
+| REQ-010 | AC-020 | `test_ac_020_open_stream` | RED |
+| REQ-010 | AC-021 | `test_ac_021_download_missing` | RED |
+| REQ-011 | AC-022 | `test_ac_022_delete` | RED |
+| REQ-011 | AC-023 | `test_ac_023_delete_missing` | RED |
+| REQ-012 | AC-024 | `test_ac_024_metadata_fields` | RED |
+| REQ-013 | AC-025 | `test_ac_025_persistence_across_instances` | RED |
+| REQ-013 | AC-026 | `test_ac_026_service_with_fake_repository` | RED |
+| REQ-014 | AC-027 | `test_ac_027_get_file_and_list_pagination` | RED |
+| REQ-014 | AC-028 | `test_ac_028_list_invalid_pagination` | RED |
+| REQ-015 | AC-029 | `test_ac_029_default_local_backend` | RED |
+| REQ-015 | AC-030 | `test_ac_030_in_memory_backend` | RED |
+| REQ-016 | AC-031 | `test_ac_031_symlink_rejected` | RED |
+| REQ-016 | AC-032 | `test_ac_032_path_escape_rejected` | RED |
+| REQ-017 | AC-033 | `test_ac_033_upload_avatar` | RED |
+| REQ-017 | AC-034 | `test_ac_034_upload_avatar_existing` | RED |
+| REQ-017 | AC-035 | `test_ac_035_replace_avatar` | RED |
+| REQ-017 | AC-036 | `test_ac_036_replace_avatar_missing` | RED |
+| REQ-017 | AC-037 | `test_ac_037_delete_avatar` | RED |
+| REQ-017 | AC-038 | `test_ac_038_delete_avatar_noop` | RED |
+| REQ-018 | AC-039 | `test_ac_039_avatar_url_format` | RED |
+| REQ-018 | AC-040 | `test_ac_040_live_avatar_base_url` | RED |
+| REQ-019 | AC-041 | `test_ac_041_avatar_undecodable` | RED |
+| REQ-019 | AC-042 | `test_ac_042_avatar_dimensions_exceeded` | RED |
+| REQ-019 | AC-043 | `test_ac_043_avatar_type_not_allowed` | RED |
+| REQ-020 | AC-044 | `test_ac_044_get_avatar_default` | RED |
+| REQ-021 | AC-045 | `test_ac_045_avatar_variants_created` | RED |
+| REQ-021 | AC-046 | `test_ac_046_avatar_variants_replaced` | RED |
+| REQ-022 | AC-047 | `test_ac_047_event_uploaded` | RED |
+| REQ-022 | AC-048 | `test_ac_048_event_downloaded_deleted` | RED |
+| REQ-022 | AC-049 | `test_ac_049_event_validation_failed` | RED |
+| REQ-022 | AC-050 | `test_ac_050_no_publisher` | RED |
+| REQ-023 | AC-051 | `test_ac_051_error_hierarchy_context` | RED |
+| REQ-024 | AC-052 | `test_ac_052_register_settings` | RED |
+| REQ-024 | AC-053 | `test_ac_053_unregistered_settings_defaults` | RED |
+| REQ-025 | AC-054 | `test_ac_054_operations_traced` | RED |
+| REQ-026 | AC-055 | `test_ac_055_layout_convention` | RED |
+| INV-001 | — | `test_inv_001_no_partial_state_on_failure` | RED |
+| INV-002 | — | `test_inv_002_concurrent_same_key_last_write_wins` | RED |
+| INV-003 | — | `test_inv_003_metadata_matches_content` | RED |
+| INV-004 | — | `test_inv_004_at_most_one_avatar_per_user` | RED |
+| INV-005 | — | `test_inv_005_avatar_url_format` | RED |
+| INV-006 | — | `test_inv_006_event_correspondence` | RED |
+| INV-007 | — | `test_inv_007_key_containment` | RED |
+| INV-008 | — | `test_inv_008_variant_consistency` | RED |
+| EDGE-001 | — | `test_edge_001_source_not_found` | RED |
+| EDGE-002 | — | `test_edge_002_source_not_a_file` | RED |
+| EDGE-003 | — | `test_edge_003_stream_exceeds_limit_mid_stream` | RED |
+| EDGE-004 | — | `test_edge_004_key_null_byte` | RED |
+| EDGE-005 | — | `test_edge_005_key_absolute_path` | RED |
+| EDGE-006 | — | `test_edge_006_record_without_content` | RED |
+| EDGE-007 | — | `test_edge_007_delete_missing_content` | RED |
+| EDGE-008 | — | `test_edge_008_list_empty_store` | RED |
+| EDGE-009 | — | `test_edge_009_list_offset_beyond_end` | RED |
+| EDGE-010 | — | `test_edge_010_sequential_key_replacement` | RED |
+| EDGE-011 | — | `test_edge_011_dangling_avatar_mapping` | RED |
+| EDGE-012 | — | `test_edge_012_truncated_png_decode_failure` | RED |
+| EDGE-013 | — | `test_edge_013_variant_generation_failure_rollback` | RED |
+| EDGE-014 | — | `test_edge_014_publisher_raises` | RED |
+| EDGE-015 | — | `test_edge_015_repo_creates_parent_dir` | RED |
+| EDGE-016 | — | `test_edge_016_in_memory_isolation` | RED |
+| EDGE-017 | — | `test_edge_017_concurrent_download_upload` | RED |
+| EDGE-018 | — | `test_edge_018_dimensions_boundary_allowed` | RED |
+| EDGE-019 | — | `test_edge_019_size_boundary_allowed` | RED |
+| NFR-001 | — | `test_nfr_001_performance_budgets` | RED |
+| NFR-002 | — | `test_nfr_002_no_content_in_logs_events_errors` | RED |
+| NFR-003 | — | `test_nfr_003_api_backward_compatible` | RED |
+| NFR-004 | — | `test_nfr_004_concurrent_repository_safety` | RED |
+| NFR-005 | — | `test_nfr_005_operations_logged` | RED |
+| — | integration | `test_full_file_lifecycle` | RED |
+| — | integration | `test_avatar_lifecycle_with_variants` | RED |
+| — | integration | `test_concurrent_same_key_upload` | RED |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:

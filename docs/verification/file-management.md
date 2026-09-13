@@ -24,6 +24,25 @@
 - **Approval authority:** executed on the explicit human governance delegation recorded in the "Governance Delegation (human authority)" section above ("auto approve the pr at the end of phase 1 by my authority", 2026-09-13). The approval was performed through the GitHub PR process (PR → merge), not a direct push to `main`, satisfying the Spec Approval Gate.
 - **Note:** self-approval via `gh pr review --approve` is rejected by GitHub for the PR author's own PR; the merge step (with all CI checks green) constitutes the approval execution on the delegation.
 
+## Phase 3 — Test & RED
+
+- **Step:** S3.1 (derive tests), 2026-09-13.
+- **Tests derived** from `docs/specs/file-management.md` (test strategy table, 90 test functions):
+  - `tests/acceptance/filemanagement/test_filemanagement.py` — AC-001 .. AC-055 (55 acceptance tests).
+  - `tests/property/filemanagement/test_filemanagement_properties.py` — INV-001 .. INV-008 (8 property tests, Hypothesis).
+  - `tests/unit/filemanagement/test_filemanagement_edges.py` — EDGE-001 .. EDGE-019 (19 unit tests).
+  - `tests/contract/filemanagement/test_filemanagement_contracts.py` — NFR-001 .. NFR-005 (5 contract tests).
+  - `tests/integration/filemanagement/test_filemanagement_integration.py` — 3 integration tests (full file lifecycle, avatar lifecycle with variants, concurrent same-key upload).
+  - `tests/filemanagement_test_helpers.py` — shared helpers (content factories, wiring helpers, fault-injection doubles).
+  - Per-directory `conftest.py` in the five `filemanagement` test directories (shared `events` / `registry` / `repo` / `backend` / `service` fixtures).
+- **Test-name check:** every written test function name matches the spec's test strategy table exactly (90/90; verified by diffing `def test_*` names in the written files against the spec table).
+- **RED state confirmed:**
+  - `uv run pytest tests/acceptance/filemanagement tests/property/filemanagement tests/unit/filemanagement tests/contract/filemanagement tests/integration/filemanagement -q` → **exit code 4** (collection error), failing with `ModuleNotFoundError: No module named 'backend.filemanagement'` (the feature is unimplemented; the helpers import the feature public API at module level).
+  - `uv run pytest --collect-only` on the same paths shows the same `ModuleNotFoundError` at conftest import.
+- **Ruff:** `uv run ruff check` on all six new file-management test paths → **All checks passed** (exit 0). Repo-wide `uv run ruff check .` additionally reports 23 pre-existing `I001` import-sort errors in `tests/**/mail/**` that also exist on `main` (out of scope for this step; recorded for the verify phase).
+- **Traceability:** `docs/verification/traceability.md` gained a **File Management Matrix** section mapping every REQ/AC/INV/EDGE/NFR to its test with status `RED`.
+
 ## Evidence
 
 - Phase 1 (Specify): spec committed, PR #24 opened + merged on human delegation (see "Phase 1 — Spec approval").
+- Phase 3 (Test & RED): 90 tests derived from the spec, RED confirmed (`ModuleNotFoundError: backend.filemanagement`, pytest exit 4), ruff clean on the new files (see "Phase 3 — Test & RED").
