@@ -47,7 +47,7 @@ Each question is a section with the following fields:
 - **Question:** When an avatar is uploaded/replaced/deleted, does file-management itself call `UserManager.update_user(user_id, UserUpdate(profile_picture_url=...))` (and subscribe to `UserDeleted` to clean up avatar files)? Or does it return the avatar URL/key and the caller (application wiring) handles user-management? Should file-management depend on the usermanagement feature at all?
 - **Answer:** B — the caller updates it. file-management stays independent (no dependency on user-management): it stores the file and returns a URL string; the application code that called it sets the URL on the user record. No automatic avatar cleanup on user deletion (caller responsibility).
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-3 — Image processing in scope (Pillow, thumbnails)
@@ -58,7 +58,7 @@ Each question is a section with the following fields:
 - **Question:** Is image processing in scope — e.g., generating resized avatar variants (thumbnails) with Pillow? If yes: which sizes, and are variants stored as separate files? If no: are avatars stored as raw uploads only?
 - **Answer:** In scope: Pillow + thumbnails (image processing is in scope; exact variant sizes to be specified in the spec).
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-4 — Out-of-scope confirmations
@@ -69,7 +69,7 @@ Each question is a section with the following fields:
 - **Question:** Confirm out of scope for this change: virus scanning, content deduplication, file versioning, retention/expiration (auto-cleanup), sharing/permission grants, and any frontend UI. Is anything in that list actually in scope?
 - **Answer:** All out of scope: virus scanning, content deduplication, file versioning, retention/expiration, sharing/permissions, and frontend UI.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-5 — Storage backends
@@ -80,7 +80,7 @@ Each question is a section with the following fields:
 - **Question:** Which storage backends must the spec cover: (a) local disk only (plus in-memory for tests), (b) local disk + S3-compatible (boto3) behind the same interface, or (c) other? Is the interface identical across backends (put/get/delete/exists/stat)?
 - **Answer:** (a) Local disk only, plus in-memory for tests. S3 can be added later behind the same StorageBackend interface.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-6 — Object store (flat keys) vs. path store (directories)
@@ -91,7 +91,7 @@ Each question is a section with the following fields:
 - **Question:** Is the store flat (opaque keys, object-store style) or hierarchical (paths with directories/folders)? Are "folders" part of the public API?
 - **Answer:** Flat opaque keys (object-store style). "Folders" are NOT part of the public API; namespaces (e.g., avatars) are a logical concept, not real directories.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-7 — Default storage root + in-memory test backend
@@ -102,7 +102,7 @@ Each question is a section with the following fields:
 - **Question:** What is the default storage root directory for the local backend (e.g., `./data/files`)? Should an in-memory storage backend be part of the public API for tests/DI?
 - **Answer:** Default root `./data/files` (configurable). Yes — a public in-memory storage backend for tests/DI.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-8 — Upload input shape
@@ -113,7 +113,7 @@ Each question is a section with the following fields:
 - **Question:** What input shape(s) should `upload` accept: existing file path, raw bytes, file-like stream (or all of them)? Should the read be streamed (chunked) or whole-file?
 - **Answer:** All three: existing file path, raw bytes, and file-like stream.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-9 — Size limits
@@ -124,7 +124,7 @@ Each question is a section with the following fields:
 - **Question:** What are the max file sizes — for general uploads and for avatars (defaults, e.g., 100 MB / 5 MB)? Should limits be configurable via the settings registry (read live)? Are zero-byte files rejected (minimum size)?
 - **Answer:** Defaults: 10 MB general uploads, 2 MB avatars; configurable via the settings registry (read live); zero-byte files rejected.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-10 — Concurrent uploads to the same key
@@ -135,7 +135,7 @@ Each question is a section with the following fields:
 - **Question:** What should happen when two uploads target the same key concurrently: last-write-wins (atomic replacement), per-key locking (one fails), or undefined?
 - **Answer:** Last-write-wins (atomic replacement); exactly one winner, no error.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-11 — Atomicity / no partial state
@@ -146,7 +146,7 @@ Each question is a section with the following fields:
 - **Question:** Confirm: a failed/interrupted upload leaves no partial state (temp file + atomic rename; if the storage write fails, the metadata record is rolled back, and vice versa). Is this a hard invariant?
 - **Answer:** Yes — hard invariant (MUST hold for every operation).
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-12 — Type detection method
@@ -157,7 +157,7 @@ Each question is a section with the following fields:
 - **Question:** How should file type be determined: declared MIME type, file extension, magic-byte sniffing (adds a python-magic dependency), or image decode? When signals conflict, which wins (e.g., `.png` name but JPEG content)? Should a mismatch be rejected?
 - **Answer:** Magic-byte sniffing via python-magic (content-based detection; declared type is not trusted as the source of truth). Conflicting signals are rejected.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-13 — Allowed-type policy
@@ -168,7 +168,7 @@ Each question is a section with the following fields:
 - **Question:** What is the allowed-type policy: a global allowed-types list, per-kind lists (e.g., avatars restricted to image/png, image/jpeg, image/webp), or both? Is the policy unit MIME type or extension? Should it be configurable via the settings registry?
 - **Answer:** Per-namespace allowed types (avatars: images only) + a global default; unit = detected MIME type; configurable via the settings registry.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-14 — Metadata fields
@@ -179,7 +179,7 @@ Each question is a section with the following fields:
 - **Question:** Which metadata fields are normative? Proposed: id, key, original filename, declared MIME, detected MIME, size (bytes), SHA-256 content hash, namespace, uploader reference, created/updated timestamps. Is content hashing (SHA-256) required? Any additional fields (tags, owner)?
 - **Answer:** The proposed full set, with SHA-256 content hashing required.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-15 — Metadata persistence
@@ -190,7 +190,7 @@ Each question is a section with the following fields:
 - **Question:** Should file metadata be persisted in SQLite/SQLModel behind a repository ABC (like user-management), or in-memory (like the settings registry)?
 - **Answer:** SQLite/SQLModel behind a repository ABC (like user-management).
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-16 — List/query API
@@ -201,7 +201,7 @@ Each question is a section with the following fields:
 - **Question:** What list/query API is needed: list by namespace/prefix, lookup by key, search by original filename? Is pagination needed?
 - **Answer:** Lookup by key + list by namespace (prefix), with limit/offset pagination.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-17 — Avatar lifecycle semantics
@@ -212,7 +212,7 @@ Each question is a section with the following fields:
 - **Question:** Avatar lifecycle: upload (first), replace (second and later), delete. Is replace atomic (new file stored, then the user's URL swapped)? Is deleting the only avatar different from deleting a subsequent one (e.g., revert to a default)? Any guards?
 - **Answer:** Upload / replace / delete. Replace: new file stored, new URL returned, old file deleted. Delete: file deleted, caller clears the URL. No special guards.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-18 — Avatar URL format
@@ -223,7 +223,7 @@ Each question is a section with the following fields:
 - **Question:** With no HTTP layer, what URL does an avatar get? E.g., a stable pattern like `https://<base>/files/<file_id>` with a configurable base URL? Or should user-management's URL validation be extended (spec amendment)?
 - **Answer:** Configurable base URL pattern: `https://<base>/files/<file_id>` with a configurable base URL (settings registry). No user-management spec amendment.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-19 — Avatar constraints
@@ -234,7 +234,7 @@ Each question is a section with the following fields:
 - **Question:** What are the avatar constraints: max size (default?), allowed image types (png/jpeg/webp?), max dimensions? Are there per-user quotas (file count / total size)?
 - **Answer:** Allowed: image/png, image/jpeg, image/webp; max 4096x4096 dimensions (verified by Pillow decode); no per-user quota.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-20 — Avatar cleanup on user deletion + default avatar
@@ -245,7 +245,7 @@ Each question is a section with the following fields:
 - **Question:** When a user is deleted, are their avatar files also deleted (file-management subscribes to `UserDeleted`)? When a user is deactivated, is the avatar kept? Is there a "default avatar" fallback when no avatar is set?
 - **Answer:** Cleanup on user deletion stays the caller's responsibility (per Q-2; no UserDeleted subscription). There IS a built-in default avatar: the feature ships a default avatar image and returns its URL when a user has no avatar.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-21 — Download output shape
@@ -256,7 +256,7 @@ Each question is a section with the following fields:
 - **Question:** What output shape should `download` have: return bytes, return a file-like stream, write to a destination path (or all of them)? What error for a missing file? Is range/partial download out of scope?
 - **Answer:** Return bytes or a file-like stream. Missing file → FileNotFoundError. Range/partial download out of scope.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-22 — Download access control
@@ -267,7 +267,7 @@ Each question is a section with the following fields:
 - **Question:** Are downloads open to any in-process caller (consistent with existing features), or gated (owner reference, role, session token via the authentication feature)?
 - **Answer:** Open in-process access (any in-process caller); consistent with existing features.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-23 — Events
@@ -278,7 +278,7 @@ Each question is a section with the following fields:
 - **Question:** Which typed events should file-management publish to the shared event bus? Proposed: FileUploaded, FileDownloaded, FileDeleted, FileValidationFailed, AvatarUploaded, AvatarDeleted. Do events carry non-sensitive data only (no content, no secrets)?
 - **Answer:** The full proposed set: FileUploaded, FileDownloaded, FileDeleted, FileValidationFailed, AvatarUploaded, AvatarDeleted — non-sensitive data only.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-24 — Error taxonomy
@@ -289,7 +289,7 @@ Each question is a section with the following fields:
 - **Question:** Confirm the exception hierarchy rooted at `FileManagementError`: `FileNotFoundError`, `FileTooLargeError`, `FileTypeNotAllowedError`, `FileValidationError`, `StorageError`, `AvatarError` (plus avatar-specific). Do validation errors carry context (key, actual vs. limit/allowed)?
 - **Answer:** Confirmed — the proposed hierarchy rooted at FileManagementError, with context attributes on validation errors (key, actual vs. limit/allowed).
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-25 — NFR performance budgets
@@ -300,7 +300,7 @@ Each question is a section with the following fields:
 - **Question:** What are the performance budgets? Proposed: upload of a 10 MB file < 2 s (median); download of a 10 MB file < 1 s (median); metadata read < 5 ms (median); all including `@logged` tracing overhead. Any different values?
 - **Answer:** The proposed budgets: 10 MB upload < 2 s, 10 MB download < 1 s, metadata read < 5 ms (median, incl. tracing overhead).
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-26 — NFR security (path traversal / symlinks)
@@ -311,7 +311,7 @@ Each question is a section with the following fields:
 - **Question:** Confirm the hard security invariant: no key/filename can escape the storage root (reject or normalize `../`, absolute paths, null bytes; handle symlinks — reject or resolve within root). Which symlink behavior: reject or resolve within root?
 - **Answer:** Hard invariant; reject symlinks. Nothing escapes the storage root; reject `../`, absolute paths, null bytes; reject symlinks.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-27 — Settings registry integration
@@ -322,7 +322,7 @@ Each question is a section with the following fields:
 - **Question:** Confirm the settings keys registered via `register_feature("file-management", [...])` (e.g., `file-management.storage_root`, `file-management.max_file_size`, `file-management.avatar_max_size`, `file-management.allowed_types`, `file-management.avatar_base_url`), read live on each operation. Which keys should be settings vs. constructor args?
 - **Answer:** The proposed keys (storage_root, max_file_size, avatar_max_size, allowed_types, avatar_base_url), read live; repository/backend injection stays constructor args.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-28 — Observability policy
@@ -333,7 +333,7 @@ Each question is a section with the following fields:
 - **Question:** Confirm: the public service class (e.g., `FileService`) is traced with `@logged_class` (with a sensible `slow_threshold_ms`), module-level functions with `@logged`, `include_args=False` where secrets are involved. Any method that needs `include_args=True` for debuggability?
 - **Answer:** Confirmed — @logged_class on the service, @logged on module functions, include_args=False where secrets are involved.
 - **Date:** 2026-09-13
-- **Status:** PENDING
+- **Status:** ANSWERED
 - **Incorporated:** no
 
 ## Q-29 — Scope boundary: user-file-storage vs. centralizing all persistence (user-initiated)
