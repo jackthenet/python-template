@@ -36,7 +36,7 @@
         "Acceptance test for AC-051 passes"
       ],
       "dependencies": [],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-002",

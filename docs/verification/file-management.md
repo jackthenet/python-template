@@ -51,7 +51,18 @@
 - **Ruff:** `uv run ruff check` on all six new file-management test paths → **All checks passed** (exit 0). Repo-wide `uv run ruff check .` additionally reports 23 pre-existing `I001` import-sort errors in `tests/**/mail/**` that also exist on `main` (out of scope for this step; recorded for the verify phase).
 - **Traceability:** `docs/verification/traceability.md` gained a **File Management Matrix** section mapping every REQ/AC/INV/EDGE/NFR to its test with status `RED`.
 
+## Phase 4 — Implement (T-001)
+
+- **Step:** S4.5 (commit + update status), completing the partially-finished S4.5 for task T-001, 2026-09-13.
+- **T-001 scope:** foundation — `src/backend/filemanagement/{__init__,errors,events,models}.py` (error hierarchy with context, event types, domain models), committed as `c6b70c0` (plus the user-authorized test-helper import fixes Q-30/Q-31/Q-32).
+- **GREEN confirmed (T-001 gate — "Acceptance test for AC-051 passes"):**
+  - `uv run pytest tests/acceptance/filemanagement/test_filemanagement.py::test_ac_051_error_hierarchy_context -v` → `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_051_error_hierarchy_context PASSED [100%]` — **1 passed in 0.13s**.
+  - Note: the task's full-suite `green_command` (`uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v`) is NOT expected to be fully green at this point — later tasks T-002..T-008 are unimplemented, so their tests still fail with the unimplemented signal. The T-001 completion gate is specifically the AC-051 acceptance test, which passes.
+- **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-001).
+- **Task status:** `SPECIFIED → VERIFIED` for T-001 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
+
 ## Evidence
 
 - Phase 1 (Specify): spec committed, PR #24 opened + merged on human delegation (see "Phase 1 — Spec approval").
 - Phase 3 (Test & RED): 90 tests derived from the spec, RED confirmed (`ModuleNotFoundError: backend.filemanagement`, pytest exit 4), ruff clean on the new files (see "Phase 3 — Test & RED").
+- Phase 4 (Implement, T-001): foundation (errors, events, models) committed as `c6b70c0`; AC-051 acceptance test `test_ac_051_error_hierarchy_context` PASSED (GREEN); ruff clean on file-management paths (23 pre-existing mail `I001`s remain, out of scope); task status `VERIFIED` in both task files (see "Phase 4 — Implement (T-001)").
