@@ -11,7 +11,8 @@ They raise ``NotImplementedError`` when used — they carry no behavior. The
 real implementations land in T-004..T-008 and replace these placeholders.
 ``register_settings`` (T-002) is a real implementation in
 ``feature_settings``; the storage backends (T-003) are real implementations
-in ``storage``.
+in ``storage``; the metadata repository (T-004) is a real implementation in
+``repository``.
 """
 
 from __future__ import annotations
@@ -51,22 +52,16 @@ from backend.filemanagement.models import (
     StorageStat,
     UserAvatar,
 )
+from backend.filemanagement.repository import FileRepository, SqliteFileRepository
 from backend.filemanagement.storage import (
     InMemoryStorageBackend,
     LocalDiskStorageBackend,
     StorageBackend,
 )
 
-# --- Collection scaffolding for later tasks (T-004..T-008) ------------------
+# --- Collection scaffolding for later tasks (T-005..T-008) ------------------
 # No behavior: each raises NotImplementedError when used. Replaced by the real
 # implementations in the tasks noted below.
-
-
-class SqliteFileRepository:
-    """Placeholder (implemented in T-004)."""
-
-    def __init__(self, database_url: str) -> None:
-        raise NotImplementedError("SqliteFileRepository is implemented in T-004")
 
 
 class FileService:
@@ -97,6 +92,7 @@ __all__ = [
     "FileManagementNotFoundError",
     "FileRead",
     "FileRecord",
+    "FileRepository",
     "FileService",
     "FileTooLargeError",
     "FileTypeNotAllowedError",
