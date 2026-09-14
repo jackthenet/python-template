@@ -132,6 +132,15 @@
 - **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-004).
 - **Task status:** `SPECIFIED → VERIFIED` for T-004 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
 
+## Dependency Replacement (python-magic → filetype, discovered in Phase 4)
+
+- **When:** during T-005 S4.2 (FileService.upload), 2026-09-14. The T-005 implementation subagent deadlocked probing `python-magic` (`import magic` → segfault exit 139; `magic.loader.load_lib()` → hang/timeout). The user directed the replacement ("If python-magic has problem replace it").
+- **Root cause:** `python-magic` (libmagic bindings) is unusable on the Windows host — no bundled libmagic, and loading it either segfaults or deadlocks.
+- **Replacement:** the pure-Python `filetype` package (magic-byte detection: `filetype.guess_mime(data)` → MIME type or `None`) **plus a text fallback** in the implementation: text content (no null bytes in the leading 8 KiB) → `text/plain`; unidentified binary → `application/octet-stream`. This preserves the spec's behavior (magic-byte detection as the source of truth, conflicting signals rejected); only the library changes.
+- **Verified on host:** `filetype` detects the types the spec's acceptance criteria exercise — image/png, image/jpeg, image/webp, image/gif, application/pdf, application/zip — and the text fallback yields text/plain for `text_bytes(n)` (= `b"x" * n`). `puremagic` was evaluated and rejected (2.x returns extensions, not MIME types, and raises for unidentified content).
+- **Spec drift:** `docs/specs/file-management.md` names `python-magic` (REQ-004, REQ-005, D3). The normative behavior is preserved; only the library name is now stale. A spec-amendment rename is deferred (the behavior, not the library name, is what the spec governs).
+- **Recorded in:** ADR-048 (amended), `pyproject.toml` (`filetype>=1.2.0`; `python-magic` removed), `uv.lock`.
+
 ## Evidence
 
 - Phase 1 (Specify): spec committed, PR #24 opened + merged on human delegation (see "Phase 1 — Spec approval").
