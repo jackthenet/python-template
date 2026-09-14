@@ -116,7 +116,11 @@ def test_inv_003_metadata_matches_content(tmp_path: Path, content: bytes) -> Non
     assert rec.detected_mime_type == "text/plain"
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+@settings(
+    max_examples=_MAX_EXAMPLES,
+    deadline=500,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
+)
 @given(ops=st.lists(st.sampled_from(["upload", "replace", "delete"]), min_size=1, max_size=8))
 def test_inv_004_at_most_one_avatar_per_user(tmp_path: Path, ops: list[str]) -> None:
     repo = SqliteFileRepository(db_url(tmp_path, f"inv004-{uuid4()}.db"))

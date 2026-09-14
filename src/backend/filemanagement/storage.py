@@ -28,12 +28,18 @@ from typing import BinaryIO
 
 from backend.filemanagement.errors import StorageError
 from backend.filemanagement.models import KEY_PATTERN, StorageStat
+from backend.logging import logged_class
 
 
+@logged_class(slow_threshold_ms=100, include_args=False)
 class StorageBackend(ABC):
     """Seam for storage content (REQ-015).
 
     Service code references only this ABC — both backends are swappable.
+
+    The ABC is traced via the shared logging feature (``@logged_class``);
+    concrete backends inherit the tracing. ``include_args=False`` so file
+    content never appears in log records (NFR-002, REQ-025).
     """
 
     @abstractmethod
@@ -65,6 +71,7 @@ class StorageBackend(ABC):
         """Return the content's size/updated time at ``key``, or ``None`` if absent."""
 
 
+@logged_class(slow_threshold_ms=100, include_args=False)
 class LocalDiskStorageBackend(StorageBackend):
     """Local-disk storage backend (REQ-015, REQ-016).
 
@@ -157,6 +164,7 @@ class LocalDiskStorageBackend(StorageBackend):
         return StorageStat(size=st.st_size, updated_at=datetime.fromtimestamp(st.st_mtime, UTC))
 
 
+@logged_class(slow_threshold_ms=100, include_args=False)
 class InMemoryStorageBackend(StorageBackend):
     """Public in-memory storage backend for tests/DI (REQ-015).
 

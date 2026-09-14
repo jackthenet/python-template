@@ -30,6 +30,7 @@ from backend.filemanagement import (
     SqliteFileRepository,
     register_settings,
 )
+from backend.logging import register_settings as register_logging_settings
 from backend.settings import get_settings_registry
 
 _UPLOAD_BUDGET_S = 2.0
@@ -80,6 +81,12 @@ _PUBLIC_API = (
 def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     # Measured with the shared logging feature at the default INFO level.
     shared = get_settings_registry()
+    # Order-independence: the settings-coverage suite may have reset the module
+    # singleton, recreating it without the logging.* definitions. Re-register
+    # them if absent so reading logging.log_level never depends on test order.
+    # Robustness fix only — the performance-budget assertions below are unchanged.
+    if not shared.has("logging.log_level"):
+        register_logging_settings(shared)
     previous = shared.get_value("logging.log_level")
     shared.set_value("logging.log_level", "INFO")
     try:
