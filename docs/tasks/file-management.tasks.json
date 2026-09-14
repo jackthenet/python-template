@@ -117,12 +117,8 @@
       "requirements": [
         "REQ-013"
       ],
-      "acceptance_criteria": [
-        "AC-025"
-      ],
+      "acceptance_criteria": [],
       "tests_to_create": [
-        "test_ac_025_persistence_across_instances",
-        "test_edge_010_sequential_key_replacement",
         "test_edge_015_repo_creates_parent_dir"
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
@@ -140,8 +136,7 @@
         "list_by_namespace: prefix match, created_at ordering, limit/offset pagination (REQ-014)"
       ],
       "completion_gates": [
-        "Acceptance test for AC-025 passes",
-        "Unit tests for EDGE-010, EDGE-015 pass"
+        "Unit test for EDGE-015 passes"
       ],
       "dependencies": [
         "T-001"
@@ -283,7 +278,8 @@
         "AC-023",
         "AC-027",
         "AC-028",
-        "AC-048"
+        "AC-048",
+        "AC-025"
       ],
       "tests_to_create": [
         "test_ac_019_download_bytes",
@@ -298,7 +294,9 @@
         "test_edge_007_delete_missing_content",
         "test_edge_008_list_empty_store",
         "test_edge_009_list_offset_beyond_end",
-        "test_edge_017_concurrent_download_upload"
+        "test_edge_017_concurrent_download_upload",
+        "test_ac_025_persistence_across_instances",
+        "test_edge_010_sequential_key_replacement"
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
@@ -320,8 +318,8 @@
         "Events: FileDownloaded per successful download/open, FileDeleted per file record deleted (REQ-022)"
       ],
       "completion_gates": [
-        "Acceptance tests for AC-019, AC-020, AC-021, AC-022, AC-023, AC-027, AC-028, AC-048 pass",
-        "Unit tests for EDGE-006, EDGE-007, EDGE-008, EDGE-009, EDGE-017 pass"
+        "Unit tests for EDGE-006, EDGE-007, EDGE-008, EDGE-009, EDGE-010, EDGE-017 pass",
+        "Acceptance tests for AC-019, AC-020, AC-021, AC-022, AC-023, AC-025, AC-027, AC-028, AC-048 pass"
       ],
       "dependencies": [
         "T-005"

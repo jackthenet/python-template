@@ -72,6 +72,16 @@
 - **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-002).
 - **Task status:** `SPECIFIED → VERIFIED` for T-002 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
 
+## DAG Correction (T-004 gate, discovered in Phase 4)
+
+- **When:** 2026-09-14, before S4.1 (pick T-004 + confirm RED).
+- **Flaw:** T-004's completion gate ("Acceptance test for AC-025 passes" + "Unit tests for EDGE-010, EDGE-015 pass") could not be satisfied by T-004 alone. `test_edge_015_repo_creates_parent_dir` needs only `SqliteFileRepository` (T-004), but `test_ac_025_persistence_across_instances` needs `FileService.upload` (T-005) + `FileService.get_file` (T-006), and `test_edge_010_sequential_key_replacement` needs `FileService.upload` (T-005) + `FileService.download` (T-006). Since T-005 depends on T-004 (must be VERIFIED), this created a deadlock: T-004 could not be VERIFIED until `test_ac_025`/`test_edge_010` passed, but those need T-005/T-006.
+- **Correction (decomposition fix, NOT a test weakening — both tests preserved, only moved to the task that can make them pass):**
+  - T-004: `tests_to_create` → `[test_edge_015_repo_creates_parent_dir]`; `acceptance_criteria` → `[]` (AC-025 moved to T-006); `completion_gates` → `["Unit test for EDGE-015 passes"]`.
+  - T-006 (queries; depends on T-005, so `upload` + `download`/`get_file` are available): added `test_ac_025_persistence_across_instances` + `test_edge_010_sequential_key_replacement` to `tests_to_create`, `AC-025` to `acceptance_criteria`, and updated the two completion gates to include AC-025 and EDGE-010.
+  - Applied to both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (kept in sync).
+- **Rationale:** Same P-5 pattern — a task's completion gate must be satisfiable by that task alone. `test_ac_025`/`test_edge_010` can only pass after T-006, so T-006 is the earliest task where they are satisfiable. This respects "tests are the contract" (neither test is weakened nor deleted).
+
 ## DAG Correction (T-002 gate, discovered in Phase 4)
 
 - **When:** 2026-09-13, during S4.1 (pick T-002 + confirm RED).
