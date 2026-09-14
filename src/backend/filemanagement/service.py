@@ -37,6 +37,7 @@ from backend.filemanagement.errors import (
 from backend.filemanagement.events import (
     AvatarDeleted,
     AvatarUploaded,
+    EventPublisher,
     FileDeleted,
     FileDownloaded,
     FileUploaded,
@@ -159,7 +160,7 @@ class FileService:
         self,
         repository: FileRepository,
         backend: StorageBackend | None = None,
-        event_bus: object | None = None,
+        event_bus: EventPublisher | None = None,
         settings_registry: SettingsRegistry | None = None,
     ) -> None:
         self._repository = repository
