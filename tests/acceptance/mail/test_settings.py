@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from backend.mail import register_settings
 from mail_test_helpers import ensure_mail_settings, resolve_mail_config
 
+from backend.mail import register_settings
 from backend.settings import get_settings_registry
 
 

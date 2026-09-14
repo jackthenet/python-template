@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import (
-    MailService,
-    MailTemplateError,
-    PasswordResetEmailRequest,
-)
 from mail_test_helpers import (
     EventCollector,
     RecordingTransport,
     ensure_mail_settings,
     simple_template,
+)
+
+from backend.mail import (
+    MailService,
+    MailTemplateError,
+    PasswordResetEmailRequest,
 )
 
 SMTP_PASSWORD = "smtp-log-secret"

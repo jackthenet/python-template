@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import html
 
-from backend.mail import EmailTemplate, render_template
 from hypothesis import given
 from hypothesis import strategies as st
+
+from backend.mail import EmailTemplate, render_template
 
 
 @st.composite

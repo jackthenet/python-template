@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import MailConfigurationError, MailService
 from mail_test_helpers import RecordingTransport, ensure_mail_settings, simple_template
+
+from backend.mail import MailConfigurationError, MailService
 
 
 def test_ac_011_empty_smtp_host() -> None:

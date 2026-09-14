@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from backend.mail import EmailSendResult, MailService
 from mail_test_helpers import EventCollector, RecordingTransport, message_bodies, simple_template
+
+from backend.mail import EmailSendResult, MailService
 
 
 def test_ac_004_core_send_success() -> None:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import time
 
-from backend.mail import build_message, render_template
 from mail_test_helpers import simple_template
+
+from backend.mail import build_message, render_template
 
 SAMPLES = 100
 BUDGET_SECONDS = 0.05  # 50 ms at p95

@@ -14,6 +14,221 @@
 - **Execution:** At S1.4 (end of Phase 1), the spec PR is approved AND merged via `gh pr merge` (through the GitHub PR process — NOT a direct push to `main`, which does not constitute approval per the Spec Approval Gate).
 - **Note:** This exercises the human-controls-WHAT boundary by explicit delegation rather than by review. Recorded for traceability.
 
+## Phase 1 — Spec approval
+
+- **PR:** #24 — `spec(file-management): user file storage feature specification` (https://github.com/jackthenet/python-template/pull/24)
+- **Merged:** 2026-09-13 (squash merge via `gh pr merge 24 --squash`)
+- **Merge commit (on `main`):** `d0c99e1428121ac7be5f92c907266eeba0eba84e`
+- **Merge-landed verification:** `git log origin/main -- docs/specs/file-management.md` shows commit `d0c99e1` touching the spec file; the spec file (715 lines) is present on `origin/main`. (The pre-merge commit `f4e45fc` is not a SHA ancestor of `origin/main` because the merge was a squash merge — the content landed via the new squash commit.)
+- **CI checks:** `spec-validation` SUCCESS, `tests` SUCCESS (both completed before merge).
+- **Approval authority:** executed on the explicit human governance delegation recorded in the "Governance Delegation (human authority)" section above ("auto approve the pr at the end of phase 1 by my authority", 2026-09-13). The approval was performed through the GitHub PR process (PR → merge), not a direct push to `main`, satisfying the Spec Approval Gate.
+- **Note:** self-approval via `gh pr review --approve` is rejected by GitHub for the PR author's own PR; the merge step (with all CI checks green) constitutes the approval execution on the delegation.
+
+## Phase 3 — Test & RED
+
+- **Step:** S3.1 (derive tests), 2026-09-13.
+- **Tests derived** from `docs/specs/file-management.md` (test strategy table, 90 test functions):
+  - `tests/acceptance/filemanagement/test_filemanagement.py` — AC-001 .. AC-055 (55 acceptance tests).
+  - `tests/property/filemanagement/test_filemanagement_properties.py` — INV-001 .. INV-008 (8 property tests, Hypothesis).
+  - `tests/unit/filemanagement/test_filemanagement_edges.py` — EDGE-001 .. EDGE-019 (19 unit tests).
+  - `tests/contract/filemanagement/test_filemanagement_contracts.py` — NFR-001 .. NFR-005 (5 contract tests).
+  - `tests/integration/filemanagement/test_filemanagement_integration.py` — 3 integration tests (full file lifecycle, avatar lifecycle with variants, concurrent same-key upload).
+  - `tests/filemanagement_test_helpers.py` — shared helpers (content factories, wiring helpers, fault-injection doubles).
+  - Per-directory `conftest.py` in the five `filemanagement` test directories (shared `events` / `registry` / `repo` / `backend` / `service` fixtures).
+- **Test-name check:** every written test function name matches the spec's test strategy table exactly (90/90; verified by diffing `def test_*` names in the written files against the spec table).
+- **RED state confirmed:**
+  - `uv run pytest tests/acceptance/filemanagement tests/property/filemanagement tests/unit/filemanagement tests/contract/filemanagement tests/integration/filemanagement -q` → **exit code 4** (collection error), failing with `ModuleNotFoundError: No module named 'backend.filemanagement'` (the feature is unimplemented; the helpers import the feature public API at module level).
+  - `uv run pytest --collect-only` on the same paths shows the same `ModuleNotFoundError` at conftest import.
+  - **Failure mode per test category** (all five categories fail identically at collection — each per-directory `conftest.py` and `tests/filemanagement_test_helpers.py` import the feature public API `backend.filemanagement` at module level, so no individual test function is reached; this is the valid RED signal for a new, unimplemented FEATURE, not a broken test contract):
+
+    | Test category | Path | Failure mode |
+    |---------------|------|--------------|
+    | Acceptance | `tests/acceptance/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Property | `tests/property/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Unit | `tests/unit/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Contract | `tests/contract/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+    | Integration | `tests/integration/filemanagement/` | Collection error — `ModuleNotFoundError: No module named 'backend.filemanagement'` (conftest import) |
+- **Ruff:** `uv run ruff check` on all six new file-management test paths → **All checks passed** (exit 0). Repo-wide `uv run ruff check .` additionally reports 23 pre-existing `I001` import-sort errors in `tests/**/mail/**` that also exist on `main` (out of scope for this step; recorded for the verify phase).
+- **Traceability:** `docs/verification/traceability.md` gained a **File Management Matrix** section mapping every REQ/AC/INV/EDGE/NFR to its test with status `RED`.
+
+## Phase 4 — Implement (T-001)
+
+- **Step:** S4.5 (commit + update status), completing the partially-finished S4.5 for task T-001, 2026-09-13.
+- **T-001 scope:** foundation — `src/backend/filemanagement/{__init__,errors,events,models}.py` (error hierarchy with context, event types, domain models), committed as `c6b70c0` (plus the user-authorized test-helper import fixes Q-30/Q-31/Q-32).
+- **GREEN confirmed (T-001 gate — "Acceptance test for AC-051 passes"):**
+  - `uv run pytest tests/acceptance/filemanagement/test_filemanagement.py::test_ac_051_error_hierarchy_context -v` → `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_051_error_hierarchy_context PASSED [100%]` — **1 passed in 0.13s**.
+  - Note: the task's full-suite `green_command` (`uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v`) is NOT expected to be fully green at this point — later tasks T-002..T-008 are unimplemented, so their tests still fail with the unimplemented signal. The T-001 completion gate is specifically the AC-051 acceptance test, which passes.
+- **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-001).
+- **Task status:** `SPECIFIED → VERIFIED` for T-001 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
+
+## Phase 4 — Implement (T-002)
+
+- **Step:** S4.5 (commit + update status), for task T-002, 2026-09-13.
+- **T-002 scope:** feature settings registration — `src/backend/filemanagement/feature_settings.py` with `register_settings(registry)` (traced with `@logged(slow_threshold_ms=5)`) that calls `registry.register_feature('filemanagement', [...])` registering the 5 `SettingDefinition`s (category `application`, group `filemanagement`): `filemanagement.storage_root` (TEXT, default `./data/files`), `filemanagement.max_file_size` (NUMBER, default `10485760`), `filemanagement.avatar_max_size` (NUMBER, default `2097152`), `filemanagement.allowed_types` (LIST, 9 MIME defaults), `filemanagement.avatar_base_url` (TEXT, default `files.example.com`); live-read pattern (settings read live on each operation, unregistered keys fall back to the hardcoded defaults); no import side effects (`register_settings` is an explicit function called at wiring time, not at import); re-exported from `src/backend/filemanagement/__init__.py` (REQ-024, ADR-057). Committed as `65425e0`.
+- **Gate (NARROWED by DAG correction P-5):** "Acceptance test for AC-052 passes." AC-053 / `test_ac_053_unregistered_settings_defaults` was moved to T-008 (see "DAG Correction (T-002 gate, discovered in Phase 4)").
+- **GREEN confirmed (T-002 gate — "Acceptance test for AC-052 passes"):**
+  - `uv run pytest tests/acceptance/filemanagement/test_filemanagement.py::test_ac_052_register_settings -v` → `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_052_register_settings PASSED [100%]` — **1 passed in 0.14s**.
+  - Note: the task's full-suite `green_command` (`uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v`) is NOT expected to be fully green at this point — later tasks T-003..T-008 are unimplemented, so their tests still fail with the unimplemented signal. The T-002 completion gate is specifically the AC-052 acceptance test, which passes.
+- **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-002).
+- **Task status:** `SPECIFIED → VERIFIED` for T-002 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
+
+## DAG Correction (T-005 gate, discovered in Phase 4)
+
+- **When:** 2026-09-14, before S4.1 (pick T-005 + confirm RED).
+- **Flaw:** T-005's completion gate (all 34 tests) could not be satisfied by T-005 alone. 5 of the 34 tests use T-006 **service** methods (called on the `FileService` instance, not the repository): `test_ac_001` (AC-001, `get_file`), `test_ac_014` (AC-014, `get_file`), `test_ac_026` (AC-026, `delete`/`download`/`get_file`/`list_files`), `test_ac_030` (AC-030, `delete`/`download`), `test_ac_050` (AC-050, `delete`/`download`). Since T-006 depends on T-005 (must be VERIFIED), this created a deadlock: T-005 could not be VERIFIED until those 5 tests passed, but they need T-006's `get_file`/`download`/`delete`/`list_files`. (Note: the other 29 T-005 tests use only **repository** methods (`repo.list_by_namespace`, etc.) which are T-004, already VERIFIED — so they are satisfiable by T-005 alone.)
+- **Correction (decomposition fix, NOT a test weakening — all 5 tests preserved, only moved to the task that can make them pass):**
+  - T-005: removed the 5 tests from `tests_to_create` (29 remain) and AC-001/AC-014/AC-026/AC-030/AC-050 from `acceptance_criteria` (19 remain); `completion_gates` updated to the 19 remaining ACs + the EDGE/INV gates.
+  - T-006 (queries; depends on T-005, so `get_file`/`download`/`delete`/`list_files` are available): added the 5 tests to `tests_to_create` (20 total) and AC-001/AC-014/AC-026/AC-030/AC-050 to `acceptance_criteria` (14 total); the acceptance completion gate updated to the full 14-AC list.
+  - Applied to both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (kept in sync).
+- **Rationale:** Same P-5/P-8 pattern — a task's completion gate must be satisfiable by that task alone. The 5 upload tests are written assuming the queries methods (`get_file`/`download`/`delete`/`list_files`) are available, but those are T-006. T-006 is the earliest task where they are satisfiable. This respects "tests are the contract" (no test is weakened nor deleted).
+- **Guidance (reinforces P-5/P-8):** When decomposing a spec into a task DAG (S2.2), for EACH task verify that every test in `tests_to_create` can pass using ONLY that task's implementation plus its declared `dependencies` (already-VERIFIED tasks). Distinguish **service** methods (called on the `FileService` instance) from **repository** methods (called on the repository instance) — only the service methods of a LATER task create a deadlock. A task's completion gate must be satisfiable by that task alone.
+
+## DAG Correction (T-004 gate, discovered in Phase 4)
+
+- **When:** 2026-09-14, before S4.1 (pick T-004 + confirm RED).
+- **Flaw:** T-004's completion gate ("Acceptance test for AC-025 passes" + "Unit tests for EDGE-010, EDGE-015 pass") could not be satisfied by T-004 alone. `test_edge_015_repo_creates_parent_dir` needs only `SqliteFileRepository` (T-004), but `test_ac_025_persistence_across_instances` needs `FileService.upload` (T-005) + `FileService.get_file` (T-006), and `test_edge_010_sequential_key_replacement` needs `FileService.upload` (T-005) + `FileService.download` (T-006). Since T-005 depends on T-004 (must be VERIFIED), this created a deadlock: T-004 could not be VERIFIED until `test_ac_025`/`test_edge_010` passed, but those need T-005/T-006.
+- **Correction (decomposition fix, NOT a test weakening — both tests preserved, only moved to the task that can make them pass):**
+  - T-004: `tests_to_create` → `[test_edge_015_repo_creates_parent_dir]`; `acceptance_criteria` → `[]` (AC-025 moved to T-006); `completion_gates` → `["Unit test for EDGE-015 passes"]`.
+  - T-006 (queries; depends on T-005, so `upload` + `download`/`get_file` are available): added `test_ac_025_persistence_across_instances` + `test_edge_010_sequential_key_replacement` to `tests_to_create`, `AC-025` to `acceptance_criteria`, and updated the two completion gates to include AC-025 and EDGE-010.
+  - Applied to both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (kept in sync).
+- **Rationale:** Same P-5 pattern — a task's completion gate must be satisfiable by that task alone. `test_ac_025`/`test_edge_010` can only pass after T-006, so T-006 is the earliest task where they are satisfiable. This respects "tests are the contract" (neither test is weakened nor deleted).
+
+## DAG Correction (T-002 gate, discovered in Phase 4)
+
+- **When:** 2026-09-13, during S4.1 (pick T-002 + confirm RED).
+- **Flaw:** T-002's completion gate ("Acceptance tests for AC-052, AC-053 pass") could not be satisfied by T-002 alone. `test_ac_052_register_settings` needs only `register_settings` (T-002), but `test_ac_053_unregistered_settings_defaults` is an integration-level test that also requires `InMemoryStorageBackend` (T-003), `SqliteFileRepository` (T-004), `FileService.upload` (T-005), and `FileService.upload_avatar` (T-007). Since T-005 depends on T-002 (must be VERIFIED), this created a deadlock: T-002 could not be VERIFIED until `test_ac_053` passed, but `test_ac_053` needs T-005/T-007.
+- **Correction (decomposition fix, NOT a test weakening — `test_ac_053` is preserved, only moved to the task that can make it pass):**
+  - T-002: `tests_to_create` → `[test_ac_052_register_settings]`; `acceptance_criteria` → `[AC-052]`; `completion_gates` → `["Acceptance test for AC-052 passes"]`.
+  - T-008 (final cross-cutting task; depends on T-006 + T-007, so the full stack is available): added `test_ac_053_unregistered_settings_defaults` to `tests_to_create`, `AC-053` to `acceptance_criteria`, and `"Acceptance test for AC-053 passes"` to `completion_gates`.
+  - Applied to both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (kept in sync).
+- **Rationale:** DAG ordering is T-001 → (T-002, T-003, T-004) → T-005 → (T-006, T-007) → T-008. `test_ac_053` can only pass after T-007, so T-008 is the earliest task where it is satisfiable. This respects "tests are the contract" (the test is neither weakened nor deleted).
+
+## Phase 4 — Implement (T-003)
+
+- **Step:** S4.5 (commit + update status), for task T-003, 2026-09-13.
+- **T-003 scope:** storage backends — `src/backend/filemanagement/storage.py`:
+  - `StorageBackend` ABC: `put(key, data: bytes | BinaryIO)` (atomically write the content to key, replacing any existing content — last-write-wins; `StorageError` reason `io` | `symlink` | `path_escape`), `get(key) -> BinaryIO` (file-like stream of the content; reason `not_found` if the key is absent), `delete(key)` (no-op if the key is absent), `exists(key) -> bool`, `stat(key) -> StorageStat | None` (D1, ADR-050).
+  - `LocalDiskStorageBackend(root: Path)`: flat layout (one file per key directly under root, the key is the filename); KEY_PATTERN enforcement (a violating key → `StorageError` reason `path_escape`); resolved-path containment (a path resolving outside root → `StorageError` reason `path_escape`); symlink rejection at the target path or any path component (reason `symlink`, never followed); `put` writes to a temp file (`mkstemp`) then `os.replace` (atomic rename, last-write-wins) (D4, D5, D13, ADR-050, ADR-053).
+  - `InMemoryStorageBackend`: a dict of key → bytes; public for tests/DI; instances are isolated (no shared state between instances) (REQ-015, EDGE-016).
+  - `StorageStat` (size, updated_at). Re-exported from `src/backend/filemanagement/__init__.py`. Committed as `8c22d0d`.
+- **Q-33 test fix (separate commit):** `161f772` — suppresses the `function_scoped_fixture` health check in all 8 property tests (false-positive health-check signal; no assertion changes).
+- **GREEN confirmed (T-003 gate — "Acceptance tests for AC-031, AC-032 pass"; "Unit test for EDGE-016 passes"; "Property test for INV-007 passes"):**
+  - `test_ac_032_path_escape_rejected` PASSED (AC-032), `test_edge_016_in_memory_isolation` PASSED (EDGE-016), `test_inv_007_key_containment` PASSED (INV-007), `test_ac_031_symlink_rejected` SKIPPED — symlinks unavailable on this host (WinError 1314), acceptable per task (AC-031). Summary: **3 passed, 1 skipped**.
+  - Note: the task's full-suite `green_command` (`uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v`) is NOT expected to be fully green at this point — later tasks T-004..T-008 are unimplemented, so their tests still fail with the unimplemented signal. The T-003 completion gates are the AC-031/AC-032 acceptance tests, the EDGE-016 unit test, and the INV-007 property test, which pass (AC-031 skipped as host-acceptable).
+- **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-003).
+- **Task status:** `SPECIFIED → VERIFIED` for T-003 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
+
+## Phase 4 — Implement (T-004)
+
+- **Step:** S4.5 (commit + update status), for task T-004, 2026-09-14.
+- **T-004 scope:** metadata repository — `src/backend/filemanagement/repository.py`:
+  - `FileRepository` ABC: `add`, `get_by_key`, `get_by_id`, `update`, `delete`, `list_by_namespace`, `set_user_avatar`, `get_user_avatar`, `clear_user_avatar`.
+  - `SqliteFileRepository`: auto-creates the DB file's parent directory (EDGE-015), bootstraps tables via `SQLModel.metadata.create_all`, thread-safe SQLite (per-thread connections), atomic same-key replacement in `add`, `list_by_namespace` (prefix match + `created_at` ordering + limit/offset pagination), user→avatar mapping.
+  - Both classes traced via `@logged_class(slow_threshold_ms=100)`. Re-exported from `src/backend/filemanagement/__init__.py`. Committed as `7966c40`.
+- **Gate (NARROWED by DAG correction P-8):** "Unit test for EDGE-015 passes." `test_ac_025_persistence_across_instances` + `test_edge_010_sequential_key_replacement` were moved to T-006 (see "DAG Correction (T-004 gate, discovered in Phase 4)").
+- **GREEN confirmed (T-004 gate — "Unit test for EDGE-015 passes"):**
+  - `uv run pytest tests/unit/filemanagement/test_filemanagement_edges.py::test_edge_015_repo_creates_parent_dir -v` → `tests/unit/filemanagement/test_filemanagement_edges.py::test_edge_015_repo_creates_parent_dir PASSED [100%]` — **1 passed in 0.16s**.
+  - Note: the task's full-suite `green_command` (`uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v`) is NOT expected to be fully green at this point — later tasks T-005..T-008 are unimplemented, so their tests still fail with the unimplemented signal. The T-004 completion gate is specifically the EDGE-015 unit test, which passes.
+- **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-004).
+- **Task status:** `SPECIFIED → VERIFIED` for T-004 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
+
+## Phase 4 — Implement (T-005)
+
+- **Step:** S4.2 (implement + confirm GREEN), for task T-005, 2026-09-14.
+- **T-005 scope:** `FileService.upload` — `src/backend/filemanagement/service.py`:
+  - `FileService(repository, backend=None, event_bus=None, settings_registry=None)`; `upload(source, key=None, namespace="general", declared_mime_type=None, original_filename=None, uploader=None) -> FileRecord`.
+  - Behavior per T-005 implementation_steps: key/namespace pattern validation (traversal/null-byte/absolute-path rejected), live max-file-size limit (general vs avatar), zero-byte rejection, magic-byte content detection via `filetype` + text fallback (ADR-048 amendment; `python-magic` unusable on host), declared-type conflict rejection, filename-type conflict rejection, live allowed-type set enforcement, generated UUID key when omitted, atomic write with mutual rollback (storage content rolled back on metadata failure and vice versa), `FileUploaded` / `FileValidationFailed` events (best-effort; a publisher failure never breaks the operation), `@logged_class(slow_threshold_ms=5000, include_args=False)` traced.
+  - `__init__.py`: re-exports the real `FileService` (the `NotImplementedError` placeholder removed).
+  - **T-004 fix (discovered in S4.2):** `SqliteFileRepository.add` same-key replacement now uses an immediate bulk `delete` statement (`session.execute(delete(...))`), which executes before the deferred insert flushes. The previous ORM pattern (deferred `session.delete` + deferred `session.add` in one commit) flushed the insert first → `IntegrityError` (UNIQUE `files.key`) even for sequential replacement, violating the ADR-054 no-error atomic-replacement contract. T-004's gate (EDGE-015 only) never exercised the replacement path, so the bug was latent. The bounded service-side retry (`_persist_record`, `_ADD_ATTEMPTS`) is kept as defense for the true inter-connection race (the winner committing between the loser's delete and insert).
+  - **Dependency:** `pillow>=10.0.0` added (`pyproject.toml`, `uv.lock`) — image decode validation (spec REQ-019 dependency; the approved spec lists Pillow; the test helper `png_bytes` imports PIL).
+  - Committed as `a4d75c0`.
+- **Gate (NARROWED by DAG correction P-9):** the 29 T-005 tests = `tests_to_create` in `.github/task-runner/tasks.json` (AC-002..AC-013, AC-015..AC-018, AC-024, AC-029, AC-049 + EDGE-001..EDGE-005, EDGE-014, EDGE-019 + INV-001..INV-003). The 5 upload tests moved to T-006 (see "DAG Correction (T-005 gate, discovered in Phase 4)").
+- **GREEN confirmed (T-005 gate — all 29 tests):**
+  - `uv run pytest` (29 node IDs: 19 acceptance in `tests/acceptance/filemanagement/test_filemanagement.py`, 7 unit in `tests/unit/filemanagement/test_filemanagement_edges.py`, 3 property in `tests/property/filemanagement/test_filemanagement_properties.py`) → **31 passed in 4.52s** (29 test functions; 2 are parameterized into 2 items each — all PASS, 0 failed).
+  - Regression check (T-004 fix touched `repository.py`): `test_edge_015_repo_creates_parent_dir` PASSED. The 4 failing contract tests (`test_nfr_001/003/004/005`) are owned by T-008 (status SPECIFIED, unimplemented) — pre-existing RED, not a regression.
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` → **All checks passed**; `uv run ruff format --check src/backend/filemanagement/` → 8 files already formatted.
+- **Task status:** `SPECIFIED → GREEN` for T-005 (S4.2 done; S4.3/S4.4/S4.5 follow).
+
+## Phase 4 — Implement (T-006)
+
+- **Step:** S4.2 (implement + confirm GREEN), for task T-006, 2026-09-14.
+- **T-006 scope:** `FileService` query methods — `src/backend/filemanagement/service.py`:
+  - `download(key) -> bytes` (record lookup → `backend.get` → read+close → publish `FileDownloaded`), `open(key) -> BinaryIO` (file-like stream, usable as a context manager), `delete(key)` (record lookup → `backend.delete` no-op if content missing → `repository.delete` → publish `FileDeleted`), `get_file(key) -> FileRead`, `list_files(namespace=None, limit=100, offset=0) -> list[FileRead]` (pagination validation `limit >= 1` / `offset >= 0` else `ValueError`).
+  - Behavior per T-006 implementation_steps/design_constraints: missing file → `FileManagementNotFoundError`; record without content → `StorageError(reason='not_found')` and NOT auto-deleted (EDGE-006); delete of a file whose content is already missing still deletes the record (storage delete no-op, EDGE-007); a download concurrent with a same-key upload returns a complete file, never partial (EDGE-017).
+  - `upload` and the content-detection logic (T-005) were NOT modified. Committed as `4772a94`.
+- **Gate:** the 20 T-006 tests = `tests_to_create` in `.github/task-runner/tasks.json` (EDGE-006..EDGE-009, EDGE-010, EDGE-017 + AC-001, AC-014, AC-019..AC-023, AC-025..AC-028, AC-030, AC-048, AC-050). No deadlock (T-006's tests use only T-005 `upload` + T-006 methods; no T-007/T-008 methods).
+- **GREEN confirmed (T-006 gate — all 20 tests):** `uv run pytest` (20 node IDs: 14 acceptance, 6 unit) → **20 passed in 1.05s** (0 failed).
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` → All checks passed; `ruff format` applied + `--check` clean.
+- **Task status:** `SPECIFIED → VERIFIED` for T-006 (both task files).
+
+## Phase 4 — Implement (T-007)
+
+- **Step:** S4.2 (implement + confirm GREEN), for task T-007, 2026-09-14.
+- **T-007 scope:** `FileService` avatar methods — `src/backend/filemanagement/service.py`:
+  - `upload_avatar(user_id, source, *, declared_mime_type=None) -> AvatarRead` (first avatar; existing → `AvatarError(user_id, operation='upload')`), `replace_avatar(user_id, source, ...) -> AvatarRead` (store new file + new URL, delete old file + variants; missing → `AvatarError(user_id, operation='replace')`), `delete_avatar(user_id)` (delete file + variants, clear the user→file mapping; missing is a no-op), `get_avatar(user_id) -> AvatarRead` (returns the default avatar when the user has no avatar or a dangling mapping), module fn `get_default_avatar() -> bytes` (`@logged`).
+  - Behavior per T-007 implementation_steps/design_constraints: fixed allowed set {image/png, image/jpeg, image/webp} (image/gif → `FileTypeNotAllowedError`); Pillow decode validation (stricter than magic bytes — truncated PNG → `FileValidationError(reason='image_decode_failed')`, EDGE-012); dimensions ≤ 4096×4096 (boundary inclusive, EDGE-018) else `FileValidationError(reason='dimensions_exceeded')`; avatar URL `https://<base>/files/<file_id>` (https fixed, live `filemanagement.avatar_base_url`); 64/256px PNG variants (longest side, `variant_of` reference, own metadata records, deleted with the main file; generation failure → rollback + `StorageError(reason='variant_generation')`, EDGE-013, INV-008); dangling mapping → default avatar + cleared (EDGE-011).
+  - **Default avatar asset:** `src/backend/filemanagement/assets/default_avatar.png` (new 256×256 solid-color PNG, Pillow).
+  - `upload`, the query methods, and the content-detection logic (T-005/T-006) were NOT modified. Committed as `a691c4e`.
+- **Gate:** the 23 T-007 tests = `tests_to_create` (AC-033..AC-047 + EDGE-011..EDGE-013, EDGE-018 + INV-004, INV-005, INV-006, INV-008). No deadlock (T-007's tests use only T-005/T-006/T-007 methods; T-008 is a verification task with no new service methods).
+- **GREEN confirmed (T-007 gate — all 23 tests):** `uv run pytest` (23 node IDs: 15 acceptance, 4 unit, 4 property) → **23 passed** (0 failed).
+- **FINDING (spec-wording vs. test conflict — test wins; needs Spec Amendment Workflow):** `test_ac_035_replace_avatar` asserts `len(events.of_type(AvatarUploaded)) == 1` after `upload_avatar` + `replace_avatar` (and `test_ac_033` fixes upload alone → exactly 1), so the only consistent reading is that **`replace_avatar` publishes no `AvatarUploaded`**. But AC-035 ("And `AvatarUploaded` is published"), the `AvatarUploaded` docstring ("uploaded or replaced"), and REQ-022 all say replace **does** publish `AvatarUploaded`. Resolution (test wins, per AGENTS.md *Traceability & Spec Drift*): `replace_avatar` implemented to publish `FileUploaded` (new main + variants) + `FileDeleted` (old main + variants) but **no** `AvatarUploaded`; the test was NOT modified. **Must be resolved via the Spec Amendment Workflow** (amend AC-035 / the `AvatarUploaded` docstring to state replace does not publish `AvatarUploaded`, or re-derive the test if the spec intent is authoritative). Flagged for the Phase 6 review.
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` → All checks passed; `ruff format` applied + `--check` clean.
+- **Task status:** `SPECIFIED → VERIFIED` for T-007 (both task files).
+
+## Phase 4 — Implement (T-008)
+
+- **Step:** S4.2 (apply test-bug fix + confirm GREEN), for task T-008, 2026-09-14.
+- **T-008 scope:** cross-cutting verification (performance, security, public API, concurrency, observability contracts + integration tests) — no new `FileService` methods; verifies the already-implemented T-005..T-007 methods satisfy the NFRs.
+- **Test fix (test-infrastructure fix, weakens NO test — same class as Q-30/31/32/33, authorized under the user's delegated decision authority):** `test_nfr_003_api_backward_compatible` (`tests/contract/filemanagement/test_filemanagement_contracts.py`) constructed `backend.usermanagement.UserCreate(...)` without the required `role` field (`UserCreate.role: str` has no default), raising a pydantic `ValidationError`. Added `role="member"` (satisfies `^[a-z0-9_-]{1,32}$`); no assertion changed. Committed as `4a0243a`.
+- **Gate:** the 11 T-008 tests = `tests_to_create` (AC-053, AC-054, AC-055 + NFR-001..NFR-005 + 3 integration tests). No deadlock (T-008 is a verification task with no new service methods).
+- **GREEN confirmed (T-008 gate — all 11 tests):** `uv run pytest` (11 node IDs: 3 acceptance, 5 contract, 3 integration) → **11 passed in 1.69s** (0 failed). Tracing, performance budgets, security, concurrency, layout, and integration all verified.
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` + `tests/contract/filemanagement/` → All checks passed.
+- **Task status:** `SPECIFIED → VERIFIED` for T-008 (both task files). **Phase 4 (Implement) is complete: T-001 through T-008 all VERIFIED.**
+
+## Dependency Replacement (python-magic → filetype, discovered in Phase 4)
+
+- **When:** during T-005 S4.2 (FileService.upload), 2026-09-14. The T-005 implementation subagent deadlocked probing `python-magic` (`import magic` → segfault exit 139; `magic.loader.load_lib()` → hang/timeout). The user directed the replacement ("If python-magic has problem replace it").
+- **Root cause:** `python-magic` (libmagic bindings) is unusable on the Windows host — no bundled libmagic, and loading it either segfaults or deadlocks.
+- **Replacement:** the pure-Python `filetype` package (magic-byte detection: `filetype.guess_mime(data)` → MIME type or `None`) **plus a text fallback** in the implementation: text content (no null bytes in the leading 8 KiB) → `text/plain`; unidentified binary → `application/octet-stream`. This preserves the spec's behavior (magic-byte detection as the source of truth, conflicting signals rejected); only the library changes.
+- **Verified on host:** `filetype` detects the types the spec's acceptance criteria exercise — image/png, image/jpeg, image/webp, image/gif, application/pdf, application/zip — and the text fallback yields text/plain for `text_bytes(n)` (= `b"x" * n`). `puremagic` was evaluated and rejected (2.x returns extensions, not MIME types, and raises for unidentified content).
+- **Spec drift:** `docs/specs/file-management.md` names `python-magic` (REQ-004, REQ-005, D3). The normative behavior is preserved; only the library name is now stale. A spec-amendment rename is deferred (the behavior, not the library name, is what the spec governs).
+- **Recorded in:** ADR-048 (amended), `pyproject.toml` (`filetype>=1.2.0`; `python-magic` removed), `uv.lock`.
+
+## Phase 5 — Verify
+
+- **S5.1 Full test suite:** `uv run pytest tests/ -v` → **488 passed, 1 skipped, 0 failed**. The single skip is `test_ac_031_symlink_rejected` ("symlinks not available on this host", WinError 1314) — a legitimate environment skip (the test runs wherever symlinks are available; AC-031 is GREEN in the matrix). **PASS.**
+- **S5.2 Lint:** `uv run ruff check .` → **0 errors** (All checks passed!). **PASS.**
+- **S5.2 Type checks:** `uv run mypy src/` → **Success: no issues found in 51 source files.** **PASS.**
+- **S5.3 Traceability:** `docs/verification/traceability.md` ("File Management Matrix") — **90/90 rows GREEN**: 26/26 REQs, 55/55 ACs, 8/8 INVs, 19/19 EDGEs, 5/5 NFRs (+ 3 integration rows). Every REQ has at least one GREEN test. **PASS.**
+- **S5.4 Spec coverage: 100%** — every REQ-XXX (REQ-001..REQ-026) has at least one GREEN test, verified from the traceability matrix (all 90 rows GREEN) and confirmed by `uv run python scripts/verify_spec.py docs/specs/file-management.md` → **exit 0** (all 26 REQs have acceptance criteria, all 55 ACs have executable tests, all 8 INVs have property tests; "Traceability: PASS").
+- **Phase 5 gate: PASS** — spec coverage = 100%, all gates pass.
+
 ## Evidence
 
-(pending — Phase 1 in progress)
+- Phase 1 (Specify): spec committed, PR #24 opened + merged on human delegation (see "Phase 1 — Spec approval").
+- Phase 3 (Test & RED): 90 tests derived from the spec, RED confirmed (`ModuleNotFoundError: backend.filemanagement`, pytest exit 4), ruff clean on the new files (see "Phase 3 — Test & RED").
+- Phase 4 (Implement, T-001): foundation (errors, events, models) committed as `c6b70c0`; AC-051 acceptance test `test_ac_051_error_hierarchy_context` PASSED (GREEN); ruff clean on file-management paths (23 pre-existing mail `I001`s remain, out of scope); task status `VERIFIED` in both task files (see "Phase 4 — Implement (T-001)").
+- Phase 4 (Implement, T-002): feature settings registration (`feature_settings.py` — `register_settings`, 5 `SettingDefinition`s, live-read pattern, no import side effects) committed as `65425e0`; AC-052 acceptance test `test_ac_052_register_settings` PASSED (GREEN; gate NARROWED by P-5 — AC-053 / `test_ac_053` moved to T-008); ruff clean on file-management paths (23 pre-existing mail `I001`s remain, out of scope); task status `VERIFIED` in both task files (see "Phase 4 — Implement (T-002)").
+- Phase 4 (Implement, T-003): storage backends (`storage.py` — `StorageBackend` ABC, `LocalDiskStorageBackend` (flat layout, KEY_PATTERN → `path_escape`, symlink rejection → `symlink`, resolved-path containment → `path_escape`, atomic `put` via `mkstemp`+`os.replace`, last-write-wins), `InMemoryStorageBackend` (dict, public, instance-isolated), `StorageStat`) committed as `8c22d0d`; Q-33 test fix (suppress `function_scoped_fixture` in all 8 property tests) committed as `161f772`; gate: AC-032 / EDGE-016 / INV-007 PASSED, AC-031 SKIPPED (symlinks unavailable on this host — WinError 1314, acceptable per task); ruff clean on file-management paths (23 pre-existing mail `I001`s remain, out of scope); task status `VERIFIED` in both task files (see "Phase 4 — Implement (T-003)").
+- Phase 4 (Implement, T-004): metadata repository (`repository.py` — `FileRepository` ABC (`add`/`get_by_key`/`get_by_id`/`update`/`delete`/`list_by_namespace`/`set_user_avatar`/`get_user_avatar`/`clear_user_avatar`), `SqliteFileRepository` (auto-creates the DB file's parent directory, `create_all` bootstrap, thread-safe SQLite, atomic same-key replacement in `add`, `list_by_namespace` prefix match + `created_at` ordering + limit/offset pagination, user→avatar mapping), both traced via `@logged_class(slow_threshold_ms=100)`) committed as `7966c40`; EDGE-015 unit test `test_edge_015_repo_creates_parent_dir` PASSED (GREEN; gate NARROWED by P-8 — `test_ac_025` + `test_edge_010` moved to T-006); ruff clean on file-management paths (23 pre-existing mail `I001`s remain, out of scope); task status `VERIFIED` in both task files (see "Phase 4 — Implement (T-004)").
+- Phase 5 (Verify, S5.3): traceability matrix updated to GREEN — `docs/verification/traceability.md` ("File Management Matrix": all 90 rows RED → GREEN; 26/26 REQs, 55/55 ACs, 8/8 INVs, 19/19 EDGEs, 5/5 NFRs + 3 integration rows, all GREEN; intro line updated to record the GREEN status and the 91 passed / 1 skipped suite result, the skip being `test_ac_031_symlink_rejected` — symlinks not available on this host). Committed as `fc02c0f`.
+- Phase 5 (Verify, S5.4): verification report ("Phase 5 — Verify" section) — S5.1 full suite 488 passed / 1 skipped (legit env skip) / 0 failed, S5.2 ruff 0 errors + mypy clean (51 source files), S5.3 traceability 90/90 rows GREEN, S5.4 spec coverage = 100% (`verify_spec.py` exit 0). All gates pass.
+
+## Phase 6 — Review
+
+- **S6.1 Review vs. normative basis: Compliance confirmed.**
+  - The change implements exactly what the spec (`docs/specs/file-management.md`) says — no more, no less:
+    - **No more:** the public API surface is exactly the spec's surface — `FileService` (`upload`, `download`, `open`, `delete`, `get_file`, `list_files`, `upload_avatar`, `replace_avatar`, `delete_avatar`, `get_avatar`), module fn `get_default_avatar`, `register_settings`, `StorageBackend`/`LocalDiskStorageBackend`/`InMemoryStorageBackend`, `FileRepository`/`SqliteFileRepository`, the 6 event types, and the `FileManagementError` hierarchy. No extra operations, no HTTP layer, no cross-feature imports (source imports only `backend.logging` and `backend.settings` — the mandated shared features; no `backend.usermanagement` / `backend.eventbus` import).
+    - **No less:** spec coverage = **100%** — all 26 REQs (REQ-001..REQ-026), all 55 ACs (AC-001..AC-055), 8 INVs, 19 EDGEs, 5 NFRs mapped to executable GREEN tests (Phase 5, `verify_spec.py` exit 0).
+    - **No unspecified behavior:** the behavior contract is the spec + the re-derived tests; the implementation adds nothing beyond them (e.g., last-write-wins, mutual rollback, variant generation, dangling-mapping clearing are all spec'd).
+  - **No acceptance test modified, deleted, or weakened:** 90 test functions (55 acceptance + 8 property + 19 unit + 5 contract + 3 integration), every name matching the spec's test strategy table 1:1 (verified in Phase 3; re-verified for the matrix in S6.2). The only test-side changes during Phase 4 were authorized test-infrastructure fixes (Q-30/31/32 import fixes, Q-33 health-check suppression, T-008 fixture construction added the required `role` field) — zero assertion changes.
+  - **Findings (S6.1):**
+    1. **RESOLVED (during Phase 4, via the Spec Amendment Workflow):** AC-035 spec-wording vs. re-derived-test conflict — `replace_avatar` and `AvatarUploaded`. The re-derived tests (`test_ac_033`/`test_ac_035`) fix the event count so that only `upload_avatar` publishes `AvatarUploaded`; the test wins per the Spec Drift rule. Resolved by amending the spec (commit `a1484fe`: spec Changelog v2, AC-035 rewritten to state `replace_avatar` publishes `FileUploaded` (new main+variants) + `FileDeleted` (old main+variants) and NO `AvatarUploaded`; the `AvatarUploaded` docstring in `events.py` aligned). No longer open.
+    2. **DOCUMENTED/ACCEPTED (non-blocking):** `python-magic` → `filetype` substitution. User-directed during T-005 (`python-magic` unusable on the Windows host — segfault/hang); behavior-preserving (magic-byte detection as source of truth + text fallback; conflicting signals still rejected). Recorded in this verification artifact ("Dependency Replacement" section) and ADR-048 (amended); the spec still names `python-magic` (REQ-004/REQ-005/D3) — the spec rename is **deferred as a follow-up spec-amendment item**; it does not block this change (the normative behavior is preserved; only the library name is stale).
+- **S6.2 Traceability + boundaries: Intact.**
+  - **Traceability:** 26/26 REQs, 55/55 ACs, 8/8 INVs, 19/19 EDGEs, 5/5 NFRs all mapped to executable GREEN tests. `docs/verification/traceability.md` ("File Management Matrix"): **90/90 rows GREEN**, 1:1 with the 90 test functions (55 + 8 + 19 + 5 + 3 integration). **Zero orphaned tests** (every test function appears in the matrix; no test without a spec reference), **zero missing traceability links** (every spec ID appears in the matrix).
+  - **Feature boundaries:** all code lives in `src/backend/filemanagement/` (src) and `tests/**/filemanagement/` + `tests/filemanagement_test_helpers.py` (tests); the spec, tests, and implementation use the same feature vocabulary. No cross-feature internal imports (only `backend.logging` / `backend.settings` — the mandated shared features).
+  - **Architecture rules:** `models.py` = domain concepts + fixed constants; `service.py` = use cases; `repository.py` / `storage.py` = infrastructure behind ABCs (`FileRepository`, `StorageBackend`) introduced because the spec requires them; no premature layers. Tracing per the shared logging policy: `FileService` / repository classes via `@logged_class` (`include_args=False`), `register_settings` / `get_default_avatar` via `@logged`.
+  - **Findings (S6.2):** none.
+- **Review report status: CLEAN** — no unresolved findings. The single finding carried into the report is documented/accepted (non-blocking): the `python-magic` → `filetype` substitution (user-directed, behavior-preserving, recorded in the verification artifact + ADR-048 (amended); spec rename deferred as a follow-up). The AC-035 finding was resolved via the Spec Amendment Workflow (commit `a1484fe`) before the report.
+- **Reusable shared capability:** the file-management feature is a reusable shared capability (features that need user-file storage should use it instead of inventing their own) — a "how to use this" note is added to `AGENTS.md` ("Using the File Management Feature" section, S6.3).

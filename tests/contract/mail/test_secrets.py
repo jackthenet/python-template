@@ -3,11 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import (
-    MailService,
-    MailTransportError,
-    PasswordResetEmailRequest,
-)
 from mail_test_helpers import (
     EventCollector,
     FailingTransport,
@@ -15,6 +10,12 @@ from mail_test_helpers import (
     ensure_mail_settings,
     event_text,
     simple_template,
+)
+
+from backend.mail import (
+    MailService,
+    MailTransportError,
+    PasswordResetEmailRequest,
 )
 
 SMTP_PASSWORD = "nfr-smtp-password"

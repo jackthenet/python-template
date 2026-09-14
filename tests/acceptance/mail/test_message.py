@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from backend.mail import MailService
 from mail_test_helpers import RecordingTransport, ensure_mail_settings, message_bodies, simple_template
+
+from backend.mail import MailService
 
 
 def test_ac_019_multipart_alternative() -> None:
