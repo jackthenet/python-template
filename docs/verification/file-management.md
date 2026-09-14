@@ -175,6 +175,16 @@
 - **Ruff:** `uv run ruff check src/backend/filemanagement/` → All checks passed; `ruff format` applied + `--check` clean.
 - **Task status:** `SPECIFIED → VERIFIED` for T-007 (both task files).
 
+## Phase 4 — Implement (T-008)
+
+- **Step:** S4.2 (apply test-bug fix + confirm GREEN), for task T-008, 2026-09-14.
+- **T-008 scope:** cross-cutting verification (performance, security, public API, concurrency, observability contracts + integration tests) — no new `FileService` methods; verifies the already-implemented T-005..T-007 methods satisfy the NFRs.
+- **Test fix (test-infrastructure fix, weakens NO test — same class as Q-30/31/32/33, authorized under the user's delegated decision authority):** `test_nfr_003_api_backward_compatible` (`tests/contract/filemanagement/test_filemanagement_contracts.py`) constructed `backend.usermanagement.UserCreate(...)` without the required `role` field (`UserCreate.role: str` has no default), raising a pydantic `ValidationError`. Added `role="member"` (satisfies `^[a-z0-9_-]{1,32}$`); no assertion changed. Committed as `4a0243a`.
+- **Gate:** the 11 T-008 tests = `tests_to_create` (AC-053, AC-054, AC-055 + NFR-001..NFR-005 + 3 integration tests). No deadlock (T-008 is a verification task with no new service methods).
+- **GREEN confirmed (T-008 gate — all 11 tests):** `uv run pytest` (11 node IDs: 3 acceptance, 5 contract, 3 integration) → **11 passed in 1.69s** (0 failed). Tracing, performance budgets, security, concurrency, layout, and integration all verified.
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` + `tests/contract/filemanagement/` → All checks passed.
+- **Task status:** `SPECIFIED → VERIFIED` for T-008 (both task files). **Phase 4 (Implement) is complete: T-001 through T-008 all VERIFIED.**
+
 ## Dependency Replacement (python-magic → filetype, discovered in Phase 4)
 
 - **When:** during T-005 S4.2 (FileService.upload), 2026-09-14. The T-005 implementation subagent deadlocked probing `python-magic` (`import magic` → segfault exit 139; `magic.loader.load_lib()` → hang/timeout). The user directed the replacement ("If python-magic has problem replace it").
