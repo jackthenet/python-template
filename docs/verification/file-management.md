@@ -132,6 +132,23 @@
 - **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-004).
 - **Task status:** `SPECIFIED → VERIFIED` for T-004 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
 
+## Phase 4 — Implement (T-005)
+
+- **Step:** S4.2 (implement + confirm GREEN), for task T-005, 2026-09-14.
+- **T-005 scope:** `FileService.upload` — `src/backend/filemanagement/service.py`:
+  - `FileService(repository, backend=None, event_bus=None, settings_registry=None)`; `upload(source, key=None, namespace="general", declared_mime_type=None, original_filename=None, uploader=None) -> FileRecord`.
+  - Behavior per T-005 implementation_steps: key/namespace pattern validation (traversal/null-byte/absolute-path rejected), live max-file-size limit (general vs avatar), zero-byte rejection, magic-byte content detection via `filetype` + text fallback (ADR-048 amendment; `python-magic` unusable on host), declared-type conflict rejection, filename-type conflict rejection, live allowed-type set enforcement, generated UUID key when omitted, atomic write with mutual rollback (storage content rolled back on metadata failure and vice versa), `FileUploaded` / `FileValidationFailed` events (best-effort; a publisher failure never breaks the operation), `@logged_class(slow_threshold_ms=5000, include_args=False)` traced.
+  - `__init__.py`: re-exports the real `FileService` (the `NotImplementedError` placeholder removed).
+  - **T-004 fix (discovered in S4.2):** `SqliteFileRepository.add` same-key replacement now uses an immediate bulk `delete` statement (`session.execute(delete(...))`), which executes before the deferred insert flushes. The previous ORM pattern (deferred `session.delete` + deferred `session.add` in one commit) flushed the insert first → `IntegrityError` (UNIQUE `files.key`) even for sequential replacement, violating the ADR-054 no-error atomic-replacement contract. T-004's gate (EDGE-015 only) never exercised the replacement path, so the bug was latent. The bounded service-side retry (`_persist_record`, `_ADD_ATTEMPTS`) is kept as defense for the true inter-connection race (the winner committing between the loser's delete and insert).
+  - **Dependency:** `pillow>=10.0.0` added (`pyproject.toml`, `uv.lock`) — image decode validation (spec REQ-019 dependency; the approved spec lists Pillow; the test helper `png_bytes` imports PIL).
+  - Committed as `a4d75c0`.
+- **Gate (NARROWED by DAG correction P-9):** the 29 T-005 tests = `tests_to_create` in `.github/task-runner/tasks.json` (AC-002..AC-013, AC-015..AC-018, AC-024, AC-029, AC-049 + EDGE-001..EDGE-005, EDGE-014, EDGE-019 + INV-001..INV-003). The 5 upload tests moved to T-006 (see "DAG Correction (T-005 gate, discovered in Phase 4)").
+- **GREEN confirmed (T-005 gate — all 29 tests):**
+  - `uv run pytest` (29 node IDs: 19 acceptance in `tests/acceptance/filemanagement/test_filemanagement.py`, 7 unit in `tests/unit/filemanagement/test_filemanagement_edges.py`, 3 property in `tests/property/filemanagement/test_filemanagement_properties.py`) → **31 passed in 4.52s** (29 test functions; 2 are parameterized into 2 items each — all PASS, 0 failed).
+  - Regression check (T-004 fix touched `repository.py`): `test_edge_015_repo_creates_parent_dir` PASSED. The 4 failing contract tests (`test_nfr_001/003/004/005`) are owned by T-008 (status SPECIFIED, unimplemented) — pre-existing RED, not a regression.
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` → **All checks passed**; `uv run ruff format --check src/backend/filemanagement/` → 8 files already formatted.
+- **Task status:** `SPECIFIED → GREEN` for T-005 (S4.2 done; S4.3/S4.4/S4.5 follow).
+
 ## Dependency Replacement (python-magic → filetype, discovered in Phase 4)
 
 - **When:** during T-005 S4.2 (FileService.upload), 2026-09-14. The T-005 implementation subagent deadlocked probing `python-magic` (`import magic` → segfault exit 139; `magic.loader.load_lib()` → hang/timeout). The user directed the replacement ("If python-magic has problem replace it").
