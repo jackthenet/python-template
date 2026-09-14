@@ -33,3 +33,59 @@
 - Only the 6 files above are changed (all workflow documentation).
 - No `src/`, `tests/`, or `docs/specs/` changes.
 - The changes are guidance/rules for future workflow runs; they do not affect the already-merged file-management feature or any executable behavior.
+
+## Phase 5 — Verify (light)
+
+**Date:** 2026-09-15
+
+### 1. Only workflow docs changed (no behavior delta)
+
+`git diff main --stat` (from the change worktree):
+
+```text
+.agents/skills/decompose/SKILL.md          |  8 +++++++
+.agents/skills/git/SKILL.md                | 12 +++++-----
+.agents/skills/specify/SKILL.md            |  8 +++++++
+.agents/skills/test/SKILL.md               |  4 ++++
+AGENTS.md                                  |  6 ++---
+docs/verification/workflow-optimization.md | 35 ++++++++++++++++++++++++++++++
+docs/workflow/PROBLEMS.md                  | 10 +++++++++
+7 files changed, 74 insertions(+), 9 deletions(-)
+```
+
+- **Confirmed:** ONLY the 6 workflow-doc files + the scope file (`docs/verification/workflow-optimization.md`) changed.
+- **Confirmed:** NO `src/`, `tests/`, or `docs/specs/` files changed (verified with `git diff main --stat -- src/`, `-- tests/`, `-- docs/specs/` — all empty).
+
+### 2. Ruff
+
+`uv run ruff check .`:
+
+```text
+All checks passed!
+```
+
+- **Confirmed:** ruff is clean (the changed files are markdown, not linted; no NEW lint errors introduced).
+
+### 3. Test suite (no behavior delta)
+
+`uv run pytest tests/ -q`:
+
+```text
+1 failed, 487 passed, 1 skipped in 110.56s (0:01:50)
+```
+
+**The 1 failure is a pre-existing environmental timing flake, NOT a behavioral delta:**
+- Failing test: `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format`
+- Cause: Hypothesis `FlakyFailure` / `DeadlineExceeded` — "On an initial run, this test took 253.09ms, which exceeded the deadline of 200.00ms, but on a subsequent run it took 122.10 ms". The test logic PASSES ("Falsified on the first call but did not on a subsequent one"); only wall-clock timing intermittently exceeds Hypothesis's 200ms deadline on this Windows host.
+- Confirmed flaky (passes on re-run): single test → `1 passed in 1.46s`; full `tests/property/filemanagement/` → `8 passed in 6.58s`.
+- Confirmed pre-existing: the same test passes on `main` (`1 passed in 1.49s`).
+- A markdown-only change cannot affect Python test timing or behavior.
+
+- **Confirmed:** 487 passed, 1 skipped; the sole failure is an environmental timing flake unrelated to this change. No behavior delta.
+
+### 4. No-Behavior-Delta Confirmation
+- Only the 6 workflow-doc files + the scope file changed (all markdown).
+- No `src/`, `tests/`, or `docs/specs/` changes.
+- Ruff clean.
+- Test suite green except a pre-existing Hypothesis timing flake (passes on re-run and on `main`).
+- **No behavior delta.**
