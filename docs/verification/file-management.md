@@ -161,6 +161,20 @@
 - **Ruff:** `uv run ruff check src/backend/filemanagement/` → All checks passed; `ruff format` applied + `--check` clean.
 - **Task status:** `SPECIFIED → VERIFIED` for T-006 (both task files).
 
+## Phase 4 — Implement (T-007)
+
+- **Step:** S4.2 (implement + confirm GREEN), for task T-007, 2026-09-14.
+- **T-007 scope:** `FileService` avatar methods — `src/backend/filemanagement/service.py`:
+  - `upload_avatar(user_id, source, *, declared_mime_type=None) -> AvatarRead` (first avatar; existing → `AvatarError(user_id, operation='upload')`), `replace_avatar(user_id, source, ...) -> AvatarRead` (store new file + new URL, delete old file + variants; missing → `AvatarError(user_id, operation='replace')`), `delete_avatar(user_id)` (delete file + variants, clear the user→file mapping; missing is a no-op), `get_avatar(user_id) -> AvatarRead` (returns the default avatar when the user has no avatar or a dangling mapping), module fn `get_default_avatar() -> bytes` (`@logged`).
+  - Behavior per T-007 implementation_steps/design_constraints: fixed allowed set {image/png, image/jpeg, image/webp} (image/gif → `FileTypeNotAllowedError`); Pillow decode validation (stricter than magic bytes — truncated PNG → `FileValidationError(reason='image_decode_failed')`, EDGE-012); dimensions ≤ 4096×4096 (boundary inclusive, EDGE-018) else `FileValidationError(reason='dimensions_exceeded')`; avatar URL `https://<base>/files/<file_id>` (https fixed, live `filemanagement.avatar_base_url`); 64/256px PNG variants (longest side, `variant_of` reference, own metadata records, deleted with the main file; generation failure → rollback + `StorageError(reason='variant_generation')`, EDGE-013, INV-008); dangling mapping → default avatar + cleared (EDGE-011).
+  - **Default avatar asset:** `src/backend/filemanagement/assets/default_avatar.png` (new 256×256 solid-color PNG, Pillow).
+  - `upload`, the query methods, and the content-detection logic (T-005/T-006) were NOT modified. Committed as `a691c4e`.
+- **Gate:** the 23 T-007 tests = `tests_to_create` (AC-033..AC-047 + EDGE-011..EDGE-013, EDGE-018 + INV-004, INV-005, INV-006, INV-008). No deadlock (T-007's tests use only T-005/T-006/T-007 methods; T-008 is a verification task with no new service methods).
+- **GREEN confirmed (T-007 gate — all 23 tests):** `uv run pytest` (23 node IDs: 15 acceptance, 4 unit, 4 property) → **23 passed** (0 failed).
+- **FINDING (spec-wording vs. test conflict — test wins; needs Spec Amendment Workflow):** `test_ac_035_replace_avatar` asserts `len(events.of_type(AvatarUploaded)) == 1` after `upload_avatar` + `replace_avatar` (and `test_ac_033` fixes upload alone → exactly 1), so the only consistent reading is that **`replace_avatar` publishes no `AvatarUploaded`**. But AC-035 ("And `AvatarUploaded` is published"), the `AvatarUploaded` docstring ("uploaded or replaced"), and REQ-022 all say replace **does** publish `AvatarUploaded`. Resolution (test wins, per AGENTS.md *Traceability & Spec Drift*): `replace_avatar` implemented to publish `FileUploaded` (new main + variants) + `FileDeleted` (old main + variants) but **no** `AvatarUploaded`; the test was NOT modified. **Must be resolved via the Spec Amendment Workflow** (amend AC-035 / the `AvatarUploaded` docstring to state replace does not publish `AvatarUploaded`, or re-derive the test if the spec intent is authoritative). Flagged for the Phase 6 review.
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` → All checks passed; `ruff format` applied + `--check` clean.
+- **Task status:** `SPECIFIED → VERIFIED` for T-007 (both task files).
+
 ## Dependency Replacement (python-magic → filetype, discovered in Phase 4)
 
 - **When:** during T-005 S4.2 (FileService.upload), 2026-09-14. The T-005 implementation subagent deadlocked probing `python-magic` (`import magic` → segfault exit 139; `magic.loader.load_lib()` → hang/timeout). The user directed the replacement ("If python-magic has problem replace it").
