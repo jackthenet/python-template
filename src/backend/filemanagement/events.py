@@ -69,7 +69,7 @@ class AvatarEvent(FileEvent):
 
 
 class AvatarUploaded(AvatarEvent):
-    """Published when a user's avatar is uploaded or replaced (REQ-022)."""
+    """Published when a user uploads a new avatar via `upload_avatar` (not on `replace_avatar`) (REQ-022)."""
 
     file_id: UUID
     url: str

@@ -1,5 +1,8 @@
 # Spec: File Management (Backend)
 
+## Changelog
+- v2 (2026-09-14): AC-035 amended — `replace_avatar` publishes NO `AvatarUploaded` (only `upload_avatar` does); `replace_avatar` publishes `FileUploaded` (new main+variants) + `FileDeleted` (old main+variants). Resolves the spec-wording vs. re-derived-test conflict (test wins per the Spec Drift rule).
+
 ## 1. Overview & Objectives
 - **Feature Name:** File Management (Backend)
 - **Target Component:** `src/backend/filemanagement/`
@@ -423,7 +426,7 @@ Each acceptance criterion MUST have a stable ID and MUST reference at least one 
 | AC-032 | REQ-016 | **Given** a local backend, **When** a key would resolve outside the root (defense in depth), **Then** a `StorageError` is raised with reason `path_escape`, **And** nothing is written outside the root. |
 | AC-033 | REQ-017 | **Given** a user without an avatar and valid avatar content, **When** `upload_avatar(user_id, source)` is called, **Then** an `AvatarRead` is returned with `is_default=False`, `file_id` set, and a URL matching the avatar URL format, **And** `get_avatar(user_id)` returns the same avatar, **And** `AvatarUploaded` is published. |
 | AC-034 | REQ-017 | **Given** a user with an existing avatar, **When** `upload_avatar` is called, **Then** an `AvatarError` is raised with `operation == "upload"` (use `replace_avatar`). |
-| AC-035 | REQ-017 | **Given** a user with an existing avatar, **When** `replace_avatar(user_id, new_source)` is called, **Then** an `AvatarRead` is returned with the new URL, **And** the old file (and its variants) are deleted, **And** `get_avatar` returns the new avatar, **And** `AvatarUploaded` is published. |
+| AC-035 | REQ-017 | **Given** a user with an existing avatar, **When** `replace_avatar(user_id, new_source)` is called, **Then** an `AvatarRead` is returned with the new URL, **And** the old file (and its variants) are deleted, **And** `get_avatar` returns the new avatar, **And** `FileUploaded` events are published for the new main file and each variant, **And** `FileDeleted` events are published for the old main file and each variant, **And** no `AvatarUploaded` event is published (only `upload_avatar` publishes `AvatarUploaded`). |
 | AC-036 | REQ-017 | **Given** a user without an avatar, **When** `replace_avatar` is called, **Then** an `AvatarError` is raised with `operation == "replace"` (use `upload_avatar`). |
 | AC-037 | REQ-017 | **Given** a user with an avatar, **When** `delete_avatar(user_id)` is called, **Then** the file (and its variants) are deleted, **And** the mapping is cleared, **And** `AvatarDeleted` is published, **And** `get_avatar` returns the default avatar. |
 | AC-038 | REQ-017 | **Given** a user without an avatar, **When** `delete_avatar` is called, **Then** it is a no-op (no event, no error). |
