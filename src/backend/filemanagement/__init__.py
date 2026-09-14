@@ -4,13 +4,14 @@ T-001 implements the foundation: the error hierarchy (``errors``), the typed
 lifecycle events + structural publisher (``events``), and the domain models and
 fixed constants (``models``).
 
-The later-task public names (``FileService``, the repository, and the storage
-backends) are present as **collection scaffolding** only: the derived test
-suite imports them at module level, so the package must export them for the
-tests to be collected. They raise ``NotImplementedError`` when used — they
-carry no behavior. The real implementations land in T-003..T-008 and replace
-these placeholders. ``register_settings`` (T-002) is a real implementation in
-``feature_settings``.
+The later-task public names (``FileService`` and the repository) are present
+as **collection scaffolding** only: the derived test suite imports them at
+module level, so the package must export them for the tests to be collected.
+They raise ``NotImplementedError`` when used — they carry no behavior. The
+real implementations land in T-004..T-008 and replace these placeholders.
+``register_settings`` (T-002) is a real implementation in
+``feature_settings``; the storage backends (T-003) are real implementations
+in ``storage``.
 """
 
 from __future__ import annotations
@@ -50,31 +51,15 @@ from backend.filemanagement.models import (
     StorageStat,
     UserAvatar,
 )
+from backend.filemanagement.storage import (
+    InMemoryStorageBackend,
+    LocalDiskStorageBackend,
+    StorageBackend,
+)
 
-# --- Collection scaffolding for later tasks (T-002..T-008) ------------------
+# --- Collection scaffolding for later tasks (T-004..T-008) ------------------
 # No behavior: each raises NotImplementedError when used. Replaced by the real
 # implementations in the tasks noted below.
-
-
-class StorageBackend:
-    """Placeholder for the storage backend ABC (implemented in T-003)."""
-
-    def __init__(self) -> None:
-        raise NotImplementedError("StorageBackend is implemented in T-003")
-
-
-class LocalDiskStorageBackend(StorageBackend):
-    """Placeholder (implemented in T-003)."""
-
-    def __init__(self, root) -> None:
-        raise NotImplementedError("LocalDiskStorageBackend is implemented in T-003")
-
-
-class InMemoryStorageBackend(StorageBackend):
-    """Placeholder (implemented in T-003)."""
-
-    def __init__(self) -> None:
-        raise NotImplementedError("InMemoryStorageBackend is implemented in T-003")
 
 
 class SqliteFileRepository:
