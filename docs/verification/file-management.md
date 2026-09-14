@@ -149,6 +149,18 @@
 - **Ruff:** `uv run ruff check src/backend/filemanagement/` → **All checks passed**; `uv run ruff format --check src/backend/filemanagement/` → 8 files already formatted.
 - **Task status:** `SPECIFIED → GREEN` for T-005 (S4.2 done; S4.3/S4.4/S4.5 follow).
 
+## Phase 4 — Implement (T-006)
+
+- **Step:** S4.2 (implement + confirm GREEN), for task T-006, 2026-09-14.
+- **T-006 scope:** `FileService` query methods — `src/backend/filemanagement/service.py`:
+  - `download(key) -> bytes` (record lookup → `backend.get` → read+close → publish `FileDownloaded`), `open(key) -> BinaryIO` (file-like stream, usable as a context manager), `delete(key)` (record lookup → `backend.delete` no-op if content missing → `repository.delete` → publish `FileDeleted`), `get_file(key) -> FileRead`, `list_files(namespace=None, limit=100, offset=0) -> list[FileRead]` (pagination validation `limit >= 1` / `offset >= 0` else `ValueError`).
+  - Behavior per T-006 implementation_steps/design_constraints: missing file → `FileManagementNotFoundError`; record without content → `StorageError(reason='not_found')` and NOT auto-deleted (EDGE-006); delete of a file whose content is already missing still deletes the record (storage delete no-op, EDGE-007); a download concurrent with a same-key upload returns a complete file, never partial (EDGE-017).
+  - `upload` and the content-detection logic (T-005) were NOT modified. Committed as `4772a94`.
+- **Gate:** the 20 T-006 tests = `tests_to_create` in `.github/task-runner/tasks.json` (EDGE-006..EDGE-009, EDGE-010, EDGE-017 + AC-001, AC-014, AC-019..AC-023, AC-025..AC-028, AC-030, AC-048, AC-050). No deadlock (T-006's tests use only T-005 `upload` + T-006 methods; no T-007/T-008 methods).
+- **GREEN confirmed (T-006 gate — all 20 tests):** `uv run pytest` (20 node IDs: 14 acceptance, 6 unit) → **20 passed in 1.05s** (0 failed).
+- **Ruff:** `uv run ruff check src/backend/filemanagement/` → All checks passed; `ruff format` applied + `--check` clean.
+- **Task status:** `SPECIFIED → VERIFIED` for T-006 (both task files).
+
 ## Dependency Replacement (python-magic → filetype, discovered in Phase 4)
 
 - **When:** during T-005 S4.2 (FileService.upload), 2026-09-14. The T-005 implementation subagent deadlocked probing `python-magic` (`import magic` → segfault exit 139; `magic.loader.load_lib()` → hang/timeout). The user directed the replacement ("If python-magic has problem replace it").
