@@ -89,3 +89,51 @@ All checks passed!
 - Ruff clean.
 - Test suite green except a pre-existing Hypothesis timing flake (passes on re-run and on `main`).
 - **No behavior delta.**
+
+## Phase 6 — Review (light)
+
+**Date:** 2026-09-15
+**Result:** CLEAN (no findings)
+
+### 1. Scope conformance (light review vs. the scope)
+
+- **Confirmed:** ONLY the 6 workflow-doc files + the scope file changed (AGENTS.md, `.agents/skills/decompose/SKILL.md`, `.agents/skills/specify/SKILL.md`, `.agents/skills/test/SKILL.md`, `.agents/skills/git/SKILL.md`, `docs/workflow/PROBLEMS.md`, `docs/verification/workflow-optimization.md`).
+- **Confirmed:** NO `src/`, `tests/`, or `docs/specs/` changes (`git diff main --stat -- src/`, `-- tests/`, `-- docs/specs/` all empty).
+- **Confirmed:** NO test was weakened or deleted — this is a docs-only change; no test files touched.
+- **Confirmed:** Working tree clean; all changes committed on `chore/workflow-optimization`.
+
+### 2. All 10 logged problems addressed by a fix AND marked Solved in `docs/workflow/PROBLEMS.md`
+
+| Problem | Fix location | Fix content | Marked Solved |
+|---------|--------------|-------------|---------------|
+| P-1 | `.agents/skills/git/SKILL.md` | S7.1 done-criteria: merge verified "reachable from `origin/main` (after `git fetch`)" via `git merge-base --is-ancestor <merge-commit> origin/main` — not the local `main` ref | ✓ |
+| P-2 | `AGENTS.md` | BLOCKED-USER retention: if the session is released (resume unavailable) and only verifying recorded answers remains, the orchestrator may record answers, mark the step done, and commit — without relaunching | ✓ |
+| P-3 | `AGENTS.md` | Completion guard: a step subagent MUST end with the structured handoff; a step returning without it is a FAILED step relaunched with a fresh subagent | ✓ |
+| P-4 | `AGENTS.md` | Ruff gate: `ruff check --fix` + `ruff format` scoped to the task's changed paths (auto-fix before hand-diagnosis) | ✓ |
+| P-5 | `.agents/skills/decompose/SKILL.md` | DAG validation (gate satisfiability): each task's tests must pass using only that task's implementation + declared dependencies | ✓ |
+| P-6 | `AGENTS.md` | Ruff gate: repo-wide `--fix`/`format` during a task step forbidden; a repo-wide lint fix is a separate, explicit step (or the verify phase) | ✓ |
+| P-7 | `AGENTS.md` | Completion guard (same rule as P-3; also covers ending mid-investigation with an unexpected failure) | ✓ |
+| P-8 | `.agents/skills/decompose/SKILL.md` | DAG validation (service vs. repository method distinction — only service methods of a LATER task create a deadlock) | ✓ |
+| P-9 | `.agents/skills/decompose/SKILL.md` | DAG validation (a task's completion gate must be satisfiable by that task alone; move tests, don't delete) | ✓ |
+| P-10 | `.agents/skills/decompose/SKILL.md` | Narrowed gate coverage: un-exercised path(s) of a narrowed gate must be covered by the task that DOES exercise them | ✓ |
+
+All 10 entries in `docs/workflow/PROBLEMS.md` carry a `- **Status:** Solved (2026-09-15)` line naming the fix location.
+
+### 3. The 6 major issues are all addressed
+
+| # | Major issue | Addressed by |
+|---|-------------|--------------|
+| 1 | DAG validation (gate satisfiability) | `.agents/skills/decompose/SKILL.md` — "DAG Validation (gate satisfiability)" section |
+| 2 | Dependency smoke-test + capability-not-library | `.agents/skills/specify/SKILL.md` — "Dependency Smoke-Test" section + "Capability, not library" subsection |
+| 3 | Completion guard | `AGENTS.md` — Execution Model (structured handoff required; missing handoff = FAILED step) |
+| 4 | Pre-flight collection check | `.agents/skills/test/SKILL.md` — "Pre-flight Collection Check" section |
+| 5 | Scoped ruff (no repo-wide `--fix`/`format` during a task) | `AGENTS.md` — Ruff gate (scoped to task's changed paths) |
+| 6 | BLOCKED-USER retention | `AGENTS.md` — AI Questions Mechanism (orchestrator may complete the step directly when resume is unavailable) |
+
+### 4. Review verdict
+
+- Light review vs. the scope: **clean, no findings**.
+- All 10 problems (P-1..P-10) fixed and marked Solved.
+- All 6 major issues addressed.
+- No behavior delta (docs-only; no `src/`/`tests/`/`docs/specs/` changes; no test weakened or deleted).
+- **NO version bump** (DOCS/CHORE per the Versioning section).
