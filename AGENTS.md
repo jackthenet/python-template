@@ -775,6 +775,42 @@ service.send_password_reset_email(
 
 ---
 
+## Using the File Management Feature
+
+New backend features that need user-file storage MUST use the shared file-management feature at `src/backend/filemanagement/` (spec: `docs/specs/file-management.md`) instead of implementing their own file storage.
+
+- **Service entry point.** Use `FileService` (the use-case service). Construct it with a `FileRepository` and an optional `StorageBackend` (when `None` it builds a `LocalDiskStorageBackend` from the live `filemanagement.storage_root` on each operation), plus an optional `event_bus` — any object with a `publish(event)` method (structural `EventPublisher` protocol, no base class required) — and an optional `settings_registry` (when `None` it uses the shared `get_settings_registry()`). A `None` event bus means no events; a publisher failure never breaks the operation.
+- **Core operations.** `upload(source, key=None, namespace="general", original_filename=None, declared_mime_type=None, uploader=None) -> FileRead` (source: a filesystem path, raw bytes, or a file-like binary stream; validation: key/namespace patterns, zero-byte, live size limit, magic-byte type detection as the source of truth, declared/filename type conflicts rejected, live allowed-type set; the write is atomic with mutual rollback between the storage content and the metadata record), `download(key) -> bytes`, `open(key) -> BinaryIO` (file-like stream, usable as a context manager), `delete(key)` (no-op if the content is already missing), `get_file(key) -> FileRead`, `list_files(namespace=None, limit=100, offset=0) -> list[FileRead]` (namespace prefix match, created_at ordering, limit/offset pagination; `limit < 1` or `offset < 0` → `ValueError`).
+- **Avatar operations.** `upload_avatar(user_id, source) -> AvatarRead` (first avatar; an existing avatar → `AvatarError(operation='upload')`), `replace_avatar(user_id, source) -> AvatarRead` (stores the new file + variants, deletes the old file + variants; a missing avatar → `AvatarError(operation='replace')`; publishes `FileUploaded`/`FileDeleted` but NO `AvatarUploaded`), `delete_avatar(user_id)` (deletes the file + variants, clears the user→file mapping; a missing avatar is a no-op), `get_avatar(user_id) -> AvatarRead` (returns the default avatar when the user has no avatar or a dangling mapping; a dangling mapping is cleared), `get_default_avatar() -> bytes` (module function). Avatars: image/png, image/jpeg, image/webp only; Pillow decode validation (truncated image → `FileValidationError(reason='image_decode_failed')`); dimensions ≤ 4096×4096; 64px/256px PNG variants stored as separate files (deleted with the main file); URL `https://<base>/files/<file_id>` (live `filemanagement.avatar_base_url`, always https).
+- **Settings.** Registered via the feature-owned `register_settings(registry)` (call at startup); read live on each operation. Keys: `filemanagement.storage_root` (TEXT, default `./data/files`), `filemanagement.max_file_size` (NUMBER, default `10485760`), `filemanagement.avatar_max_size` (NUMBER, default `2097152`), `filemanagement.allowed_types` (LIST, 9 MIME defaults), `filemanagement.avatar_base_url` (TEXT, default `files.example.com`). Unregistered keys fall back to hardcoded defaults.
+- **Storage backends.** `LocalDiskStorageBackend(root)` (production: flat layout, key-pattern + resolved-path containment enforcement, symlink rejection, atomic `put` via temp file + `os.replace`, last-write-wins) / `InMemoryStorageBackend()` (tests/DI; instances are isolated) — both implement the `StorageBackend` ABC (`put`/`get`/`delete`/`exists`/`stat`).
+- **Repository.** `SqliteFileRepository("sqlite:///...")` (production: auto-creates the DB file's parent directory, thread-safe SQLite, atomic same-key replacement) — implements the `FileRepository` ABC.
+- **Events.** `FileUploaded`, `FileDownloaded`, `FileDeleted`, `FileValidationFailed`, `AvatarUploaded`, `AvatarDeleted` (non-sensitive data only — never file content, never secrets).
+- **Errors.** Exceptions are the `FileManagementError` hierarchy (from `backend.filemanagement.errors`): `FileManagementNotFoundError`, `FileTooLargeError`, `FileTypeNotAllowedError`, `FileValidationError`, `StorageError`, `AvatarError`. All carry context attributes (key, reason, user_id, operation).
+- **Tracing.** `FileService` and the repository classes are traced via `@logged_class` (`include_args=False` — file content never appears in log records); `register_settings` and `get_default_avatar` are traced via `@logged`.
+
+```python
+from backend.filemanagement import (
+    FileService,
+    LocalDiskStorageBackend,
+    SqliteFileRepository,
+    register_settings,
+)
+from backend.settings import get_settings_registry
+
+register_settings(get_settings_registry())  # once at startup
+
+service = FileService(
+    SqliteFileRepository("sqlite:///./files.db"),
+    LocalDiskStorageBackend("./data/files"),
+    event_bus=event_bus,
+)
+record = service.upload("report.pdf", namespace="general", original_filename="report.pdf")
+content = service.download(record.key)
+```
+
+---
+
 ## Dependencies and Existing Packages
 
 Prefer established, well-maintained packages over custom implementations when a package materially solves the problem and fits the project's requirements, architecture, licensing, and operational constraints.
