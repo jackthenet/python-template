@@ -26,7 +26,7 @@ from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine, delete, select
 
 from backend.filemanagement.models import FileRecord, UserAvatar
 from backend.logging import logged_class
@@ -140,11 +140,11 @@ class SqliteFileRepository(FileRepository):
 
     def add(self, record: FileRecord) -> FileRecord:
         with self._session() as session:
-            existing = session.exec(select(FileRecord).where(FileRecord.key == record.key)).first()
-            if existing is not None:
-                # Atomic same-key replacement (last-write-wins, D5): the
-                # replaced record is deleted in the same transaction.
-                session.delete(existing)
+            # Immediate same-key replacement (last-write-wins, D5): the bulk
+            # delete executes before the deferred insert flushes, so the
+            # unique key never conflicts within the transaction (the replaced
+            # record is deleted).
+            session.execute(delete(FileRecord).where(FileRecord.key == record.key))
             session.add(record)
             session.commit()
         return record

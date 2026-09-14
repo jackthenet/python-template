@@ -4,15 +4,11 @@ T-001 implements the foundation: the error hierarchy (``errors``), the typed
 lifecycle events + structural publisher (``events``), and the domain models and
 fixed constants (``models``).
 
-The later-task public names (``FileService`` and the repository) are present
-as **collection scaffolding** only: the derived test suite imports them at
-module level, so the package must export them for the tests to be collected.
-They raise ``NotImplementedError`` when used — they carry no behavior. The
-real implementations land in T-004..T-008 and replace these placeholders.
 ``register_settings`` (T-002) is a real implementation in
 ``feature_settings``; the storage backends (T-003) are real implementations
 in ``storage``; the metadata repository (T-004) is a real implementation in
-``repository``.
+``repository``; the upload service (T-005) is a real implementation in
+``service``.
 """
 
 from __future__ import annotations
@@ -53,23 +49,12 @@ from backend.filemanagement.models import (
     UserAvatar,
 )
 from backend.filemanagement.repository import FileRepository, SqliteFileRepository
+from backend.filemanagement.service import FileService
 from backend.filemanagement.storage import (
     InMemoryStorageBackend,
     LocalDiskStorageBackend,
     StorageBackend,
 )
-
-# --- Collection scaffolding for later tasks (T-005..T-008) ------------------
-# No behavior: each raises NotImplementedError when used. Replaced by the real
-# implementations in the tasks noted below.
-
-
-class FileService:
-    """Placeholder (implemented in T-005)."""
-
-    def __init__(self, repository, backend=None, event_bus=None, settings_registry=None) -> None:
-        raise NotImplementedError("FileService is implemented in T-005")
-
 
 __all__ = [
     "AVATAR_ALLOWED_TYPES",
