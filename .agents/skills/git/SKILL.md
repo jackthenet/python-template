@@ -49,10 +49,10 @@ The git skill's phase steps are decomposed into two atomic steps (S6.4 Create PR
 
 ### S7.1 Post-merge cleanup
 
-- **Objective:** After the human merges the PR, verify the merge on `main`, remove the worktree, and delete the local + remote branches.
+- **Objective:** After the human merges the PR, verify the merge is reachable from `origin/main` (after `git fetch`), remove the worktree, and delete the local + remote branches.
 - **Inputs:** the merged PR.
-- **Outputs:** the merge verified on `main`; the worktree removed; the local + remote branches deleted.
-- **Done-criteria:** the merge commit is present on `main`; the worktree is removed (`git worktree remove`); the local branch is deleted (`git branch -d`); the remote branch is deleted (`git push origin --delete`); `git worktree list` shows only the primary (`main`) worktree.
+- **Outputs:** the merge verified as reachable from `origin/main` (after `git fetch`); the worktree removed; the local + remote branches deleted.
+- **Done-criteria:** the merge commit is verified reachable from `origin/main` (run `git fetch` first, then `git merge-base --is-ancestor <merge-commit> origin/main` — do NOT rely on the local `main` ref, which may lag); the worktree is removed (`git worktree remove`); the local branch is deleted (`git branch -d`); the remote branch is deleted (`git push origin --delete`); `git worktree list` shows only the primary (`main`) worktree.
 
 ## Operations
 
@@ -82,12 +82,12 @@ gh pr create --head <type>/<name> --base main --title "<title>" --body "<body>"
 
 After the human merges the PR:
 
-1. Verify the merge landed on `main` (from the primary worktree):
+1. Verify the merge is reachable from `origin/main` (run `git fetch` first, then `git merge-base --is-ancestor <merge-commit> origin/main`) — do NOT rely on the local `main` ref, which may lag (from the primary worktree):
    ```bash
    git fetch
-   git log main --oneline -5
+   git merge-base --is-ancestor <merge-commit> origin/main
    ```
-   The merge commit must be present.
+   The command must exit 0 (the merge commit is an ancestor of `origin/main`).
 2. Remove the worktree:
    ```bash
    git worktree remove ../<repo-name>-worktrees/<type>/<name>

@@ -132,6 +132,14 @@ Run this against the written specification before presenting it for approval. Fi
 - **Scope consistency**: every in-scope item has at least one REQ; every out-of-scope item is not accidentally covered by a REQ/AC. CROSS-CUTTING additionally: the Impact Analysis names every affected feature and the REQ/AC IDs it touches.
 - **Performance budget vs. observability**: every performance budget that covers an operation which the observability table requires to log must (a) be achievable *including* that per-call logging overhead, and (b) state the logging context (e.g., synchronous console sink) under which the budget is measured. A budget that only holds with logging disabled (or that is unachievable with the mandated logging) is inconsistent.
 
+## Dependency Smoke-Test
+
+Before a **NEW dependency** is named in a spec or ADR, smoke-test it on the host: a minimal `import` plus one representative call, run with a short timeout (e.g., `timeout 15 uv run python -c "import <lib>; <one call>"`). If it segfaults, hangs, or fails on the host, do NOT bake it into the spec/ADR — replace it with a working alternative and record the replacement in an ADR + the verification artifact.
+
+### Capability, not library
+
+A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection"), not a specific library, so the implementation can choose a working alternative. A specific library may be named as the **default**, but the capability is the normative requirement — if the default library is unusable on the host, the capability still holds.
+
 ## Rules
 
 - A change branch **and its worktree** MUST be created before any Phase 1 work (all types).
