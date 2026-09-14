@@ -49,7 +49,7 @@ def _content() -> SearchStrategy[bytes]:
     return st.lists(st.sampled_from(b"abcdefghijklmnopqrstuvwxyz0123456789"), min_size=1, max_size=4096).map(bytes)
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(content=_content(), fault=st.sampled_from(["none", "storage", "metadata"]))
 def test_inv_001_no_partial_state_on_failure(tmp_path: Path, content: bytes, fault: str) -> None:
     key = str(uuid4())
@@ -73,7 +73,7 @@ def test_inv_001_no_partial_state_on_failure(tmp_path: Path, content: bytes, fau
         assert mem.exists(key)
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(contents=st.lists(_content(), min_size=2, max_size=4))
 def test_inv_002_concurrent_same_key_last_write_wins(tmp_path: Path, contents: list[bytes]) -> None:
     key = str(uuid4())
@@ -101,7 +101,7 @@ def test_inv_002_concurrent_same_key_last_write_wins(tmp_path: Path, contents: l
     assert backend.get(key).read() in contents  # last-write-wins
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(content=_content())
 def test_inv_003_metadata_matches_content(tmp_path: Path, content: bytes) -> None:
     key = str(uuid4())
@@ -116,7 +116,7 @@ def test_inv_003_metadata_matches_content(tmp_path: Path, content: bytes) -> Non
     assert rec.detected_mime_type == "text/plain"
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(ops=st.lists(st.sampled_from(["upload", "replace", "delete"]), min_size=1, max_size=8))
 def test_inv_004_at_most_one_avatar_per_user(tmp_path: Path, ops: list[str]) -> None:
     repo = SqliteFileRepository(db_url(tmp_path, f"inv004-{uuid4()}.db"))
@@ -138,7 +138,7 @@ def test_inv_004_at_most_one_avatar_per_user(tmp_path: Path, ops: list[str]) -> 
         assert repo.get_by_id(file_id) is not None  # the mapping points to an existing file
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(size=st.integers(min_value=8, max_value=256))
 def test_inv_005_avatar_url_format(tmp_path: Path, size: int) -> None:
     repo = SqliteFileRepository(db_url(tmp_path, f"inv005-{uuid4()}.db"))
@@ -151,7 +151,7 @@ def test_inv_005_avatar_url_format(tmp_path: Path, size: int) -> None:
     )
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(n=st.integers(min_value=1, max_value=4))
 def test_inv_006_event_correspondence(tmp_path: Path, n: int) -> None:
     events = EventCollector()
@@ -173,7 +173,7 @@ def test_inv_006_event_correspondence(tmp_path: Path, n: int) -> None:
     assert len(events.events) == n * 3 + 1  # only FileValidationFailed on failure
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(key=st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,20}", fullmatch=True))
 def test_inv_007_key_containment(tmp_path: Path, key: str) -> None:
     root = tmp_path / f"inv007-{uuid4()}"
@@ -185,7 +185,7 @@ def test_inv_007_key_containment(tmp_path: Path, key: str) -> None:
     assert backend.exists(key)
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 @given(size=st.sampled_from([32, 64, 128, 256]))
 def test_inv_008_variant_consistency(tmp_path: Path, size: int) -> None:
     from PIL import Image
