@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import threading
 
-from backend.mail import MailService
 from mail_test_helpers import EventCollector, RecordingTransport, ensure_mail_settings, simple_template
+
+from backend.mail import MailService
 
 THREADS = 8
 SENDS_PER_THREAD = 4

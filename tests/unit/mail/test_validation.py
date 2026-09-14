@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import MailService, MailTemplateError
 from mail_test_helpers import RecordingTransport, simple_template
+
+from backend.mail import MailService, MailTemplateError
 
 
 def _assert_reason(error: MailTemplateError, expected: str) -> None:

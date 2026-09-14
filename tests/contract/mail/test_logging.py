@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from backend.mail import MailService
 from mail_test_helpers import RecordingTransport, simple_template
+
+from backend.mail import MailService
 
 SLOW_THRESHOLD_MS = 5000
 MIN_TRACE_RECORDS = 2

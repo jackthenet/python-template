@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from mail_test_helpers import EventCollector, RecordingTransport, message_bodies
+
 from backend.mail import (
     EmailSendResult,
     EmailVerificationEmailRequest,
     MailService,
     PasswordResetEmailRequest,
 )
-from mail_test_helpers import EventCollector, RecordingTransport, message_bodies
 
 RESET_URL = "https://reset.example.com/reset?token=reset-token-123"
 VERIFY_URL = "https://verify.example.com/verify?token=verify-token-456"

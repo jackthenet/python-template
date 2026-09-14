@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import MailService, MailTransportError
 from hypothesis import given
 from hypothesis import strategies as st
 from mail_test_helpers import EventCollector, FlakyTransport, simple_template
+
+from backend.mail import MailService, MailTransportError
 
 
 @given(

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import MailService, MailTransportError
 from mail_test_helpers import FailingTransport, simple_template
+
+from backend.mail import MailService, MailTransportError
 
 
 def test_ac_012_transport_failure() -> None:

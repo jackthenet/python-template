@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import EmailFailed, EmailSent, MailService, MailTransportError
 from mail_test_helpers import EventCollector, FlakyTransport, simple_template
+
+from backend.mail import EmailFailed, EmailSent, MailService, MailTransportError
 
 
 def test_edge_010_failure_then_success() -> None:

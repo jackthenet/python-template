@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import pytest
-from backend.mail import (
-    EmailFailed,
-    EmailSent,
-    MailService,
-    MailTemplateError,
-    PasswordResetEmailRequest,
-)
 from mail_test_helpers import (
     EventCollector,
     RecordingTransport,
     ensure_mail_settings,
     event_text,
     simple_template,
+)
+
+from backend.mail import (
+    EmailFailed,
+    EmailSent,
+    MailService,
+    MailTemplateError,
+    PasswordResetEmailRequest,
 )
 
 SMTP_PASSWORD = "smtp-secret-password"

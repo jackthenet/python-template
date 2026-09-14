@@ -5,8 +5,9 @@ from __future__ import annotations
 from email.message import EmailMessage
 
 import pytest
-from backend.mail import MailTransportError, SmtpTransportImpl
 from mail_test_helpers import FakeSmtpServer, closed_port
+
+from backend.mail import MailTransportError, SmtpTransportImpl
 
 
 def _message() -> EmailMessage:

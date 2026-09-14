@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
+
 from backend.mail import (
     EMAIL_VERIFICATION_TEMPLATE,
     PASSWORD_RESET_TEMPLATE,
@@ -21,7 +23,6 @@ from backend.mail import (
     SmtpTransport,
     SmtpTransportImpl,
 )
-from pydantic import ValidationError
 
 
 def test_nfr_003_public_api_stable() -> None:
