@@ -25,12 +25,13 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.filemanagement.errors import (
     FileManagementError,
+    FileManagementNotFoundError,
     FileTooLargeError,
     FileTypeNotAllowedError,
     FileValidationError,
     StorageError,
 )
-from backend.filemanagement.events import FileUploaded, FileValidationFailed
+from backend.filemanagement.events import FileDeleted, FileDownloaded, FileUploaded, FileValidationFailed
 from backend.filemanagement.feature_settings import (
     DEFAULT_ALLOWED_TYPES,
     DEFAULT_AVATAR_MAX_SIZE,
@@ -365,3 +366,103 @@ class FileService:
             )
         )
         return _to_read(record)
+
+    # -- Query use cases --------------------------------------------------------
+
+    def download(self, key: str) -> bytes:
+        """Return the stored file's bytes (REQ-010).
+
+        A missing file (no metadata record) raises
+        ``FileManagementNotFoundError``; a metadata record without storage
+        content raises ``StorageError(reason='not_found')`` and the record is
+        NOT auto-deleted (EDGE-006). A successful download publishes
+        ``FileDownloaded`` (REQ-022). A download concurrent with a same-key
+        upload returns a complete file, never partial (EDGE-017): the storage
+        backends write atomically (local disk: temp file + ``os.replace``;
+        in-memory: a single bytes assignment), so a concurrent read sees
+        either the old or the new complete content.
+        """
+        record = self._repository.get_by_key(key)
+        if record is None:
+            raise FileManagementNotFoundError(key)
+        backend = self._backend_for(self._registry())
+        stream = backend.get(key)  # StorageError(reason='not_found') if content missing
+        try:
+            data = stream.read()
+        finally:
+            with contextlib.suppress(Exception):
+                stream.close()
+        self._publish(FileDownloaded(occurred_at=datetime.now(UTC), file_id=record.id, key=key, size=record.size))
+        return data
+
+    def open(self, key: str) -> BinaryIO:
+        """Return a file-like stream of the stored file (REQ-010).
+
+        The stream is usable as a context manager and its content equals the
+        stored bytes. A missing file (no metadata record) raises
+        ``FileManagementNotFoundError``; a metadata record without storage
+        content raises ``StorageError(reason='not_found')`` (EDGE-006). A
+        successful open publishes ``FileDownloaded`` (REQ-022).
+        """
+        record = self._repository.get_by_key(key)
+        if record is None:
+            raise FileManagementNotFoundError(key)
+        backend = self._backend_for(self._registry())
+        stream = backend.get(key)  # StorageError(reason='not_found') if content missing
+        self._publish(FileDownloaded(occurred_at=datetime.now(UTC), file_id=record.id, key=key, size=record.size))
+        return stream
+
+    def delete(self, key: str) -> None:
+        """Remove the storage content and the metadata record (REQ-011).
+
+        A missing file (no metadata record) raises
+        ``FileManagementNotFoundError``; a file whose storage content is
+        already missing still has its metadata record deleted (the storage
+        delete is a no-op) (EDGE-007). A successful delete publishes
+        ``FileDeleted`` (REQ-022).
+        """
+        record = self._repository.get_by_key(key)
+        if record is None:
+            raise FileManagementNotFoundError(key)
+        backend = self._backend_for(self._registry())
+        backend.delete(key)  # no-op if the content is already missing (EDGE-007)
+        self._repository.delete(record.id)
+        self._publish(
+            FileDeleted(
+                occurred_at=datetime.now(UTC),
+                file_id=record.id,
+                key=key,
+                namespace=record.namespace,
+            )
+        )
+
+    def get_file(self, key: str) -> FileRead:
+        """Return the metadata for a key (REQ-014).
+
+        A missing file raises ``FileManagementNotFoundError``.
+        """
+        record = self._repository.get_by_key(key)
+        if record is None:
+            raise FileManagementNotFoundError(key)
+        return _to_read(record)
+
+    def list_files(
+        self,
+        namespace: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[FileRead]:
+        """Return files whose namespace starts with the prefix (REQ-014).
+
+        ``namespace=None`` returns all files. Results are ordered by
+        created_at with limit/offset pagination. ``limit`` must be >= 1 and
+        ``offset`` must be >= 0, otherwise ``ValueError``. An empty store
+        returns ``[]``; an offset beyond the last item returns ``[]``
+        (EDGE-008, EDGE-009).
+        """
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        records = self._repository.list_by_namespace(namespace, limit, offset)
+        return [_to_read(record) for record in records]
