@@ -214,7 +214,7 @@ Every workflow step is executed by a **new subagent** launched via the `subagent
 
 #### Execution Model
 
-- **Synchronous — never background.** Every subagent is launched with `run_in_background: false` (the default). The orchestrator **waits for the subagent to complete its step and return a handoff** before proceeding to the next step. A subagent is never left running in the background and is never polled. If a subagent does not return (timeout / network / error), the orchestrator treats it as a **failed step**: it logs the problem (Problem Log), launches a **fresh** subagent for the same step (never resumes a stuck one), and continues.
+- **Synchronous — never background.** Every subagent is launched with `run_in_background: false` (the default). The orchestrator **waits for the subagent to complete its step and return a handoff** before proceeding to the next step. A subagent is never left running in the background and is never polled. If a subagent does not return (timeout / network / error), the orchestrator treats it as a **failed step**: it logs the problem (Problem Log), launches a **fresh** subagent for the same step (never resumes a stuck one), and continues. A step subagent MUST end with the **structured handoff**; a step that returns without it (e.g., ends with an intermediate statement) is treated as a **FAILED step** and relaunched with a fresh subagent (completion guard, P-3/P-7).
 - **Atomic steps.** Each phase is broken into **atomic steps** (table below). An atomic step has a **single objective**, clear **inputs/outputs**, a **required skill**, a **dedicated subagent**, a clear **“done” definition**, and a **validation** before the next step. A step subagent executes **exactly one atomic step** — never more. Small steps exist so a subagent can actually **finish** its work.
 - **One subagent per atomic step.** Every time an atomic step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4/3) and reclassification re-runs — the orchestrator launches a **new** subagent. The only exception: a `BLOCKED-USER` subagent may be **resumed** to deliver the user's answers, which continues the **same** step (never a different one).
 
@@ -232,7 +232,7 @@ The six phases are the **gates** (entry/exit criteria per the Phase Matrix). Wit
 | **6 Review** | **S6.1 Review vs. normative basis** → **S6.2 Traceability + boundaries** → **S6.3 Review report** → **S6.4 Bump version + open PR** |
 | **Post-merge** | **S7.1 Cleanup** (verify merge + remove worktree + delete branches) |
 
-**Ruff gate.** Every atomic step that writes or modifies **tests or implementation code** MUST run `uv run ruff check .` before it returns and record the result in the handoff (`ruff` field). A step that leaves lint errors is **not done**.
+**Ruff gate.** Every atomic step that writes or modifies **tests or implementation code** MUST run `uv run ruff check .` before it returns and record the result in the handoff (`ruff` field). A step that leaves lint errors is **not done**. Scope `uv run ruff check --fix` + `uv run ruff format` to the **task's changed paths** (not repo-wide) — repo-wide `--fix`/`format` during a task step modifies out-of-scope files and can introduce new errors (P-6); a repo-wide lint fix is a separate, explicit step (or the verify phase).
 
 #### Task-Definition Contract
 
@@ -268,7 +268,7 @@ Questions that need user input are recorded persistently in `AI_Questions.md` (r
 
 - **MAY create questions:** any step, when it meets an ambiguity, a missing requirement, or a decision that requires user input.
 - **MUST create questions:** the **Interrogate** step (**S1.1**) MUST create a question for every ambiguity, missing requirement, edge case, and scope boundary it identifies — the spec phase is where user input is most needed. Any step that returns `BLOCKED-USER` MUST have its questions recorded in `AI_Questions.md`.
-- **Workflow stop:** when a step returns `BLOCKED-USER`, the orchestrator **stops the workflow**, presents the questions to the user (via `ask_user_question`), records the answers in `AI_Questions.md`, marks them **incorporated**, and **relaunches the same step** with the answers. The workflow never proceeds past a `BLOCKED-USER` step until the user has answered.
+- **Workflow stop:** when a step returns `BLOCKED-USER`, the orchestrator **stops the workflow**, presents the questions to the user (via `ask_user_question`), records the answers in `AI_Questions.md`, marks them **incorporated**, and **relaunches the same step** with the answers. The workflow never proceeds past a `BLOCKED-USER` step until the user has answered. If the BLOCKED-USER subagent's session is released (resume unavailable) and the only remaining work is verifying already-recorded answers, the orchestrator may record the answers, mark the step done directly, and commit — without relaunching (P-2).
 
 #### Problem Log (`docs/workflow/PROBLEMS.md`)
 
