@@ -72,6 +72,17 @@
 - **Ruff:** repo-wide `uv run ruff check .` → 23 errors, all pre-existing `I001` import-sort errors in `tests/**/mail/**` (same set recorded in Phase 3; out of scope). File-management paths (`src/backend/filemanagement/` + all five `tests/**/filemanagement/` test directories) → **All checks passed** (0 errors; no new errors introduced by T-002).
 - **Task status:** `SPECIFIED → VERIFIED` for T-002 in both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (synced), committed together with this evidence.
 
+## DAG Correction (T-005 gate, discovered in Phase 4)
+
+- **When:** 2026-09-14, before S4.1 (pick T-005 + confirm RED).
+- **Flaw:** T-005's completion gate (all 34 tests) could not be satisfied by T-005 alone. 5 of the 34 tests use T-006 **service** methods (called on the `FileService` instance, not the repository): `test_ac_001` (AC-001, `get_file`), `test_ac_014` (AC-014, `get_file`), `test_ac_026` (AC-026, `delete`/`download`/`get_file`/`list_files`), `test_ac_030` (AC-030, `delete`/`download`), `test_ac_050` (AC-050, `delete`/`download`). Since T-006 depends on T-005 (must be VERIFIED), this created a deadlock: T-005 could not be VERIFIED until those 5 tests passed, but they need T-006's `get_file`/`download`/`delete`/`list_files`. (Note: the other 29 T-005 tests use only **repository** methods (`repo.list_by_namespace`, etc.) which are T-004, already VERIFIED — so they are satisfiable by T-005 alone.)
+- **Correction (decomposition fix, NOT a test weakening — all 5 tests preserved, only moved to the task that can make them pass):**
+  - T-005: removed the 5 tests from `tests_to_create` (29 remain) and AC-001/AC-014/AC-026/AC-030/AC-050 from `acceptance_criteria` (19 remain); `completion_gates` updated to the 19 remaining ACs + the EDGE/INV gates.
+  - T-006 (queries; depends on T-005, so `get_file`/`download`/`delete`/`list_files` are available): added the 5 tests to `tests_to_create` (20 total) and AC-001/AC-014/AC-026/AC-030/AC-050 to `acceptance_criteria` (14 total); the acceptance completion gate updated to the full 14-AC list.
+  - Applied to both `.github/task-runner/tasks.json` and `docs/tasks/file-management.tasks.json` (kept in sync).
+- **Rationale:** Same P-5/P-8 pattern — a task's completion gate must be satisfiable by that task alone. The 5 upload tests are written assuming the queries methods (`get_file`/`download`/`delete`/`list_files`) are available, but those are T-006. T-006 is the earliest task where they are satisfiable. This respects "tests are the contract" (no test is weakened nor deleted).
+- **Guidance (reinforces P-5/P-8):** When decomposing a spec into a task DAG (S2.2), for EACH task verify that every test in `tests_to_create` can pass using ONLY that task's implementation plus its declared `dependencies` (already-VERIFIED tasks). Distinguish **service** methods (called on the `FileService` instance) from **repository** methods (called on the repository instance) — only the service methods of a LATER task create a deadlock. A task's completion gate must be satisfiable by that task alone.
+
 ## DAG Correction (T-004 gate, discovered in Phase 4)
 
 - **When:** 2026-09-14, before S4.1 (pick T-004 + confirm RED).

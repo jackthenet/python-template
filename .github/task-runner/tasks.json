@@ -161,7 +161,6 @@
         "REQ-022"
       ],
       "acceptance_criteria": [
-        "AC-001",
         "AC-002",
         "AC-003",
         "AC-004",
@@ -174,20 +173,15 @@
         "AC-011",
         "AC-012",
         "AC-013",
-        "AC-014",
         "AC-015",
         "AC-016",
         "AC-017",
         "AC-018",
         "AC-024",
-        "AC-026",
         "AC-029",
-        "AC-030",
-        "AC-049",
-        "AC-050"
+        "AC-049"
       ],
       "tests_to_create": [
-        "test_ac_001_upload_bytes_round_trip",
         "test_ac_002_upload_file_path",
         "test_ac_003_upload_file_like_stream",
         "test_ac_004_zero_byte_rejected",
@@ -200,17 +194,13 @@
         "test_ac_011_type_not_allowed",
         "test_ac_012_live_allowed_types",
         "test_ac_013_generated_uuid_key",
-        "test_ac_014_caller_key",
         "test_ac_015_traversal_key_rejected",
         "test_ac_016_storage_failure_rollback",
         "test_ac_017_metadata_failure_rollback",
         "test_ac_018_concurrent_same_key_last_write_wins",
         "test_ac_024_metadata_fields",
-        "test_ac_026_service_with_fake_repository",
         "test_ac_029_default_local_backend",
-        "test_ac_030_in_memory_backend",
         "test_ac_049_event_validation_failed",
-        "test_ac_050_no_publisher",
         "test_edge_001_source_not_found",
         "test_edge_002_source_not_a_file",
         "test_edge_003_stream_exceeds_limit_mid_stream",
@@ -249,7 +239,7 @@
         "The service references only the FileRepository and StorageBackend ABCs; a non-SQLite fake repository works (D1, REQ-013, REQ-015, AC-026)"
       ],
       "completion_gates": [
-        "Acceptance tests for AC-001..AC-018, AC-024, AC-026, AC-029, AC-030, AC-049, AC-050 pass",
+        "Acceptance tests for AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010, AC-011, AC-012, AC-013, AC-015, AC-016, AC-017, AC-018, AC-024, AC-029, AC-049 pass",
         "Unit tests for EDGE-001, EDGE-002, EDGE-003, EDGE-004, EDGE-005, EDGE-014, EDGE-019 pass",
         "Property tests for INV-001, INV-002, INV-003 pass"
       ],
@@ -271,15 +261,20 @@
         "REQ-022"
       ],
       "acceptance_criteria": [
+        "AC-001",
+        "AC-014",
         "AC-019",
         "AC-020",
         "AC-021",
         "AC-022",
         "AC-023",
+        "AC-025",
+        "AC-026",
         "AC-027",
         "AC-028",
+        "AC-030",
         "AC-048",
-        "AC-025"
+        "AC-050"
       ],
       "tests_to_create": [
         "test_ac_019_download_bytes",
@@ -296,7 +291,12 @@
         "test_edge_009_list_offset_beyond_end",
         "test_edge_017_concurrent_download_upload",
         "test_ac_025_persistence_across_instances",
-        "test_edge_010_sequential_key_replacement"
+        "test_edge_010_sequential_key_replacement",
+        "test_ac_001_upload_bytes_round_trip",
+        "test_ac_014_caller_key",
+        "test_ac_026_service_with_fake_repository",
+        "test_ac_030_in_memory_backend",
+        "test_ac_050_no_publisher"
       ],
       "red_command": "uv run pytest tests/acceptance/filemanagement/ tests/property/filemanagement/ tests/unit/filemanagement/ tests/contract/filemanagement/ tests/integration/filemanagement/ -v",
       "implementation_steps": [
@@ -319,7 +319,7 @@
       ],
       "completion_gates": [
         "Unit tests for EDGE-006, EDGE-007, EDGE-008, EDGE-009, EDGE-010, EDGE-017 pass",
-        "Acceptance tests for AC-019, AC-020, AC-021, AC-022, AC-023, AC-025, AC-027, AC-028, AC-048 pass"
+        "Acceptance tests for AC-001, AC-014, AC-019, AC-020, AC-021, AC-022, AC-023, AC-025, AC-026, AC-027, AC-028, AC-030, AC-048, AC-050 pass"
       ],
       "dependencies": [
         "T-005"
