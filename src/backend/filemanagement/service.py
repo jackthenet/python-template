@@ -14,16 +14,19 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import io
 import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO, NoReturn
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import filetype
+from PIL import Image
 from sqlalchemy.exc import IntegrityError
 
 from backend.filemanagement.errors import (
+    AvatarError,
     FileManagementError,
     FileManagementNotFoundError,
     FileTooLargeError,
@@ -31,26 +34,52 @@ from backend.filemanagement.errors import (
     FileValidationError,
     StorageError,
 )
-from backend.filemanagement.events import FileDeleted, FileDownloaded, FileUploaded, FileValidationFailed
+from backend.filemanagement.events import (
+    AvatarDeleted,
+    AvatarUploaded,
+    FileDeleted,
+    FileDownloaded,
+    FileUploaded,
+    FileValidationFailed,
+)
 from backend.filemanagement.feature_settings import (
     DEFAULT_ALLOWED_TYPES,
+    DEFAULT_AVATAR_BASE_URL,
     DEFAULT_AVATAR_MAX_SIZE,
     DEFAULT_MAX_FILE_SIZE,
     DEFAULT_STORAGE_ROOT,
 )
 from backend.filemanagement.models import (
     AVATAR_ALLOWED_TYPES,
+    AVATAR_MAX_HEIGHT,
+    AVATAR_MAX_WIDTH,
+    AVATAR_VARIANT_SIZES,
+    DEFAULT_AVATAR_PATH,
     KEY_PATTERN,
     NAMESPACE_PATTERN,
+    AvatarRead,
     FileRead,
     FileRecord,
 )
 from backend.filemanagement.repository import FileRepository
 from backend.filemanagement.storage import LocalDiskStorageBackend, StorageBackend
-from backend.logging import logged_class
+from backend.logging import logged, logged_class
 
 if TYPE_CHECKING:
     from backend.settings import SettingsRegistry
+
+# The built-in default avatar asset, shipped with the feature package (D9).
+_DEFAULT_AVATAR_ASSET: Path = Path(__file__).resolve().parent / "assets" / "default_avatar.png"
+
+
+@logged
+def get_default_avatar() -> bytes:
+    """The built-in default avatar asset's bytes (REQ-020, D9).
+
+    The module function is traced via the shared logging feature (``@logged``).
+    """
+    return _DEFAULT_AVATAR_ASSET.read_bytes()
+
 
 _CHUNK_SIZE: int = 65536
 
@@ -366,6 +395,297 @@ class FileService:
             )
         )
         return _to_read(record)
+
+    # -- Avatar use cases -------------------------------------------------------
+
+    def _validate_avatar_image(self, key: str, content: bytes) -> None:
+        """Pillow decode + dimension validation (REQ-019, ADR-049).
+
+        Decode validation is stricter than magic bytes: content detected as
+        an image must fully decode, else
+        ``FileValidationError(reason='image_decode_failed')`` (EDGE-012).
+        Dimensions must be at most 4096x4096 (boundary inclusive, EDGE-018),
+        else ``FileValidationError(reason='dimensions_exceeded', width, height)``.
+        """
+        try:
+            with Image.open(io.BytesIO(content)) as img:
+                img.load()
+                width, height = img.size
+        except Exception:
+            self._validation_failure(
+                key, "avatars", "image_decode_failed", FileValidationError(key, "image_decode_failed")
+            )
+        if width > AVATAR_MAX_WIDTH or height > AVATAR_MAX_HEIGHT:
+            self._validation_failure(
+                key,
+                "avatars",
+                "dimensions_exceeded",
+                FileValidationError(key, "dimensions_exceeded", width=width, height=height),
+            )
+
+    def _generate_variants(self, key: str, content: bytes) -> list[bytes]:
+        """Generate the 64px/256px PNG variants (longest side, REQ-021, D8).
+
+        Returns the variant PNG bytes in ``AVATAR_VARIANT_SIZES`` order; a
+        generation failure raises ``StorageError(reason='variant_generation')``
+        (EDGE-013, INV-008).
+        """
+        try:
+            variants: list[bytes] = []
+            with Image.open(io.BytesIO(content)) as img:
+                img.load()
+                width, height = img.size
+                longest = max(width, height)
+                for size in AVATAR_VARIANT_SIZES:
+                    new_size = (
+                        max(1, round(width * size / longest)),
+                        max(1, round(height * size / longest)),
+                    )
+                    resized = img.resize(new_size, Image.Resampling.LANCZOS)
+                    buf = io.BytesIO()
+                    resized.save(buf, format="PNG")
+                    variants.append(buf.getvalue())
+            return variants
+        except Exception as e:
+            raise StorageError(key, "variant_generation") from e
+
+    def _store_avatar(
+        self,
+        source: str | bytes | BinaryIO,
+        declared_mime_type: str | None,
+    ) -> tuple[FileRecord, list[FileRecord]]:
+        """Validate and persist a new avatar: the main file + its variants.
+
+        Returns ``(main_record, variant_records)``. On a variant generation or
+        persistence failure the entire write is rolled back (no main file, no
+        variants, no records) (EDGE-013, INV-008).
+        """
+        registry = self._registry()
+        key = str(uuid4())
+        limit = self._effective_limit(registry, "avatars")
+        content, original_filename = self._resolve_source(source, key, "avatars", limit, None)
+        detected = self._validate_content(
+            key, "avatars", content, limit, registry, original_filename, declared_mime_type
+        )
+        self._validate_avatar_image(key, content)
+
+        backend = self._backend_for(registry)
+        variant_contents = self._generate_variants(key, content)
+
+        now = datetime.now(UTC)
+        main_id = uuid4()
+        main_record = FileRecord(
+            id=main_id,
+            key=key,
+            original_filename=original_filename,
+            declared_mime_type=declared_mime_type,
+            detected_mime_type=detected,
+            size=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+            namespace="avatars",
+            uploader=None,
+            variant_of=None,
+            created_at=now,
+            updated_at=now,
+        )
+        variant_records = [
+            FileRecord(
+                id=uuid4(),
+                key=str(uuid4()),
+                original_filename=None,
+                declared_mime_type=None,
+                detected_mime_type="image/png",
+                size=len(variant_bytes),
+                sha256=hashlib.sha256(variant_bytes).hexdigest(),
+                namespace="avatars",
+                uploader=None,
+                variant_of=main_id,
+                created_at=now,
+                updated_at=now,
+            )
+            for variant_bytes in variant_contents
+        ]
+
+        # Write content: the main file first, then the variants. A variant
+        # write failure rolls back the entire write (EDGE-013).
+        written: list[str] = []
+        try:
+            backend.put(key, content)
+            written.append(key)
+            for record, variant_bytes in zip(variant_records, variant_contents, strict=True):
+                backend.put(record.key, variant_bytes)
+                written.append(record.key)
+        except StorageError as e:
+            for written_key in written:
+                with contextlib.suppress(Exception):
+                    backend.delete(written_key)
+            if key in written:
+                # The main file was written: a variant write failed.
+                raise StorageError(key, "variant_generation") from e
+            raise  # the main write failed: propagate the backend's error
+
+        # Persist the records with rollback of the entire write on failure.
+        try:
+            self._persist_record(backend, main_record)
+            for record in variant_records:
+                self._persist_record(backend, record)
+        except StorageError:
+            with contextlib.suppress(Exception):
+                self._repository.delete(main_record.id)
+            for record in [main_record, *variant_records]:
+                with contextlib.suppress(Exception):
+                    backend.delete(record.key)
+            raise
+        return main_record, variant_records
+
+    def _avatar_url(self, registry: SettingsRegistry, file_id: UUID) -> str:
+        """The avatar URL ``https://<base>/files/<file_id>`` (REQ-018, D7).
+
+        ``<base>`` is the live ``filemanagement.avatar_base_url`` setting
+        (host only); the ``https`` scheme is fixed.
+        """
+        base = str(self._read_setting(registry, "filemanagement.avatar_base_url", DEFAULT_AVATAR_BASE_URL))
+        return f"https://{base}/files/{file_id}"
+
+    def _default_avatar_read(self, user_id: str) -> AvatarRead:
+        """The default avatar representation (REQ-020, D9)."""
+        registry = self._registry()
+        base = str(self._read_setting(registry, "filemanagement.avatar_base_url", DEFAULT_AVATAR_BASE_URL))
+        return AvatarRead(
+            user_id=user_id,
+            url=f"https://{base}/files/{DEFAULT_AVATAR_PATH}",
+            file_id=None,
+            is_default=True,
+            updated_at=None,
+        )
+
+    def _publish_uploaded(self, main_record: FileRecord, variant_records: list[FileRecord]) -> None:
+        """``FileUploaded`` per file record created (REQ-022, AC-047)."""
+        for record in [main_record, *variant_records]:
+            self._publish(
+                FileUploaded(
+                    occurred_at=datetime.now(UTC),
+                    file_id=record.id,
+                    key=record.key,
+                    namespace=record.namespace,
+                    size=record.size,
+                    detected_mime_type=record.detected_mime_type,
+                    variant_of=record.variant_of,
+                )
+            )
+
+    def _delete_avatar_files(self, file_id: UUID) -> None:
+        """Delete the avatar file and its variants (content + records).
+
+        Publishes ``FileDeleted`` per file record deleted (REQ-022).
+        """
+        backend = self._backend_for(self._registry())
+        records = [
+            record
+            for record in self._repository.list_by_namespace("avatars")
+            if file_id in (record.id, record.variant_of)
+        ]
+        for record in records:
+            with contextlib.suppress(Exception):
+                backend.delete(record.key)
+            self._repository.delete(record.id)
+            self._publish(
+                FileDeleted(
+                    occurred_at=datetime.now(UTC),
+                    file_id=record.id,
+                    key=record.key,
+                    namespace=record.namespace,
+                )
+            )
+
+    def upload_avatar(
+        self,
+        user_id: str,
+        source: str | bytes | BinaryIO,
+        *,
+        declared_mime_type: str | None = None,
+    ) -> AvatarRead:
+        """Upload the user's first avatar (REQ-017).
+
+        An existing avatar raises ``AvatarError(operation='upload')``.
+        """
+        if self._repository.get_user_avatar(user_id) is not None:
+            raise AvatarError(user_id, "upload")
+        main_record, variant_records = self._store_avatar(source, declared_mime_type)
+        url = self._avatar_url(self._registry(), main_record.id)
+        self._repository.set_user_avatar(user_id, main_record.id)
+        self._publish_uploaded(main_record, variant_records)
+        self._publish(AvatarUploaded(occurred_at=datetime.now(UTC), user_id=user_id, file_id=main_record.id, url=url))
+        return AvatarRead(
+            user_id=user_id,
+            url=url,
+            file_id=main_record.id,
+            is_default=False,
+            updated_at=main_record.updated_at,
+        )
+
+    def replace_avatar(
+        self,
+        user_id: str,
+        source: str | bytes | BinaryIO,
+        *,
+        declared_mime_type: str | None = None,
+    ) -> AvatarRead:
+        """Replace the user's avatar (REQ-017).
+
+        The new file is stored first; the old file and its variants are
+        deleted afterwards. A missing avatar raises
+        ``AvatarError(operation='replace')``.
+        """
+        old_file_id = self._repository.get_user_avatar(user_id)
+        if old_file_id is None:
+            raise AvatarError(user_id, "replace")
+        main_record, variant_records = self._store_avatar(source, declared_mime_type)
+        url = self._avatar_url(self._registry(), main_record.id)
+        self._repository.set_user_avatar(user_id, main_record.id)
+        self._publish_uploaded(main_record, variant_records)
+        self._delete_avatar_files(old_file_id)
+        return AvatarRead(
+            user_id=user_id,
+            url=url,
+            file_id=main_record.id,
+            is_default=False,
+            updated_at=main_record.updated_at,
+        )
+
+    def delete_avatar(self, user_id: str) -> None:
+        """Delete the user's avatar (REQ-017).
+
+        The file and its variants are deleted and the user → file mapping is
+        cleared; a missing avatar is a no-op (no event, no error).
+        """
+        file_id = self._repository.get_user_avatar(user_id)
+        if file_id is None:
+            return
+        self._delete_avatar_files(file_id)
+        self._repository.clear_user_avatar(user_id)
+        self._publish(AvatarDeleted(occurred_at=datetime.now(UTC), user_id=user_id, file_id=file_id))
+
+    def get_avatar(self, user_id: str) -> AvatarRead:
+        """Return the user's avatar (REQ-017, REQ-020).
+
+        A user without an avatar (or with a dangling mapping) gets the
+        default avatar (``is_default=True``, ``file_id=None``); a dangling
+        mapping is cleared (EDGE-011).
+        """
+        file_id = self._repository.get_user_avatar(user_id)
+        record = self._repository.get_by_id(file_id) if file_id is not None else None
+        if record is None:
+            if file_id is not None:
+                self._repository.clear_user_avatar(user_id)
+            return self._default_avatar_read(user_id)
+        return AvatarRead(
+            user_id=user_id,
+            url=self._avatar_url(self._registry(), record.id),
+            file_id=record.id,
+            is_default=False,
+            updated_at=record.updated_at,
+        )
 
     # -- Query use cases --------------------------------------------------------
 
