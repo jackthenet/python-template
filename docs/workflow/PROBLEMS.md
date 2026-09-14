@@ -26,6 +26,14 @@ A step MUST log a problem when it:
 
 ## Problems
 
+## P-10 — T-004 latent bug: SqliteFileRepository.add broken for sequential same-key replacement (discovered in T-005)
+- **Problem:** `SqliteFileRepository.add` was broken even for **sequential** same-key replacement. The ORM pattern (deferred `session.delete` + deferred `session.add` in one commit) flushed the INSERT before the DELETE → `IntegrityError` (UNIQUE `files.key`) → rollback, violating the ADR-054 no-error atomic-replacement contract. T-004's gate (EDGE-015 only) never exercised the replacement path, so the bug was latent — it surfaced only when T-005's `upload` exercised same-key replacement. Fixed minimally in T-005 S4.2: the same-key deletion is now an immediate bulk `delete` statement (executes before the deferred insert flushes); the bounded service-side retry (`_persist_record`) is kept for the true inter-connection race.
+- **Step / Phase:** S4.2 (T-005 implement + confirm GREEN) — Phase 4 (T-005); latent bug in T-004 (`repository.py`)
+- **Change:** file-management / FEATURE
+- **Duration / iterations:** 1 iteration (caught during T-005 GREEN; T-004 regression test re-confirmed)
+- **Resolution:** T-004 `repository.py` fixed (immediate bulk delete for same-key replacement); T-004 regression test `test_edge_015_repo_creates_parent_dir` re-confirmed PASSED; T-005 29/29 tests GREEN. Committed as `a4d75c0`.
+- **Date:** 2026-09-14
+
 ## P-9 — DAG decomposition flaw (3rd instance): T-005 gate included 5 upload tests using T-006 service methods (get_file/download/delete/list_files) (deadlock)
 - **Problem:** T-005's completion gate (all 34 tests) could not be satisfied by T-005 alone. 5 tests use T-006 **service** methods (called on the `FileService` instance): `test_ac_001` (AC-001, `get_file`), `test_ac_014` (AC-014, `get_file`), `test_ac_026` (AC-026, `delete`/`download`/`get_file`/`list_files`), `test_ac_030` (AC-030, `delete`/`download`), `test_ac_050` (AC-050, `delete`/`download`). Since T-006 depends on T-005 being VERIFIED, this created a deadlock. The other 29 T-005 tests use only **repository** methods (`repo.list_by_namespace`, etc.) which are T-004 (already VERIFIED), so they are satisfiable by T-005 alone. Root cause (same as P-5/P-8): the Phase 2 (S2.2) decomposition wrote the upload tests (T-005) assuming the queries service methods (T-006) are available, and assigned them to T-005 without checking that the tests' runtime dependencies (T-006) were available at that task.
 - **Step / Phase:** before S4.1 (pick T-005 + confirm RED) — Phase 4 (T-005); root cause in Phase 2 (S2.2 Decompose)
