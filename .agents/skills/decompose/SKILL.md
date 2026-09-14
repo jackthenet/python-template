@@ -72,6 +72,14 @@ The decompose phase is decomposed into two atomic steps. Each has a **single obj
 6. Copy `docs/tasks/[name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
 7. Commit the ADRs and the task DAG.
 
+## DAG Validation (gate satisfiability)
+
+Before the task DAG is considered complete, validate gate satisfiability. For **each** task, verify that every test in `tests_to_create` can pass using **only** that task's implementation plus its declared `dependencies` (already-VERIFIED tasks). Distinguish **service** methods (called on the service instance, e.g., `FileService.get_file`/`download`/`delete`/`list_files`) from **repository** methods (called on the repository instance) — only **service methods of a LATER task** create a deadlock (a task cannot be VERIFIED until a test passes, but the test needs a task that depends on it). A task's completion gate must be satisfiable by that task alone. If a test needs a component implemented in a LATER task, assign the test to the **earliest task where all its runtime dependencies are available** (typically the final cross-cutting task), and move it (do not delete it — a DAG correction is a decomposition fix, not a test weakening).
+
+### Narrowed gate coverage
+
+When a task's gate is narrowed (a DAG correction), record that the **un-exercised path(s)** must be covered by the task that DOES exercise them. A narrowed gate may leave a code path untested in that task (e.g., a repository's same-key replacement path), so a latent bug can surface later — the later task that exercises the path is responsible for catching it.
+
 ## Rules
 
 - ADRs MUST be created for significant design decisions (WHY, not WHAT).
