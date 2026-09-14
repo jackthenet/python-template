@@ -139,7 +139,7 @@ PHASE 2   [S] DECOMPOSE (decompose skill)
              │
              ▼
 PHASE 3   [S] TEST & RED (test skill)
-  S3.1   Derive tests
+  S3.1   Derive tests (per task in the DAG)
              │
              ▼
   S3.2   Ruff ◆ + confirm RED ◆ (tests FAIL on behavior)
@@ -216,7 +216,8 @@ Every workflow step is executed by a **new subagent** launched via the `subagent
 
 - **Synchronous — never background.** Every subagent is launched with `run_in_background: false` (the default). The orchestrator **waits for the subagent to complete its step and return a handoff** before proceeding to the next step. A subagent is never left running in the background and is never polled. If a subagent does not return (timeout / network / error), the orchestrator treats it as a **failed step**: it logs the problem (Problem Log), launches a **fresh** subagent for the same step (never resumes a stuck one), and continues.
 - **Atomic steps.** Each phase is broken into **atomic steps** (table below). An atomic step has a **single objective**, clear **inputs/outputs**, a **required skill**, a **dedicated subagent**, a clear **“done” definition**, and a **validation** before the next step. A step subagent executes **exactly one atomic step** — never more. Small steps exist so a subagent can actually **finish** its work.
-- **One subagent per atomic step.** Every time an atomic step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4/3) and reclassification re-runs — the orchestrator launches a **new** subagent. The only exception: a `BLOCKED-USER` subagent may be **resumed** to deliver the user's answers, which continues the **same** step (never a different one).
+- **One subagent per atomic step.** Every time an atomic step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4/3) and reclassification re-runs — the orchestrator launches a **new** subagent. A `BLOCKED-USER` step is re-entered with a **fresh** subagent; the orchestrator includes the user's recorded answers in the new launch prompt. The orchestrator **NEVER** resumes/restores a previously launched subagent session (its context is full/stale) — every (re-)entry, including after BLOCKED-USER, after a failed gate, and after reclassification, launches a **new** subagent.
+- **Naming.** The orchestrator names each step subagent's description `Sx.x: <short objective>` (e.g., `S4.2: implement FileService.upload`); for per-task steps it includes the task ID (e.g., `S4.2 (T-005): implement FileService.upload`).
 
 #### Atomic Steps
 
@@ -226,7 +227,7 @@ The six phases are the **gates** (entry/exit criteria per the Phase Matrix). Wit
 |-------|-------------------------------------------|
 | **1 Specify** | **S1.1 Interrogate** → **S1.2 Draft spec** → **S1.3 Verify self-consistency** → **S1.4 Present for approval** (commit + PR) |
 | **2 Decompose** | **S2.1 Create ADRs** → **S2.2 Decompose into task DAG** |
-| **3 Test & RED** | **S3.1 Derive tests** → **S3.2 Ruff + confirm RED** |
+| **3 Test & RED** | **S3.1 Derive tests (per task: one fresh subagent derives one DAG task's `tests_to_create`)** → **S3.2 Ruff + confirm RED** |
 | **4 Implement** | **S4.1 Pick task + confirm RED** → **S4.2 Implement + confirm GREEN** → **S4.3 Ruff** → **S4.4 Refactor** → **S4.5 Commit + update status** |
 | **5 Verify** | **S5.1 Run full test suite** → **S5.2 Lint + types** → **S5.3 Update traceability** → **S5.4 Verification report** |
 | **6 Review** | **S6.1 Review vs. normative basis** → **S6.2 Traceability + boundaries** → **S6.3 Review report** → **S6.4 Bump version + open PR** |
@@ -382,6 +383,8 @@ FEATURE and CROSS-CUTTING only. Once the specification file is merged into `main
 5. Copy `docs/tasks/[name].tasks.json` to `.github/task-runner/tasks.json` to initialize the active build environment.
 ### Phase 3: TEST & RED (`tests/`)
 FEATURE, CROSS-CUTTING, and ISSUE.
+
+Test derivation is **per task in the DAG** (S3.1): one fresh subagent derives one task's `tests_to_create`; S3.2 stays a single ruff + RED gate over the whole suite.
 
 **FEATURE / CROSS-CUTTING** (after the task DAG is initialized):
 1. Write acceptance tests derived directly from the spec's acceptance criteria.

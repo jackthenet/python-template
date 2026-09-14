@@ -27,7 +27,7 @@ Convert an approved specification into executable acceptance tests (FEATURE/CROS
 
 This phase runs in a **new, synchronous subagent** launched by the orchestrator via the `subagent` tool (see "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`). The subagent is **never** run in the background — the workflow waits for it to complete and return its handoff.
 
-- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S3.1 Derive tests** → **S3.2 Ruff + confirm RED**. Each has a single objective, inputs, expected outputs, and a done criterion.
+- **Atomic steps:** execute this phase's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **S3.1 Derive tests (per task: one fresh subagent derives one DAG task's `tests_to_create`)** → **S3.2 Ruff + confirm RED**. Each has a single objective, inputs, expected outputs, and a done criterion.
 - **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
 - **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
@@ -44,10 +44,10 @@ The test phase is decomposed into two atomic steps. Each has a **single objectiv
 
 ### S3.1 Derive tests
 
-- **Objective:** Derive the executable tests from the spec (FEATURE/CROSS-CUTTING: acceptance, property, unit, and contract tests per AC/INV/EDGE/NFR) or write the reproduction test (ISSUE).
-- **Inputs:** the approved specification (FEATURE/CROSS-CUTTING) or the triage record (ISSUE); the MUST list (below).
-- **Outputs:** `tests/acceptance/<name>/test_<name>.py` (plus property/unit/contract tests) (FEATURE/CROSS-CUTTING) or the reproduction test(s) (ISSUE).
-- **Done-criteria:** one or more test functions per `AC-XXX` (names reference the `AC-XXX` ID); property tests for every `INV-XXX` (Hypothesis); unit tests for `EDGE-XXX` cases; contract tests for `NFR-XXX` requirements; externally observable behavior only; the tests are committed.
+- **Objective:** Derive the executable tests for the single DAG task assigned in the task definition (its `tests_to_create`) (FEATURE/CROSS-CUTTING), or write the reproduction test (ISSUE).
+- **Inputs:** the approved specification + the task definition (task ID, requirements, acceptance criteria) (FEATURE/CROSS-CUTTING) or the triage record (ISSUE); the MUST list (below).
+- **Outputs:** that task's test functions (FEATURE/CROSS-CUTTING) or the reproduction test(s) (ISSUE).
+- **Done-criteria:** that task's `AC-XXX` test functions (names reference the IDs); property tests for its `INV-XXX` (Hypothesis); unit tests for its `EDGE-XXX` cases; contract tests for its `NFR-XXX` requirements; externally observable behavior only; the tests are committed.
 
 ### S3.2 Ruff + confirm RED
 

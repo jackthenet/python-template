@@ -108,3 +108,35 @@ A step MUST log a problem when it:
 - **Duration / iterations:** single run, no relaunch
 - **Resolution:** verified against `origin/main` (`git merge-base --is-ancestor <merge-commit> origin/main`); cleanup completed correctly. Follow-up: amend the S7.1 done-criteria in AGENTS.md + git skill to say "reachable from `origin/main` (after fetch)" so future runs don't rely on the local `main` ref.
 - **Date:** 2026-09-12
+
+## P-14 — xdist parallel run fails on Windows: shared default settings repository (settings/values.yaml) file lock
+- **Problem:** `uv run pytest tests/ -n auto` → 486 errors: `PermissionError [WinError 32]` in `YamlValueRepository.save` (`os.replace` on `settings/values.yaml` — file in use by another process). Root cause: multiple tests instantiate the shared default settings registry (`get_settings_registry()` → default `YamlValueRepository('settings')`) and all write the same repo-root `settings/values.yaml`; the concurrent replace collides under Windows file locking. Sequential runs pass. Also the cause of the transient untracked `settings/` directory (P-13). Violates the AGENTS.md rule "Test registries MUST pass an explicit isolated value repository".
+- **Step / Phase:** Phase 5 (S5.1 full-suite run, xdist) — file-management; pre-existing (any xdist run)
+- **Change:** file-management / FEATURE (discovered); pre-existing defect
+- **Duration / iterations:** discovered during after-workflow coverage measurement (2026-09-15)
+- **Resolution:** fixed in ISSUE change `issue/settings-test-isolation` (test fixtures pass an isolated `YamlValueRepository(tempdir)`); until then, run the suite sequentially on Windows.
+- **Date:** 2026-09-15
+
+## P-13 — Transient untracked `settings/` directory in repo root after pytest runs
+- **Problem:** Any test run that instantiates the default settings registry writes runtime values to `settings/values.yaml` (repo root) via the default `YamlValueRepository('settings')`. The directory appears as untracked clutter (deleted as a transient artifact during the file-management run).
+- **Step / Phase:** any test run (pre-existing)
+- **Change:** file-management / FEATURE (discovered); pre-existing behavior
+- **Duration / iterations:** recurring
+- **Resolution:** root cause = P-14 (shared default repository in tests); fixed in `issue/settings-test-isolation`. Mitigation: `.gitignore` entry `settings/` (chore/tooling-hardening).
+- **Date:** 2026-09-15
+
+## P-12 — Subagent sessions restored/resumed with full context + no naming convention
+- **Problem:** The orchestrator resumed/restored previously launched step subagents (e.g., "Implement T-001 (retry after Q-30/31/32)") — restored sessions carry full/stale context, wasting time and risking confusion; step subagents also had no consistent naming, making session lists hard to map to steps.
+- **Step / Phase:** Phase 4 (S4.x retries) — file-management
+- **Change:** file-management / FEATURE
+- **Duration / iterations:** 3+ relaunches of the same step with restored sessions
+- **Resolution:** AGENTS.md updated (chore/workflow-subagent-ergonomics): (a) the orchestrator never resumes/restores a previously launched subagent — every (re-)entry launches a new subagent (the BLOCKED-USER resume exception is removed; user answers go into the new launch prompt); (b) subagent description naming template `Sx.x: <short objective>` (include the task ID for per-task steps, e.g., `S4.2 (T-005): implement FileService.upload`).
+- **Date:** 2026-09-15
+
+## P-11 — S3.1 Derive tests took ~8h / 158 tool calls for one subagent
+- **Problem:** A single S3.1 subagent derived all tests for the file-management spec (8 DAG tasks, ~55 ACs) — 158 tool calls, ~29185s. The step's scope (all tasks' tests) was too large for one subagent's context.
+- **Step / Phase:** S3.1 Derive tests — Phase 3
+- **Change:** file-management / FEATURE
+- **Duration / iterations:** 1 run (completed, but disproportionately long)
+- **Resolution:** AGENTS.md updated (chore/workflow-subagent-ergonomics): S3.1 is now per-task in the DAG — one fresh subagent derives one task's `tests_to_create`; S3.2 stays a single ruff+RED gate over the whole suite.
+- **Date:** 2026-09-15
