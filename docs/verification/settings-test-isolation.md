@@ -185,5 +185,52 @@ No `PermissionError [WinError 32]` on the parallel run — no test writes to the
 
 **Ruff gate:** `uv run ruff check .` → `All checks passed!`
 
+## Phase 5 — verify
+
+**Gate:** reproduction test GREEN + full regression suite no new failures + lint (ruff) + type-check (mypy) + traceability updated.
+
+### 1. Reproduction test (GREEN)
+
+```text
+$ uv run pytest tests/unit/test_settings_test_isolation.py -v
+tests/unit/test_settings_test_isolation.py::test_offending_tests_do_not_create_shared_settings_dir PASSED
+1 passed in 0.98s
+```
+
+### 2. Full regression suite (no new failures)
+
+```text
+$ uv run pytest tests/
+489 passed, 1 skipped in 111.16s
+```
+
+The single skip is pre-existing: `tests/acceptance/filemanagement/test_filemanagement.py:364` — "symlinks not available on this host". **No new failures.**
+
+**Failure classification (transient, NOT a regression):** the first full-suite run reported `1 failed, 488 passed, 1 skipped` with `tests/property/usermanagement/test_usermanagement_properties.py::test_inv_003_last_admin_invariant` failing on `hypothesis.errors.DeadlineExceeded` (test took 276.82 ms > 200 ms deadline). This is a timing-based flake, not a behavioral failure: the change touches neither `tests/property/usermanagement/`, `src/`, nor user-management; after clearing the local (gitignored) `.hypothesis/` example DB — which had replayed the slow example from the loaded first run — the test passes consistently (3/3 isolated, and the clean full-suite run above is 489 passed). Classified as **pre-existing/flaky (timing)**.
+
+### 3. Lint gate (ruff)
+
+```text
+$ uv run ruff check .
+All checks passed!
+```
+
+### 4. Type-check gate (mypy — the gate)
+
+```text
+$ uv run mypy src/
+Success: no issues found in 51 source files
+```
+
+(`src/` is unchanged by this change; the gate passes with zero errors.)
+
+### 5. Traceability update
+
+`docs/verification/traceability.md` — Settings matrix: added the issue's evidence row for REQ-014 / AC-018 (`docs/specs/settings.md`): reproduction test `test_offending_tests_do_not_create_shared_settings_dir` (offending fixtures now use isolated repositories; no test writes the shared `settings/` dir) — **GREEN**.
+
+### Gate result
+
+All Phase 5 gates pass: reproduction GREEN, regression clean (no new failures), ruff clean, mypy clean, traceability updated.
+
 ## Date
 2026-09-15

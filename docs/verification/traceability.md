@@ -102,6 +102,7 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | REQ-012, REQ-001 | AC-016 | `test_ac_016_to_view` | GREEN |
 | REQ-013 | AC-017 | `test_ac_017_status_transitions` | GREEN |
 | REQ-014 | AC-018 | `test_ac_018_singleton` | GREEN |
+| REQ-014 | AC-018 | `test_offending_tests_do_not_create_shared_settings_dir` (issue `settings-test-isolation` reproduction — offending fixtures now use isolated repositories; no test writes the shared `settings/` dir) | GREEN |
 | REQ-016, REQ-015 | AC-019 | `test_ac_019_create_template_explicit` | GREEN |
 | REQ-016 | AC-020 | `test_ac_020_create_template_capture` | GREEN |
 | REQ-016 | AC-021 | `test_ac_021_create_template_incomplete` | GREEN |
