@@ -28,13 +28,14 @@ dependencies = [
 # Development-only tooling installed by `uv sync`; keep runtime packages out of
 # this group so deploy and compatibility mirrors stay minimal.
 dev = [
+    "bandit>=1.9.4",
     # Complexity reporting used during refactors and cleanup work.
     "complexipy>=4.2",
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.155.0",
     # Static type checking for the source tree.
-    "mypy>=1.10",
     # Pre-commit automation for local quality gates.
+    "pip-audit>=2.10.1",
     "pre-commit>=4.0",
     # Low-overhead sampling profiler for live Python processes and spawned commands.
     "py-spy>=0.4.2",
@@ -48,6 +49,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     # Linting, formatting, and autofix checks.
     "ruff>=0.14",
+    "ty>=0.0.81",
 ]
 
 [tool.uv]
@@ -78,14 +80,23 @@ branch = true
 # "never imported" warning.
 source = ["src/backend", "src/frontend"]
 
-[tool.mypy]
-python_version = "3.14"
-check_untyped_defs = true
-ignore_missing_imports = true
-# `src/backend/` is a namespace package (no `__init__.py`); these flags let
-# `mypy src/` resolve `backend.logging` correctly without CLI flags.
-explicit_package_bases = true
-namespace_packages = true
+[tool.coverage.report]
+# Floor of the 2026-09-15 coverage baseline (92.74%); raise as coverage improves.
+fail_under = 92
+
+[tool.ty.environment]
+# mypy `python_version = "3.14"` equivalent (ty also infers it from
+# `project.requires-python`; pinned explicitly for documentation).
+python-version = "3.14"
+
+[tool.ty.analysis]
+# mypy `ignore_missing_imports = true` equivalent: suppress
+# `unresolved-import` diagnostics for all modules.
+allowed-unresolved-imports = ["*"]
+# mypy `check_untyped_defs = true`, `explicit_package_bases = true`, and
+# `namespace_packages = true` have no ty equivalent: ty analyzes all function
+# bodies by default and auto-detects the `./src` first-party root (namespace
+# package layout), so `ty check src/` resolves `backend.*` without config.
 
 [tool.ruff]
 target-version = "py314"
@@ -139,5 +150,5 @@ testpaths = ["tests"]
 [tool.agent-runner]
 tasks_file = ".github/task-runner/tasks.json"
 test_command = "uv run pytest"
-quality_check = "uv run ruff check src/ && uv run mypy src/"
+quality_check = "uv run ruff check src/ && uv run ty check src/"
 max_retries = 3

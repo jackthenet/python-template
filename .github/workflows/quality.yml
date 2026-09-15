@@ -1,0 +1,71 @@
+name: Quality
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      - name: Run ty
+        run: uv run ty check src/
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      - name: Run pip-audit
+        run: uv run pip-audit
+      - name: Run bandit
+        run: uv run bandit -r src/
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      # pytest-cov honors `[tool.coverage.report] fail_under` (92) from pyproject.toml.
+      - name: Run pytest with coverage
+        run: uv run pytest tests/ --cov --cov-report=xml
+
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      # PR-time dependency gate (lockfile diff review).
+      - uses: actions/dependency-review-action@v5
