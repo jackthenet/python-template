@@ -254,3 +254,39 @@ allowed-unresolved-imports = ["webauthn"]
   - `AGENTS.md` lines 439, 445 (Phase 5 VERIFY, ISSUE and REFACTOR paths): type-check command → `uv run mypy src/`.
   - `pyproject.toml` `[tool.agent-runner] quality_check`: `uv run ruff check src/ && uv run ty check src/` → `uv run ruff check src/ && uv run mypy src/` (mypy is the blocking gate).
 
+## Phase 5 — light verify (DOCS/CHORE gate)
+
+- **Date:** 2026-09-15
+- **Gate:** no behavior delta + lint + type-check + all scoped tooling changes in place (DOCS/CHORE light verify per the Phase Matrix).
+
+### Results
+
+| # | Check | Command / evidence | Result |
+|---|-------|--------------------|--------|
+| 1 | Lint gate | `uv run ruff check .` | **PASS** — "All checks passed!" |
+| 2 | Type-check gate (the blocking gate) | `uv run mypy src/` | **PASS** — "Success: no issues found in 51 source files" (zero errors) |
+| 3 | No behavior delta | `git diff main..HEAD -- src/ tests/` | **PASS** — empty (no `src/` or `tests/` changes) |
+| 4 | Scoped-file list | `git diff --stat $(git merge-base main HEAD)..HEAD` | **PASS** — the branch touches exactly the 7 scoped files (see below) |
+| 5 | Type-check CI config | `.github/workflows/quality.yml` `type-check` job | **PASS** — `Run mypy (gate)` (`uv run mypy src/`, blocking) + `Run ty (informational)` (`uv run ty check src/`, `continue-on-error: true`); file is valid YAML (`yaml.safe_load` OK) |
+| 6 | Security tooling | `pyproject.toml` dev group + `.github/dependabot.yml` + `security` job | **PASS** — `pip-audit>=2.10.1` + `bandit>=1.9.4` in the dev dependency group; `.github/dependabot.yml` exists (`package-ecosystem: "uv"` — the dedicated ecosystem for uv-managed Python deps/`uv.lock` — + `github-actions`, both weekly); the `security` job runs `uv run pip-audit` + `uv run bandit -r src/`; a `dependency-review` job is present (`actions/dependency-review-action@v5`, PR-time dependency gate) |
+| 7 | Coverage enforcement | `pyproject.toml` + `coverage` job | **PASS** — `[tool.coverage.report]` has `fail_under = 92`; the `coverage` job runs `uv run pytest tests/ --cov --cov-report=xml` (pytest-cov honors `fail_under`, so the floor is enforced in CI) |
+| 8 | `.gitignore` additions | `.gitignore` | **PASS** — includes `settings/` (line 223) and `.pi/subagents.json` (line 225) |
+
+### Scoped-file list confirmation (branch diff, merge-base `d5f0a94` → HEAD)
+
+```
+.github/dependabot.yml                 |  13 +
+.github/workflows/quality.yml          |  74 +
+.gitignore                             |   6 +
+AGENTS.md                              |   2 +-
+docs/verification/tooling-hardening.md | 256 +
+pyproject.toml                         |  26 +
+uv.lock                                | 502 +--
+```
+
+Exactly the scoped files — no others. (The wider `main..HEAD` delta also shows `.agents/skills/*` edits and deletions of `docs/verification/workflow-optimization.md` / `workflow-subagent-ergonomics.md` / `docs/workflow/PROBLEMS.md`; these are **main-side changes after the branch point**, verified via `git diff $(git merge-base main HEAD)..main -- .agents/skills/ docs/...` — not branch changes.)
+
+### Gate verdict
+
+All DOCS/CHORE light-verify checks pass: no behavior delta, lint clean, mypy (the gate) clean, and every scoped tooling change (type-check CI with mypy gate + informational ty, security tooling with dependabot + dependency-review, coverage floor enforcement, `.gitignore` additions) is in place and correct. **DOCS/CHORE gate: PASSED.**
+
