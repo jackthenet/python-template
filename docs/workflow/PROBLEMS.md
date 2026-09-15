@@ -140,3 +140,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 run (completed, but disproportionately long)
 - **Resolution:** AGENTS.md updated (chore/workflow-subagent-ergonomics): S3.1 is now per-task in the DAG — one fresh subagent derives one task's `tests_to_create`; S3.2 stays a single ruff+RED gate over the whole suite.
 - **Date:** 2026-09-15
+
+## P-15 — S5 subagent edit loop: verification section inserted ~180 times (session anomaly)
+- **Problem:** The A:S5 (light verify) subagent for `workflow-subagent-ergonomics` got stuck in a loop: it repeatedly inserted the same `## Verification (Phase 5)` section into `docs/verification/workflow-subagent-ergonomics.md` (~180 times) before detecting the anomaly and deduplicating to a single section. The step took 22441.8s / 190 tool uses for a 3-check light verification.
+- **Step / Phase:** S5 (light verify) — Phase 5
+- **Change:** workflow-subagent-ergonomics / DOCS/CHORE
+- **Duration / iterations:** 1 run (recovered by the subagent itself: file deduplicated, committed cleanly)
+- **Resolution:** Handoff verified by the orchestrator (section count = 1; diff = 4 in-scope files; tree clean). Follow-up: (a) step subagents that edit a file MUST re-read it after the edit to verify the edit landed exactly once before the next tool call; (b) when a handoff reports a loop/anomaly, the orchestrator MUST verify artifact counts (e.g., `grep -c` on the section header) before marking the step complete.
+- **Date:** 2026-09-15
