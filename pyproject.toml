@@ -37,7 +37,7 @@ dev = [
     "mypy>=1.10",
     # Pre-commit automation for local quality gates.
     "pip-audit>=2.10.1",
-    "pre-commit>=4.0",
+    "pre-commit>=4.6.2",
     # Low-overhead sampling profiler for live Python processes and spawned commands.
     "py-spy>=0.4.2",
     # Unit and integration test runner.
