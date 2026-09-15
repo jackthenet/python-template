@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from settings_test_helpers import install_isolated_registry
 
 from backend.settings import (
     ListSpec,
@@ -55,6 +56,9 @@ def test_no_import_side_effects() -> None:
         # Each feature exposes register_settings (the new API).
         assert hasattr(mod, "register_settings"), f"{module_name} missing register_settings"
     # The registry singleton is not mutated by the imports (no settings registered).
+    # Use an isolated registry (temp-dir value repository) so no value is
+    # persisted to the shared default "settings/" directory (test isolation).
+    install_isolated_registry()
     reg = get_settings_registry()
     assert reg.has("logging.log_level") is False
     assert reg.has("authentication.session_ttl") is False
@@ -69,6 +73,7 @@ def test_unregistered_key_fallback() -> None:
     from backend.logging import _read_setting
 
     # A fresh registry has no logging.* settings registered.
+    install_isolated_registry()
     reg = get_settings_registry()
     value = _read_setting(reg, "logging.log_level", fallback="INFO")
     assert value == "INFO"
@@ -78,6 +83,7 @@ def test_unregistered_key_warning() -> None:
     """EDGE-002: an unregistered key logs a warning."""
     from backend.logging import _read_setting
 
+    install_isolated_registry()
     reg = get_settings_registry()
     # The fallback default is returned (the warning is a side effect).
     assert _read_setting(reg, "logging.log_level", fallback="INFO") == "INFO"
@@ -192,6 +198,7 @@ def test_eventbus_registry_value() -> None:
     """AC-018: EventBus() reads eventbus.max_queue_size from the registry when it exists."""
     from backend.eventbus import EventBus
 
+    install_isolated_registry()
     reg = get_settings_registry()
     reg.register(
         SettingDefinition(key="eventbus.max_queue_size", kind=SettingKind.NUMBER, default=1000)
@@ -240,6 +247,7 @@ def test_no_env_vars() -> None:
 
 def test_settings_registers_nothing() -> None:
     """AC-027: the settings feature registers no settings of its own."""
+    install_isolated_registry()
     reg = get_settings_registry()
     # The settings feature does not register any settings with the registry.
     assert reg.has("settings.log_level") is False
@@ -321,6 +329,7 @@ def test_sink_reconfigured_rotation() -> None:
     from backend.logging import setup_logger
 
     setup_logger()
+    install_isolated_registry()
     reg = get_settings_registry()
     # Change a rotation parameter (requires sink replacement).
     reg.register(
@@ -351,6 +360,7 @@ def test_live_read_no_trace_on_same() -> None:
     # The live-read helper traces only on change; an unchanged value logs no trace.
     from backend.logging import _read_setting
 
+    install_isolated_registry()
     reg = get_settings_registry()
     reg.register(
         SettingDefinition(

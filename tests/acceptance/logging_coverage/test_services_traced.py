@@ -7,6 +7,7 @@ assert the produced records).
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
@@ -28,7 +29,7 @@ from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
 from backend.eventbus.eventbus import EventBus
 from backend.settings.registry import SettingsRegistry
-from backend.settings.repository import MemoryTemplateRepository, YamlTemplateRepository
+from backend.settings.repository import MemoryTemplateRepository, YamlTemplateRepository, YamlValueRepository
 from backend.usermanagement.repository import SqliteUserRepository
 
 # PyWebAuthnProvider's configured slow threshold (spec section 3.3); verified
@@ -55,7 +56,7 @@ def test_service_registry_classes_traced(log_records: list[Any]) -> None:
     # (checking if eventbus.max_queue_size is registered), so we expect 2 entry
     # records total (one from the EventBus constructor, one from the test's call).
     _EXPECTED_HAS_RECORDS = 2
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
+    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     reg.has("some.key")
     assert len([r for r in entry_records(log_records) if "SettingsRegistry.has" in str(r)]) == _EXPECTED_HAS_RECORDS
     assert len([r for r in exit_records(log_records) if "SettingsRegistry.has" in str(r)]) == _EXPECTED_HAS_RECORDS

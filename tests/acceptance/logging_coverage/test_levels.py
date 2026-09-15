@@ -9,6 +9,7 @@ significant lifecycle events are logged at INFO/WARNING/ERROR, not only DEBUG.
 from __future__ import annotations
 
 import contextlib
+import tempfile
 import time
 from typing import Any
 
@@ -20,7 +21,7 @@ from logging_coverage_test_helpers import (
 from backend.eventbus.eventbus import EventBus
 from backend.settings.models import SettingDefinition, SettingKind
 from backend.settings.registry import SettingsRegistry
-from backend.settings.repository import MemoryTemplateRepository
+from backend.settings.repository import MemoryTemplateRepository, YamlValueRepository
 
 
 def test_semantic_log_levels(log_records: list[Any]) -> None:
@@ -57,7 +58,7 @@ def test_semantic_log_levels(log_records: list[Any]) -> None:
     # SettingsRegistrationError, which the test catches).
     from backend.settings.exceptions import SettingsRegistrationError
 
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
+    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     definition = SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="d")
     reg.register(definition)
     with contextlib.suppress(SettingsRegistrationError):

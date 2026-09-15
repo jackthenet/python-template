@@ -5,6 +5,7 @@ Covers EDGE-001 .. EDGE-029.
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from backend.settings import (
     SettingKind,
     SettingsRegistry,
     SliderSpec,
+    YamlValueRepository,
 )
 from backend.settings.exceptions import (
     SettingsNotFoundError,
@@ -36,7 +38,7 @@ _EVENT_COUNT = 2
 @pytest.fixture
 def registry() -> Iterator[SettingsRegistry]:
     bus = EventBus()
-    r = SettingsRegistry(event_bus=bus)
+    r = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     yield r
     bus.shutdown()
 
@@ -244,7 +246,7 @@ def test_edge_020_feature_prefix(registry: SettingsRegistry) -> None:
 
 def test_edge_021_unchanged_value_event() -> None:
     collector = EventCollector()
-    registry = SettingsRegistry(event_bus=collector)
+    registry = SettingsRegistry(event_bus=collector, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     registry.register(_text("app.name", default="orig"))
     registry.set_value("app.name", "same")
     registry.set_value("app.name", "same")  # value equals the current value
@@ -257,7 +259,7 @@ def test_edge_021_unchanged_value_event() -> None:
 def test_edge_022_bus_shutdown() -> None:
     bus = EventBus()
     bus.shutdown()
-    registry = SettingsRegistry(event_bus=bus)
+    registry = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     registry.register(_text("app.name", default="orig"))
     # set_value still succeeds even though the bus is shut down.
     assert registry.set_value("app.name", "new") == "new"
@@ -296,7 +298,7 @@ def test_edge_026_empty_scope_template(registry: SettingsRegistry) -> None:
 def test_edge_027_load_unregistered_settings(tmp_path: Path) -> None:
     shared_repo = YamlTemplateRepository(tmp_path)
     bus_a = EventBus()
-    reg_a = SettingsRegistry(event_bus=bus_a, template_repository=shared_repo)
+    reg_a = SettingsRegistry(event_bus=bus_a, template_repository=shared_repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     reg_a.register(
         SettingDefinition(
             key="app.a",
@@ -310,7 +312,7 @@ def test_edge_027_load_unregistered_settings(tmp_path: Path) -> None:
 
     # A second registry shares the template store but has app.a unregistered.
     bus_b = EventBus()
-    reg_b = SettingsRegistry(event_bus=bus_b, template_repository=shared_repo)
+    reg_b = SettingsRegistry(event_bus=bus_b, template_repository=shared_repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     with pytest.raises(SettingsNotFoundError):
         reg_b.load_template("t1")
     bus_b.shutdown()

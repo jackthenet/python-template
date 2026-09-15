@@ -6,6 +6,7 @@ REQ-010: all existing direct loguru statements are kept unchanged.
 
 from __future__ import annotations
 
+import tempfile
 from typing import Any
 
 from logging_coverage_test_helpers import INVENTORY_CLASSES, messages
@@ -13,7 +14,7 @@ from logging_coverage_test_helpers import INVENTORY_CLASSES, messages
 from backend.eventbus.eventbus import EventBus
 from backend.settings.models import SettingDefinition, SettingKind
 from backend.settings.registry import SettingsRegistry
-from backend.settings.repository import MemoryTemplateRepository
+from backend.settings.repository import MemoryTemplateRepository, YamlValueRepository
 
 
 def test_existing_direct_loguru_kept(log_records: list[Any]) -> None:
@@ -32,7 +33,7 @@ def test_existing_direct_loguru_kept(log_records: list[Any]) -> None:
         bus.shutdown()
 
     # SettingsRegistry one-off facts.
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
+    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     reg.register(SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="d"))
     reg.set_value("x.y", "v")
 

@@ -12,7 +12,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 def test_main_wires_all_features() -> None:
     """AC-003: executing src/main.py registers all features' settings in the shared registry."""
     code = (
-        "import sys; sys.path.insert(0, 'src');\n"
+        "import sys, tempfile; sys.path.insert(0, 'src');\n"
+        "from backend.settings import SettingsRegistry, YamlValueRepository;\n"
+        "from backend.settings import registry as _reg_mod;\n"
+        "_reg_mod._registry[0] = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()));\n"
         "import main;\n"
         "from backend.settings import get_settings_registry;\n"
         "reg = get_settings_registry();\n"

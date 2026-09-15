@@ -48,6 +48,25 @@ def make_registry(event_bus: EventBus | None = None) -> tuple[SettingsRegistry, 
     return registry, bus
 
 
+def install_isolated_registry() -> SettingsRegistry:
+    """Install a fresh isolated registry into the module singleton.
+
+    Mirrors the mail test suite's ``setup_isolated_registry()``: the registry is
+    backed by a temp-dir value repository, so no value is ever persisted to the
+    shared default ``settings/`` directory and nothing written by one test leaks
+    into another (test isolation). Returns the installed registry.
+    """
+    import tempfile
+
+    from backend.settings import YamlValueRepository
+    from backend.settings import registry as _registry_module
+
+    _registry_module.reset_settings_registry()
+    isolated = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    _registry_module._registry[0] = isolated
+    return isolated
+
+
 class EventCollector:
     """A synchronous event publisher for exact event counting in tests.
 

@@ -30,7 +30,7 @@ from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.logging import logged
 from backend.settings.registry import SettingsRegistry
-from backend.settings.repository import MemoryTemplateRepository
+from backend.settings.repository import MemoryTemplateRepository, YamlValueRepository
 from backend.usermanagement.repository import SqliteUserRepository
 
 
@@ -42,7 +42,7 @@ def _subjects(tmp_path: Path) -> list[tuple[str, Callable[[], Any]]]:
     connection is never locked on disk.
     """
     db = "sqlite:///:memory:"
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
+    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     tracker = InMemoryAttemptTracker(3, timedelta(minutes=5))
     urepo = SqliteUserRepository(db)
     mem = MemoryTemplateRepository()

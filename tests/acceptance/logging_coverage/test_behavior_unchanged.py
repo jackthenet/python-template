@@ -8,6 +8,7 @@ observability without altering signatures or behavior.
 from __future__ import annotations
 
 import inspect
+import tempfile
 import uuid
 from typing import Any
 
@@ -16,7 +17,7 @@ from logging_coverage_test_helpers import INVENTORY_CLASSES
 from backend.eventbus.eventbus import EventBus
 from backend.settings.models import SettingDefinition, SettingKind
 from backend.settings.registry import SettingsRegistry
-from backend.settings.repository import MemoryTemplateRepository
+from backend.settings.repository import MemoryTemplateRepository, YamlValueRepository
 from backend.usermanagement.errors import UserNotFoundError
 from backend.usermanagement.models import UserCreate
 from backend.usermanagement.repository import SqliteUserRepository
@@ -43,7 +44,7 @@ def test_tracing_does_not_change_behavior(log_records: list[Any], tmp_path: Any)
     assert _param_names(UserManager.create_user) == ["data"]
 
     # Observable behavior is unchanged: SettingsRegistry set/get round-trip.
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository())
+    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     reg.register(SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="default"))
     reg.set_value("x.y", "changed")
     assert reg.get_value("x.y") == "changed"
