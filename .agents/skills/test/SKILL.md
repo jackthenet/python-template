@@ -38,6 +38,10 @@ This phase runs in a **new, synchronous subagent** launched by the orchestrator 
 
 Per the AGENTS.md Todo Tracking Discipline, the orchestrator (not this subagent) manages the Phase 3 item: `in_progress` before launching this subagent; `completed` only after verifying the handoff that RED is observed and recorded in `docs/verification/[name].md`.
 
+## Pre-flight Collection Check
+
+Before (and after) deriving tests, run `uv run pytest --collect-only <test-directory>` to confirm the test files **collect cleanly** (no import/collection errors). Surface and fix collection blockers (e.g., pre-existing test-infrastructure bugs in shared test helpers) **before the RED gate**, not during it — a collection error is not a valid RED signal.
+
 ## Atomic Steps
 
 The test phase is decomposed into two atomic steps. Each has a **single objective**, **inputs**, **outputs**, and a **done criterion**. The task-definition points at the specific step to execute; the subagent executes exactly that step (and only that step).
