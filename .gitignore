@@ -217,3 +217,9 @@ data/configuration/
 src/data/db/
 src/data/logs/
 src/data/configuration/
+
+# Test-run artifact: the settings feature's default `YamlValueRepository('settings')`
+# writes runtime values there during tests.
+settings/
+# pi subagent snapshot state.
+.pi/subagents.json

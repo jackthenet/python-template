@@ -20,7 +20,7 @@ If asked to implement a new feature, refactor core components, or build a system
 This repository utilizes modern Python tooling managed via `uv`:
 - **Package Manager:** `uv` (Use `uv run <command>` for isolated execution)
 - **Quality Assurance & Formatting:** `ruff` (`uv run ruff check .` / `uv run ruff format .`). The verify phase lints the whole repo with `uv run ruff check .`, matching CI (`.github/workflows/lint.yml`) exactly — pre-existing lint errors are in scope, not out of scope.
-- **Type Checking:** `mypy` (`uv run mypy src/`)
+- **Type Checking:** `mypy` (`uv run mypy src/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool
 - **Test Runner:** `pytest` (`uv run pytest`)
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`

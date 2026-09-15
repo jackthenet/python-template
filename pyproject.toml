@@ -28,6 +28,7 @@ dependencies = [
 # Development-only tooling installed by `uv sync`; keep runtime packages out of
 # this group so deploy and compatibility mirrors stay minimal.
 dev = [
+    "bandit>=1.9.4",
     # Complexity reporting used during refactors and cleanup work.
     "complexipy>=4.2",
     # Property-based testing for pure logic and boundary-heavy helpers.
@@ -35,6 +36,7 @@ dev = [
     # Static type checking for the source tree.
     "mypy>=1.10",
     # Pre-commit automation for local quality gates.
+    "pip-audit>=2.10.1",
     "pre-commit>=4.0",
     # Low-overhead sampling profiler for live Python processes and spawned commands.
     "py-spy>=0.4.2",
@@ -48,6 +50,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     # Linting, formatting, and autofix checks.
     "ruff>=0.14",
+    "ty>=0.0.81",
 ]
 
 [tool.uv]
@@ -78,6 +81,10 @@ branch = true
 # "never imported" warning.
 source = ["src/backend", "src/frontend"]
 
+[tool.coverage.report]
+# Floor of the 2026-09-15 coverage baseline (92.74%); raise as coverage improves.
+fail_under = 92
+
 [tool.mypy]
 python_version = "3.14"
 check_untyped_defs = true
@@ -86,6 +93,25 @@ ignore_missing_imports = true
 # `mypy src/` resolve `backend.logging` correctly without CLI flags.
 explicit_package_bases = true
 namespace_packages = true
+
+[tool.ty.environment]
+# mypy `python_version = "3.14"` equivalent (ty also infers it from
+# `project.requires-python`; pinned explicitly for documentation).
+python-version = "3.14"
+# mypy `explicit_package_bases = true` + `namespace_packages = true`
+# equivalent: the first-party module root. ty searches for first-party
+# modules in the project root or `src` by default; `./src` is set
+# explicitly so `backend.*` (namespace-package layout, no `__init__.py`
+# in `src/backend/`) resolves as `backend.<feature>`.
+root = ["./src"]
+
+[tool.ty.analysis]
+# mypy `ignore_missing_imports = true` equivalent, scoped to the only
+# third-party package without type information (verified 2026-09-15:
+# sqlmodel/sqlalchemy/pydantic/loguru all ship `py.typed`).
+allowed-unresolved-imports = ["webauthn"]
+# mypy `check_untyped_defs = true` has no ty equivalent: ty analyzes all
+# function bodies by default.
 
 [tool.ruff]
 target-version = "py314"
