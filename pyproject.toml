@@ -49,7 +49,7 @@ dev = [
     # Parallel pytest execution for faster focused and full-suite runs.
     "pytest-xdist>=3.8.0",
     # Linting, formatting, and autofix checks.
-    "ruff>=0.14",
+    "ruff>=0.16.7",
     "ty>=0.0.81",
 ]
 
