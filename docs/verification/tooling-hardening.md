@@ -85,7 +85,7 @@ The implementation step MUST run these and record the results (findings only —
 
 - `pyproject.toml`:
   - `uv add --dev ty pip-audit bandit` → `ty>=0.0.81`, `pip-audit>=2.10.1`, `bandit>=1.9.4` (dev group); `uv remove --dev mypy`; `uv.lock` updated by uv (committed with the change).
-  - `[tool.mypy]` removed; `[tool.ty.environment]` + `[tool.ty.analysis]` added (ty config mapping per the placeholders above; ty CLI form verified via `ty --help`: `ty check [PATH]...`).
+  - `[tool.mypy]` removed; `[tool.ty.environment]` + `[tool.ty.analysis]` added (ty CLI form verified via `ty --help`: `ty check [PATH]...`). **Updated in S4 (re-run):** the mapping was refined — `explicit_package_bases`/`namespace_packages` map to `[tool.ty.environment] root = ["./src"]` (the ty first-party module root), and `ignore_missing_imports` maps to `[tool.ty.analysis] allowed-unresolved-imports = ["webauthn"]` (scoped to the only third-party package without type information). See the S4 (re-run) section below.
   - `[tool.coverage.report]` added: `fail_under = 92` (floor of the 2026-09-15 baseline 92.74%; raise as coverage improves).
   - `[tool.agent-runner] quality_check` → `uv run ruff check src/ && uv run ty check src/`.
 - `AGENTS.md`: all 3 mypy references (old lines 23, 439, 445) → ty (`uv run ty check src/`).
@@ -167,3 +167,71 @@ src\backend\usermanagement\repository.py:196:24: error[invalid-argument-type] Ar
 src\backend\usermanagement\service.py:66:21: error[invalid-type-form] Variable of type `type` is not allowed in a parameter annotation
 Found 59 diagnostics (concise mode; 71 in full mode)
 ```
+
+## S4 (re-run) — ty module-resolution config
+
+- **Date:** 2026-09-15
+- **Sub-objective:** make `uv run ty check src/` pass (or prove it cannot pass with correct config) by fixing the ty CONFIGURATION only. No `src/`/`tests/` changes, no blanket rule suppression.
+
+### Investigation
+
+1. **First-party module resolution.** ty docs (Module discovery): first-party modules are searched in the project root or `src` (if present); the equivalent of mypy's `explicit_package_bases` + `namespace_packages` is `[tool.ty.environment] root` ("the root paths of the project, used for finding first-party modules"; when set, it replaces the auto-detected roots — the project root `.` is no longer included). Verified empirically:
+   - `uv run ty check --extra-search-path src src/` → 59 (no change — auto-detection already resolves `backend.*` from the `src` root; the CLI extra-search-path is redundant with `root`).
+   - Probe files (temporary, deleted after): `from backend.settings import SettingsRegistry` resolves (no `unresolved-import`); the failure mode is a *type* failure on the resolved name, not a resolution failure. So `backend.*` namespace-package resolution was working all along; the 71/59 findings were never a resolution problem.
+2. **`allowed-unresolved-imports = ["*"]` check.** Removed the setting entirely → 60 diagnostics: exactly one new finding, `unresolved-import` for `webauthn` (the `py-webauthn` package — the only third-party dep without type information; `sqlmodel`/`sqlalchemy`/`pydantic`/`loguru` all ship `py.typed`). No masking or distortion of first-party resolution. Final config scopes the setting to `["webauthn"]` (strictly more precise than `["*"]`; same 59).
+3. **Root cause of the dominant findings (probe-verified).** A self-contained probe reproduces `error[invalid-type-form]: Variable of type `type` is not allowed in a parameter annotation`:
+   - unannotated decorator factory (`def decorator(c): return c`) → **passes**;
+   - the exact `logged_class` signature (`def decorator(c: type) -> type`, outer return `type | Callable[[type], type]`) → **same diagnostic**.
+   So the 34 `invalid-type-form` + 9 `unsupported-base` findings all trace to the non-generic `logged`/`logged_class` decorator factories in `src/backend/logging/_decorator.py`: ty faithfully applies the declared decorator return type, so every `@logged_class`-decorated class (every service/registry/repository/provider class, per the logging tracing policy) becomes a binding of type `type` — invalid as an annotation (`invalid-type-form`) and as a class base (`unsupported-base: Any | type`). mypy treats `Type`-returning decorators specially (preserves the class type), which is why mypy passed on this tree. **Checker limitation / strictness difference; no ty config controls decorator typing.** (The src-side fix would be generic `type[_T]` decorators — out of scope for this DOCS/CHORE.)
+4. **`unresolved-attribute` findings (6, in `src/backend/logging/_decorator.py`; the 7th `unresolved-attribute` is the SQLModel `like` finding covered in item 5).** Dynamic attribute assignment on function/class objects (`wrapper.__logged__`, `wrapper.slow_threshold_ms`, `func.__qualname__`, `c.__logged_class__`). The source already carries mypy-style `# type: ignore[attr-defined]` comments; per ty's suppression docs, ty honors only *bare* `# type: ignore` and codes with a `ty:` prefix — mypy codes (`[attr-defined]`) are ignored. **Checker limitation / suppression-syntax migration artifact; not fixable in config** (fixing it requires `# ty: ignore[unresolved-attribute]` comments in `src/`).
+5. **SQLModel ORM findings (10, in the `*repository.py` files).** ty resolves the real `sqlmodel`/`sqlalchemy` types (both ship `py.typed` — mypy had the same type information and passed). Breakdown:
+   - `unresolved-attribute` `Object of type `str` has no attribute `like`` + `invalid-argument-type` on `where`/`order_by`: ty models SQLModel model fields by their declared Python types (e.g. `str`), not as SQLAlchemy `Column` objects — the class-attribute query-building magic is not modeled. **Checker limitation.**
+   - `invalid-return-type` (`FileRecord | None` vs `FileRecord`, `list[FileRecord | None]` vs `Sequence[FileRecord]`, `list[User | None]` vs `Sequence[User]`): ty's inference for `session.exec(...).first()`/`.all()` produces Optional element types where mypy (with the same stubs) inferred non-Optional. **Checker strictness difference.**
+   - `deprecated` (`The function `execute` is deprecated`): third-party API deprecation surfaced by ty's full type resolution. **Third-party strictness.**
+   - `invalid-argument-type` on `int.__new__` (`int | None` argument): same Optional-inference difference. **Checker strictness difference.**
+
+### Config variants tested (diagnostic counts, `uv run ty check src/`)
+
+| # | Config | Count |
+|---|--------|-------|
+| 1 | Baseline as committed in `34864ec` (`python-version = "3.14"` + `allowed-unresolved-imports = ["*"]`, no `root`) | 59 (concise) / 59 (full) |
+| 2 | `--extra-search-path src` (CLI) | 59 — redundant with auto-detected `src` root |
+| 3 | `ty check .` (project root, CLI) | 300 — out of scope (includes `tests/` and non-`src` module names); not a config issue |
+| 4 | `allowed-unresolved-imports` removed | 60 — one new `unresolved-import` (`webauthn`); no resolution distortion |
+| 5 | **Final:** `root = ["./src"]` + `allowed-unresolved-imports = ["webauthn"]` | **59** — 0 `unresolved-import`; resolution verified intact |
+
+Note: the previous S4 run recorded "71 in full mode"; that count is **not reproducible** on the current tree — both output modes report 59 under both the baseline and the final config (verified 2026-09-15). The 59-findings list above (concise mode) is the exact remaining set.
+
+### Final ty config (in `pyproject.toml`)
+
+```toml
+[tool.ty.environment]
+# mypy `python_version = "3.14"` equivalent.
+python-version = "3.14"
+# mypy `explicit_package_bases = true` + `namespace_packages = true` equivalent:
+# the first-party module root, so `backend.*` (namespace-package layout) resolves.
+root = ["./src"]
+
+[tool.ty.analysis]
+# mypy `ignore_missing_imports = true` equivalent, scoped to the only
+# third-party package without type information.
+allowed-unresolved-imports = ["webauthn"]
+```
+
+(`check_untyped_defs = true` has no ty equivalent — ty analyzes all function bodies by default.)
+
+### Remaining findings (59) — per-finding classification
+
+| Findings | Rule(s) | Classification | Fixable in config? |
+|----------|---------|----------------|--------------------|
+| 34 | `invalid-type-form` | Checker limitation: non-generic `@logged`/`@logged_class` decorator signatures (`-> type` / `-> Callable[..., Any]`); ty types the decorated class as a `type` variable, mypy preserves the class. Probe-verified. | No (src fix: generic `type[_T]` decorators — out of scope) |
+| 9 | `unsupported-base` | Same root cause (decorated class used as a base). | No (same as above) |
+| 6 | `unresolved-attribute` | Checker limitation / migration artifact: dynamic attribute assignment in `src/backend/logging/_decorator.py`; mypy-style `# type: ignore[attr-defined]` comments are not honored by ty (only bare `# type: ignore` or `ty:`-prefixed codes). | No (src fix: `# ty: ignore[unresolved-attribute]` — out of scope) |
+| 1 + 5 | `unresolved-attribute` (`str` has no `like`) + `invalid-argument-type` (`where`/`order_by`/`int.__new__`) | Checker limitation: ty does not model SQLModel/SQLAlchemy `Column` class-attribute magic; models model fields by declared Python types. | No |
+| 3 | `invalid-return-type` | Checker strictness difference: ty infers Optional elements from `session.exec(...).first()`/`.all()` where mypy (same `py.typed` stubs) inferred non-Optional. | No |
+| 1 | `deprecated` | Third-party API strictness: deprecation surfaced by full `sqlmodel`/`sqlalchemy` type resolution. | No |
+
+### Conclusion
+
+`uv run ty check src/` **cannot pass with configuration alone**. Module resolution is correct and is now explicitly configured as the faithful mypy mapping (`root = ["./src"]` for `explicit_package_bases`/`namespace_packages`; scoped `allowed-unresolved-imports = ["webauthn"]` for `ignore_missing_imports`). The remaining 59 findings are **checker limitations / strictness differences** in `src/` that mypy did not flag: (a) non-generic `@logged`/`@logged_class` decorator signatures that ty types strictly (43 findings), (b) mypy-style suppression comments ty does not honor (6), and (c) ty's incomplete modeling of SQLModel/SQLAlchemy ORM APIs plus Optional-inference differences (10). No rule codes were blanket-suppressed; no `src/`, `tests/`, `.github/`, or `AGENTS.md` changes were made. Per the sub-objective, the findings are recorded here rather than suppressed.
+
