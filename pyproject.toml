@@ -41,7 +41,7 @@ dev = [
     # Low-overhead sampling profiler for live Python processes and spawned commands.
     "py-spy>=0.4.2",
     # Unit and integration test runner.
-    "pytest>=8.3",
+    "pytest>=9.1.1",
     # Coverage reporting for the verify phase (spec/branch coverage evidence).
     "pytest-cov>=6.0",
     # Randomized pytest ordering to expose order-dependent test coupling.
