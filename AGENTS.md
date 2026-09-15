@@ -20,7 +20,7 @@ If asked to implement a new feature, refactor core components, or build a system
 This repository utilizes modern Python tooling managed via `uv`:
 - **Package Manager:** `uv` (Use `uv run <command>` for isolated execution)
 - **Quality Assurance & Formatting:** `ruff` (`uv run ruff check .` / `uv run ruff format .`). The verify phase lints the whole repo with `uv run ruff check .`, matching CI (`.github/workflows/lint.yml`) exactly — pre-existing lint errors are in scope, not out of scope.
-- **Type Checking:** `ty` (`uv run ty check src/`)
+- **Type Checking:** `mypy` (`uv run mypy src/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool
 - **Test Runner:** `pytest` (`uv run pytest`)
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`
@@ -436,13 +436,13 @@ All types.
 
 **ISSUE**:
 9. Run the reproduction tests (GREEN) and the full regression suite (no new failures).
-10. Run lint (`uv run ruff check .`) and type checks (`uv run ty check src/`).
+10. Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`).
 11. Update the traceability matrix with the issue's evidence rows.
 12. If the regression suite shows a failure, classify it as in the FEATURE path (pre-existing vs regression).
 
 **REFACTOR**:
 13. Run the full regression suite (MUST be GREEN, zero test changes) and the architecture rules (`uv run pytest tests/architecture/ -v`).
-14. Run lint (`uv run ruff check .`) and type checks (`uv run ty check src/`).
+14. Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`).
 15. Confirm no observable behavior changed (suite result identical to baseline).
 
 **DOCS/CHORE**:

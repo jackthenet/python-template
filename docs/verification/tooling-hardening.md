@@ -246,3 +246,11 @@ allowed-unresolved-imports = ["webauthn"]
   - `pyproject.toml`: restored `mypy>=1.10` to the dev dependency group (kept `ty>=0.0.81`); restored the `[tool.mypy]` config (kept the `[tool.ty]` config intact).
   - `.github/workflows/quality.yml`: the `type-check` job now runs `Run mypy (gate)` (`uv run mypy src/`, blocking) + `Run ty (informational)` (`uv run ty check src/`, `continue-on-error: true`).
 
+## S4 (follow-up) — align AGENTS.md + agent-runner references with the mypy gate
+
+- **Date:** 2026-09-15
+- **Scope:** the type-check references still pointing to ty (carried over from the initial S4 mypy→ty swap) were aligned with the final decision — mypy is the CI type-check gate (`uv run mypy src/`), ty is the non-blocking fast local/LSP tool (`uv run ty check src/`):
+  - `AGENTS.md` line 23 ("Tooling & Execution Environment"): documents `mypy` (`uv run mypy src/`) as the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool.
+  - `AGENTS.md` lines 439, 445 (Phase 5 VERIFY, ISSUE and REFACTOR paths): type-check command → `uv run mypy src/`.
+  - `pyproject.toml` `[tool.agent-runner] quality_check`: `uv run ruff check src/ && uv run ty check src/` → `uv run ruff check src/ && uv run mypy src/` (mypy is the blocking gate).
+
