@@ -232,5 +232,42 @@ Success: no issues found in 51 source files
 
 All Phase 5 gates pass: reproduction GREEN, regression clean (no new failures), ruff clean, mypy clean, traceability updated.
 
+## Phase 6 — review
+
+**Review verdict: CLEAN.**
+
+The branch was reviewed against the ISSUE triage record (above) and the affected spec IDs (REQ-014, AC-018 in `docs/specs/settings.md`; the AGENTS.md "Using the Settings Feature" rule). All review checks pass and no findings were raised.
+
+### 1. Branch scope (minimal, test-infrastructure only)
+
+`git diff --stat main..HEAD` and the merge-base–isolated diff confirm the branch touches **only** test files + the verification/traceability docs:
+
+- `docs/verification/settings-test-isolation.md` (this record — new)
+- `docs/verification/traceability.md` (+1 evidence row)
+- `tests/` — the offending test files + the new reproduction test `tests/unit/test_settings_test_isolation.py` + the shared helper `tests/settings_test_helpers.py`
+
+`git diff main..HEAD -- src/` is **empty** — no source/behavior change. The fix makes the tests follow the existing AGENTS.md rule; it introduces no new behavior, so it is in scope for an ISSUE. (The apparent deletions of `AGENTS.md`, `pyproject.toml`, `uv.lock`, `docs/verification/tooling-hardening.md`, etc. in the raw `main..HEAD` diff are `main`'s own progress after this branch diverged, not branch changes — confirmed via the merge-base.)
+
+**Minimality:** the change only makes the offending test fixtures/tests use an isolated value repository (`YamlValueRepository(tempfile.mkdtemp())`); no test behavior was changed (same assertions, same coverage — only the value repository was made isolated).
+
+### 2. Gates (re-confirmed at review)
+
+- **Reproduction test GREEN:** `uv run pytest tests/unit/test_settings_test_isolation.py -v` → `test_offending_tests_do_not_create_shared_settings_dir PASSED` (1 passed).
+- **Full regression suite (no new failures):** `uv run pytest tests/` → `489 passed, 1 skipped` (the single skip is pre-existing: `tests/acceptance/filemanagement/test_filemanagement.py:364` — "symlinks not available on this host"). No new failures.
+- **Lint:** `uv run ruff check .` → `All checks passed!`
+- **Type-check (mypy gate):** `uv run mypy src/` → `Success: no issues found in 51 source files`.
+
+### 3. Traceability
+
+`docs/verification/traceability.md` — Settings matrix: the issue's evidence row is present for REQ-014 / AC-018 (`docs/specs/settings.md`): reproduction test `test_offending_tests_do_not_create_shared_settings_dir` (offending fixtures now use isolated repositories; no test writes the shared `settings/` dir) — **GREEN**.
+
+### 4. Version bump
+
+Per the Versioning section of AGENTS.md, an ISSUE change bumps the version at `patch` level (0.3.0 → 0.3.1). The bump is committed via `bump-my-version bump patch` and is part of this PR.
+
+### Review result
+
+CLEAN — all review checks pass, no findings. Proceed to version bump (patch) and PR.
+
 ## Date
 2026-09-15
