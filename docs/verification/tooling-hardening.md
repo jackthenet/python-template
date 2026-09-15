@@ -235,3 +235,14 @@ allowed-unresolved-imports = ["webauthn"]
 
 `uv run ty check src/` **cannot pass with configuration alone**. Module resolution is correct and is now explicitly configured as the faithful mypy mapping (`root = ["./src"]` for `explicit_package_bases`/`namespace_packages`; scoped `allowed-unresolved-imports = ["webauthn"]` for `ignore_missing_imports`). The remaining 59 findings are **checker limitations / strictness differences** in `src/` that mypy did not flag: (a) non-generic `@logged`/`@logged_class` decorator signatures that ty types strictly (43 findings), (b) mypy-style suppression comments ty does not honor (6), and (c) ty's incomplete modeling of SQLModel/SQLAlchemy ORM APIs plus Optional-inference differences (10). No rule codes were blanket-suppressed; no `src/`, `tests/`, `.github/`, or `AGENTS.md` changes were made. Per the sub-objective, the findings are recorded here rather than suppressed.
 
+## S4 (re-run) — Final type-check decision: mypy gate + ty as non-blocking fast local tool
+
+- **Date:** 2026-09-15
+- **Decision (user, after evaluating ty vs mypy):** keep **both** mypy and ty.
+  - **The type-check CI gate uses mypy** (blocking): `uv run mypy src/`. mypy passes cleanly on the existing SQLModel-based codebase.
+  - **ty is a non-blocking fast local/LSP tool** (informational in CI via `continue-on-error: true`): `uv run ty check src/`.
+- **Rationale:** ty is faster (10-60x) but less conformant (53% vs mypy 58%) and produces 59 false positives on the SQLModel-based codebase (SQLModel column transformation, `from __future__ import annotations` + `TYPE_CHECKING` imports, custom decorators). mypy passes cleanly, so it is the correct gate. ty stays for developer speed/LSP.
+- **Changes applied:**
+  - `pyproject.toml`: restored `mypy>=1.10` to the dev dependency group (kept `ty>=0.0.81`); restored the `[tool.mypy]` config (kept the `[tool.ty]` config intact).
+  - `.github/workflows/quality.yml`: the `type-check` job now runs `Run mypy (gate)` (`uv run mypy src/`, blocking) + `Run ty (informational)` (`uv run ty check src/`, `continue-on-error: true`).
+

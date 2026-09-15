@@ -19,8 +19,11 @@ jobs:
           python-version: '3.14'
       - name: Sync tooling
         run: uv sync --only-group dev
-      - name: Run ty
+      - name: Run mypy (gate)
+        run: uv run mypy src/
+      - name: Run ty (informational)
         run: uv run ty check src/
+        continue-on-error: true
 
   security:
     runs-on: ubuntu-latest
