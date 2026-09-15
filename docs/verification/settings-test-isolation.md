@@ -132,5 +132,58 @@ FAILED tests/unit/test_settings_test_isolation.py::test_offending_tests_do_not_c
 
 **Ruff gate (this step writes a test file):** `uv run ruff check .` → `All checks passed!`
 
+## Phase 4 — minimal fix (GREEN)
+
+**Fix:** Every offending test fixture/test now uses an **isolated** value repository (a temp directory) instead of the shared default `settings/` directory, per the AGENTS.md rule ("Test registries MUST pass an explicit isolated value repository (e.g., `YamlValueRepository(tempfile.mkdtemp())`)"). No test behavior was changed — only the value repository was made isolated.
+
+**How it was done:**
+- A shared helper `install_isolated_registry()` was added to `tests/settings_test_helpers.py` (mirrors the compliant mail suite's `setup_isolated_registry()`): it resets the singleton and installs a fresh `SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))` into the module singleton, returning the installed registry.
+- **Primary offender** — `tests/conftest.py`'s session-scoped autouse `_logging_session_setup` fixture now calls `install_isolated_registry()` (instead of `get_settings_registry()`), so the session's `set_value("logging.log_file", ...)` / `set_value("logging.log_level", ...)` write to an isolated temp dir. Because this fixture runs for every test, the shared singleton is isolated for the whole suite.
+- **Fixtures building `SettingsRegistry(...)` directly** now pass `value_repository=YamlValueRepository(tempfile.mkdtemp())`:
+  - `tests/acceptance/settings/test_settings.py` — `registry`, `registry_with_bus`, and the individual tests `test_ac_030_yaml_file_written`, `test_ac_031_persistence_across_instances`, `test_ac_034_storage_agnostic`, `test_ac_037_custom_bus`, `test_ac_038_thread_safe_registration`.
+  - `tests/integration/settings/test_settings_integration.py` — `registry` fixture + `test_multi_feature_reactive_settings`.
+  - `tests/unit/settings/test_settings_edges.py` — `registry` fixture + `test_edge_021_unchanged_value_event`, `test_edge_022_bus_shutdown`, `test_edge_027_load_unregistered_settings`.
+  - `tests/contract/settings/test_settings_contracts.py` — `test_nfr_001_performance_budgets`, `test_nfr_003_resource_contract`, `test_nfr_004_observability`.
+  - `tests/acceptance/logging_coverage/{test_behavior_unchanged,test_direct_loguru_kept,test_levels,test_services_traced}.py` — the `SettingsRegistry(...)` construction in each.
+  - `tests/property/logging_coverage/test_invariants.py` — the `_subjects` module helper.
+- **Tests that read/write the shared singleton via `get_settings_registry()`** now install an isolated registry first (so the singleton is isolated, not a fresh default `YamlValueRepository("settings")`):
+  - `tests/acceptance/settings_coverage/test_constructor_defaults.py` + `test_live_reads.py` — the autouse `_reset_registry` fixture now installs an isolated registry.
+  - `tests/unit/test_settings_coverage.py` — the reader/writer tests (`test_no_import_side_effects`, `test_unregistered_key_fallback`, `test_unregistered_key_warning`, `test_eventbus_registry_value`, `test_settings_registers_nothing`, `test_sink_reconfigured_rotation`, `test_live_read_no_trace_on_same`) call `install_isolated_registry()` before `get_settings_registry()`. (The autouse `_reset_registry` fixture was kept as a bare reset so the guarded-read tests `test_guarded_read_no_side_effect` / `test_guarded_read_none` still observe a non-existent singleton.)
+  - `tests/contract/filemanagement/test_filemanagement_contracts.py` — `test_nfr_001_performance_budgets` uses `install_isolated_registry()` for the `logging.log_level` read/write.
+- **Subprocess offenders** (child processes run with `cwd` = repo root and do not inherit the conftest session fixture) — the child code now installs an isolated registry into the child's singleton before `set_value`/`setup_logger()`, so the child does not create the shared `settings/` dir:
+  - `tests/acceptance/settings_coverage/test_setup_logger.py` — `test_setup_logger_reads_registry`, `test_sink_reconfigured_on_change`.
+  - `tests/acceptance/settings_coverage/test_wiring.py` — `test_main_wires_all_features` (reader; the child's `get_settings_registry()` would otherwise create the shared dir).
+  - `tests/contract/logging/test_logging_contracts.py` — `test_nfr_001_setup_time_budget`.
+  - `tests/property/logging/test_logging_properties.py` — `test_inv_001_concurrent_setup_logger_sinks`.
+  - `tests/unit/logging/test_logging_edges.py` — `test_edge_001_log_file_parent_created`.
+
+**GREEN confirmation (reproduction test passes):**
+
+```text
+$ uv run python -m pytest tests/unit/test_settings_test_isolation.py -q -p no:cacheprovider
+.
+1 passed in 0.99s
+```
+
+**Regression suite (no new failures):**
+
+```text
+$ uv run pytest tests/ -q -p no:cacheprovider
+489 passed, 1 skipped in 109.06s
+```
+
+(The single skip is pre-existing: `tests/acceptance/filemanagement/test_filemanagement.py:364` — "symlinks not available on this host".)
+
+**Root-cause confirmation (parallel run — the original failure mode):**
+
+```text
+$ uv run pytest tests/acceptance/settings/ tests/unit/settings/ tests/contract/settings/ tests/integration/settings/ tests/acceptance/settings_coverage/ -n auto -q -p no:cacheprovider
+82 passed in 19.11s
+```
+
+No `PermissionError [WinError 32]` on the parallel run — no test writes to the shared `settings/` directory.
+
+**Ruff gate:** `uv run ruff check .` → `All checks passed!`
+
 ## Date
 2026-09-15

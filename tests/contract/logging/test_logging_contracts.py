@@ -27,10 +27,12 @@ def test_nfr_001_setup_time_budget(tmp_path: Path) -> None:
     """NFR-001: setup_logger() completes in under 50 ms (median of 3 fresh processes)."""
     log_file = tmp_path / "nfr_001.log"
     code = f"""
-import time
-from backend.settings import get_settings_registry
+import time, tempfile
+from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import registry as _reg_mod
 from backend.logging import register_settings as logging_register, setup_logger
-reg = get_settings_registry()
+reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+_reg_mod._registry[0] = reg
 logging_register(reg)
 reg.set_value('logging.log_file', {str(log_file)!r})
 reg.set_value('logging.log_level', 'INFO')

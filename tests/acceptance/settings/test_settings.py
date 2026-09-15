@@ -8,6 +8,7 @@ leave-as-is load semantics, YAML template storage, and event-bus integration.
 
 from __future__ import annotations
 
+import tempfile
 import threading
 import time
 from collections.abc import Iterator
@@ -28,6 +29,7 @@ from backend.settings import (
     SettingStatus,
     SettingView,
     SliderSpec,
+    YamlValueRepository,
     get_settings_registry,
     reset_settings_registry,
 )
@@ -86,7 +88,7 @@ def _select(key: str, default: str = "a") -> SettingDefinition:
 def registry() -> Iterator[SettingsRegistry]:
     """A fresh registry wired to a fresh bus, shut down afterwards."""
     bus = EventBus()
-    r = SettingsRegistry(event_bus=bus)
+    r = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     yield r
     bus.shutdown()
 
@@ -95,7 +97,7 @@ def registry() -> Iterator[SettingsRegistry]:
 def registry_with_bus() -> Iterator[tuple[SettingsRegistry, EventBus]]:
     """A fresh registry plus its bus (for event subscription)."""
     bus = EventBus()
-    r = SettingsRegistry(event_bus=bus)
+    r = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     yield r, bus
     bus.shutdown()
 
@@ -428,7 +430,7 @@ def test_ac_029_template_access(registry: SettingsRegistry) -> None:
 def test_ac_030_yaml_file_written(tmp_path: Path) -> None:
     repo = YamlTemplateRepository(tmp_path)
     bus = EventBus()
-    registry = SettingsRegistry(event_bus=bus, template_repository=repo)
+    registry = SettingsRegistry(event_bus=bus, template_repository=repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     _register_app_scope(registry)
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     f = tmp_path / "t1.yaml"
@@ -442,13 +444,13 @@ def test_ac_030_yaml_file_written(tmp_path: Path) -> None:
 
 def test_ac_031_persistence_across_instances(tmp_path: Path) -> None:
     bus1 = EventBus()
-    r1 = SettingsRegistry(event_bus=bus1, template_repository=YamlTemplateRepository(tmp_path))
+    r1 = SettingsRegistry(event_bus=bus1, template_repository=YamlTemplateRepository(tmp_path), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     _register_app_scope(r1)
     r1.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     bus1.shutdown()
 
     bus2 = EventBus()
-    r2 = SettingsRegistry(event_bus=bus2, template_repository=YamlTemplateRepository(tmp_path))
+    r2 = SettingsRegistry(event_bus=bus2, template_repository=YamlTemplateRepository(tmp_path), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     t = r2.get_template("t1")
     assert t.values == {"app.a": "x", "app.b": 1}
     bus2.shutdown()
@@ -468,9 +470,9 @@ def test_ac_033_missing_file(tmp_path: Path) -> None:
 
 
 def test_ac_034_storage_agnostic() -> None:
-    # An in-memory repository (default) must behave like the YAML one.
+    # An in-memory template repository (default) must behave like the YAML one.
     bus = EventBus()
-    registry = SettingsRegistry(event_bus=bus)  # default in-memory repo
+    registry = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))  # default in-memory template repo
     _register_app_scope(registry)
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     registry.load_template("t1")
@@ -515,7 +517,7 @@ def test_ac_036_load_template_publishes_events(registry_with_bus) -> None:
 def test_ac_037_custom_bus() -> None:
     custom = EventBus()
     shared = EventBus()
-    registry = SettingsRegistry(event_bus=custom)
+    registry = SettingsRegistry(event_bus=custom, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     registry.register(_text("app.name", default="orig"))
     on_custom: list[SettingChanged] = []
     on_shared: list[SettingChanged] = []
@@ -570,7 +572,7 @@ def test_ac_039_reset_publishes_events(registry_with_bus) -> None:
 
 def test_ac_038_thread_safe_registration() -> None:
     bus = EventBus()
-    registry = SettingsRegistry(event_bus=bus)
+    registry = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     errors: list[BaseException] = []
 
     def worker(i: int) -> None:

@@ -32,12 +32,14 @@ def test_inv_001_concurrent_setup_logger_sinks(tmp_path: Path) -> None:
     def inner(n: int) -> None:
         log_file = tmp_path / f"inv_001_{n}.log"
         code = f"""
-import threading
-from backend.settings import get_settings_registry
+import threading, tempfile
+from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import registry as _reg_mod
 from backend.logging import register_settings as logging_register, setup_logger
 from loguru import logger
 
-reg = get_settings_registry()
+reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+_reg_mod._registry[0] = reg
 logging_register(reg)
 reg.set_value('logging.log_file', {str(log_file)!r})
 reg.set_value('logging.log_level', 'INFO')

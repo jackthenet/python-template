@@ -21,6 +21,7 @@ from filemanagement_test_helpers import (
     png_bytes,
     text_bytes,
 )
+from settings_test_helpers import install_isolated_registry
 
 from backend.filemanagement import (
     FileManagementNotFoundError,
@@ -31,7 +32,6 @@ from backend.filemanagement import (
     register_settings,
 )
 from backend.logging import register_settings as register_logging_settings
-from backend.settings import get_settings_registry
 
 _UPLOAD_BUDGET_S = 2.0
 _DOWNLOAD_BUDGET_S = 1.0
@@ -80,7 +80,9 @@ _PUBLIC_API = (
 
 def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     # Measured with the shared logging feature at the default INFO level.
-    shared = get_settings_registry()
+    # Use an isolated registry (temp-dir value repository) so no value is
+    # persisted to the shared default "settings/" directory (test isolation).
+    shared = install_isolated_registry()
     # Order-independence: the settings-coverage suite may have reset the module
     # singleton, recreating it without the logging.* definitions. Re-register
     # them if absent so reading logging.log_level never depends on test order.

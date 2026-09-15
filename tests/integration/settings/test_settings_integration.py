@@ -6,6 +6,7 @@ workflow.
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Iterator
 
 import pytest
@@ -17,6 +18,7 @@ from backend.settings import (
     SettingDefinition,
     SettingKind,
     SettingsRegistry,
+    YamlValueRepository,
 )
 
 _SNAPSHOT_B = 5
@@ -25,7 +27,7 @@ _SNAPSHOT_B = 5
 @pytest.fixture
 def registry() -> Iterator[SettingsRegistry]:
     bus = EventBus()
-    r = SettingsRegistry(event_bus=bus)
+    r = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     yield r
     bus.shutdown()
 
@@ -33,7 +35,7 @@ def registry() -> Iterator[SettingsRegistry]:
 def test_multi_feature_reactive_settings() -> None:
     """Two features register settings; a reactive consumer tracks changes."""
     bus = EventBus()
-    registry = SettingsRegistry(event_bus=bus)
+    registry = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     registry.register_feature(
         "logging",
         [

@@ -24,9 +24,12 @@ def test_edge_001_log_file_parent_created(tmp_path: Path) -> None:
     """
     nested = tmp_path / "a" / "b" / "c" / "app.log"
     code = f"""
-from backend.settings import get_settings_registry
+import tempfile
+from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import registry as _reg_mod
 from backend.logging import register_settings as logging_register, setup_logger
-reg = get_settings_registry()
+reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+_reg_mod._registry[0] = reg
 logging_register(reg)
 reg.set_value('logging.log_file', {str(nested)!r})
 reg.set_value('logging.log_level', 'INFO')

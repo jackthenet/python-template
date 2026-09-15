@@ -23,10 +23,12 @@ def test_setup_logger_reads_registry(tmp_path: Path) -> None:
     """AC-019: setup_logger() reads logging.* from the shared registry."""
     log_file = tmp_path / "app.log"
     code = f"""
-import sys; sys.path.insert(0, 'src')
-from backend.settings import get_settings_registry
+import sys, tempfile; sys.path.insert(0, 'src')
+from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import registry as _reg_mod
 from backend.logging import register_settings as logging_register, setup_logger
-reg = get_settings_registry()
+reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+_reg_mod._registry[0] = reg
 logging_register(reg)
 reg.set_value('logging.log_file', {str(log_file)!r})
 reg.set_value('logging.log_level', 'WARNING')
@@ -45,10 +47,12 @@ def test_sink_reconfigured_on_change(tmp_path: Path) -> None:
     """AC-020: a logging.* change reconfigures the sink at runtime."""
     log_file = tmp_path / "app.log"
     code = f"""
-import sys, time; sys.path.insert(0, 'src')
-from backend.settings import get_settings_registry
+import sys, time, tempfile; sys.path.insert(0, 'src')
+from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import registry as _reg_mod
 from backend.logging import register_settings as logging_register, setup_logger
-reg = get_settings_registry()
+reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+_reg_mod._registry[0] = reg
 logging_register(reg)
 reg.set_value('logging.log_file', {str(log_file)!r})
 setup_logger()

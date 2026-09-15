@@ -7,6 +7,7 @@ resource contract, and observability.
 from __future__ import annotations
 
 import statistics
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -21,6 +22,7 @@ from backend.settings import (
     TemplateRepository,
     TemplateStorageError,
     YamlTemplateRepository,
+    YamlValueRepository,
 )
 
 _LOAD_MS = 10.0
@@ -48,7 +50,7 @@ _MUTATING_OP_BUDGET_MS = 50.0
 
 def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     collector = EventCollector()
-    registry = SettingsRegistry(event_bus=collector)
+    registry = SettingsRegistry(event_bus=collector, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     for i in range(1000):
         registry.register(_text(f"app.s{i}"))
     key = "app.s500"
@@ -71,14 +73,14 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     assert _median_ms(_register_once, n=20) < _MUTATING_OP_BUDGET_MS
 
     # load_template < 10 ms for a scope of 100 settings.
-    scope_registry = SettingsRegistry(event_bus=collector)
+    scope_registry = SettingsRegistry(event_bus=collector, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     for i in range(100):
         scope_registry.register(_text(f"scope.s{i}", category="scope"))
     scope_registry.create_template("t1", "scope", None, None)
     assert _median_ms(lambda: scope_registry.load_template("t1"), n=50) < _LOAD_MS
 
     # create/update/delete (YAML file I/O) < 50 ms; list < 500 ms with 100 stored.
-    yaml_registry = SettingsRegistry(event_bus=collector, template_repository=YamlTemplateRepository(tmp_path))
+    yaml_registry = SettingsRegistry(event_bus=collector, template_repository=YamlTemplateRepository(tmp_path), value_repository=YamlValueRepository(tempfile.mkdtemp()))
     for i in range(100):
         yaml_registry.register(_text(f"y.s{i}", category="y"))
     assert _median_ms(lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10) < _YAML_MS
@@ -141,7 +143,7 @@ def test_nfr_002_api_and_repository_contract() -> None:
 
 def test_nfr_003_resource_contract(tmp_path: Path) -> None:
     collector = EventCollector()
-    registry = SettingsRegistry(event_bus=collector)
+    registry = SettingsRegistry(event_bus=collector, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     before = threading.active_count()
     for i in range(50):
         registry.register(_text(f"app.s{i}", category="app"))
@@ -153,7 +155,7 @@ def test_nfr_003_resource_contract(tmp_path: Path) -> None:
 
     # Templates persist as YAML files when a YAML repository is used.
     repo = YamlTemplateRepository(tmp_path)
-    yaml_registry = SettingsRegistry(event_bus=collector, template_repository=repo)
+    yaml_registry = SettingsRegistry(event_bus=collector, template_repository=repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     yaml_registry.register(_text("y.a", category="y"))
     yaml_registry.create_template("t1", "y", None, None)
     assert (tmp_path / "t1.yaml").exists()
@@ -161,7 +163,7 @@ def test_nfr_003_resource_contract(tmp_path: Path) -> None:
 
 def test_nfr_004_observability(log_records: list, tmp_path: Path) -> None:
     collector = EventCollector()
-    registry = SettingsRegistry(event_bus=collector)
+    registry = SettingsRegistry(event_bus=collector, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     registry.register(_text("app.name", default="orig", category="app"))
     registry.set_value("app.name", "new")
     registry.create_template("t1", "app", None, {"app.name": "new"})
