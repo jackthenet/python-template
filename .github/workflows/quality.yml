@@ -10,7 +10,7 @@ jobs:
   type-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
       - name: Setup Python
@@ -28,7 +28,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
       - name: Setup Python
@@ -45,7 +45,7 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
       - name: Setup Python
@@ -61,7 +61,7 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
       - name: Setup Python
