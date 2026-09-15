@@ -30,7 +30,7 @@ dependencies = [
 dev = [
     "bandit>=1.9.4",
     # Complexity reporting used during refactors and cleanup work.
-    "complexipy>=4.2",
+    "complexipy>=8.0.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.155.0",
     # Static type checking for the source tree.
