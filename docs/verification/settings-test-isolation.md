@@ -102,5 +102,35 @@ Tests that instantiate the shared default settings registry **without** an isola
 - **Fix scope (C:P4):** Make the offending test fixtures/tests pass an isolated `YamlValueRepository(tempfile.mkdtemp())` (per the AGENTS.md rule), so no test writes to the shared `settings/` directory. For subprocess-based offenders, the child code must also use an isolated repository (or a temp directory) instead of the shared default `settings/`.
 - **Files expected to change (C:P4):** the offending test files listed above — `tests/conftest.py`, `tests/acceptance/settings/test_settings.py`, `tests/acceptance/settings_coverage/{test_constructor_defaults,test_live_reads,test_setup_logger,test_wiring}.py`, `tests/acceptance/logging_coverage/{test_behavior_unchanged,test_direct_loguru_kept,test_levels,test_services_traced}.py`, `tests/contract/settings/test_settings_contracts.py`, `tests/contract/logging/test_logging_contracts.py`, `tests/contract/filemanagement/test_filemanagement_contracts.py`, `tests/integration/settings/test_settings_integration.py`, `tests/property/logging/test_logging_properties.py`, `tests/property/logging_coverage/test_invariants.py`, `tests/unit/settings/test_settings_edges.py`, `tests/unit/logging/test_logging_edges.py`, `tests/unit/test_settings_coverage.py`.
 
+## Phase 3 — reproduction test (RED)
+
+**Reproduction test:** `tests/unit/test_settings_test_isolation.py::test_offending_tests_do_not_create_shared_settings_dir`
+
+**Approach (deterministic, cross-platform):** Run a representative offending test in a **subprocess** (`sys.executable -m pytest <test>`, `cwd` = repo root), then assert the shared `settings/` directory at the repo root was **NOT** created by that run. The session-scoped autouse `_logging_session_setup` fixture (`tests/conftest.py`) runs for **every** test and writes to the shared default registry, so any test run reproduces the defect on the current code. The representative test is `tests/acceptance/settings/test_settings.py::test_ac_018_singleton` (fast, ~1s).
+
+**Why it is RED on the current code:** The subprocess run constructs/writes the shared default registry (`YamlValueRepository("settings")`), which creates the shared `settings/` directory at the repo root. The assertion `assert not <repo>/settings.exists()` therefore fails.
+
+**Why it will be GREEN after the fix:** The fix (C:P4) makes the offending fixtures/tests pass an isolated `YamlValueRepository(tempfile.mkdtemp())`, so no test constructs/writes the shared default registry and the shared `settings/` directory is not created.
+
+**Determinism:** The subprocess run is synchronous (the test waits for it) and the `_logging_session_setup` fixture always runs and always writes to the shared default registry on the current code — no race condition. The test also cleans up the `settings/` directory in a `finally` block (it is an untracked, non-ignored defect artifact, not a repo file), keeping the worktree clean.
+
+**RED evidence (failing test output):**
+
+```text
+$ uv run python -m pytest tests/unit/test_settings_test_isolation.py::test_offending_tests_do_not_create_shared_settings_dir --no-header -q
+
+E           AssertionError: DEFECT (settings-test-isolation): running the offending test created the shared C:\\...\\settings-test-isolation\\settings directory at the repo root. Tests must use an isolated value repository (YamlValueRepository(tempfile.mkdtemp())), not the shared default registry. See AGENTS.md 'Using the Settings Feature'.
+E           assert not True
+E            +  where True = exists()
+E            +    where exists = WindowsPath('C:/.../settings-test-isolation/settings').exists
+
+tests\unit\test_settings_test_isolation.py:103: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/unit/test_settings_test_isolation.py::test_offending_tests_do_not_create_shared_settings_dir
+1 failed in 1.00s
+```
+
+**Ruff gate (this step writes a test file):** `uv run ruff check .` → `All checks passed!`
+
 ## Date
 2026-09-15
