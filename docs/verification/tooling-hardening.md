@@ -290,3 +290,27 @@ Exactly the scoped files — no others. (The wider `main..HEAD` delta also shows
 
 All DOCS/CHORE light-verify checks pass: no behavior delta, lint clean, mypy (the gate) clean, and every scoped tooling change (type-check CI with mypy gate + informational ty, security tooling with dependabot + dependency-review, coverage floor enforcement, `.gitignore` additions) is in place and correct. **DOCS/CHORE gate: PASSED.**
 
+## Phase 6 — review
+
+- **Date:** 2026-09-15
+- **Review basis:** the DOCS/CHORE scope recorded in this file (Phase 1 Scope) — no behavior delta; documentation, configuration, CI, and tooling only.
+
+### Review verdict
+
+**CLEAN** — no findings. All DOCS/CHORE review criteria are satisfied (see confirmations below). The change is ready for a PR to `main` (human review/merge; the agent does not merge).
+
+### Confirmations
+
+| # | Criterion | Evidence | Result |
+|---|-----------|----------|--------|
+| 1 | **No behavior delta** | `git diff main..HEAD -- src/ tests/` is empty; the branch-only diff (`git diff --stat d5f0a94..HEAD`, `d5f0a94` = `git merge-base main HEAD`) touches exactly the 7 scoped files: `.github/dependabot.yml`, `.github/workflows/quality.yml`, `.gitignore`, `AGENTS.md`, `docs/verification/tooling-hardening.md`, `pyproject.toml`, `uv.lock`. The wider `main..HEAD` delta (`.agents/skills/*` edits, `docs/verification/workflow-optimization.md` / `workflow-subagent-ergonomics.md` / `docs/workflow/PROBLEMS.md` deletions) is main-side change after the branch point (`git diff d5f0a94..main`), not a branch change. | **PASS** |
+| 2 | **Type-check decision correctly implemented (mypy gate + ty fast local tool)** | (a) `.github/workflows/quality.yml` `type-check` job: `Run mypy (gate)` (`uv run mypy src/`, blocking) + `Run ty (informational)` (`uv run ty check src/`, `continue-on-error: true`). (b) Both tools present: `mypy>=1.10` + `ty>=0.0.81` in the dev dependency group; `[tool.mypy]` + `[tool.ty]` configs in `pyproject.toml`. (c) References consistent: `AGENTS.md` line 23 documents `mypy` (`uv run mypy src/`) as the gate and `ty` (`uv run ty check src/`) as the fast local/LSP tool; `AGENTS.md` lines 439/445 use `uv run mypy src/`; `[tool.agent-runner] quality_check` = `uv run ruff check src/ && uv run mypy src/`. (d) The gate passes: `uv run mypy src/` → "Success: no issues found in 51 source files". (e) `uv run ty check src/` reports 59 pre-existing diagnostics (exit 1) — exactly why ty is the non-blocking informational tool, not the gate. | **PASS** |
+| 3 | **Security tooling in place** | `pip-audit>=2.10.1` + `bandit>=1.9.4` in the dev dependency group; `.github/dependabot.yml` (uv ecosystem for `uv.lock` + `github-actions`, both weekly); the `security` job runs `uv run pip-audit` + `uv run bandit -r src/`; a `dependency-review` job is present (`actions/dependency-review-action@v5`, PR-time dependency gate). | **PASS** |
+| 4 | **Coverage enforcement in place** | `[tool.coverage.report]` has `fail_under = 92` (floor of the 2026-09-15 baseline 92.74%); the `coverage` job runs `uv run pytest tests/ --cov --cov-report=xml` (pytest-cov honors `fail_under`, so the floor is enforced in CI). | **PASS** |
+| 5 | **`.gitignore` additions in place** | `.gitignore` includes `settings/` (test-run artifact of the settings feature's default `YamlValueRepository('settings')`) and `.pi/subagents.json` (pi subagent snapshot state). | **PASS** |
+| 6 | **Quality gates pass** | `uv run ruff check .` → "All checks passed!"; `uv run mypy src/` → "Success: no issues found in 51 source files" (the gate). | **PASS** |
+
+### Versioning
+
+DOCS/CHORE: **no version bump** (per the Versioning section of `AGENTS.md`: REFACTOR / DOCS-CHORE → none). `pyproject.toml` `[project] version` is untouched by this branch.
+
