@@ -30,3 +30,39 @@ Exact non-behavior changes. Files to change (and ONLY these) in a later step:
 - No `.github/` changes.
 
 All changes are documentation/workflow-ergonomics only; externally observable behavior is unchanged.
+
+## Verification (Phase 5 — DOCS/CHORE)
+
+- **Date:** 2026-09-15
+
+### Check 1 — `git diff d5f0a94..HEAD --stat` (scope: docs-only, no behavior)
+
+```text
+.agents/skills/test/SKILL.md                      | 10 +++----
+ AGENTS.md                                         |  9 ++++---
+ docs/verification/workflow-subagent-ergonomics.md | 32 +++++++++++++++++++++++
+ docs/workflow/PROBLEMS.md                         | 32 +++++++++++++++++++++++
+ 4 files changed, 75 insertions(+), 8 deletions(-)
+```
+
+**Result: PASS.** Only the four expected files changed: `AGENTS.md`, `.agents/skills/test/SKILL.md`, `docs/workflow/PROBLEMS.md`, `docs/verification/workflow-subagent-ergonomics.md`. No `src/`, no `tests/`, no `pyproject.toml`, no `.github/`.
+
+### Check 2 — `uv run ruff check .` (lint state)
+
+```text
+All checks passed!
+```
+
+**Result: PASS.** Identical to main's state; a docs-only change cannot alter it.
+
+### Check 3 — `git status --short` (clean tree)
+
+```text
+(no output)
+```
+
+**Result: PASS.** Working tree is clean.
+
+### Conclusion
+
+No behavior delta: the change touches no `src/`, no `tests/`, no `pyproject.toml`, no `.github/`; lint state is identical to main (`All checks passed!`); tree clean. DOCS/CHORE light-verify gate passed.
