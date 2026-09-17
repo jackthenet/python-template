@@ -1,0 +1,140 @@
+"""The SessionService use-case service (docs/specs/session-management.md).
+
+``SessionService`` manages the sessions owned by the authentication feature
+over the reused authentication session store (REQ-017, ADR-061): it lists a
+user's valid sessions with device identification and a current-session marker,
+resolving the token path through the same token-at-rest contract
+(``hash_token``) that authentication's ``session_info`` uses (REQ-002,
+REQ-008/REQ-017 of the authentication spec).
+
+The service is traced with ``@logged_class`` (``include_args=False`` so raw
+tokens never appear in log records; ``slow_threshold_ms=100``) (REQ-022,
+NFR-004).
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID
+
+from backend.authentication import InvalidSessionError, hash_token
+from backend.authentication.models import Session
+from backend.authentication.repositories import SessionRepository
+from backend.logging import logged_class
+from backend.sessionmanagement.events import EventPublisher, SessionsListed
+from backend.sessionmanagement.models import SessionEntry
+from backend.settings import SettingsRegistry, get_settings_registry
+
+# Hardcoded fallbacks for the live settings reads (REQ-019): unregistered
+# keys fall back to these defaults.
+DEFAULT_MAX_LISTED_SESSIONS = 100
+
+
+@logged_class(slow_threshold_ms=100, include_args=False)
+class SessionService:
+    """Manages the sessions owned by the authentication feature (REQ-001..REQ-018).
+
+    The constructor takes the authentication ``SessionRepository`` ABC
+    (constructor DI, REQ-020, ADR-065); a ``None`` event bus means no events
+    and no subscriptions; a ``None`` settings registry uses the shared
+    ``get_settings_registry()`` (REQ-020).
+    """
+
+    def __init__(
+        self,
+        repository: SessionRepository,
+        event_bus: EventPublisher | None = None,
+        settings_registry: SettingsRegistry | None = None,
+    ) -> None:
+        self._repository = repository
+        self._event_bus = event_bus
+        self._settings_registry = settings_registry
+
+    # -- Wiring helpers -------------------------------------------------------
+
+    def _registry(self) -> SettingsRegistry:
+        """The settings registry: the injected one, or the shared singleton."""
+        if self._settings_registry is not None:
+            return self._settings_registry
+        return get_settings_registry()
+
+    def _read_setting(self, registry: SettingsRegistry, key: str, fallback: Any) -> Any:
+        """The live value of ``key``, or ``fallback`` when unregistered (REQ-019)."""
+        if registry.has(key):
+            return registry.get_value(key)
+        return fallback
+
+    def _publish(self, event: object) -> None:
+        """Publish ``event``; a ``None`` publisher means no events and no error."""
+        if self._event_bus is not None:
+            self._event_bus.publish(event)
+
+    # -- Operations -----------------------------------------------------------
+
+    def list_sessions(
+        self,
+        token: str | None = None,
+        user_id: UUID | None = None,
+        limit: int | None = None,
+    ) -> list[SessionEntry]:
+        """List the user's valid sessions (REQ-001..REQ-007).
+
+        Exactly one of ``token`` (self-service) or ``user_id`` (admin) is
+        required (REQ-001, EDGE-008). The token path resolves the user and
+        the current session, re-raising ``InvalidSessionError`` for an
+        unknown, revoked, or expired token (REQ-002). The list contains only
+        valid sessions (REQ-003, INV-002), ordered ``created_at`` descending
+        with the current session (token path) pinned first (REQ-006, INV-005),
+        bounded by ``limit`` (default the live-read
+        ``sessionmanagement.max_listed_sessions``; ``limit < 1`` ->
+        ``ValueError``) (REQ-007, EDGE-009).
+        """
+        if (token is None) == (user_id is None):
+            raise ValueError("exactly one of token or user_id is required")
+        if limit is not None and limit < 1:
+            raise ValueError("limit must be >= 1")
+        # One "now at call time" snapshot: the current-session validity check
+        # and the valid-only filter evaluate validity against the same instant
+        # (INV-002, authentication INV-002).
+        now = datetime.now(UTC)
+        current_session_id: UUID | None = None
+        if token is not None:
+            session = self._repository.get_by_token_hash(hash_token(token))
+            if session is None or session.revoked or session.expires_at <= now:
+                raise InvalidSessionError("invalid session")
+            current_session_id = session.id
+            user_id = session.user_id
+        assert user_id is not None  # validated above (exactly one of token/user_id)
+        valid = [row for row in self._repository.list_for_user(user_id) if not row.revoked and row.expires_at > now]
+        if current_session_id is not None:
+            # Pin the current session first; the remainder is already
+            # created_at descending from list_for_user (REQ-006, INV-005).
+            rest = [row for row in valid if row.id != current_session_id]
+            ordered = [row for row in valid if row.id == current_session_id] + rest
+        else:
+            ordered = valid
+        if limit is None:
+            limit = int(
+                self._read_setting(
+                    self._registry(), "sessionmanagement.max_listed_sessions", DEFAULT_MAX_LISTED_SESSIONS
+                )
+            )
+        entries = [self._to_entry(row, current_session_id) for row in ordered[:limit]]
+        self._publish(SessionsListed(user_id=user_id, count=len(entries)))
+        return entries
+
+    # -- Mapping --------------------------------------------------------------
+
+    def _to_entry(self, row: Session, current_session_id: UUID | None) -> SessionEntry:
+        """Map a session row to its listing entry (REQ-004; no tokens/hashes)."""
+        return SessionEntry(
+            session_id=row.id,
+            created_at=row.created_at,
+            expires_at=row.expires_at,
+            is_current=row.id == current_session_id,
+            user_agent=row.user_agent,
+            ip=row.ip,
+            device_name=row.device_name,
+            login_method=row.login_method,
+        )

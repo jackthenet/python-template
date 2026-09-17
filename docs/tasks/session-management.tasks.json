@@ -87,7 +87,7 @@
         "Property tests for INV-002, INV-005 pass"
       ],
       "dependencies": [],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-002",

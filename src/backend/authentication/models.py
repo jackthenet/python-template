@@ -56,6 +56,12 @@ class Session(SQLModel, table=True):
     created_at: datetime  # UTC
     expires_at: datetime  # UTC
     revoked: bool = False
+    # Nullable device-identification columns (session-management REQ-016, ADR-062):
+    # rows created before the session-management feature remain NULL.
+    user_agent: str | None = None
+    ip: str | None = None
+    device_name: str | None = None
+    login_method: str | None = None  # "password" | "passkey" | None
 
 
 class PasswordReset(SQLModel, table=True):
@@ -94,6 +100,11 @@ class LoginRequest(BaseModel):
 
     identifier: str = Field(min_length=1, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
+    # Optional device identification (session-management REQ-016, ADR-062):
+    # omitted fields are stored as None on the issued session row.
+    user_agent: str | None = None
+    ip: str | None = None
+    device_name: str | None = None
 
 
 class PasswordResetRequest(BaseModel):
