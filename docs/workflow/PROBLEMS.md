@@ -158,3 +158,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 run (recovered by the subagent itself: file deduplicated, committed cleanly)
 - **Resolution:** Handoff verified by the orchestrator (section count = 1; diff = 4 in-scope files; tree clean). Follow-up: (a) step subagents that edit a file MUST re-read it after the edit to verify the edit landed exactly once before the next tool call; (b) when a handoff reports a loop/anomaly, the orchestrator MUST verify artifact counts (e.g., `grep -c` on the section header) before marking the step complete.
 - **Date:** 2026-09-15
+
+## P-16 — S4.2 (T-002) subagent stopped mid-run by user request (no handoff) left complete uncommitted work
+- **Problem:** The S4.2 (T-002) Implement subagent was stopped by user request after 6469.7s / 23 tool uses with no output/handoff. It left a complete, uncommitted implementation in the working tree (`src/backend/sessionmanagement/service.py` + `docs/verification/session-management.md`): all four revocation operations (`revoke_session`, `logout_all_sessions`, `logout_other_sessions`, `revoke_all_sessions`) plus the `_resolve_token` helper. Orchestrator re-ran T-002's 17 tests: **17/17 PASS** (GREEN) — the work was actually done, just not recorded/handed off.
+- **Step / Phase:** S4.2 Implement — Phase 4 (T-002)
+- **Change:** session-management / FEATURE
+- **Duration / iterations:** 1 stopped run + 1 fresh relaunch (S4.2 T-002) to verify GREEN and record the handoff
+- **Resolution:** Per the execution model (a subagent that does not return is a failed step; never resume a stuck one), the orchestrator logged this problem and relaunched S4.2 (T-002) with a fresh subagent to verify the in-tree implementation is GREEN, record evidence, and return the structured handoff. The in-tree work was preserved (not reverted).
+- **Date:** 2026-09-18
