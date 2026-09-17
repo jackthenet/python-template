@@ -561,6 +561,79 @@ The file-management feature (`docs/specs/file-management.md`) uses its own REQ/A
 | — | integration | `test_avatar_lifecycle_with_variants` | GREEN |
 | — | integration | `test_concurrent_same_key_upload` | GREEN |
 
+## Session Management Matrix
+
+The session-management feature (`docs/specs/session-management.md`) uses its own REQ/AC ID space (REQ-001..022, AC-001..045, INV-001..005, EDGE-001..012, NFR-001..005) that overlaps other features' IDs, so its matrix is kept separate. Rows are ordered per the task DAG (`.github/task-runner/tasks.json`: T-001…T-009). All 68 tests are derived and RED-confirmed (Phase 3, S3.2) — no implementation exists yet (`backend.sessionmanagement` module missing).
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_ac_001_list_token_returns_entries_with_current_flag` | RED |
+| REQ-001 | AC-002 | `test_ac_002_list_user_id_admin_all_not_current` | RED |
+| REQ-001 | AC-003 | `test_ac_003_both_or_neither_token_user_id_value_error` | RED |
+| REQ-002 | AC-004 | `test_ac_004_list_invalid_token_raises` | RED |
+| REQ-003 | AC-005 | `test_ac_005_list_excludes_expired_rows` | RED |
+| REQ-003 | AC-006 | `test_ac_006_list_zero_sessions_empty` | RED |
+| REQ-004 | AC-007 | `test_ac_007_pre_feature_row_null_device_fields` | RED |
+| REQ-004, REQ-016 | AC-008 | `test_ac_008_login_stores_device_fields` | RED |
+| REQ-006 | AC-009 | `test_ac_009_list_current_session_pinned_first` | RED |
+| REQ-006 | AC-010 | `test_ac_010_list_ordered_created_at_desc` | RED |
+| REQ-007 | AC-011 | `test_ac_011_list_default_limit_100` | RED |
+| REQ-007 | AC-012 | `test_ac_012_list_explicit_limit_truncates` | RED |
+| REQ-007 | AC-013 | `test_ac_013_limit_below_one_value_error` | RED |
+| REQ-008 | AC-014 | `test_ac_014_revoke_session_revokes` | RED |
+| REQ-008 | AC-015 | `test_ac_015_revoke_unknown_id_noop` | RED |
+| REQ-008 | AC-016 | `test_ac_016_revoke_already_revoked_noop` | RED |
+| REQ-009 | AC-017 | `test_ac_017_logout_all_revokes_including_caller` | RED |
+| REQ-009 | AC-018 | `test_ac_018_logout_all_invalid_token_raises` | RED |
+| REQ-010 | AC-019 | `test_ac_019_logout_other_keeps_caller` | RED |
+| REQ-010 | AC-020 | `test_ac_020_logout_other_only_caller_noop` | RED |
+| REQ-011 | AC-021 | `test_ac_021_revoke_all_returns_count` | RED |
+| REQ-011 | AC-022 | `test_ac_022_revoke_all_excludes_session` | RED |
+| REQ-011 | AC-023 | `test_ac_023_revoke_all_zero_sessions` | RED |
+| REQ-012 | AC-024 | `test_ac_024_cleanup_bounded_by_batch_size` | RED |
+| REQ-012 | AC-025 | `test_ac_025_cleanup_no_expired_returns_zero` | RED |
+| REQ-013 | AC-026 | `test_ac_026_expiration_unchanged_no_activity_tracking` | RED |
+| REQ-014 | AC-027 | `test_ac_027_cap_evicts_oldest_at_sixth_login` | RED |
+| REQ-014 | AC-028 | `test_ac_028_no_eviction_below_cap` | RED |
+| REQ-015 | AC-029 | `test_ac_029_password_change_revokes_all` | RED |
+| REQ-015 | AC-030 | `test_ac_030_deactivation_revokes_all` | RED |
+| REQ-015 | AC-031 | `test_ac_031_deletion_revokes_all` | RED |
+| REQ-016 | AC-032 | `test_ac_032_passkey_login_stores_method` | RED |
+| REQ-017 | AC-033 | `test_ac_033_same_sessions_table_as_authentication` | RED |
+| REQ-018 | AC-034 | `test_ac_034_session_revoked_event` | RED |
+| REQ-018 | AC-035 | `test_ac_035_all_sessions_revoked_event` | RED |
+| REQ-018 | AC-036 | `test_ac_036_expired_sessions_deleted_event` | RED |
+| REQ-018 | AC-037 | `test_ac_037_sessions_listed_event` | RED |
+| REQ-018 | AC-038 | `test_ac_038_none_publisher_no_events_no_subscriptions` | RED |
+| REQ-019 | AC-039 | `test_ac_039_register_settings_defaults` | RED |
+| REQ-019 | AC-040 | `test_ac_040_live_read_max_listed_sessions` | RED |
+| REQ-020 | AC-041 | `test_ac_041_singleton_created_once` | RED |
+| REQ-020 | AC-042 | `test_ac_042_singleton_first_call_without_repository_value_error` | RED |
+| REQ-020 | AC-043 | `test_ac_043_reset_session_service` | RED |
+| REQ-021 | AC-044 | `test_ac_044_no_tokens_in_outputs` | RED |
+| REQ-022 | AC-045 | `test_ac_045_traced_methods_no_tokens_in_logs` | RED |
+| INV-001 | — | `test_inv_001_revocation_idempotent` | RED |
+| INV-002 | — | `test_inv_002_valid_only_listing` | RED |
+| INV-003 | — | `test_inv_003_cap_held_after_login` | RED |
+| INV-004 | — | `test_inv_004_no_tokens_in_outputs` | RED |
+| INV-005 | — | `test_inv_005_current_session_first` | RED |
+| EDGE-001 | — | `test_edge_001_zero_sessions_empty_and_noop` | RED |
+| EDGE-002 | — | `test_edge_002_revoke_unknown_id_noop` | RED |
+| EDGE-003 | — | `test_edge_003_revoke_already_revoked_noop` | RED |
+| EDGE-004 | — | `test_edge_004_logout_all_self_lockout` | RED |
+| EDGE-005 | — | `test_edge_005_logout_other_only_caller` | RED |
+| EDGE-006 | — | `test_edge_006_pre_feature_null_fields` | RED |
+| EDGE-007 | — | `test_edge_007_expired_rows_excluded` | RED |
+| EDGE-008 | — | `test_edge_008_both_or_neither_value_error` | RED |
+| EDGE-009 | — | `test_edge_009_limit_below_one_value_error` | RED |
+| EDGE-010 | — | `test_edge_010_concurrent_revocation_and_listing` | RED |
+| EDGE-011 | — | `test_edge_011_cap_eviction_at_exact_cap` | RED |
+| EDGE-012 | — | `test_edge_012_cleanup_below_batch_size` | RED |
+| NFR-001 | — | `test_nfr_001_list_100_sessions_budget`, `test_nfr_001_revoke_1000_sessions_budget`, `test_nfr_001_cleanup_1000_rows_budget` | RED |
+| NFR-003 | — | `test_nfr_003_public_api_contract` | RED |
+| NFR-004 | — | `test_nfr_004_traced_service_publishes_events` | RED |
+| NFR-005 | — | `test_nfr_005_concurrent_threads_safe` | RED |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:
