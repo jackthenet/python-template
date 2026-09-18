@@ -37,7 +37,7 @@ def test_ac_044_no_tokens_in_outputs(
             outputs.append(repr(entry))
             outputs.append(entry.model_dump_json())
     # events
-    session_service.revoke_session(rows[0].id)
+    session_service.revoke_session(rows[0][0].id)
     session_service.logout_other_sessions(token)
     session_service.revoke_all_sessions(user_id)
     session_service.cleanup_expired()
@@ -116,7 +116,7 @@ def test_nfr_004_traced_service_publishes_events(
         expires_at=base - timedelta(days=1),
     )
     session_service.list_sessions(user_id=user_id)
-    session_service.revoke_session(rows[0].id)
+    session_service.revoke_session(rows[0][0].id)
     session_service.logout_other_sessions(token)
     session_service.cleanup_expired()
     for event_type in (SessionsListed, SessionRevoked, AllSessionsRevoked, ExpiredSessionsDeleted):

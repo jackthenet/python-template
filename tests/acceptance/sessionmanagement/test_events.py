@@ -139,7 +139,7 @@ def test_ac_038_none_publisher_no_events_no_subscriptions(session_repository, se
     # When: any operation runs — no error is raised with a None publisher.
     service.list_sessions(user_id=user_id)
     service.list_sessions(token=token)
-    service.revoke_session(rows[0].id)
+    service.revoke_session(rows[0][0].id)
     service.logout_all_sessions(token)
     service.revoke_all_sessions(user_id)
     service.cleanup_expired()

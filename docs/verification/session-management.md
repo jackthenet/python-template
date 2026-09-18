@@ -893,3 +893,58 @@ No duplication, dead code, or complexity was found; the parameter pass is alread
 **Evidence:** this section.
 
 **S4.4 (T-008) Refactor:** No refactor warranted — the T-008 implementation (module singleton holder `list[SessionService | None]`, `get_session_service`, `reset_session_service`, and the `__init__.py` exports) is already clean, minimal, and consistent with the codebase house pattern (one-element list holder, cf. `settings._registry` / `eventbus._default_bus`), the tracing policy (public module-level functions traced with `@logged(slow_threshold_ms=5)`), and the file's naming/docstring conventions. No unnecessary complexity, redundant code, or inconsistent naming found. GREEN re-confirmed 3/3 (`uv run pytest tests/acceptance/sessionmanagement/test_singleton.py tests/unit/sessionmanagement/test_validation.py -v` → 7 passed, including T-008's 3 singleton tests). No files changed.
+
+### S3.1 (T-009) test fix — tuple access (P-19)
+
+**Date:** 2026-09-18
+
+**Scope:** fix ONLY the tuple-access contract bug (P-19) in the 3 T-009 tests that call `.id` on a `(Session, str)` tuple element of `rows` built from `make_session` (`tests/sessionmanagement_test_helpers.py` — confirmed to return `tuple[Session, str]` = `(row, raw_token)`). `rows[0]` is a tuple, not a `Session`, so `rows[0].id` raised `AttributeError: 'tuple' object has no attribute 'id'` at argument evaluation, BEFORE the feature code under test ran. The fix is `rows[0].id` → `rows[0][0].id` (access the `Session` object from the tuple). The asserted behavior (AC-038, AC-044, NFR-004) is unchanged — mechanical alignment, not a weakening.
+
+**The 3 exact line changes** (1 in `tests/acceptance/sessionmanagement/test_events.py`, 2 in `tests/acceptance/sessionmanagement/test_observability.py` — the 3 affected tests span 2 files):
+
+1. `test_ac_038_none_publisher_no_events_no_subscriptions` (test_events.py):
+   - before: `service.revoke_session(rows[0].id)`
+   - after:  `service.revoke_session(rows[0][0].id)`
+2. `test_ac_044_no_tokens_in_outputs` (test_observability.py):
+   - before: `session_service.revoke_session(rows[0].id)`
+   - after:  `session_service.revoke_session(rows[0][0].id)`
+3. `test_nfr_004_traced_service_publishes_events` (test_observability.py):
+   - before: `session_service.revoke_session(rows[0].id)`
+   - after:  `session_service.revoke_session(rows[0][0].id)`
+
+No other test changes, no implementation changes, no helper changes. All other tuple-consuming sites in the 3 tests unpack correctly (`_, token = rows[1]`, `for _row, tok in rows:`) — no further tuple-access bugs found in these tests.
+
+**Targeted re-run (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/test_events.py::test_ac_038_none_publisher_no_events_no_subscriptions tests/acceptance/sessionmanagement/test_observability.py::test_ac_044_no_tokens_in_outputs tests/acceptance/sessionmanagement/test_observability.py::test_nfr_004_traced_service_publishes_events -v --tb=short`
+- Result: **3 passed** (1.56s). **No test fails with `AttributeError: 'tuple' object has no attribute 'id'` anymore.**
+- **New failure reason per test: none — all 3 now PASS**, because the behavior under test is **already implemented** in this worktree: `src/backend/sessionmanagement/` exists and is complete (T-003…T-008 committed — `service.py` with `revoke_session`/`logout_other_sessions`/`cleanup_expired`/`list_sessions` + `@logged_class` tracing, `events.py` with the typed events, `feature_settings.py`). Specifically:
+  - `test_ac_038` — a `None` publisher publishes no events, raises no error, and subscribes to no user-management/authentication events: **PASS** (implemented).
+  - `test_ac_044` — no raw token or token hash in any `SessionEntry`, log record, published event, or error message: **PASS** (implemented).
+  - `test_nfr_004` — lifecycle events (`SessionsListed`, `SessionRevoked`, `AllSessionsRevoked`, `ExpiredSessionsDeleted`) published to the injected publisher: **PASS** (implemented).
+- **Consequence for S4.1 (T-009):** the T-009 RED premise (unimplemented None-publisher/observability/tracing behavior) no longer holds — the behavior is already GREEN. S4.1 (T-009) must re-enter and confirm the real RED reason (expected: none — T-009's tests are already GREEN against the implemented behavior; T-009's remaining work is the test-derivation bookkeeping, not implementation).
+
+**Ruff gate:** `uv run ruff check tests/acceptance/sessionmanagement/` → **All checks passed!** Zero ruff errors in this step's changed paths.
+
+**No commits in this step** — the test fix should be committed with the T-009 work (or a separate test-fix commit).
+
+**Evidence:** this section.
+
+### S4.2 (T-009) Implement + confirm GREEN (side-effect of T-003…T-008)
+
+**Date:** 2026-09-18
+
+**No new implementation.** T-009's observability behavior (typed lifecycle events + `@logged_class(include_args=False, slow_threshold_ms=100)` tracing of `SessionService` + `@logged` tracing of the module functions + the `None`-publisher contract) was **already implemented as a side-effect of T-003…T-008** (committed in this worktree: `src/backend/sessionmanagement/service.py` with the traced methods, `events.py` with the typed events, `feature_settings.py`, the module singleton). T-009 therefore requires **no implementation step** — S4.2 is trivially satisfied. The only T-009 change is the **P-19 test fix** (the 3 tests used `rows[0].id` where `rows[0]` is a `tuple[Session, str]`; fixed to `rows[0][0].id`), which is a mechanical test-alignment, not a behavior change.
+
+**The 3 tests that were RED** (`test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`) were RED **only** because of the P-19 tuple-access `AttributeError` at argument evaluation (before the feature code ran). After the P-19 test fix they **pass** against the already-implemented behavior (AC-038, AC-044, NFR-004).
+
+**GREEN confirmation (2026-09-18):**
+
+- **Targeted (the 2 T-009 acceptance files):** `uv run pytest tests/acceptance/sessionmanagement/test_events.py tests/acceptance/sessionmanagement/test_observability.py -v --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` → **7 passed, 1 deselected, 0 failed** (1.97s).
+- **Full `green_command` (the five sessionmanagement dirs):** `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` → **67 passed, 1 deselected, 0 failed** (47.35s).
+- **All 13 of T-009's `tests_to_create` pass:** `test_ac_026_expiration_unchanged_no_activity_tracking` (acceptance), `test_ac_038_none_publisher_no_events_no_subscriptions` (acceptance/test_events.py), `test_ac_044_no_tokens_in_outputs` (acceptance/test_observability.py), `test_nfr_004_traced_service_publishes_events` (acceptance/test_observability.py), `test_nfr_001_list_100_sessions_budget` / `test_nfr_001_revoke_1000_sessions_budget` / `test_nfr_001_cleanup_1000_rows_budget` (contract/test_performance.py), `test_nfr_003_public_api_contract` (contract/test_contract.py), `test_nfr_005_concurrent_threads_safe` (integration/test_concurrency.py), `test_edge_010_concurrent_revocation_and_listing` (integration/test_concurrency.py), `test_inv_001_revocation_idempotent` / `test_inv_004_no_tokens_in_outputs` (property). The one deselected test, `test_ac_045_traced_methods_no_tokens_in_logs`, is the **known loguru `enqueue=True` file-sink pipe-deadlock hang** (a logging-infrastructure issue, not a T-009 logic bug; recorded under "Known friction").
+- **Note on the count:** the step prompt's expected count was "0 failed, 64 passed, 1 deselected"; the actual full-suite count is **67 passed** (the suite grew by 3 tests after the prompt was written). The GREEN gate is **0 failed**, which is satisfied.
+
+**Ruff gate:** `uv run ruff check tests/acceptance/sessionmanagement/test_events.py tests/acceptance/sessionmanagement/test_observability.py` → **All checks passed!** Zero ruff errors in this step's changed paths.
+
+**Evidence:** this section + the P-19 fix commit + the status-VERIFIED commit.
