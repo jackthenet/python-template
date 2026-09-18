@@ -22,13 +22,20 @@ from backend.authentication import InvalidSessionError, hash_token
 from backend.authentication.models import Session
 from backend.authentication.repositories import SessionRepository
 from backend.logging import logged_class
-from backend.sessionmanagement.events import AllSessionsRevoked, EventPublisher, SessionRevoked, SessionsListed
+from backend.sessionmanagement.events import (
+    AllSessionsRevoked,
+    EventPublisher,
+    ExpiredSessionsDeleted,
+    SessionRevoked,
+    SessionsListed,
+)
 from backend.sessionmanagement.models import SessionEntry
 from backend.settings import SettingsRegistry, get_settings_registry
 
 # Hardcoded fallbacks for the live settings reads (REQ-019): unregistered
 # keys fall back to these defaults.
 DEFAULT_MAX_LISTED_SESSIONS = 100
+DEFAULT_CLEANUP_BATCH_SIZE = 1000
 
 
 @logged_class(slow_threshold_ms=100, include_args=False)
@@ -197,6 +204,24 @@ class SessionService:
         revoked (REQ-018, AC-035, INV-001).
         """
         return self._revoke_user_sessions(user_id, exclude_session_id=exclude_session_id)
+
+    def cleanup_expired(self) -> int:
+        """Delete expired session rows and return the number deleted (REQ-012).
+
+        Bounded by the live-read ``sessionmanagement.cleanup_batch_size``
+        (default 1000) (REQ-012, REQ-019); the application calls this on
+        its own schedule — no threads or background workers in the feature
+        (REQ-012). When at least one row is deleted,
+        ``ExpiredSessionsDeleted(count)`` is published; deleting 0 rows
+        publishes no event (REQ-018, AC-036, ADR-068).
+        """
+        batch_size = int(
+            self._read_setting(self._registry(), "sessionmanagement.cleanup_batch_size", DEFAULT_CLEANUP_BATCH_SIZE)
+        )
+        count = self._repository.delete_expired(batch_size)
+        if count > 0:
+            self._publish(ExpiredSessionsDeleted(count=count))
+        return count
 
     # -- Mapping --------------------------------------------------------------
 

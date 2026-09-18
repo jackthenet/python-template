@@ -201,7 +201,7 @@
       "dependencies": [
         "T-001"
       ],
-      "status": "SPECIFIED"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-004",

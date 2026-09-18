@@ -224,3 +224,98 @@ All 68 DAG `tests_to_create` functions derived and committed to disk:
 **No test modifications. No commits in this step (S4.5 commits).**
 
 **Evidence:** this section.
+
+### S4.1 (T-003) Pick task + confirm RED
+
+**Task picked (2026-09-18):**
+
+- **T-003 — "cleanup_expired (bounded by sessionmanagement.cleanup_batch_size)"** (REQ-012/018; AC-024, AC-025, AC-036; 4 `tests_to_create`).
+- Ready: its only dependency, **T-001, is VERIFIED** (T-002 is also VERIFIED). T-003 is the first ready task in the DAG (all later tasks are SPECIFIED).
+- `red_command` / `green_command` (from the DAG): `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+
+**RED gate — T-003 `red_command` (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+- **Hang note (known environment issue, not a T-003 logic bug):** the full `red_command` hangs on the later-task T-009 test `test_ac_045_traced_methods_no_tokens_in_logs` (loguru `enqueue=True` file-sink pipe deadlock in a `@logged` wrapper). Recorded with that one test deselected: `uv run pytest <the five sessionmanagement dirs> --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -q`.
+- Result: **23 failed, 42 passed, 1 deselected, 2 errors** (67 of 68) — identical to the S4.2 (T-002) GREEN state (nothing has been implemented since T-002).
+- **T-003's 4 `tests_to_create` all FAIL (4/4):**
+  - 3 × `tests/acceptance/sessionmanagement/test_cleanup.py`: `test_ac_024_cleanup_bounded_by_batch_size`, `test_ac_025_cleanup_no_expired_returns_zero`, `test_edge_012_cleanup_below_batch_size`.
+  - 1 × `tests/acceptance/sessionmanagement/test_events.py`: `test_ac_036_expired_sessions_deleted_event`.
+- **Failure kind (T-003's tests): `AttributeError: 'SessionService' object has no attribute 'cleanup_expired'`** — `cleanup_expired` is not implemented yet (the tests call `session_service.cleanup_expired()` on the T-001 `SessionService`). Confirmed by targeted re-run: `uv run pytest tests/acceptance/sessionmanagement/test_cleanup.py::test_ac_024_cleanup_bounded_by_batch_size tests/acceptance/sessionmanagement/test_cleanup.py::test_ac_025_cleanup_no_expired_returns_zero tests/acceptance/sessionmanagement/test_cleanup.py::test_edge_012_cleanup_below_batch_size tests/acceptance/sessionmanagement/test_events.py::test_ac_036_expired_sessions_deleted_event -v` → **4 failed** (same kind).
+- **Expected-still-failing, unchanged:** 21 (19 FAILED + 2 ERROR). The 2 errors (`test_ac_041`/`test_ac_043` in `test_singleton.py`) fail at setup on `ImportError: cannot import name 'reset_session_service' from 'backend.sessionmanagement'` (the later module-singleton task's API, T-007, not T-003). The remaining 19 FAILED (23 − 4) are other later tasks' features (cap eviction, expiration-unchanged, user-lifecycle subscriptions, settings registration, singleton validation, device storage at login, observability, cross-cutting).
+- **Passes (42, unchanged):** T-001's 20 `tests_to_create` + 2 side-effect passes (`test_ac_040_live_read_max_listed_sessions`, `test_nfr_001_list_100_sessions_budget`) + T-002's 17 `tests_to_create` + 3 later-task tests now incidentally passing (their behavior depends on revocation, which T-002 implements).
+
+**RED confirmed for T-003.** No implementation code written in this step. No test modifications. No commits in this step (S4.5 commits).
+
+**Evidence:** this section.
+
+### S4.2 (T-003) Implement + confirm GREEN
+
+**Implementation (per T-003 `implementation_steps`, 4 steps; no test modifications):**
+
+1. `src/backend/sessionmanagement/service.py` — the `SessionService` gains `cleanup_expired() -> int` (REQ-012, REQ-018, ADR-068):
+   - Reads the live `sessionmanagement.cleanup_batch_size` via the existing `_read_setting`/`_registry` helpers (default `DEFAULT_CLEANUP_BATCH_SIZE = 1000`, a new hardcoded fallback constant alongside `DEFAULT_MAX_LISTED_SESSIONS`) (REQ-012, REQ-019).
+   - Deletes up to that bound via the repository's `delete_expired(limit)` (the T-001 additive `SessionRepository` extension; `None` = all is the previous behavior, here a bound is always passed) and returns the count (REQ-012).
+   - Publishes `ExpiredSessionsDeleted(count)` when the count > 0; deleting 0 rows publishes no event (REQ-018, AC-036, ADR-068). The event already existed (T-001) and is already exported in `__init__.py`.
+   - The application calls `cleanup_expired` on its own schedule — no threads or background workers in the feature (REQ-012).
+2. No new exception types, no new events, no new repository methods: the method reuses the T-001 `SessionRepository.delete_expired(limit)` and the T-001 `ExpiredSessionsDeleted` event. Expiration semantics are unchanged — cleanup only deletes expired rows (sessions expire per `authentication.session_ttl`; cleanup does not extend, renew, or track activity) (REQ-013, REQ-017). Events carry non-sensitive data only — the count; never raw tokens or token hashes (REQ-018, NFR-002, ADR-068).
+3. Public API export in `__init__.py` unchanged: `cleanup_expired` is a method on the existing `SessionService`, and `ExpiredSessionsDeleted` is already exported (T-001). No `__init__.py` change needed.
+4. Tracing: `SessionService` is `@logged_class` (T-001); `cleanup_expired` is a public method so it is traced automatically (entry/exit/exception), consistent with the other public operations. No tracing-specific code was added.
+
+**GREEN gate — T-003 `green_command` (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+- **T-003's 4 `tests_to_create` all PASS (4/4)** — targeted re-run: `uv run pytest tests/acceptance/sessionmanagement/test_cleanup.py::test_ac_024_cleanup_bounded_by_batch_size tests/acceptance/sessionmanagement/test_cleanup.py::test_ac_025_cleanup_no_expired_returns_zero tests/acceptance/sessionmanagement/test_cleanup.py::test_edge_012_cleanup_below_batch_size tests/acceptance/sessionmanagement/test_events.py::test_ac_036_expired_sessions_deleted_event -v` → **4 passed**.
+  - 3 × `tests/acceptance/sessionmanagement/test_cleanup.py`: `test_ac_024_cleanup_bounded_by_batch_size` (AC-024: 150 expired rows, `cleanup_batch_size` 100 → 100 deleted, 100 returned), `test_ac_025_cleanup_no_expired_returns_zero` (AC-025: no expired rows → 0 returned, no error, valid rows untouched), `test_edge_012_cleanup_below_batch_size` (EDGE-012: 3 expired rows < `cleanup_batch_size` 100 → all deleted, count returned).
+  - 1 × `tests/acceptance/sessionmanagement/test_events.py`: `test_ac_036_expired_sessions_deleted_event` (AC-036: `cleanup_expired` deletes `n > 0` rows → `ExpiredSessionsDeleted(n)` published with `count == n`; deleting 0 rows → no event).
+- **Full-suite state (excluding the hanging T-009 test — see "Known friction" below):** `uv run pytest <the five sessionmanagement dirs> --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -q` → **50 passed, 15 failed, 2 errors** (67 of 68).
+  - **Passed (50):** T-001's 20 `tests_to_create` + 2 side-effect passes (`test_ac_040_live_read_max_listed_sessions`, `test_nfr_001_list_100_sessions_budget`) + T-002's 17 `tests_to_create` + 3 later-task tests incidentally passing (revocation-dependent) + **T-003's 4 `tests_to_create`** + **4 later-task tests now incidentally passing** (their tests call `cleanup_expired`, which T-003 implements): `test_ac_026_expiration_unchanged_no_activity_tracking` (expiration), `test_nfr_001_cleanup_1000_rows_budget` (performance), `test_nfr_005_concurrent_threads_safe` (concurrency), `test_inv_004_no_tokens_in_outputs` (property).
+  - **Expected-still-failing (15 `FAILED` + 2 `ERROR`, all later tasks T-004…T-009):** cap eviction (`test_ac_027`, `test_ac_028`, `test_edge_011`, `test_inv_003`), user-lifecycle subscriptions (`test_ac_029`, `test_ac_030`, `test_ac_031`, `test_ac_038`), settings registration (`test_ac_039`), singleton (`test_ac_042` + the 2 setup errors `test_ac_041`/`test_ac_043`), device storage at login (`test_ac_008`, `test_ac_032`), observability (`test_ac_044`, `test_nfr_004`), contract (`test_nfr_003`). **Zero T-003 test failures** (confirmed: none of T-003's 4 tests appears in the failure list).
+  - The 2 errors (`test_ac_041`/`test_ac_043` in `test_singleton.py`) fail at setup on `ImportError: cannot import name 'reset_session_service'` (the later module-singleton task's API, T-007, not T-003).
+- **No regressions vs. the S4.1 (T-003) RED state:** the RED state was 42 passed / 23 failed / 2 errors; the GREEN state is 50 passed / 15 failed / 2 errors. The delta is exactly +8 passed / −8 failed = T-003's 4 `tests_to_create` (RED → GREEN) + 4 later-task tests that call `cleanup_expired` (RED → GREEN incidentally). No previously-passing test now fails; the 2 errors are unchanged (T-007 singleton setup, not T-003).
+
+**Ruff gate — `uv run ruff check .` (2026-09-18):**
+
+- Result: **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero errors in T-003's changed path** (`uv run ruff check src/backend/sessionmanagement/service.py` → "All checks passed!").
+- **Format gate — `uv run ruff format --check` on T-003's changed path:** clean — `1 file already formatted` (`src/backend/sessionmanagement/service.py`). One cosmetic reformat of the new `cleanup_expired` body (collapsing the `_read_setting` call to one line, within the 120 line-length) was applied during this step; T-003's 4 tests were re-run after it and still pass 4/4.
+
+**Known friction (later-task test, not a T-003 regression):**
+
+- **T-009 `test_ac_045_traced_methods_no_tokens_in_logs` hangs** (loguru `enqueue=True` file-sink pipe deadlock in a `@logged` wrapper). This later-task test (AC-045 observability, T-009) prevents the full `green_command` from running to completion; it was deselected for the full-suite state above. This is a logging-infrastructure issue in a later-task test (T-009), not a T-003 logic bug; T-003's 4 tests (T-003's GREEN definition) all pass.
+
+**GREEN confirmed for T-003.** No commits in this step (S4.5 commits). No test modifications.
+
+**Evidence:** this section.
+
+### S4.3 (T-003) Ruff
+
+**Ruff gate — `uv run ruff check .` (2026-09-18):**
+
+- Result: **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero errors in T-003's changed path** (`src/backend/sessionmanagement/service.py`; `uv run ruff check src/backend/sessionmanagement/service.py` → "All checks passed!").
+- **Format gate — `uv run ruff format --check` on T-003's changed paths:** clean — `1 file already formatted` (`src/backend/sessionmanagement/service.py`). No format fixes needed.
+- No lint/format fixes were applied, so no test re-run was required (T-003's 4/4 GREEN from S4.2 stands).
+
+**Evidence:** this section. No commits in this step (S4.5 commits). No implementation changes beyond lint/format fixes on T-003's paths (none were needed).
+
+### S4.4 (T-003) Refactor (keep GREEN)
+
+**No refactor applied (recorded per done criterion 1 — the code is already clean and there is no safe, in-scope improvement; no change forced):**
+
+T-003's implementation is a single public method `cleanup_expired() -> int` plus the hardcoded fallback constant `DEFAULT_CLEANUP_BATCH_SIZE = 1000` (alongside `DEFAULT_MAX_LISTED_SESSIONS`). Structure review (duplication, complexity, naming, boundaries):
+
+- **Duplication — none in scope.** The live setting read reuses the existing `_read_setting`/`_registry` helpers (no settings-logic duplication); the same 2-line `int(self._read_setting(self._registry(), key, fallback))` pattern also appears in `list_sessions` (T-001). Extracting a `_read_int_setting` helper would (a) require modifying `list_sessions` (T-001's code, outside T-003's scope) and (b) if only `cleanup_expired` used it, leave a single-caller helper with zero dedup benefit — an unjustified abstraction. The conditional publish `if count > 0: self._publish(...)` mirrors the pattern in `_revoke_user_sessions` (T-002) but with a different event (`ExpiredSessionsDeleted(count)` vs. `AllSessionsRevoked(user_id, excluded_session_id)`); a generic helper would require an event factory — over-abstraction.
+- **Complexity — minimal.** One branch (`if count > 0`), one repository call (`delete_expired(batch_size)`), one publish. Nothing to simplify.
+- **Naming — clean.** `cleanup_expired` / `batch_size` / `count` are descriptive and consistent with the other operations.
+- **Boundaries — correct.** Uses the T-001 `SessionRepository.delete_expired(limit)` ABC extension, the T-001 `ExpiredSessionsDeleted` event, the existing private helpers, and the shared settings registry (REQ-019). No cross-feature internal imports; no new public API (`cleanup_expired` is a method on the existing `SessionService`; the event is already exported).
+- **Tracing — unchanged.** `cleanup_expired` is a public method, so it is traced automatically by `@logged_class` (entry/exit/exception); no new private helper means no new untraced method.
+
+**GREEN gate — T-003 `tests_to_create` re-run (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/test_cleanup.py::test_ac_024_cleanup_bounded_by_batch_size tests/acceptance/sessionmanagement/test_cleanup.py::test_ac_025_cleanup_no_expired_returns_zero tests/acceptance/sessionmanagement/test_cleanup.py::test_edge_012_cleanup_below_batch_size tests/acceptance/sessionmanagement/test_events.py::test_ac_036_expired_sessions_deleted_event -v`
+- Result: **4 passed** (4/4) — identical to S4.2/S4.3. No regressions.
+
+**Ruff gate:** n/a — no implementation files were modified in this step (the S4.3 (T-003) ruff gate stands: 6 pre-existing PLR0917 baseline errors, zero in T-003's paths).
+
+**No test modifications. No commits in this step (S4.5 commits). No implementation changes.**
+
+**Evidence:** this section.
