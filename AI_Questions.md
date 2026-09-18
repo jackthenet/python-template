@@ -405,3 +405,322 @@ Each question is a section with the following fields:
 - **Date:** 2026-09-14
 - **Status:** ANSWERED
 - **Incorporated:** yes (to be applied as an authorized test-infrastructure fix in T-003's S4.2, committed separately from the T-003 implementation)
+
+## Q-34 — Relationship to the existing authentication feature (new feature vs. extension)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The idea (active sessions/devices, logout current/all, expiration, revocation) overlaps heavily with the already-approved authentication feature, which owns the `Session` table, `SessionRepository`, `AuthService.session_info(token)`, `logout(token)`, TTL expiration, and revocation on password change/reset. This answer determines whether the change is a new feature, an extension of authentication (spec amendment), or a CROSS-CUTTING change, and which existing REQ/AC IDs are extended.
+- **Context:** `docs/specs/authentication.md`: REQ-006 (opaque tokens, SHA-256 at rest), REQ-007 (TTL expiration, `authentication.session_ttl`), REQ-008 (`session_info(token)`), REQ-009 (`logout(token)`, idempotent), REQ-012 (revocation on reset completion), INV-002 (validity iff unrevoked and unexpired), NFR-003 (public API backward-compatibility contract). Implementation `src/backend/authentication/`: `Session` table (id, user_id, token_hash, created_at, expires_at, revoked — no device fields); `SessionRepository` ABC (add, get_by_token_hash, revoke, revoke_all_for_user, delete_expired — no list_for_user); `AuthService` (login, session_info, logout, reset, passkey).
+- **Question:** Which option? (a) A new feature `src/backend/sessionmanagement/` that reuses authentication's `Session` table + `SessionRepository` (constructor-injected; the repository ABC is extended with e.g. `list_for_user`), (b) extend the authentication feature itself (new `AuthService` methods + spec amendment to `authentication.md`), or (c) a new feature with its own read-only repository over the same `sessions` table (zero changes to authentication)?
+- **Answer:** Option (a): a new feature `src/backend/sessionmanagement/` reusing authentication's `Session` table + `SessionRepository` (constructor-injected; the repository ABC is extended with e.g. `list_for_user`). No spec amendment to `authentication.md`.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-35 — Backend-only scope (no HTTP layer, no frontend)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Every existing backend feature is an in-process Python service with no HTTP/REST layer, but "active sessions/devices" could imply a user-facing UI or web API. The answer fixes the entire API surface.
+- **Context:** All features in `src/backend/` (authentication, usermanagement, settings, mail, filemanagement, eventbus, logging) are in-process services; no web framework in `pyproject.toml`; the authentication spec explicitly lists frontend/HTTP as out of scope.
+- **Question:** Confirm: session-management is a backend-only in-process service (no HTTP/REST layer, no frontend), consistent with all existing features? If an HTTP layer is needed, is it part of this change or a separate change?
+- **Answer:** Confirmed: backend-only in-process service (no HTTP/REST layer, no frontend), consistent with all existing features.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-36 — Source of device identification ("devices" in "active sessions/devices")
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** "Active sessions/devices" implies per-session device identification, but with no HTTP layer the backend cannot observe user-agent/IP in-process, and the `Session` table has no device fields. This decides whether a schema change to authentication's login path is required and what the list entries can show.
+- **Context:** `Session` table fields: id, user_id, token_hash, created_at, expires_at, revoked. No user_agent/ip/device_name. Login is owned by authentication (`AuthService.login(LoginRequest(identifier, password))`).
+- **Question:** Which option? (a) capture device info at login — add optional `user_agent`/`ip`/`device_name` fields to the login schema (schema change to authentication, stored on the `Session` row), (b) no device identification — a "device" is just a session listed with timestamps (display name null), or (c) a separate device-binding API — the client calls with its token to attach a device name to an existing session?
+- **Answer:** Option (a): capture device info at login — add optional `user_agent`/`ip`/`device_name` fields to the login schema, stored on the `Session` row (schema change to authentication's storage).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-37 — "Logout from all sessions" semantics (include the current one?)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** "Logout from all sessions" is ambiguous: does "all" include the caller's current session (full logout, caller loses their token) or exclude it ("log out all other devices")? The API shape (self-service via token vs. admin via user_id) also depends on this.
+- **Context:** `SessionRepository.revoke_all_for_user(user_id)` already exists (repository level, no service API); `AuthService.logout(token)` is per-token and idempotent. The repository has no "revoke all except one" operation.
+- **Question:** Which option(s)? (a) `logout_all_sessions(token)` — self-service, revokes the caller's session too, (b) `logout_other_sessions(token)` — self-service, excludes the caller's current session, (c) `revoke_all_sessions(user_id)` — admin, no token required, (d) some combination (e.g., both self-service and admin variants)?
+- **Answer:** Options (a), (b) and (c) — all three: `logout_all_sessions(token)` (self-service, revokes the caller's session too), `logout_other_sessions(token)` (self-service, excludes the caller's current session), and `revoke_all_sessions(user_id)` (admin, no token required).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-38 — Service-level revocation of a specific session
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The "session revocation" bullet plus a session list implies the user can revoke a specific session (e.g., remove a device from the list). The repository has `revoke(session_id)` but no service-level API. The identifier choice (session id vs. token) is constrained by NFR-002 (raw tokens are never exposed after login).
+- **Context:** `SessionRepository.revoke(session_id: UUID)` exists; `SessionInfo` (authentication) exposes only user_id, created_at, expires_at — no session id. A new list representation would need to expose the session id (a UUID, not a token).
+- **Question:** Is an explicit "revoke this specific session" API in scope? If yes, what is the identifier — the session id (UUID, exposed in the list) or the raw token? Proposed: `revoke_session(session_id)` for list-driven revocation, with `logout(token)` (authentication) remaining the token-based path.
+- **Answer:** In scope: `revoke_session(session_id)` — revoke a specific session by its UUID as exposed in the session list; `logout(token)` (authentication) remains the token-based path.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-39 — "Current session" marker in the session list
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** To identify the caller's own session in the list (UI "this device" label, self-lockout prevention), the list must mark the current session. This depends on whether the list API takes the caller's token.
+- **Context:** Self-service listing by token would resolve user_id via `session_info(token)` (authentication REQ-008). Admin listing by user_id has no token to compare.
+- **Question:** Which option? (a) the list API takes the caller's token and returns an `is_current` flag per entry, (b) no marker — the caller identifies the current session by other means, or (c) marker only for token-based (self-service) listing, absent for admin listing?
+- **Answer:** Option (a): the list API takes the caller's token and returns an `is_current` flag per entry (true for the caller's own session).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-40 — "Session expiration" semantics (TTL reuse vs. new expiration modes)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** TTL-based expiration already exists (authentication REQ-007; `authentication.session_ttl` setting, default 604800 s, read live). The "session expiration" bullet could mean: reuse the existing TTL, add sliding/active expiration (extend on activity), or add per-session/admin-set expiration. Each has very different scope.
+- **Context:** `authentication.feature_settings` registers `authentication.session_ttl` (NUMBER, default 604800, min 1). `Session.expires_at` is set at creation; nothing updates it afterwards.
+- **Question:** Which option? (a) no change to expiration semantics — reuse the existing TTL (this feature only manages listing/revocation/cleanup), (b) add sliding/active expiration (extend `expires_at` on activity — requires touching the token-use path), or (c) add per-session/admin-set expiration (e.g., "expire this session now" / set a custom expiry)?
+- **Answer:** Option (a): no change to expiration semantics — reuse the existing TTL (`authentication.session_ttl`); this feature only manages listing/revocation/cleanup.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-41 — Cleanup of expired sessions (who calls `delete_expired`?)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** `SessionRepository.delete_expired() -> int` exists but nothing ever calls it; expired-but-not-revoked rows accumulate in the `sessions` table indefinitely. The "session expiration" bullet may intend this cleanup.
+- **Context:** `SqliteSessionRepository.delete_expired` is implemented; no scheduler, background worker, or service method references it. No other feature in the repo runs background threads.
+- **Question:** Which option? (a) expose a `cleanup_expired() -> int` service method (the application calls it on its own schedule), (b) run a background worker thread inside the feature, (c) lazy cleanup (delete expired rows opportunistically on list/read operations), or (d) out of scope for this change?
+- **Answer:** Option (a): expose `cleanup_expired() -> int` — the application calls it on its own schedule; no threads in the feature.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-42 — Listing scope: self-service vs. admin
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** "Active sessions/devices" could be viewed by the user themselves (token-authenticated) or by an administrator (by user id). The API surface differs (token parameter vs. user_id parameter).
+- **Context:** user-management has roles (default `{"admin", "member"}`) and `UserDeactivated`/`UserDeleted` events; authentication sessions are per-user (`Session.user_id`).
+- **Question:** Which option? (a) self-service only (the user lists their own sessions via their token), (b) admin only (list by user_id, no token), or (c) both (two API shapes: token-based and user_id-based)?
+- **Answer:** Option (c) both: token-based self-service listing (user lists own sessions via their token) AND user_id-based admin listing.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-43 — Authorization model for user_id-based (admin) operations
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Existing features use an in-process trust model (no per-call auth). If user_id-based operations are in scope (Q-42), it must be pinned whether they are open to any in-process caller or gated by a role check (user-management "admin" role).
+- **Context:** file-management Q-22 precedent: open in-process access was chosen there. user-management exposes `get_user(user_id)` and roles; no feature currently performs a role check per call.
+- **Question:** For user_id-based operations (list/revoke-all by user_id): (a) open in-process access (any caller, consistent with existing features), or (b) gated — require the caller to pass a role (e.g., "admin") or an admin user id, checked against user-management? And for token-based operations: confirm resolution via `session_info(token)` (authentication REQ-008), invalid token → `InvalidSessionError`?
+- **Answer:** Option (a): open in-process access — user_id-based operations are open to any in-process caller (consistent with the in-process trust model of all existing features); token-based ops resolve via `session_info(token)` (authentication REQ-008), invalid token → `InvalidSessionError`.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-44 — Session list entry fields (representation)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The list entry representation must be pinned. The minimum is session_id, created_at, expires_at, is_current; device fields and login method depend on Q-36/Q-45. Raw tokens/hashes must never appear (authentication NFR-002).
+- **Context:** `Session` table: id, user_id, token_hash, created_at, expires_at, revoked. `SessionInfo` (authentication): user_id, created_at, expires_at. No device fields, no login method.
+- **Question:** Which field set? Proposed minimum: session_id (UUID), created_at, expires_at, is_current (bool). Optional additions: user_agent, ip, device_name (Q-36), login_method ("password"|"passkey", Q-45). Which fields are normative?
+- **Answer:** Full set: session_id (UUID), created_at, expires_at, is_current (bool), user_agent, ip, device_name, login_method ("password"|"passkey"). Raw tokens/hashes never appear (authentication NFR-002).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-45 — Store the login method on the session row
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Showing how each session was created (password vs. passkey) requires storing the method on the `Session` row — a schema change to authentication's table (NFR-003 backward-compatibility contract; existing rows would be null). The authentication `LoginSucceeded` event carries `method`, but the `Session` row does not.
+- **Context:** `Session` table has no method column; `AuthService._issue_session(user, method)` receives the method but only stores user_id/token/timestamps.
+- **Question:** Should the login method be stored on the `Session` row (nullable column, backward-compatible) so the list can show it? (a) yes, (b) no — the list does not show login method?
+- **Answer:** Option (a) yes — add a nullable `login_method` column to the `Session` row (backward-compatible; existing rows null) so the list can show how each session was created.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-46 — Events published by this feature
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Per the repo pattern, features publish typed lifecycle events to an injected `EventPublisher` (structural protocol). The event set must be pinned, and it must be decided whether authentication's existing `Logout` event is reused or a new event is published for logout-all.
+- **Context:** authentication events: `LoginSucceeded`, `LoginFailed`, `Logout(user_id)`, `PasswordResetRequested`, `PasswordResetCompleted`, `PasskeyRegistered`, `PasskeyDeleted`. Events carry non-sensitive data only (no tokens).
+- **Question:** Which events should this feature publish? Proposed: `SessionRevoked(user_id, session_id)`, `AllSessionsRevoked(user_id)`, `ExpiredSessionsDeleted(count)`. Should logout-all reuse authentication's `Logout` event, or is a distinct `AllSessionsRevoked` preferred? Is listing an event (e.g., `SessionsListed`) or not (read operation)?
+- **Answer:** Proposed set plus `SessionsListed`: publish `SessionRevoked(user_id, session_id)`, `AllSessionsRevoked(user_id)` (distinct from authentication's `Logout`), `ExpiredSessionsDeleted(count)`, and `SessionsListed` (listing is also published).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-47 — Error taxonomy and idempotency for revocation
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The spec needs a structured exception hierarchy (repo pattern: root error with documented context attributes) and idempotency semantics. Authentication's `logout(token)` is an idempotent no-op for unknown/revoked/expired tokens; `revoke_session(session_id)` with an unknown id could follow the same pattern or raise.
+- **Context:** authentication errors: `AuthenticationError` root; `InvalidSessionError` (unknown/revoked/expired token). file-management precedent: `FileNotFoundError` for missing keys.
+- **Question:** (a) `revoke_session` with an unknown/already-revoked session id → idempotent no-op (like `logout`), or (b) raise a `SessionNotFoundError` (rooted in a new `SessionManagementError` hierarchy)? Confirm: listing a user with zero active sessions → empty list (no error).
+- **Answer:** Option (a): `revoke_session` with an unknown/already-revoked session id is an idempotent no-op (like `logout`); listing a user with zero active sessions → empty list (no error).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-48 — Settings registry keys for this feature
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Configurable values should use the shared settings registry (repo pattern: feature-owned `register_settings(registry)`, live reads like mail-service/file-management). The key set must be pinned; session TTL already exists as `authentication.session_ttl`.
+- **Context:** `authentication.feature_settings` registers `authentication.session_ttl` (604800 s default). file-management registers `filemanagement.*` keys read live per operation.
+- **Question:** Which settings keys should this feature register (read live)? Proposed: `sessionmanagement.max_listed_sessions` (default limit for the list), `sessionmanagement.max_sessions_per_user` (if Q-49 caps sessions), and possibly a cleanup-related key (if Q-41 adds cleanup). Reuse `authentication.session_ttl` for expiration (no duplicate TTL key)? Which keys?
+- **Answer:** Full proposed set: `sessionmanagement.max_listed_sessions` (default limit for the list), `sessionmanagement.max_sessions_per_user` (per-user cap, per Q-49), and a cleanup-related key, plus reuse of `authentication.session_ttl` for expiration (no duplicate TTL key).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-49 — Max concurrent sessions per user (single-device mode / eviction)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** A common session-management requirement: cap the number of concurrent active sessions per user (e.g., "single device" mode), evicting the oldest session(s) when a new login exceeds the cap. This changes the login path (authentication) and is a significant behavior addition.
+- **Context:** No per-user session cap exists; `AuthService.login` always creates a new session row. Eviction would require authentication's login path to call the new feature (or the repository) — a cross-feature dependency.
+- **Question:** Is a per-user concurrent-session cap in scope? If yes: what is the default (e.g., unlimited, 5, 1 = single-device), what is the eviction policy (oldest first), and is the cap configurable via the settings registry? If no, confirm unlimited concurrent sessions.
+- **Answer:** Configurable per-user cap — set via the settings registry (`sessionmanagement.max_sessions_per_user`), with oldest-first eviction when the cap is exceeded.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-50 — Pagination for the session list
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The list API may need pagination (file-management precedent: limit/offset). The default limit and validation rules (file-management: `limit < 1` or `offset < 0` → `ValueError`) must be pinned if in scope.
+- **Context:** file-management `list_files(namespace, limit=100, offset=0)` with `ValueError` on invalid limit/offset. No other feature paginates.
+- **Question:** Should the session list support pagination (limit/offset)? If yes: default limit (e.g., 100), and the same `ValueError` validation as file-management? Or is a single bounded list (max N, no offset) sufficient?
+- **Answer:** A single bounded list with a `limit` parameter (default from `sessionmanagement.max_listed_sessions`); no offset; `limit < 1` → `ValueError`.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-51 — Ordering of the session list
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The list ordering must be pinned for deterministic output (tests + UI).
+- **Context:** No precedent in the repo for session ordering; file-management orders by created_at (newest first for its list).
+- **Question:** What is the ordering? Proposed: created_at descending (newest first), with the current session (is_current) optionally pinned first. Which?
+- **Answer:** created_at descending (newest first), with the current session (`is_current`) pinned to the top of the list.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-52 — Schema change to the `Session` table (device columns)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Adding device columns (user_agent, ip, device_name) to authentication's `Session` table is a schema change to an existing approved feature (NFR-003 backward-compatibility contract). Existing rows would have NULL device data. Alternatives: a separate join table, or no device data at all (Q-36).
+- **Context:** `Session` table (authentication): id, user_id, token_hash, created_at, expires_at, revoked. Bootstrap is `create_all` (no migration framework), so adding nullable columns is backward-compatible at the schema level.
+- **Question:** If device data is in scope (Q-36): (a) add nullable device columns to the existing `sessions` table (simplest, backward-compatible), (b) a separate `session_devices` join table (one row per session, keeps the `sessions` table untouched), or (c) no device data (sessions only)?
+- **Answer:** Option (a) — add nullable device columns to the existing `sessions` table (simplest, backward-compatible; existing rows NULL). **Implied by Q-36** (batch 1, answered 2026-09-15): the user chose "capture device info at login — add optional `user_agent`/`ip`/`device_name` fields to the login schema, stored on the `Session` row". "Stored on the `Session` row" is option (a) — the device data lives directly on the `Session` row; the separate-join-table alternative (b) and the no-device-data alternative (c) are both excluded by the same answer.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes (implied from Q-36; to be folded into the spec as the device-data storage decision)
+
+## Q-53 — `last_seen_at` activity tracking
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** "Active sessions" could imply a last-activity timestamp. Tracking `last_seen_at` requires a write on every token use (e.g., `session_info`/list), which touches the authentication read path and affects the performance budget (authentication NFR-001: login ≤ 250 ms p95).
+- **Context:** `session_info(token)` is currently read-only. A `last_seen_at` update would make it a write operation (SQLite round-trip per token use).
+- **Question:** Track `last_seen_at` (updated when a token is used — e.g., on `session_info` or on a token-based list)? (a) yes — acceptable to make token-use a write, (b) no — only created_at/expires_at, or (c) yes but only on token-based list calls (not on `session_info`)?
+- **Answer:** Option (b) — no `last_seen_at` tracking; only `created_at`/`expires_at`. **Implied by Q-40** (batch 1, answered 2026-09-15): the user endorsed "no change to expiration semantics — reuse the existing TTL; this feature only manages listing/revocation/cleanup." Tracking `last_seen_at` requires a write on every token use (a write on the authentication read path), which is none of {listing, revocation, cleanup} — it is outside the endorsed scope.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes (implied from Q-40's endorsed scope; to be folded into the spec as the no-activity-tracking decision)
+
+## Q-54 — Interaction with existing revocation-on-password-change/reset
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Authentication already revokes all sessions on password change/reset completion (REQ-012). The spec must confirm this path is unchanged and that this feature only adds explicit revocation paths (single/all) — no duplication or conflict.
+- **Context:** authentication REQ-012: `complete_password_reset` "revokes all sessions for the user"; `UserManager.change_password` (user-management) does not currently revoke sessions (only the reset-completion path does).
+- **Question:** Confirm: revocation on password change/reset (authentication REQ-012) remains unchanged and is NOT re-specified here; this feature adds only explicit revocation (single session / all sessions). Should a plain `change_password` (without reset) also revoke sessions, or does that stay out of scope?
+- **Answer:** Revocation on password change/reset (authentication REQ-012) remains unchanged and is NOT re-specified here; ADDITIONALLY, a plain `change_password` (without reset) also revokes all sessions — new behavior of this feature: `session-management` subscribes to `UserPasswordChanged` (user-management) and revokes all sessions of that user.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-55 — Sessions on user deactivation/deletion (orphans)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** `delete_user` is a hard delete and `Session` rows have no foreign key to users, so deleted users leave orphaned session rows; deactivation does not revoke sessions (a deactivated user's tokens remain valid until TTL). This is a cross-feature boundary (user-management/authentication) that must be explicitly in or out of scope.
+- **Context:** user-management REQ-012: `delete_user` hard-deletes; publishes `UserDeleted`. user-management REQ-009: deactivation is a flag. No session cleanup on either event today. file-management Q-20 precedent: cleanup on user deletion was left to the caller.
+- **Question:** Which option? (a) in scope — revoke all sessions on `UserDeactivated`/`UserDeleted` (this feature subscribes to user-management events), (b) in scope — only clean up orphaned rows on `UserDeleted` (deactivated users keep valid sessions), (c) out of scope — user-management/authentication behavior unchanged, orphans remain (caller responsibility)?
+- **Answer:** Option (a): in scope — this feature subscribes to `UserDeactivated`/`UserDeleted` (user-management events) and revokes all sessions of that user.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-56 — Definition of "active" in the list (expired-but-not-cleaned rows)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Until cleanup runs (Q-41), the table contains rows with `revoked == False` but `expires_at < now`. The list must define whether such rows are "active". Including them without a flag would contradict authentication INV-002 (a session is valid iff unrevoked and unexpired).
+- **Context:** authentication INV-002: `session_info` succeeds exactly when `revoked == False` and `expires_at > now`. `delete_expired` is never called, so expired rows accumulate.
+- **Question:** Does "active" mean valid-only (unrevoked AND unexpired, per INV-002 — expired rows excluded from the list), or are expired-but-not-deleted rows included with an `is_expired` flag? Proposed: valid-only.
+- **Answer:** Valid-only — "active" means unrevoked AND unexpired (per authentication INV-002); expired-but-not-cleaned rows are excluded from the list. **Implied by Q-44** (batch 1, answered 2026-09-15): the user pinned the normative list-entry field set as session_id, created_at, expires_at, is_current, user_agent, ip, device_name, login_method — with no `is_expired` flag. The "include expired rows with an `is_expired` flag" branch of this question requires that flag in the entry representation, which Q-44 excludes; including expired rows unflagged would contradict INV-002.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes (implied from Q-44's pinned field set + INV-002; to be folded into the spec as the valid-only listing decision)
+
+## Q-57 — DI and testing conventions
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The spec must pin the construction/testing pattern. The repo pattern is constructor injection of repository ABCs + optional structural `EventPublisher`, in-memory fakes for tests, no module singletons (except eventbus/settings-style registries, which this feature does not need).
+- **Context:** `AuthService`, `UserManager`, `FileService` all use constructor DI with repository ABCs and optional event publishers; tests use in-memory/temp-directory fakes.
+- **Question:** Confirm: a `SessionService` (or similarly named) constructed with the session repository ABC + optional `event_bus` (structural `publish` protocol), an in-memory session repository for tests/DI, and no module singleton? Or should this feature expose a module-level singleton like `get_event_bus()`/`get_settings_registry()`?
+- **Answer:** Constructor DI (`SessionService` with the session repository ABC + optional `event_bus`, structural `publish` protocol; in-memory session repository for tests/DI) PLUS a module-level singleton (e.g., `get_session_service()`) for application use.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-58 — Public API naming (package, service, methods, events)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The package name, service name, method names, and event names must be pinned for the spec (and for AGENTS.md's "Using the X Feature" note).
+- **Context:** Existing packages: `backend.authentication` (`AuthService`), `backend.usermanagement` (`UserManager`), `backend.filemanagement` (`FileService`).
+- **Question:** Approve the proposed naming? Package `backend.sessionmanagement`; service `SessionService` with methods `list_sessions`, `revoke_session`, `revoke_all_sessions`, `cleanup_expired` (names may shift per Q-37/Q-41 answers); events `SessionRevoked`, `AllSessionsRevoked`, `ExpiredSessionsDeleted`. Any preferred alternatives?
+- **Answer:** Approved: package `backend.sessionmanagement`; service `SessionService` with methods `list_sessions`, `revoke_session`, `logout_all_sessions`, `logout_other_sessions`, `revoke_all_sessions`, `cleanup_expired`; events `SessionRevoked`, `AllSessionsRevoked`, `ExpiredSessionsDeleted`, `SessionsListed`.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-59 — Performance budgets (NFR)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** Testable performance budgets are needed (repo pattern: budgets in contract tests, measured including the mandated logging overhead, with the logging context stated).
+- **Context:** authentication NFR-001: login ≤ 250 ms p95 (local SQLite, INFO console sink). file-management NFR-001: upload/download/metadata-read budgets (median).
+- **Question:** What are the performance budgets? Proposed: listing 100 sessions ≤ 50 ms p95; revoking all sessions for a user with 1000 sessions ≤ 250 ms p95; cleanup of 1000 expired rows ≤ 250 ms p95 — all measured on local hardware against a local SQLite database with the shared logging feature at default INFO level with a synchronous console sink (budgets hold including per-call logging overhead). Different values?
+- **Answer:** Looser budgets (2× the proposed values): listing 100 sessions ≤ 100 ms p95; revoking all sessions for a user with 1000 sessions ≤ 500 ms p95; cleanup of 1000 expired rows ≤ 500 ms p95 — all measured on local hardware against a local SQLite database with the shared logging feature at default INFO level with a synchronous console sink (budgets hold including per-call logging overhead).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-60 — Observability and secrets policy
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** The AGENTS.md tracing policy mandates `@logged_class` on public service classes (`include_args=False` where secrets are involved) and `@logged` on module functions. Tokens/hashes must never appear in logs, events, or list entries (authentication NFR-002).
+- **Context:** `AuthService` is traced with `@logged_class` (`include_args=False`); authentication NFR-002: raw tokens never appear in log records, events, or error messages.
+- **Question:** Confirm: the public service class is traced with `@logged_class` (`include_args=False`, sensible `slow_threshold_ms`), module-level functions with `@logged`; raw session tokens and token hashes never appear in log records, events, error messages, or list entries (only session ids). Any method needing `include_args=True`?
+- **Answer:** Confirmed: the public service class is traced with `@logged_class` (`include_args=False`, sensible `slow_threshold_ms`); module-level functions with `@logged`; raw session tokens and token hashes never appear in log records, events, error messages, or list entries (only session ids). No method needs `include_args=True`.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-61 — Admin self-lockout guard
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** session-management, FEATURE
+- **Why needed:** If the admin (user_id-based) revoke-all API is in scope (Q-37/Q-42), an admin can revoke all sessions for themselves — including their own — and lock themselves out. The admin API has no token, so it cannot exclude the calling session by default. A guard (e.g., optional `exclude_session_id`) or an explicit acceptance is needed.
+- **Context:** user-management's last-admin guard (REQ-008) shows the repo pattern for protective rules. The admin API would take `user_id` only (Q-43), so "the calling session" is not identifiable without an extra parameter.
+- **Question:** Is admin self-lockout acceptable (no guard — documented behavior), or is a guard required (e.g., the admin revoke-all takes an optional `exclude_session_id: UUID | None` so the caller can keep their own session)?
+- **Answer:** Guard required: the admin `revoke_all_sessions(user_id)` takes an optional `exclude_session_id: UUID | None` so the caller can keep their own session; without it, all sessions (including the caller's) are revoked.
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-62 — Spec PR approval gate (human pre-approval)
+- **Step:** S1.1 Interrogate — Phase 1 (orchestrator, user instruction)
+- **Change:** session-management, FEATURE
+- **Why needed:** The standard gate requires the spec to be merged through GitHub PR review before Phase 2. The user explicitly pre-approved the specification so the workflow can proceed unattended.
+- **Context:** AGENTS.md "Spec Approval Gate (GitHub Review)"; user instruction 2026-09-15: "the pr approval is not necessary for this feature, it is auto approved as i want to go to bed."
+- **Question:** Is the spec PR approval gate required for this change?
+- **Answer:** No — the human (user) pre-approved the specification on 2026-09-15 (auto-approved). The spec PR is still opened for traceability, but the workflow does NOT stop at the spec-PR-merge gate; Phase 2 proceeds on this recorded pre-approval (deviation from the standard PR-review gate, authorized by the human). The final implementation PR is likewise pre-approved by the human; the agent still opens it and does NOT merge it itself (agent-side human-governance boundary preserved — the merge is performed by the human).
+- **Date:** 2026-09-15
+- **Status:** ANSWERED
+- **Incorporated:** yes
