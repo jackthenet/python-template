@@ -91,7 +91,7 @@ def test_ac_027_cap_evicts_oldest_at_sixth_login(
     entries = session_service.list_sessions(user_id=user_id)
     ids = {e.session_id for e in entries}
     assert oldest_row.id not in ids
-    assert ids == {r.id for r in rows[1:]} | {new_row.id}
+    assert ids == {r[0].id for r in rows[1:]} | {new_row.id}
     assert len(entries) == cap
     # the oldest session's token is immediately unusable
     with pytest.raises(InvalidSessionError):
@@ -114,7 +114,7 @@ def test_ac_028_no_eviction_below_cap(
     _login(user_id)
     entries = session_service.list_sessions(user_id=user_id)
     assert len(entries) == existing + 1
-    assert {e.session_id for e in entries} == {r.id for r in rows} | {new_row.id}
+    assert {e.session_id for e in entries} == {r[0].id for r in rows} | {new_row.id}
 
 
 def test_edge_011_cap_eviction_at_exact_cap(
@@ -140,4 +140,7 @@ def test_edge_011_cap_eviction_at_exact_cap(
     assert len(entries) == cap
     # the new session is kept and valid through the token path
     token_entries = session_service.list_sessions(token=new_token)
-    assert [e.session_id for e in token_entries] == [new_row.id]
+    # the new session is pinned first (REQ-006, INV-005) and the token path
+    # returns the full valid list — exactly the cap after eviction (INV-003)
+    assert token_entries[0].session_id == new_row.id
+    assert len(token_entries) == cap

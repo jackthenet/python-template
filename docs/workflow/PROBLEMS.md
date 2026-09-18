@@ -166,3 +166,19 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 stopped run + 1 fresh relaunch (S4.2 T-002) to verify GREEN and record the handoff
 - **Resolution:** Per the execution model (a subagent that does not return is a failed step; never resume a stuck one), the orchestrator logged this problem and relaunched S4.2 (T-002) with a fresh subagent to verify the in-tree implementation is GREEN, record evidence, and return the structured handoff. The in-tree work was preserved (not reverted).
 - **Date:** 2026-09-18
+
+## P-17 — S4.2 (T-004) subagent stopped mid-run (no handoff) left uncommitted cap-eviction implementation
+- **Problem:** The S4.2 (T-004) Implement subagent stopped mid-run with no output/handoff. It left an uncommitted cap-eviction implementation in the working tree (`src/backend/sessionmanagement/service.py`: `DEFAULT_MAX_SESSIONS_PER_USER = 5`, the constructor `LoginSucceeded` subscription on the shared event bus, and the `_on_login_succeeded` handler) plus the S4.1 (T-004) RED record and the S3.1 (T-004) test-fix record in `docs/verification/session-management.md`, and the two-line test fix in `tests/acceptance/sessionmanagement/test_cap_eviction.py`. GREEN was never confirmed or recorded.
+- **Step / Phase:** S4.2 (T-004 implement + confirm GREEN) — Phase 4 (T-004)
+- **Change:** session-management / FEATURE
+- **Duration / iterations:** 1 stopped run + 1 fresh relaunch (S4.2 T-004) to verify GREEN and record the handoff
+- **Resolution:** Per the execution model (a subagent that does not return is a failed step; never resume a stuck one), the orchestrator logged this problem and relaunched S4.2 (T-004) with a fresh subagent to verify the in-tree implementation is GREEN, record evidence, and return the structured handoff. The in-tree work was preserved (not reverted).
+- **Date:** 2026-09-18
+
+## P-18 — T-004 test-contract bug: `test_edge_011` final assertion incompatible with spec-mandated token-path listing (discovered in S4.2 T-004 GREEN)
+- **Problem:** `test_edge_011_cap_eviction_at_exact_cap` (derived in S3.1) has a final assertion incompatible with the spec-mandated token-path listing: `assert [e.session_id for e in token_entries] == [new_row.id]` compares the full 5-entry valid-session list (new session pinned first + the 4 other valid sessions, `created_at` descending) to the 1-element list `[new_row.id]`. No implementation satisfying REQ-006/AC-009/INV-005 can make the token path return a single entry, so T-004's GREEN gate (all 4 `tests_to_create` pass) was blocked by the test, not the implementation. The implementation correctly evicts the oldest and keeps the new session (EDGE-011/REQ-014) — the test's own preceding assertions (`oldest_row.id not in ids`, `second_oldest_row.id in ids`, `len(entries) == cap`) all pass.
+- **Step / Phase:** S4.2 (T-004 implement + confirm GREEN) — Phase 4 (T-004); test-contract bug in S3.1-derived `tests/acceptance/sessionmanagement/test_cap_eviction.py`
+- **Change:** session-management / FEATURE
+- **Duration / iterations:** 1 iteration (caught during S4.2 (T-004) GREEN; routed to a fresh test-skill fix step)
+- **Resolution:** The S4.2 (T-004) subagent flagged the bug precisely (line 143; correct assertion: `token_entries[0].session_id == new_row.id` — new session valid through the token path and pinned first, per REQ-006/INV-005). A fresh test-skill step re-derives ONLY that assertion line (mechanical alignment, not a weakening; the asserted EDGE-011/REQ-014 behavior is unchanged), then S4.2 (T-004) is re-entered for GREEN.
+- **Date:** 2026-09-18

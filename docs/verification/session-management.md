@@ -319,3 +319,180 @@ T-003's implementation is a single public method `cleanup_expired() -> int` plus
 **No test modifications. No commits in this step (S4.5 commits). No implementation changes.**
 
 **Evidence:** this section.
+
+### S4.1 (T-004) Pick task + confirm RED
+
+**Task picked (2026-09-18):**
+
+- **T-004 — "Per-user session cap: event-driven eviction on LoginSucceeded (oldest first)"** (REQ-014, REQ-019; AC-027, AC-028; 4 `tests_to_create`).
+- Ready: its only dependency, **T-001, is VERIFIED** (T-002 and T-003 are also VERIFIED). T-004 is the first ready task in the DAG (all later tasks T-005…T-009 are SPECIFIED).
+- `red_command` / `green_command` (from the DAG): `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+
+**RED gate — T-004 `red_command` (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+- **Hang note (known environment issue, not a T-004 logic bug):** the full `red_command` hangs on the later-task T-009 test `test_ac_045_traced_methods_no_tokens_in_logs` (loguru `enqueue=True` file-sink pipe deadlock in a `@logged` wrapper). Confirmed this run: the full command collected 68 items and hung at that test. Recorded with that one test deselected: `uv run pytest <the five sessionmanagement dirs> --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`.
+- Result: **15 failed, 50 passed, 1 deselected, 2 errors** (67 of 68) — identical to the S4.2 (T-003) GREEN state (nothing has been implemented since T-003).
+- **T-004's 4 `tests_to_create` all FAIL (4/4):**
+  - 3 × `tests/acceptance/sessionmanagement/test_cap_eviction.py`: `test_ac_027_cap_evicts_oldest_at_sixth_login`, `test_ac_028_no_eviction_below_cap`, `test_edge_011_cap_eviction_at_exact_cap`.
+  - 1 × `tests/property/sessionmanagement/test_sessionmanagement_properties.py`: `test_inv_003_cap_held_after_login`.
+- **Failure kind (T-004's tests):**
+  - `test_ac_027`: `AssertionError` (line 93, `oldest_row.id not in ids` — the oldest session is still listed after the 6th login; the cap-eviction handler is not implemented).
+  - `test_ac_028`: `AttributeError: 'tuple' object has no attribute 'id'` (line 117 — see the potential-test-bug note below; the first assert, `len(entries) == existing + 1`, passes).
+  - `test_edge_011`: `AssertionError` (line 138, `oldest_row.id not in ids` — the oldest session is still listed at exactly the cap).
+  - `test_inv_003`: `AssertionError` (line 101, `len(entries) <= cap` → `assert 2 <= 1` — the cap is not held after login; Hypothesis falsifying example `existing=1, cap=1`).
+- Confirmed by targeted re-run: `uv run pytest tests/acceptance/sessionmanagement/test_cap_eviction.py::test_ac_027_cap_evicts_oldest_at_sixth_login tests/acceptance/sessionmanagement/test_cap_eviction.py::test_ac_028_no_eviction_below_cap tests/acceptance/sessionmanagement/test_cap_eviction.py::test_edge_011_cap_eviction_at_exact_cap tests/property/sessionmanagement/test_sessionmanagement_properties.py::test_inv_003_cap_held_after_login -v` → **4 failed** (same kinds).
+- **Potential test bug (flagged for the orchestrator; this step does NOT modify tests):** `test_ac_027` (line 94) and `test_ac_028` (line 117) both evaluate `{r.id for r in rows...}`, but `rows` is a list of `(Session, str)` tuples — `make_session` (`tests/sessionmanagement_test_helpers.py`) returns `(row, raw_token)`. `test_ac_027` currently fails earlier (line 93, missing eviction), but with a correct implementation it would crash with `AttributeError` on line 94; `test_ac_028` crashes on line 117 today. **Consequence: T-004's GREEN gate (all 4 pass) cannot be achieved by implementation alone — these two test lines need a test fix (re-derived via the appropriate workflow step) before/with S4.2.**
+- **Expected-still-failing, unchanged:** 13 (11 FAILED + 2 ERROR) — later tasks T-005…T-009:
+  - T-005 user-lifecycle subscriptions: `test_ac_029_password_change_revokes_all`, `test_ac_030_deactivation_revokes_all`, `test_ac_031_deletion_revokes_all` (3 FAILED).
+  - T-006 device storage at login: `test_ac_008_login_stores_device_fields`, `test_ac_032_passkey_login_stores_method` (2 FAILED).
+  - T-007 settings registration: `test_ac_039_register_settings_defaults` (1 FAILED).
+  - T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED) + `test_ac_041`/`test_ac_043` (2 ERROR at setup on `ImportError: cannot import name 'reset_session_service' from 'backend.sessionmanagement'` — the later singleton API, not T-004).
+  - T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — the deselected test).
+- **Passes (50, unchanged):** identical to the S4.2 (T-003) GREEN state — T-001's 20 `tests_to_create` + 2 side-effect passes (`test_ac_040_live_read_max_listed_sessions`, `test_nfr_001_list_100_sessions_budget`) + T-002's 17 `tests_to_create` + 3 revocation-dependent later-task passes + T-003's 4 `tests_to_create` + 4 cleanup-dependent later-task passes.
+
+**RED confirmed for T-004.** No implementation code written in this step. No test modifications. No commits in this step (S4.5 commits).
+
+**Evidence:** this section.
+
+### S3.1 (T-004) Fix test bug — re-derive buggy assertion lines
+
+**Date:** 2026-09-18
+
+**Scope:** fix ONLY the two set-comprehension lines flagged by S4.1 (T-004) that call `.id` on `(Session, str)` tuples, aligning the tests with the `make_session` helper contract (`tests/sessionmanagement_test_helpers.py` — returns `(row, raw_token)`). The asserted behavior (AC-027, AC-028, EDGE-011, INV-003; REQ-014) is unchanged — this is a mechanical alignment, not a weakening.
+
+**The two exact line changes** in `tests/acceptance/sessionmanagement/test_cap_eviction.py`:
+
+1. `test_ac_027_cap_evicts_oldest_at_sixth_login` (line 94):
+   - before: `assert ids == {r.id for r in rows[1:]} | {new_row.id}`
+   - after:  `assert ids == {r[0].id for r in rows[1:]} | {new_row.id}`
+2. `test_ac_028_no_eviction_below_cap` (line 117):
+   - before: `assert {e.session_id for e in entries} == {r.id for r in rows} | {new_row.id}`
+   - after:  `assert {e.session_id for e in entries} == {r[0].id for r in rows} | {new_row.id}`
+
+No other test changes, no implementation changes, no helper changes.
+
+**Bug-pattern grep result (sanity):** grepped all sessionmanagement test dirs (`tests/acceptance/sessionmanagement/`, `tests/property/sessionmanagement/`, `tests/integration/sessionmanagement/`, `tests/unit/sessionmanagement/`, `tests/contract/sessionmanagement/`) for set comprehensions / loops over the tuple-returning `make_session` results (single-variable `for r in rows` / `for row in ...` followed by `.id` on the tuple) and audited every `make_session` call site. **No other occurrence.** All other tuple-consuming sites unpack correctly (`row, _ in rows`, `rows[i][0].id`, `for _, token in rows`).
+
+**Targeted re-run (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/test_cap_eviction.py tests/property/sessionmanagement/test_sessionmanagement_properties.py -v`
+- Result: **3 failed, 5 passed** — T-004's 4 tests:
+  - `test_ac_027_cap_evicts_oldest_at_sixth_login` — **FAIL** (`AssertionError`, line 93, `oldest_row.id not in ids` — the oldest session is still listed after the 6th login; the cap-eviction handler is not implemented. Correct RED reason.)
+  - `test_ac_028_no_eviction_below_cap` — **PASS** (below-cap login revokes nothing — that IS the correct behavior, so it is legitimately GREEN pre-implementation.)
+  - `test_edge_011_cap_eviction_at_exact_cap` — **FAIL** (`AssertionError`, line 138, `oldest_row.id not in ids` — the oldest session is still listed at exactly the cap. Correct RED reason.)
+  - `test_inv_003_cap_held_after_login` — **FAIL** (`AssertionError`, line 101, `len(entries) <= cap` → `assert 2 <= 1` — the cap is not held after login. Correct RED reason.)
+  - The other 4 passed tests are the unrelated property tests (`test_inv_001`, `test_inv_002`, `test_inv_004`, `test_inv_005`).
+- **Failure kind:** all 3 failures are `AssertionError` on behavior lines (no eviction), **not** setup/fixture/`AttributeError` errors — the test contract is sound; RED is now for the correct reason.
+
+**Ruff gate:** `uv run ruff check .` → 6 pre-existing PLR0917 errors, all in `src/backend/` files NOT touched by this change branch (`authentication/service.py`, `filemanagement/errors.py`, `filemanagement/service.py`, `logging/_decorator.py` ×2, `mail/transport.py`) — confirmed pre-existing by stashing this step's change and re-running (same 6). Zero in this step's changed paths: `uv run ruff check tests/` → "All checks passed!".
+
+**RED re-confirmed for T-004** (3 of the 4 fail for the correct reason; `test_ac_028` legitimately GREEN pre-implementation).
+
+No implementation changes. No commits in this step (S4.5 commits).
+
+**Evidence:** this section.
+
+### S3.1 (T-004) Fix test bug (2) — re-derive test_edge_011 final assertion
+
+**Date:** 2026-09-18
+
+**Scope:** fix ONLY the final assertion of `test_edge_011_cap_eviction_at_exact_cap` (`tests/acceptance/sessionmanagement/test_cap_eviction.py`, the last line of the test) so it asserts the spec-mandated behavior — the new session is valid through the token path and pinned first — instead of comparing incompatible things. The asserted behavior (EDGE-011 / REQ-014) is unchanged — this is a mechanical alignment, not a weakening.
+
+**Why it is a test-contract bug (spec IDs):** the spec mandates the token path returns the FULL valid list with the current session pinned first — **REQ-006** (list ordered `created_at` descending, current session pinned first), **AC-009** (`list_sessions(token)` returns the current entry first AND the remaining entries ordered `created_at` descending), **INV-005** (first entry of `list_sessions(token)` is the resolved session). After the eviction at exactly the cap, the token path correctly returns **5 entries** (new session pinned first + the 4 other valid sessions). The buggy right-hand side `[new_row.id]` is a 1-element list — the comparison could never pass under any correct implementation.
+
+**The exact line change** in `tests/acceptance/sessionmanagement/test_cap_eviction.py` (final assertion of `test_edge_011_cap_eviction_at_exact_cap`):
+
+- before: `assert [e.session_id for e in token_entries] == [new_row.id]`
+- after:  `assert token_entries[0].session_id == new_row.id`
+- added (spec-mandated size, INV-003): `assert len(token_entries) == cap`
+
+The size assertion is spec-mandated: the token path returns the full valid list (REQ-006, INV-005) and, after eviction at exactly the cap, the user has exactly `cap` valid sessions (INV-003); `max_listed_sessions` is unregistered in this test (fallback 100 > cap 5), so no truncation. No other test changes, no implementation changes, no helper changes.
+
+**Targeted re-run (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/test_cap_eviction.py tests/property/sessionmanagement/test_sessionmanagement_properties.py::test_inv_003_cap_held_after_login -v`
+- Result: **4 passed** (4/4) — T-004's 4 `tests_to_create` all PASS (the implementation is in the tree, so GREEN is now achievable):
+  - `test_ac_027_cap_evicts_oldest_at_sixth_login` — PASS
+  - `test_ac_028_no_eviction_below_cap` — PASS
+  - `test_edge_011_cap_eviction_at_exact_cap` — PASS (the fixed final assertion now passes)
+  - `test_inv_003_cap_held_after_login` — PASS
+
+**Ruff gate:** `uv run ruff check tests/` → "All checks passed!" (zero errors in the changed path).
+
+No implementation changes. No commits in this step (S4.5 commits).
+
+**Evidence:** this section.
+
+### S4.2 (T-004) Implement + confirm GREEN
+
+**Implementation (already in place per T-004 `implementation_steps`, 4 steps; no test modifications, no implementation modifications in this step — this step only confirms GREEN, runs ruff, and records evidence):**
+
+1. `src/backend/sessionmanagement/service.py` — `SessionService.__init__` subscribes the authentication `LoginSucceeded` event to `self._on_login_succeeded` on the shared event bus, only when `event_bus is not None` (REQ-014, ADR-063).
+2. `_on_login_succeeded` live-reads `sessionmanagement.max_sessions_per_user` (default `DEFAULT_MAX_SESSIONS_PER_USER = 5`); if the user's valid (unrevoked, unexpired) session count exceeds the cap, it revokes the OLDEST valid sessions (`created_at` ascending) until the count equals the cap — the newly-issued session is always kept (REQ-014, REQ-019, ADR-063).
+3. Idempotent no-op at/below cap: no error, no state change, no duplicate event (INV-001, ADR-063).
+4. After `LoginSucceeded` handling, the user's valid session count is at most the cap (INV-003).
+
+**GREEN gate — T-004 `green_command` (2026-09-18):**
+
+- Broader-suite command (the hanging later-task T-009 test deselected): `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+- Result: **11 failed, 54 passed, 1 deselected, 2 errors** (67 of 68).
+- **T-004's 4 `tests_to_create` all PASS (4/4)** — targeted re-run: `uv run pytest tests/acceptance/sessionmanagement/test_cap_eviction.py tests/property/sessionmanagement/ -k "ac_027 or ac_028 or edge_011 or inv_003" -v` → **4 passed, 4 deselected**:
+  - `test_ac_027_cap_evicts_oldest_at_sixth_login` (AC-027) — PASSED
+  - `test_ac_028_no_eviction_below_cap` (AC-028) — PASSED
+  - `test_edge_011_cap_eviction_at_exact_cap` (EDGE-011) — PASSED
+  - `test_inv_003_cap_held_after_login` (INV-003, property) — PASSED
+- **Completion gates met:** AC-027/AC-028 acceptance tests pass; EDGE-011 acceptance test passes; INV-003 property test passes.
+- **Pass count vs. S4.1 (T-004) RED baseline:** RED was 50 passed / 15 failed / 2 errors; GREEN is 54 passed / 11 failed / 2 errors. Delta is exactly **+4 passed / −4 failed = T-004's 4 `tests_to_create`** (RED → GREEN). No previously-passing test now fails.
+- **The 13 expected-still-failing later-task tests (T-005…T-009) are STILL failing for their OWN reasons** (their tasks are not implemented yet) — **not newly broken by T-004**. The 11 `FAILED` + 2 `ERROR` in the GREEN run are exactly the baseline's 13 later-task tests:
+  - T-005 user-lifecycle subscriptions: `test_ac_029_password_change_revokes_all`, `test_ac_030_deactivation_revokes_all`, `test_ac_031_deletion_revokes_all` (3 FAILED) — unchanged.
+  - T-006 device storage at login: `test_ac_008_login_stores_device_fields`, `test_ac_032_passkey_login_stores_method` (2 FAILED) — unchanged.
+  - T-007 settings registration: `test_ac_039_register_settings_defaults` (1 FAILED) — unchanged.
+  - T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED) + `test_ac_041`/`test_ac_043` (2 ERROR at setup on `ImportError: cannot import name 'reset_session_service'`) — unchanged.
+  - T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected) — unchanged.
+  - **No legitimate state change to note:** none of the 13 later-task tests flipped to passing in this run; every one still fails for its own (unimplemented-task) reason. No T-004 test appears in the failure list.
+- **Known friction (later-task test, not a T-004 regression):** T-009 `test_ac_045_traced_methods_no_tokens_in_logs` hangs (loguru `enqueue=True` file-sink pipe deadlock in a `@logged` wrapper) — deselected, as in the RED baseline.
+
+**Ruff gate — `uv run ruff check .` (2026-09-18):**
+
+- Result: **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors in other `src/backend/` files (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero errors in T-004's changed path** (`src/backend/sessionmanagement/service.py`). Zero NEW errors introduced by T-004.
+
+**GREEN confirmed for T-004.** No commits in this step (S4.5 commits). No test modifications. No implementation modifications.
+
+**Evidence:** this section.
+
+### S4.3 (T-004) Ruff
+
+**Ruff gate (S4.3) — T-004's changed paths (2026-09-18):**
+
+- Command: `uv run ruff check src/backend/sessionmanagement/service.py tests/acceptance/sessionmanagement/test_cap_eviction.py`
+- Result: **All checks passed! — ZERO errors in T-004's changed paths.**
+- Whole-repo confirmation: `uv run ruff check .` → **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors in other `src/backend/` files (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero NEW errors introduced by T-004.**
+- No test or implementation modifications in this step (S4.3 only runs ruff and records). No commits (S4.5 commits).
+
+**Evidence:** this section.
+
+### S4.4 (T-004) Refactor (keep GREEN)
+
+**No refactor applied (recorded per done criterion — the code is already clean and minimal; no safe, in-scope improvement; no change forced):**
+
+T-004's implementation is the module constant `DEFAULT_MAX_SESSIONS_PER_USER = 5`, the constructor's `LoginSucceeded` subscription block, and the private cap-eviction handler `_on_login_succeeded()`. Structure review (duplication, complexity, naming, boundaries):
+
+- **Duplication — none in scope.** The valid-sessions filter (`not row.revoked and row.expires_at > now`) also appears in `list_sessions` (T-001's code). Extracting a shared `_valid_sessions` helper would (a) require modifying `list_sessions` (T-001's code, outside T-004's scope) and (b) if used only in `_on_login_succeeded`, leave a single-caller helper with zero dedup benefit — an unjustified abstraction (same reasoning as S4.4 (T-003)). The live cap read already reuses the existing `_read_setting`/`_registry` helpers (no settings-logic duplication).
+- **Complexity — minimal.** Read the cap, filter the user's valid sessions, compute `excess = len(valid) - cap`, early-return at/below cap (idempotent no-op — INV-001), revoke the oldest `excess` entries via `valid[-excess:]`. One early return, one loop, no nested branches. The `valid[-excess:]` slice relies on `list_for_user`'s `created_at` descending order (oldest-first eviction) — documented in a comment; the newly issued session (most recent, first entry) is always kept.
+- **Naming — clean.** `cap` / `now` / `valid` / `excess` / `_on_login_succeeded` are descriptive and consistent with the service's other members.
+- **Boundaries — correct.** Event-driven on authentication's `LoginSucceeded` via the shared event bus — authentication's login path is not modified (REQ-014, ADR-063); a `None` publisher means no subscriptions (REQ-018, AC-038); the cap is live-read on each login (REQ-019); uses the existing `SessionRepository` ABC. No cross-feature internal imports; no new public API.
+- **Tracing — unchanged.** `_on_login_succeeded` is private, so it is not traced by `@logged_class` (public methods only), consistent with the other private handlers/helpers; no raw tokens/hashes in any output.
+
+**Observable behavior unchanged:** no code changes in this step; the specified behavior (REQ-014, REQ-019, AC-027, AC-028, EDGE-011, INV-001, INV-003) remains identical.
+
+**GREEN gate — T-004 `tests_to_create` re-run (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/test_cap_eviction.py tests/property/sessionmanagement/ -k "ac_027 or ac_028 or edge_011 or inv_003" -v`
+- Result: **4 passed** (4/4) — identical to S4.2/S4.3. No regressions.
+
+**Ruff gate:** n/a — no implementation files were modified in this step (the S4.3 (T-004) ruff gate stands: zero errors in T-004's changed paths).
+
+**No test modifications. No commits in this step (S4.5 commits). No implementation changes.**
+
+**Evidence:** this section.

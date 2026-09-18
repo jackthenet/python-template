@@ -18,9 +18,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from backend.authentication import InvalidSessionError, hash_token
+from backend.authentication import InvalidSessionError, LoginSucceeded, hash_token
 from backend.authentication.models import Session
 from backend.authentication.repositories import SessionRepository
+from backend.eventbus import get_event_bus
 from backend.logging import logged_class
 from backend.sessionmanagement.events import (
     AllSessionsRevoked,
@@ -36,6 +37,7 @@ from backend.settings import SettingsRegistry, get_settings_registry
 # keys fall back to these defaults.
 DEFAULT_MAX_LISTED_SESSIONS = 100
 DEFAULT_CLEANUP_BATCH_SIZE = 1000
+DEFAULT_MAX_SESSIONS_PER_USER = 5
 
 
 @logged_class(slow_threshold_ms=100, include_args=False)
@@ -57,6 +59,14 @@ class SessionService:
         self._repository = repository
         self._event_bus = event_bus
         self._settings_registry = settings_registry
+        if event_bus is not None:
+            # Cap eviction is event-driven on authentication's
+            # ``LoginSucceeded`` (REQ-014, ADR-063): the handler is
+            # subscribed to the shared event bus, where authentication
+            # publishes its lifecycle events — authentication's login path
+            # is not modified. A ``None`` publisher means no subscriptions
+            # (REQ-018, AC-038).
+            get_event_bus().subscribe(LoginSucceeded, self._on_login_succeeded)
 
     # -- Wiring helpers -------------------------------------------------------
 
@@ -76,6 +86,38 @@ class SessionService:
         """Publish ``event``; a ``None`` publisher means no events and no error."""
         if self._event_bus is not None:
             self._event_bus.publish(event)
+
+    # -- Event handlers -------------------------------------------------------
+
+    def _on_login_succeeded(self, event: LoginSucceeded) -> None:
+        """Cap-eviction handler on authentication's ``LoginSucceeded`` (REQ-014, ADR-063).
+
+        If the user's valid session count exceeds the live-read
+        ``sessionmanagement.max_sessions_per_user``, the oldest valid sessions
+        (``created_at`` ascending) are revoked until the count equals the cap;
+        the newly issued session is always kept. Idempotent for re-runs: a
+        count at or below the cap is a no-op — no error, no state change, no
+        event (INV-001, ADR-063). The cap is live-read on each login
+        (REQ-019), so a registry change takes effect at the next login.
+        """
+        cap = int(
+            self._read_setting(
+                self._registry(), "sessionmanagement.max_sessions_per_user", DEFAULT_MAX_SESSIONS_PER_USER
+            )
+        )
+        now = datetime.now(UTC)
+        valid = [
+            row
+            for row in self._repository.list_for_user(event.user_id)
+            if not row.revoked and row.expires_at > now
+        ]
+        excess = len(valid) - cap
+        if excess <= 0:
+            return
+        # ``list_for_user`` is ``created_at`` descending, so the oldest valid
+        # sessions are the last ``excess`` entries (oldest-first eviction).
+        for row in valid[-excess:]:
+            self._repository.revoke(row.id)
 
     # -- Operations -----------------------------------------------------------
 
