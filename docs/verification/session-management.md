@@ -125,3 +125,102 @@ All 68 DAG `tests_to_create` functions derived and committed to disk:
 **No test modifications. No commits in this step (S4.5 commits).**
 
 **Evidence:** this section.
+
+### S4.1 (T-002) Pick task + confirm RED
+
+**Task picked (2026-09-17):**
+
+- **T-002 — "Revocation operations: revoke_session, logout_all_sessions, logout_other_sessions, revoke_all_sessions"** (REQ-008/009/010/011/018; AC-014…AC-023, AC-034, AC-035; 17 `tests_to_create`).
+- Ready: its only dependency, **T-001, is VERIFIED**. T-002 is the first ready task in the DAG (all later tasks are SPECIFIED).
+- `red_command` / `green_command` (from the DAG): `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+
+**RED gate — T-002 `red_command` (2026-09-17):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+- Result: **44 failed, 22 passed, 2 errors** (68 tests) — identical to the S4.4 (T-001) state.
+- **T-002's 17 `tests_to_create` all FAIL (17/17):**
+  - 15 × `tests/acceptance/sessionmanagement/test_revocation.py`: `test_ac_014_revoke_session_revokes`, `test_ac_015_revoke_unknown_id_noop`, `test_ac_016_revoke_already_revoked_noop`, `test_ac_017_logout_all_revokes_including_caller`, `test_ac_018_logout_all_invalid_token_raises`, `test_ac_019_logout_other_keeps_caller`, `test_ac_020_logout_other_only_caller_noop`, `test_ac_021_revoke_all_returns_count`, `test_ac_022_revoke_all_excludes_session`, `test_ac_023_revoke_all_zero_sessions`, `test_edge_001_zero_sessions_empty_and_noop`, `test_edge_002_revoke_unknown_id_noop`, `test_edge_003_revoke_already_revoked_noop`, `test_edge_004_logout_all_self_lockout`, `test_edge_005_logout_other_only_caller`.
+  - 2 × `tests/acceptance/sessionmanagement/test_events.py`: `test_ac_034_session_revoked_event`, `test_ac_035_all_sessions_revoked_event`.
+- **Failure kind (T-002's tests): `AttributeError: 'SessionService' object has no attribute 'revoke_session'`** — the revocation operations are not implemented yet (the tests call `service.revoke_session(...)` / `logout_all_sessions(...)` / `logout_other_sessions(...)` / `revoke_all_sessions(...)` on the T-001 `SessionService`). Confirmed by targeted re-run: `uv run pytest tests/acceptance/sessionmanagement/test_revocation.py tests/acceptance/sessionmanagement/test_events.py::test_ac_034_session_revoked_event tests/acceptance/sessionmanagement/test_events.py::test_ac_035_all_sessions_revoked_event -v` → **17 failed** (same kind).
+- **Expected-still-failing, unchanged:** 46 (44 FAILED + 2 ERROR). The 2 errors (`test_ac_041`/`test_ac_043` in `test_singleton.py`) fail at setup on `ImportError: cannot import name 'reset_session_service' from 'backend.sessionmanagement'` (the later module-singleton task's API, not T-002). The remaining 27 FAILED (44 − 17) are other later tasks' features (cleanup, cap eviction, lifecycle subscriptions, settings registration, singleton validation, device storage at login, observability, cross-cutting).
+- **Passes (22, unchanged):** T-001's 20 `tests_to_create` + 2 side-effect passes (`test_ac_040_live_read_max_listed_sessions`, `test_nfr_001_list_100_sessions_budget`).
+
+**RED confirmed for T-002.** No implementation code written in this step. No test modifications. No commits in this step (S4.5 commits).
+
+**Evidence:** this section.
+
+### S4.2 (T-002) Implement + confirm GREEN
+
+**Implementation (per T-002 `implementation_steps`, 6 steps; no test modifications):**
+
+1. `src/backend/sessionmanagement/service.py` — the T-001 `SessionService` gains `_resolve_token(token) -> Session` (resolves the token path via the reused store's `get_by_token_hash(hash_token(token))`; an unknown, revoked, or expired token re-raises authentication's `InvalidSessionError` (REQ-002, REQ-009/010, ADR-067)) and the four revocation operations:
+   - `revoke_session(session_id) -> None` (REQ-008): revoke via the repository; an unknown or already-revoked id is an idempotent no-op (no error, no event, REQ-008, INV-001, EDGE-002/003); publishes `SessionRevoked(user_id, session_id)` when a session is revoked (REQ-018, AC-034).
+   - `logout_all_sessions(token) -> None` (REQ-009): resolve the token via the token path (re-raise `InvalidSessionError` for unknown/revoked/expired, AC-018); revoke all sessions for the user including the caller's own (self-lockout accepted, EDGE-004); publishes `AllSessionsRevoked(user_id, excluded_session_id=None)` when at least one session is revoked.
+   - `logout_other_sessions(token) -> None` (REQ-010): resolve the token via the token path (re-raise `InvalidSessionError`, AC-018); revoke all sessions for the user except the caller's; publishes `AllSessionsRevoked(user_id, excluded_session_id=<the caller's session id>)` when at least one session is revoked (EDGE-005: revoking nothing publishes no event).
+   - `revoke_all_sessions(user_id, exclude_session_id=None) -> int` (REQ-011): admin, open in-process (no token); revoke via the repository's `revoke_user_sessions`; returns the count (a user with zero revocable sessions yields 0 with no error, AC-023); publishes `AllSessionsRevoked(user_id, excluded_session_id)` when the count > 0.
+   - An operation that revokes 0 sessions publishes no event (AC-035, ADR-068).
+2. No new exception types: invalid-token failures re-raise authentication's `InvalidSessionError` (design constraint). Revocation is idempotent for re-runs (no error, no state change, no duplicate event, INV-001). Events carry non-sensitive data only (user ids, session ids; never raw tokens or token hashes, REQ-018, NFR-002).
+3. Public API export in `__init__.py` unchanged: the four operations are methods on the existing `SessionService`, and the events `SessionRevoked`/`AllSessionsRevoked` are already exported (T-001).
+
+**GREEN gate — T-002 `green_command` (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ -v`
+- **T-002's 17 `tests_to_create` all PASS (17/17)** — targeted re-run: `uv run pytest tests/acceptance/sessionmanagement/test_revocation.py tests/acceptance/sessionmanagement/test_events.py::test_ac_034_session_revoked_event tests/acceptance/sessionmanagement/test_events.py::test_ac_035_all_sessions_revoked_event -q` → **17 passed**.
+  - 15 × `tests/acceptance/sessionmanagement/test_revocation.py`: `test_ac_014_revoke_session_revokes`, `test_ac_015_revoke_unknown_id_noop`, `test_ac_016_revoke_already_revoked_noop`, `test_ac_017_logout_all_revokes_including_caller`, `test_ac_018_logout_all_invalid_token_raises`, `test_ac_019_logout_other_keeps_caller`, `test_ac_020_logout_other_only_caller_noop`, `test_ac_021_revoke_all_returns_count`, `test_ac_022_revoke_all_excludes_session`, `test_ac_023_revoke_all_zero_sessions`, `test_edge_001_zero_sessions_empty_and_noop`, `test_edge_002_revoke_unknown_id_noop`, `test_edge_003_revoke_already_revoked_noop`, `test_edge_004_logout_all_self_lockout`, `test_edge_005_logout_other_only_caller`.
+  - 2 × `tests/acceptance/sessionmanagement/test_events.py`: `test_ac_034_session_revoked_event`, `test_ac_035_all_sessions_revoked_event`.
+- **Full-suite state (excluding the hanging T-009 test — see "Known friction" below):** `uv run pytest <the five sessionmanagement dirs> --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -q` → **42 passed, 23 failed, 2 errors** (67 of 68).
+  - **Passed (42):** T-001's 20 `tests_to_create` + 2 side-effect passes (`test_ac_040_live_read_max_listed_sessions`, `test_nfr_001_list_100_sessions_budget`) + **T-002's 17 `tests_to_create`** + 3 later-task tests now incidentally passing (their behavior depends on revocation, which T-002 implements).
+  - **Expected-still-failing (23 `FAILED` + 2 `ERROR`, all later tasks T-003…T-009):** cleanup, cap eviction, expiration, settings registration, singleton, observability, device storage at login, user-lifecycle subscriptions, concurrency, contract, property. **Zero T-002 test failures** (confirmed: none of T-002's 17 tests appears in the failure list).
+  - The 2 errors (`test_ac_041`/`test_ac_043` in `test_singleton.py`) fail at setup on `ImportError: cannot import name 'reset_session_service'` (the later module-singleton task's API, T-007, not T-002).
+- **No regressions vs. the main baseline:** `uv run pytest tests/ --ignore=<the five sessionmanagement dirs>` → **488 passed, 1 failed, 1 skipped**. The single failure is `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format` — a **flaky Hypothesis property test** (passes in isolation 3/3; the T-002 change only touched `src/backend/sessionmanagement/service.py` and does not touch filemanagement) — **not a T-002 regression**. The S4.2 (T-001) baseline was 489 passed + 1 skipped; the single skip is the pre-existing `tests/acceptance/filemanagement/test_filemanagement.py:364` symlink skip.
+
+**Ruff gate — `uv run ruff check .` (2026-09-18):**
+
+- Result: **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero errors in T-002's changed path** (`uv run ruff check src/backend/sessionmanagement/service.py` → "All checks passed!").
+
+**Known friction (later-task test, not a T-002 regression):**
+
+- **T-009 `test_ac_045_traced_methods_no_tokens_in_logs` hangs** (loguru enqueue-pipe deadlock). After T-002's implementation, this later-task test (AC-045 observability, T-009) progresses past `revoke_session` (now implemented) to `list_sessions(token="bogus")`, where a `@logged` wrapper's exit/exception log record deadlocks in loguru's `enqueue=True` rotating-file-sink pipe (`multiprocessing.connection._send_bytes`; the writer thread waits in `queues.get`). A faulthandler stack dump confirms the main thread is in loguru `_send_bytes` (called from `_decorator.py:103`), not in any T-002 method. This is a logging-infrastructure issue in a later-task test (T-009), not a T-002 logic bug; it prevents the full `green_command` from running to completion, but T-002's 17 tests (T-002's GREEN definition) all pass.
+
+**GREEN confirmed for T-002.** No commits in this step (S4.5 commits). No test modifications.
+
+**Evidence:** this section.
+
+### S4.3 (T-002) Ruff
+
+**Ruff gate — `uv run ruff check .` (2026-09-18):**
+
+- Result: **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero errors in T-002's changed path** (`src/backend/sessionmanagement/service.py`).
+- **Format gate — `uv run ruff format --check` on T-002's changed paths:** clean — `1 file already formatted` (`src/backend/sessionmanagement/service.py`). No format fixes needed.
+- No lint/format fixes were applied, so no test re-run was required (T-002's 17/17 GREEN from S4.2 stands).
+
+**Evidence:** this section. No commits in this step (S4.5 commits). No implementation changes beyond lint/format fixes on T-002's paths (none were needed).
+
+### S4.4 (T-002) Refactor (keep GREEN)
+
+**Refactor applied (1 small, focused, behavior-preserving change in `src/backend/sessionmanagement/service.py`; all other T-002 paths reviewed and left unchanged):**
+
+1. **Extracted the shared revocation pattern into a private helper `_revoke_user_sessions(user_id, exclude_session_id=None) -> int`.** The pattern "call the repository's `revoke_user_sessions` → publish `AllSessionsRevoked(user_id, excluded_session_id)` when `count > 0`" was duplicated verbatim across all three of T-002's revocation operations (`logout_all_sessions`, `logout_other_sessions`, `revoke_all_sessions`). The helper now owns the repository call and the conditional publish (REQ-018, AC-035, INV-001, EDGE-005); the three public methods delegate to it and keep only their token-resolution / return-count specifics. Behavior-preserving:
+   - `logout_all_sessions` previously called `self._repository.revoke_user_sessions(session.user_id)` (no exclude); the helper calls `revoke_user_sessions(user_id, exclude_session_id=None)` — identical per the `SessionRepository` ABC signature (`exclude_session_id: UUID | None = None`).
+   - `logout_other_sessions` / `revoke_all_sessions` pass the same `exclude_session_id` as before; `revoke_all_sessions` still returns the count.
+   - Publish semantics unchanged in all three: `AllSessionsRevoked` only when `count > 0`, same `user_id`/`excluded_session_id` values.
+   - No new tracing records: `@logged_class` skips underscore-prefixed methods (`_is_private_method`), so the helper is untraced like the other private helpers (`_resolve_token`, `_publish`, `_to_entry`).
+
+**Reviewed, no refactor warranted (recorded per done criterion 1):**
+- `_resolve_token` (T-002): concise, follows authentication's `session_info` contract (REQ-002); its inline `datetime.now(UTC)` is deliberate — `list_sessions` (T-001) keeps its own call-time snapshot for the INV-002 consistency between the token-path validity check and the valid-only filter, so `list_sessions` must NOT be routed through `_resolve_token` (that would introduce a second instant). Left unchanged.
+- `revoke_session` (T-002): already minimal — idempotent no-op for unknown/already-revoked ids (REQ-008, INV-001, EDGE-002, EDGE-003), single publish (REQ-018, AC-034). Left unchanged.
+- Docstrings of the three revocation operations: accurate, REQ/AC/EDGE-referenced; unchanged.
+
+**GREEN gate — T-002 `tests_to_create` re-run after refactor (2026-09-18):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/test_revocation.py tests/acceptance/sessionmanagement/test_events.py::test_ac_034_session_revoked_event tests/acceptance/sessionmanagement/test_events.py::test_ac_035_all_sessions_revoked_event -q`
+- Result: **17 passed** (17/17) — identical to S4.2/S4.3. No regressions.
+
+**Ruff gate — `uv run ruff check .` after refactor (2026-09-18):**
+
+- Result: **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero errors in T-002's changed path** (`uv run ruff check src/backend/sessionmanagement/service.py` → "All checks passed!").
+- **Format gate — `uv run ruff format --check` on T-002's changed paths (scoped to changed paths only):** clean — `1 file already formatted` (`src/backend/sessionmanagement/service.py`). No `--fix`/`format` was needed or applied.
+
+**No test modifications. No commits in this step (S4.5 commits).**
+
+**Evidence:** this section.

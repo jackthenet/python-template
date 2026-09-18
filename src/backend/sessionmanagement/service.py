@@ -22,7 +22,7 @@ from backend.authentication import InvalidSessionError, hash_token
 from backend.authentication.models import Session
 from backend.authentication.repositories import SessionRepository
 from backend.logging import logged_class
-from backend.sessionmanagement.events import EventPublisher, SessionsListed
+from backend.sessionmanagement.events import AllSessionsRevoked, EventPublisher, SessionRevoked, SessionsListed
 from backend.sessionmanagement.models import SessionEntry
 from backend.settings import SettingsRegistry, get_settings_registry
 
@@ -123,6 +123,80 @@ class SessionService:
         entries = [self._to_entry(row, current_session_id) for row in ordered[:limit]]
         self._publish(SessionsListed(user_id=user_id, count=len(entries)))
         return entries
+
+    def _resolve_token(self, token: str) -> Session:
+        """Resolve the token path (authentication's ``session_info`` contract, REQ-002).
+
+        Returns the session row for a valid token; an unknown, revoked, or
+        expired token raises ``InvalidSessionError`` (authentication).
+        """
+        session = self._repository.get_by_token_hash(hash_token(token))
+        if session is None or session.revoked or session.expires_at <= datetime.now(UTC):
+            raise InvalidSessionError("invalid session")
+        return session
+
+    def revoke_session(self, session_id: UUID) -> None:
+        """Revoke the session with that id (REQ-008).
+
+        An unknown or already-revoked id is an idempotent no-op — no error,
+        no event (REQ-008, INV-001, EDGE-002, EDGE-003). When a session is
+        revoked, ``SessionRevoked(user_id, session_id)`` is published
+        (REQ-018, AC-034).
+        """
+        row = self._repository.get(session_id)
+        if row is None or row.revoked:
+            return
+        self._repository.revoke(session_id)
+        self._publish(SessionRevoked(user_id=row.user_id, session_id=session_id))
+
+    def _revoke_user_sessions(self, user_id: UUID, exclude_session_id: UUID | None = None) -> int:
+        """Revoke the user's sessions and return the count (REQ-009..REQ-011).
+
+        Publishes ``AllSessionsRevoked(user_id, excluded_session_id)`` when at
+        least one session is revoked; revoking nothing publishes no event
+        (REQ-018, AC-035, INV-001, EDGE-005).
+        """
+        count = self._repository.revoke_user_sessions(user_id, exclude_session_id=exclude_session_id)
+        if count > 0:
+            self._publish(AllSessionsRevoked(user_id=user_id, excluded_session_id=exclude_session_id))
+        return count
+
+    def logout_all_sessions(self, token: str) -> None:
+        """Revoke all sessions for the token's user, including the caller's (REQ-009).
+
+        The token is resolved via the token path; an unknown, revoked, or
+        expired token raises ``InvalidSessionError`` (REQ-009, AC-018). The
+        caller's own session is revoked too (self-lockout accepted,
+        EDGE-004). ``AllSessionsRevoked(user_id,
+        excluded_session_id=None)`` is published when at least one session is
+        revoked (REQ-018, AC-035, INV-001).
+        """
+        session = self._resolve_token(token)
+        self._revoke_user_sessions(session.user_id)
+
+    def logout_other_sessions(self, token: str) -> None:
+        """Revoke all sessions for the token's user except the caller's (REQ-010).
+
+        The token is resolved via the token path; an unknown, revoked, or
+        expired token raises ``InvalidSessionError`` (REQ-010, AC-018).
+        ``AllSessionsRevoked(user_id, excluded_session_id=<the caller's
+        session id>)`` is published when at least one session is revoked
+        (REQ-018, AC-035, INV-001); revoking nothing publishes no event
+        (EDGE-005).
+        """
+        session = self._resolve_token(token)
+        self._revoke_user_sessions(session.user_id, exclude_session_id=session.id)
+
+    def revoke_all_sessions(self, user_id: UUID, exclude_session_id: UUID | None = None) -> int:
+        """Revoke all sessions for the user except the excluded one (REQ-011).
+
+        Admin; open in-process, no token. Returns the number of sessions
+        revoked; a user with zero revocable sessions yields 0 with no error
+        (REQ-011, AC-023). ``AllSessionsRevoked(user_id,
+        excluded_session_id)`` is published when at least one session is
+        revoked (REQ-018, AC-035, INV-001).
+        """
+        return self._revoke_user_sessions(user_id, exclude_session_id=exclude_session_id)
 
     # -- Mapping --------------------------------------------------------------
 
