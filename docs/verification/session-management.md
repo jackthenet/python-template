@@ -717,3 +717,110 @@ No duplication, dead code, or complexity was found; the parameter pass is alread
 **No commits in this step (S4.5 commits).** No test modifications.
 
 **Evidence:** this section.
+
+### S4.1 (T-007) Pick task + confirm RED
+
+**Date:** 2026-09-18
+
+**Task picked:** T-007 — "Settings registration: register_settings (feature-owned) with live reads" (REQ-019; AC-039, AC-040; 2 `tests_to_create`: `test_ac_039_register_settings_defaults`, `test_ac_040_live_read_max_listed_sessions`).
+
+**Readiness:** T-007 depends on T-001 only — T-001 is **VERIFIED** (committed). T-007 status in `.github/task-runner/tasks.json` is `SPECIFIED` → ready.
+
+**RED command** (the full suite with the hanging later-task T-009 test deselected — known loguru `enqueue=True` file-sink pipe deadlock, NOT a T-007 logic bug):
+
+`uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+
+**Result:** **6 failed, 59 passed, 1 deselected, 2 errors** (44.15s) — **identical** to the S4.2 (T-006) GREEN baseline (6 failed / 59 passed / 1 deselected / 2 errors).
+
+**T-007 RED confirmation:**
+- `test_ac_039_register_settings_defaults` — **FAILED (RED)** for the **correct reason**: `ImportError: cannot import name 'register_settings' from 'backend.sessionmanagement'` at the test body's import line (`tests/acceptance/sessionmanagement/test_settings.py:46`) — the feature-owned `register_settings` public API is not implemented yet (no `feature_settings.py`, not exported from `__init__.py`). Failure kind: **public-API import failure on unimplemented implementation** (the expected RED for this task). NOT a setup/fixture/ImportError-of-test-module error: the `settings_registry` fixture setup succeeded (registry + `YamlValueRepository.load` ran cleanly in captured setup), and the failure is precisely at the test's contract import of the not-yet-implemented name.
+- `test_ac_040_live_read_max_listed_sessions` — **PASSED** (confirmed by targeted re-run: 1 passed, 0.26s). This is the **expected** outcome: it passes as a side-effect of T-001's `_read_setting` live-read helper (unregistered key → hardcoded default 100), not because `register_settings` exists. It is NOT expected to be RED for T-007.
+
+**No regression — T-001…T-006 still GREEN:** all T-001/T-002/T-003/T-004/T-005/T-006 tests remain in the **59 passed**; none appears in the failure/error list.
+
+**Expected-still-failing later-task tests (T-008…T-009) unchanged** (identical set vs. the T-006 baseline — failing for their own reasons, their tasks not implemented yet):
+- T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED, `ImportError: cannot import name 'get_session_service'`) + `test_ac_041_singleton_created_once` / `test_ac_043_reset_session_service` (2 ERROR at setup, `ImportError: cannot import name 'reset_session_service'`).
+- T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected).
+
+**No implementation code written in this step; no test modifications; no commits in this step (S4.5 commits).** Only this verification record changed (uncommitted).
+
+**Evidence:** this section.
+
+### S4.2 (T-007) Implement + confirm GREEN
+
+**Date:** 2026-09-18
+
+**Task:** T-007 — "Settings registration: register_settings (feature-owned) with live reads" (REQ-019; AC-039, AC-040).
+
+**Implementation summary** (follows T-007 `implementation_steps` exactly; minimal, additive):
+
+- `src/backend/sessionmanagement/feature_settings.py` — NEW file (feature-owned settings module, per the repo's feature-owned settings pattern — see AGENTS.md "Using the Settings Feature"):
+  - `register_settings(registry)`, traced with `@logged(slow_threshold_ms=5)`: registers the 3 `SettingDefinition`s via `registry.register_feature("sessionmanagement", [...])`, each with `category="sessionmanagement"` and `min_value=1`:
+    - `sessionmanagement.max_listed_sessions` — `SettingKind.NUMBER`, default `100`
+    - `sessionmanagement.max_sessions_per_user` — `SettingKind.NUMBER`, default `5`
+    - `sessionmanagement.cleanup_batch_size` — `SettingKind.NUMBER`, default `1000`
+  - The registered defaults are the service's existing hardcoded fallbacks — imported from `service.py` (`DEFAULT_MAX_LISTED_SESSIONS` / `DEFAULT_MAX_SESSIONS_PER_USER` / `DEFAULT_CLEANUP_BATCH_SIZE`), so the registered defaults and the unregistered-key fallbacks are the same values (REQ-019).
+  - No import side effects: `register_settings` is an explicit function called at wiring time, not at import (design constraint).
+- `src/backend/sessionmanagement/__init__.py` — `register_settings` added to the public API (import + `__all__`), per the DAG's `implementation_steps` ("Export register_settings from __init__.py").
+
+**Design constraints honored:** no import side effects (explicit wiring-time call); settings are read live on each use by the service's existing `_read_setting` helper (a `set_value` affects a running service without re-construction — no service change needed, T-001's helper already does this); unregistered settings fall back to the hardcoded defaults (service `_read_setting` fallbacks); `authentication.session_ttl` is reused unchanged — no duplicate TTL key (the 3 registered keys are the only session-management keys). No raw tokens/hashes in any output. No test modifications.
+
+**GREEN gate — targeted T-007 tests:** `uv run pytest tests/acceptance/sessionmanagement/test_settings.py -v` → **2 passed** (0.26s):
+- `test_ac_039_register_settings_defaults` — **PASSED** (was RED: `ImportError: cannot import name 'register_settings'`)
+- `test_ac_040_live_read_max_listed_sessions` — **PASSED** (stays passing; live read via T-001's `_read_setting`)
+
+**GREEN gate — full suite (the hanging later-task T-009 test deselected):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+- Result: **5 failed, 60 passed, 1 deselected, 2 errors** (48.17s).
+- **Pass count vs. S4.1 (T-007) RED baseline:** RED was **6 failed / 59 passed / 2 errors**; GREEN is **5 failed / 60 passed / 2 errors**. Delta is exactly **−1 failed / +1 passed = T-007's `test_ac_039_register_settings_defaults`** (RED → GREEN). Pass count 60 ≥ RED baseline 59. No previously-passing test now fails.
+
+**T-001…T-006 still GREEN (no regression):** all T-001/T-002/T-003/T-004/T-005/T-006 tests remain in the **60 passed**; none appears in the failure list. No previously-passing test now fails.
+
+**The 5 expected-still-failing later-task tests (T-008…T-009) are STILL failing for their OWN reasons** (their tasks are not implemented yet) — **unchanged vs. the RED baseline** (identical set, minus T-007's `test_ac_039` which is now GREEN):
+- T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED, `ImportError: cannot import name 'get_session_service'`) + `test_ac_041_singleton_created_once` / `test_ac_043_reset_session_service` (2 ERROR at setup, `ImportError: cannot import name 'reset_session_service'`).
+- T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected).
+
+**Ruff gate:** `uv run ruff check .` → **6 errors, all pre-existing PLR0917** in other `src/backend/` files (`authentication/service.py:86`, `filemanagement/errors.py:63`, `filemanagement/service.py:284`, `logging/_decorator.py:71` + `:109`, `mail/transport.py:44`) — **none** in T-007's changed paths. `uv run ruff check src/backend/sessionmanagement/` → **All checks passed!**; `uv run ruff format --check` on both changed files → already formatted. **Zero NEW ruff errors in T-007's changed paths.** Pre-existing PLR0917 noted, not fixed (out of scope for S4.2).
+
+**No commits in this step (S4.5 commits).** No test modifications. GREEN confirmed for T-007.
+
+**Evidence:** this section.
+
+### S4.3 (T-007) Ruff
+
+**Date:** 2026-09-18
+
+**Task:** T-007 — Ruff gate on T-007's changed paths (NEW `src/backend/sessionmanagement/feature_settings.py`; `src/backend/sessionmanagement/__init__.py`).
+
+**Ruff gate — changed paths:** `uv run ruff check src/backend/sessionmanagement/feature_settings.py src/backend/sessionmanagement/__init__.py` → **All checks passed!** (exit 0). **Zero errors in T-007's changed paths.**
+
+**Ruff gate — whole repo:** `uv run ruff check .` → **6 errors, all pre-existing PLR0917** in other `src/backend/` files (`authentication/service.py:86`, `filemanagement/errors.py:63`, `filemanagement/service.py:284`, `logging/_decorator.py:71`, `logging/_decorator.py:109`, `mail/transport.py:44`) — **none** in T-007's paths. Identical set to the S4.2 (T-007) run. **No NEW errors introduced by T-007.**
+
+**Gate result: PASS** — zero new lint errors in T-007's changed paths. Pre-existing PLR0917 noted, not fixed (out of scope for S4.3; a repo-wide lint fix is a separate, explicit step).
+
+**No commits in this step (S4.5 commits).** No test or implementation modifications.
+
+**Evidence:** this section.
+
+### S4.4 (T-007) Refactor (keep GREEN)
+
+**Date:** 2026-09-18
+
+**Task:** T-007 — Refactor (improve code structure WITHOUT changing observable behavior; keep GREEN).
+
+**Refactor decision: NO refactor made.** The T-007 implementation (`src/backend/sessionmanagement/feature_settings.py`; `src/backend/sessionmanagement/__init__.py` export) is already clean, minimal, and consistent with the established codebase pattern — no worthwhile, behavior-preserving refactor identified:
+
+- **Codebase consistency (decisive):** the implementation follows exactly the pattern of the other six `feature_settings.py` files in the repo (mail, eventbus, logging, authentication, usermanagement, filemanagement): one explicit `SettingDefinition` per setting, `@logged(slow_threshold_ms=5)`, local imports inside the function (`from backend.settings import SettingDefinition, SettingKind`), `SettingsRegistry` under `TYPE_CHECKING`, module docstring stating the design (no import side effects, live reads, hardcoded fallbacks, no duplicate TTL key). Introducing a loop/comprehension to collapse the shared parameters (`kind=SettingKind.NUMBER`, `min_value=1`, `category="sessionmanagement"`) would *deviate* from the established convention (the mail feature spells out its 8 settings the same way) — a consistency regression, not an improvement.
+- **Duplication:** only the shared parameters across the 3 definitions repeat; per the convention above, this is intentional, not accidental.
+- **Complexity / naming / boundaries:** no issues — single function, single responsibility, defaults imported from `service.py` (single source of truth), no import side effects, public API export only.
+
+**Observable behavior:** unchanged — no file was modified in this step (zero diff vs. the S4.3 (T-007) state). REQ-019 / AC-039 / AC-040 behavior identical.
+
+**GREEN re-run (closing confirmation, no changes made):** `uv run pytest tests/acceptance/sessionmanagement/test_settings.py -v -k "test_ac_039_register_settings_defaults or test_ac_040_live_read_max_listed_sessions"` → **2 passed in 0.33s** (`test_ac_039_register_settings_defaults` PASSED, `test_ac_040_live_read_max_listed_sessions` PASSED). GREEN maintained.
+
+**Ruff:** n/a for this step (no changes made); S4.3 (T-007) already confirmed `uv run ruff check src/backend/sessionmanagement/` → **All checks passed!** — still valid since the tree is unchanged.
+
+**No commits in this step (S4.5 commits).** No test or implementation modifications.
+
+**Evidence:** this section.
