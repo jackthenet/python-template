@@ -32,6 +32,7 @@ from backend.sessionmanagement.events import (
 )
 from backend.sessionmanagement.models import SessionEntry
 from backend.settings import SettingsRegistry, get_settings_registry
+from backend.usermanagement import UserDeactivated, UserDeleted, UserEvent, UserPasswordChanged
 
 # Hardcoded fallbacks for the live settings reads (REQ-019): unregistered
 # keys fall back to these defaults.
@@ -67,6 +68,16 @@ class SessionService:
             # is not modified. A ``None`` publisher means no subscriptions
             # (REQ-018, AC-038).
             get_event_bus().subscribe(LoginSucceeded, self._on_login_succeeded)
+            # Revocation on user lifecycle (REQ-015, ADR-064): the handler is
+            # subscribed to the injected event bus, where user-management
+            # publishes its lifecycle events — user-management is not
+            # modified. A publisher without ``subscribe`` (a bare collector)
+            # gets no subscriptions; a ``None`` publisher means no
+            # subscriptions (REQ-018, AC-038).
+            if hasattr(event_bus, "subscribe"):
+                event_bus.subscribe(UserPasswordChanged, self._on_user_lifecycle)
+                event_bus.subscribe(UserDeactivated, self._on_user_lifecycle)
+                event_bus.subscribe(UserDeleted, self._on_user_lifecycle)
 
     # -- Wiring helpers -------------------------------------------------------
 
@@ -118,6 +129,18 @@ class SessionService:
         # sessions are the last ``excess`` entries (oldest-first eviction).
         for row in valid[-excess:]:
             self._repository.revoke(row.id)
+
+    def _on_user_lifecycle(self, event: UserEvent) -> None:
+        """Revocation handler on user-management lifecycle events (REQ-015, ADR-064).
+
+        On ``UserPasswordChanged``, ``UserDeactivated``, or ``UserDeleted``,
+        revoke all sessions for the affected user. Idempotent for re-runs —
+        revoking nothing changes no state and publishes no event (INV-001,
+        ADR-064). The ``UserPasswordChanged`` subscription is idempotent with
+        authentication's reset-completion revocation (authentication REQ-012),
+        which remains unchanged.
+        """
+        self._revoke_user_sessions(event.user_id)
 
     # -- Operations -----------------------------------------------------------
 

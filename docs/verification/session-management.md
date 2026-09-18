@@ -496,3 +496,112 @@ T-004's implementation is the module constant `DEFAULT_MAX_SESSIONS_PER_USER = 5
 **No test modifications. No commits in this step (S4.5 commits). No implementation changes.**
 
 **Evidence:** this section.
+
+### S4.1 (T-005) Pick task + confirm RED
+
+**Date:** 2026-09-18
+
+**Task picked:** T-005 — "Revocation on user lifecycle: subscriptions to UserPasswordChanged, UserDeactivated, UserDeleted" (REQ-015; AC-029, AC-030, AC-031; 3 `tests_to_create`).
+
+**Ready confirmed:** T-005's only dependency is **T-001 (VERIFIED)** — ready. No other task precedes it in the DAG.
+
+**RED gate — T-005 `red_command` (full suite; the hanging later-task T-009 test deselected):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+- Result: **11 failed, 54 passed, 1 deselected, 2 errors** (67 of 68) — **identical counts to the S4.2 (T-004) GREEN baseline** (11 failed / 54 passed / 1 deselected / 2 errors). No previously-passing test now fails.
+
+**T-005's 3 `tests_to_create` — all FAIL (RED) for the CORRECT reason (behavior, not setup/fixture/import):**
+
+| Test | Status | Failure kind |
+|------|--------|--------------|
+| `test_ac_029_password_change_revokes_all` | FAILED | Behavior assertion at the `wait_for` "Then" clause: `AssertionError: UserPasswordChanged did not revoke all sessions` — the Given (user + 3 valid sessions created, list verified) and When (`change_password` succeeded) both ran; only the expected revocation is absent because the user-lifecycle revocation subscription is **not implemented yet**. |
+| `test_ac_030_deactivation_revokes_all` | FAILED | Behavior assertion at the `wait_for` "Then" clause: `AssertionError: UserDeactivated did not revoke all sessions` — same reason (deactivation ran; revocation subscription not implemented). |
+| `test_ac_031_deletion_revokes_all` | FAILED | Behavior assertion at the `wait_for` "Then" clause: `AssertionError: UserDeleted did not revoke all sessions` — same reason (deletion ran; revocation subscription not implemented). |
+
+- Targeted re-run confirming the failure kind: `uv run pytest tests/integration/sessionmanagement/test_user_lifecycle.py -v --tb=short` → **3 failed** (16.24s); each traceback's only failing line is the `wait_for(...)` assertion (the "Then" clause) — no setup/fixture/ImportError. This is the expected RED for T-005 (the revocation subscription is the unimplemented behavior).
+
+**T-001…T-004 still GREEN (no regression):** the **54 passed** are unchanged from the S4.2 (T-004) GREEN baseline; no T-001/T-002/T-003/T-004 test appears in the failure list. No previously-passing test now fails.
+
+**The 13 expected-still-failing later-task tests (T-005…T-009) are STILL failing for their OWN reasons** (their tasks are not implemented yet) — **not newly broken by T-005**. The 11 `FAILED` + 2 `ERROR` in this run are exactly the baseline's 13 later-task tests:
+  - T-005 user-lifecycle subscriptions: `test_ac_029_password_change_revokes_all`, `test_ac_030_deactivation_revokes_all`, `test_ac_031_deletion_revokes_all` (3 FAILED) — the picked task, RED as expected.
+  - T-006 device storage at login: `test_ac_008_login_stores_device_fields`, `test_ac_032_passkey_login_stores_method` (2 FAILED) — unchanged.
+  - T-007 settings registration: `test_ac_039_register_settings_defaults` (1 FAILED) — unchanged.
+  - T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED) + `test_ac_041`/`test_ac_043` (2 ERROR at setup on `ImportError: cannot import name 'reset_session_service'`) — unchanged.
+  - T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected) — unchanged.
+
+**RED confirmed for T-005.** No implementation code written in this step; no commits in this step (S4.5 commits). No test modifications.
+
+**Evidence:** this section.
+
+### S4.2 (T-005) Implement + confirm GREEN
+
+- **Date:** 2026-09-18 19:57
+- **Objective:** Implement T-005 (user-lifecycle revocation subscriptions) to turn T-005's 3 `tests_to_create` GREEN, then confirm the full GREEN gate.
+
+**Implementation summary** (file changed: `src/backend/sessionmanagement/service.py` only):
+
+1. **Imports:** added `from backend.usermanagement import UserDeactivated, UserDeleted, UserEvent, UserPasswordChanged` (the user-management lifecycle events; `UserEvent` is their common base, used for the handler's parameter type).
+2. **Subscriptions (in `SessionService.__init__`, inside the existing `if event_bus is not None:` block):** registered one handler for each of `UserPasswordChanged`, `UserDeactivated`, and `UserDeleted` on the **injected** event bus — the bus where user-management publishes its lifecycle events (user-management is not modified, REQ-015, ADR-064). Guarded by `if hasattr(event_bus, "subscribe"):` so a publisher without subscribe capability (a bare `EventCollector`) gets no subscriptions; a `None` publisher means no subscriptions (REQ-018, REQ-020, AC-038). This is consistent with the T-004 `LoginSucceeded` subscription pattern (a `None`-bus no-subscription guarantee), with the subscription target being the injected bus because that is where the T-005 integration tests' `UserManager` publishes.
+3. **Handler:** added `_on_user_lifecycle(self, event: UserEvent) -> None` — on any of the three events it calls the existing `_revoke_user_sessions(event.user_id)` helper, which revokes **all** of the user's sessions via the repository's `revoke_user_sessions` (no exclusion — the newly-issued session is NOT kept; this is a full revocation, unlike cap-eviction) and publishes `AllSessionsRevoked(user_id, excluded_session_id=None)` **only when at least one session is revoked**. Re-runs that revoke nothing change no state and publish no event (INV-001, ADR-064). The `UserPasswordChanged` subscription is idempotent with authentication's reset-completion revocation (authentication REQ-012), which remains unchanged.
+
+No other file changed. No test modified. No new behavior beyond REQ-015/AC-029..AC-031.
+
+**Broader-suite command** (hanging T-009 test deselected, per the known environment issue):
+
+```
+uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v
+```
+
+**Result counts:** **8 failed, 57 passed, 1 deselected, 2 errors** (47.70s).
+
+- **RED baseline (S4.1 (T-005)):** 11 failed, 54 passed, 1 deselected, 2 errors.
+- **Delta:** exactly **−3 failed / +3 passed** — T-005's 3 tests moved from failing to passing. Pass count 57 ≥ RED baseline 54.
+
+**T-005's 3 tests PASS** (targeted re-run `uv run pytest tests/integration/sessionmanagement/test_user_lifecycle.py -v` → **3 passed**, 1.17s):
+
+| Test | Status |
+|------|--------|
+| `test_ac_029_password_change_revokes_all` | PASSED |
+| `test_ac_030_deactivation_revokes_all` | PASSED |
+| `test_ac_031_deletion_revokes_all` | PASSED |
+
+**T-001…T-004 still GREEN (no regression):** the 57 passed include all T-001/T-002/T-003/T-004 tests; none of `test_list_sessions.py`, `test_store_reuse.py`, `test_revocation.py`, `test_cleanup.py`, `test_cap_eviction.py` (nor `test_user_lifecycle.py`) appears in the failure/error list. No previously-passing test now fails.
+
+**The 10 expected-still-failing later-task tests (T-006…T-009) are STILL failing for their OWN reasons** (their tasks are not implemented yet) — **not newly broken by T-005**. The 8 `FAILED` + 2 `ERROR` in this run are exactly the later-task tests:
+  - T-006 device storage at login: `test_ac_008_login_stores_device_fields`, `test_ac_032_passkey_login_stores_method` (2 FAILED) — unchanged.
+  - T-007 settings registration: `test_ac_039_register_settings_defaults` (1 FAILED) — unchanged.
+  - T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED) + `test_ac_041`/`test_ac_043` (2 ERROR at setup on `ImportError: cannot import name 'reset_session_service'`) — unchanged.
+  - T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected) — unchanged.
+
+**Ruff:** `uv run ruff check .` → 6 errors, all **pre-existing PLR0917** in other files (`src/backend/authentication/service.py`, `src/backend/filemanagement/errors.py`, `src/backend/filemanagement/service.py`, `src/backend/logging/_decorator.py`, `src/backend/mail/transport.py`). **Zero in T-005's changed path** — `uv run ruff check src/backend/sessionmanagement/` → "All checks passed!".
+
+**No commits in this step (S4.5 commits).** No test modifications.
+
+**Evidence:** this section.
+
+### S4.3 (T-005) Ruff
+
+**Ruff gate (S4.3 (T-005)) — T-005's changed path (2026-09-18):**
+
+- Command: `uv run ruff check src/backend/sessionmanagement/service.py`
+- Result: **All checks passed! — ZERO errors in T-005's changed path.**
+- Whole-repo confirmation: `uv run ruff check .` → **6 errors** — exactly the 6 pre-existing PLR0917 baseline errors in other `src/backend/` files (`src/backend/authentication/service.py:86`, `src/backend/filemanagement/errors.py:63`, `src/backend/filemanagement/service.py:284`, `src/backend/logging/_decorator.py:71`, `src/backend/logging/_decorator.py:109`, `src/backend/mail/transport.py:44`). **Zero NEW errors introduced by T-005.**
+- No test or implementation modifications in this step (S4.3 only runs ruff and records). No commits (S4.5 commits).
+
+**Evidence:** this section.
+
+### S4.4 (T-005) Refactor (keep GREEN)
+
+**Refactor decision (S4.4 (T-005)) — 2026-09-18:**
+
+- **No refactor was made.** The T-005 implementation was reviewed for behavior-preserving structure improvements (duplication, complexity, naming, boundaries) and is already clean and minimal:
+  - `_on_user_lifecycle` is a one-line pass-through to the **existing** `_revoke_user_sessions` helper — no duplication introduced, no helper worth extracting (a helper would add indirection without gain).
+  - The subscription block is explicit (3 user-management event types → the one handler), with an accurate REQ/ADR-cited comment consistent with the file's style; a loop over a tuple of event types would reduce explicitness, not clarity.
+  - The `hasattr(event_bus, "subscribe")` guard is required by the spec (a publisher without `subscribe` — a bare collector — must get no subscriptions without raising); simplifying it would change observable behavior.
+  - The import line is single and correctly placed.
+- **Observable behavior unchanged:** no code changes were made, so the specified behavior (REQ-015, AC-029, AC-030, AC-031, INV-001) is trivially identical.
+- **Sanity GREEN re-run (no changes made, confirmation only):** `uv run pytest tests/ -k "test_ac_029_password_change_revokes_all or test_ac_030_deactivation_revokes_all or test_ac_031_deletion_revokes_all" -v` → **3 passed** (all T-005 tests still GREEN).
+- **Ruff:** `n/a` (no changes made; S4.3 (T-005) already confirmed T-005's path clean).
+- **No commits in this step (S4.5 commits).** No test modifications.
+
+**Evidence:** this section.
