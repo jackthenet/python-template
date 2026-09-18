@@ -824,3 +824,72 @@ No duplication, dead code, or complexity was found; the parameter pass is alread
 **No commits in this step (S4.5 commits).** No test or implementation modifications.
 
 **Evidence:** this section.
+
+### S4.1 (T-008) Pick task + confirm RED
+
+**Date:** 2026-09-18
+
+**Task picked:** T-008 — "Module singleton: get_session_service + reset_session_service" (REQ-020; AC-041, AC-042, AC-043; 3 `tests_to_create`: `test_ac_041_singleton_created_once`, `test_ac_042_singleton_first_call_without_repository_value_error`, `test_ac_043_reset_session_service`).
+
+**Readiness:** T-008 depends on T-001 only — T-001 is **VERIFIED** (committed). T-008 status in `.github/task-runner/tasks.json` is `SPECIFIED` → ready.
+
+**RED commands:**
+
+1. Task `red_command` (singleton acceptance tests): `uv run pytest tests/acceptance/sessionmanagement/test_singleton.py -v` → **2 errors in 0.21s** (both at setup, see below).
+2. AC-042 unit test (per spec §test-strategy, AC-042's test lives in `tests/unit/sessionmanagement/test_validation.py`): `uv run pytest tests/unit/sessionmanagement/test_validation.py::test_ac_042_singleton_first_call_without_repository_value_error -v` → **1 failed in 0.22s**.
+3. Regression baseline — session-management scope (the hanging later-task T-009 test deselected — known loguru `enqueue=True` file-sink pipe deadlock, NOT a T-008 logic bug): `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v` → **5 failed, 60 passed, 1 deselected, 2 errors in 38.50s** — **identical** to the S4.2 (T-007) GREEN baseline (5 failed / 60 passed / 1 deselected / 2 errors).
+4. Whole-repo full suite (same deselect): `uv run pytest tests/ -v --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` → **5 failed, 549 passed, 1 skipped, 1 deselected, 2 errors in 141.53s** — every failure/error is a session-management test; all other features (file-management, settings, event-bus, logging, user-management, authentication, mail-service, …) pass.
+
+**T-008 RED confirmation (all 3 tests RED for the correct reason — unimplemented module singleton):**
+- `test_ac_041_singleton_created_once` — **ERROR (RED)** at setup (autouse `_isolate_singleton` fixture): `ImportError: cannot import name 'reset_session_service' from 'backend.sessionmanagement'` (`tests/acceptance/sessionmanagement/test_singleton.py:23`). Correct reason: the module singleton is not implemented (no `get_session_service` / `reset_session_service` in `src/backend/sessionmanagement/`, not exported from `__init__.py`). Setup/import failure on an unimplemented feature — the expected RED for this task.
+- `test_ac_042_singleton_first_call_without_repository_value_error` — **FAILED (RED)**: `ImportError: cannot import name 'get_session_service' from 'backend.sessionmanagement'` (`tests/unit/sessionmanagement/test_validation.py:56`). Correct reason: the singleton accessor is not implemented.
+- `test_ac_043_reset_session_service` — **ERROR (RED)** at setup (autouse `_isolate_singleton` fixture): `ImportError: cannot import name 'reset_session_service' from 'backend.sessionmanagement'` (`tests/acceptance/sessionmanagement/test_singleton.py:23`). Correct reason: the singleton reset is not implemented.
+
+**No regression — T-001…T-007 still GREEN:** all T-001…T-007 tests remain in the **60 passed** (session-management scope); none appears in the failure/error list. Identical failure/error set vs. the S4.2 (T-007) GREEN baseline.
+
+**Expected-still-failing later-task tests (T-009) unchanged** (identical set vs. the T-007 baseline — failing for their own reasons, T-009 not implemented yet): `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected). T-008's own 3 tests (1 FAILED + 2 ERROR) are the remaining expected-RED set.
+
+**No implementation code written in this step; no test modifications; no commits in this step (S4.5 commits).** Only this verification record changed (uncommitted).
+
+**Evidence:** this section.
+
+### S4.2 (T-008) Implement + confirm GREEN
+
+**Date:** 2026-09-18
+
+**Task:** T-008 — "Module singleton: get_session_service + reset_session_service" (REQ-020; AC-041, AC-042, AC-043).
+
+**Implementation summary** (follows T-008 `implementation_steps` exactly; the module singleton is the application access point, REQ-020/ADR-065):
+
+- `src/backend/sessionmanagement/service.py` — two module-level functions added at the tail of the module (after the `SessionService` class), plus a single-element mutable holder (house pattern, cf. `settings._registry`, `eventbus._default_bus`):
+  - `_session_service: list[SessionService | None] = [None]` — the singleton holder.
+  - `get_session_service(repository=None, event_bus=None, settings_registry=None) -> SessionService`, traced with `@logged(slow_threshold_ms=5)`: the **first** call creates the singleton and **requires** a `repository` (`ValueError` without one — AC-042); **subsequent** calls (with or without arguments) return the existing instance (AC-041). The created instance is `SessionService(repository, event_bus, settings_registry)` — the same construction the service already uses (ADR-065: the singleton is application-only; tests construct `SessionService` directly with fakes, no singleton involvement).
+  - `reset_session_service() -> None`, traced with `@logged(slow_threshold_ms=5)`: clears the singleton (`_session_service[0] = None`) for test isolation (AC-043).
+- `src/backend/sessionmanagement/__init__.py` — `get_session_service` and `reset_session_service` added to the public API (import + `__all__`), per the DAG's `implementation_steps` ("Export get_session_service and reset_session_service from __init__.py").
+
+**Design constraints honored:** the module singleton is the application access point (REQ-020/ADR-065); the first call requires a repository — `ValueError` without one (AC-042); subsequent calls (with or without arguments) return the existing instance (AC-041); `reset_session_service()` clears the singleton for test isolation (AC-043); tests construct `SessionService` directly with fakes (no singleton involvement) — the singleton is application-only (ADR-065). No raw tokens/hashes in any output. No test modifications.
+
+**GREEN gate — targeted T-008 tests:** `uv run pytest tests/acceptance/sessionmanagement/test_singleton.py tests/unit/sessionmanagement/test_validation.py -v` → **7 passed** (0.59s). All 3 T-008 tests **PASSED**:
+- `test_ac_041_singleton_created_once` — **PASSED** (was ERROR: `ImportError: cannot import name 'reset_session_service'`)
+- `test_ac_042_singleton_first_call_without_repository_value_error` — **PASSED** (was FAILED: `ImportError: cannot import name 'get_session_service'`)
+- `test_ac_043_reset_session_service` — **PASSED** (was ERROR: `ImportError: cannot import name 'reset_session_service'`)
+
+**GREEN gate — full-suite regression baseline (the hanging later-task T-009 test deselected — known loguru `enqueue=True` file-sink pipe deadlock, NOT a T-008 logic bug):**
+
+- Command: `uv run pytest tests/ -v --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs`
+- Result: **3 failed, 553 passed, 1 skipped, 1 deselected** (160.46s).
+- **No regression.** The **3 failed** are **exactly T-009's expected-RED tests** (T-009 is `SPECIFIED`, not implemented yet — failing for their own reasons, not T-008's):
+  - `tests/acceptance/sessionmanagement/test_events.py::test_ac_038_none_publisher_no_events_no_subscriptions`
+  - `tests/acceptance/sessionmanagement/test_observability.py::test_ac_044_no_tokens_in_outputs`
+  - `tests/acceptance/sessionmanagement/test_observability.py::test_nfr_004_traced_service_publishes_events`
+- Every other test passes (553 passed / 1 skipped — the 1 skipped is the pre-existing `symlinks not available on this host` skip in `tests/acceptance/filemanagement/test_filemanagement.py:364`). No previously-passing test now fails.
+
+**T-001…T-007 still GREEN (no regression):** all T-001…T-007 tests remain in the **553 passed**; none appears in the failure list.
+
+**Ruff gate:** `uv run ruff check src/backend/sessionmanagement/` → **All checks passed!** Zero ruff errors in T-008's changed paths.
+
+**No commits in this step (S4.5 commits).** No test modifications. GREEN confirmed for T-008.
+
+**Evidence:** this section.
+
+**S4.4 (T-008) Refactor:** No refactor warranted — the T-008 implementation (module singleton holder `list[SessionService | None]`, `get_session_service`, `reset_session_service`, and the `__init__.py` exports) is already clean, minimal, and consistent with the codebase house pattern (one-element list holder, cf. `settings._registry` / `eventbus._default_bus`), the tracing policy (public module-level functions traced with `@logged(slow_threshold_ms=5)`), and the file's naming/docstring conventions. No unnecessary complexity, redundant code, or inconsistent naming found. GREEN re-confirmed 3/3 (`uv run pytest tests/acceptance/sessionmanagement/test_singleton.py tests/unit/sessionmanagement/test_validation.py -v` → 7 passed, including T-008's 3 singleton tests). No files changed.

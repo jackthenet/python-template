@@ -22,7 +22,7 @@ from backend.authentication import InvalidSessionError, LoginSucceeded, hash_tok
 from backend.authentication.models import Session
 from backend.authentication.repositories import SessionRepository
 from backend.eventbus import get_event_bus
-from backend.logging import logged_class
+from backend.logging import logged, logged_class
 from backend.sessionmanagement.events import (
     AllSessionsRevoked,
     EventPublisher,
@@ -302,3 +302,37 @@ class SessionService:
             device_name=row.device_name,
             login_method=row.login_method,
         )
+
+
+# Module singleton holder (REQ-020, ADR-065): the application access point is
+# the shared singleton; tests construct SessionService directly with fakes
+# (no singleton involvement). A single-element list is the mutable holder
+# (house pattern, cf. settings._registry, eventbus._default_bus).
+_session_service: list[SessionService | None] = [None]
+
+
+@logged(slow_threshold_ms=5)
+def get_session_service(
+    repository: SessionRepository | None = None,
+    event_bus: EventPublisher | None = None,
+    settings_registry: SettingsRegistry | None = None,
+) -> SessionService:
+    """Return the shared SessionService (module singleton, REQ-020, ADR-065).
+
+    The first call creates the singleton and requires a ``repository``
+    (``ValueError`` without one) (AC-042); subsequent calls (with or without
+    arguments) return the existing instance (AC-041).
+    """
+    service = _session_service[0]
+    if service is None:
+        if repository is None:
+            raise ValueError("a repository is required to create the shared SessionService")
+        service = SessionService(repository, event_bus, settings_registry)
+        _session_service[0] = service
+    return service
+
+
+@logged(slow_threshold_ms=5)
+def reset_session_service() -> None:
+    """Reset the shared SessionService (for test isolation, REQ-020, ADR-065)."""
+    _session_service[0] = None

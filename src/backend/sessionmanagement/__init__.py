@@ -15,7 +15,7 @@ from backend.sessionmanagement.events import (
 )
 from backend.sessionmanagement.feature_settings import register_settings
 from backend.sessionmanagement.models import SessionEntry
-from backend.sessionmanagement.service import SessionService
+from backend.sessionmanagement.service import SessionService, get_session_service, reset_session_service
 
 __all__ = [
     "AllSessionsRevoked",
@@ -25,5 +25,7 @@ __all__ = [
     "SessionRevoked",
     "SessionService",
     "SessionsListed",
+    "get_session_service",
     "register_settings",
+    "reset_session_service",
 ]
