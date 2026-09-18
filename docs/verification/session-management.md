@@ -605,3 +605,115 @@ uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanageme
 - **No commits in this step (S4.5 commits).** No test modifications.
 
 **Evidence:** this section.
+
+### S4.1 (T-006) Pick task + confirm RED
+
+**Date:** 2026-09-18
+
+**Task picked:** T-006 — "Device identification at login: store device fields + login method on the issued Session row (password + passkey paths)" (REQ-016; AC-008, AC-032; 2 `tests_to_create`).
+
+**Ready confirmed:** T-006's only dependency is **T-001 (VERIFIED)** — ready. No other unverified task precedes it in the DAG (T-002/T-003/T-004/T-005 are VERIFIED and committed).
+
+**RED gate — T-006 `red_command` (full suite; the hanging later-task T-009 test deselected):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+- Result: **8 failed, 57 passed, 1 deselected, 2 errors** (67 of 68) — **identical counts to the S4.2 (T-005) GREEN baseline** (8 failed / 57 passed / 1 deselected / 2 errors). No previously-passing test now fails.
+
+**T-006's 2 `tests_to_create` — both FAIL (RED) for the CORRECT reason (behavior, not setup/fixture/import):**
+
+| Test | Status | Failure kind |
+|------|--------|--------------|
+| `test_ac_008_login_stores_device_fields` | FAILED | Behavior assertion at the "Then" clause: `AssertionError: assert None == 'Mozilla/5.0 (X11; Linux x86_64) test-agent/1.0'` (`entry.user_agent` is `None`) — the Given (auth service + session service built) and When (password `login` succeeded, a session row was issued, `list_sessions` returned 1 entry with `is_current=True`) all ran; only the expected device-field storage is absent because device identification at login is **not implemented yet** (the Session row's `user_agent`/`ip`/`device_name` remain `None`). |
+| `test_ac_032_passkey_login_stores_method` | FAILED | Behavior assertion at the "Then" clause: `AssertionError: assert None == 'passkey'` (`entry.login_method` is `None`) — the Given (user + passkey registered + `begin_passkey_login`) and When (`complete_passkey_login` succeeded, a session row was issued) all ran; only the expected login-method storage is absent because the passkey path does not yet store `login_method='passkey'`. |
+
+- Targeted re-run confirming the failure kind: `uv run pytest "tests/integration/sessionmanagement/test_device_fields.py::test_ac_008_login_stores_device_fields" "tests/integration/sessionmanagement/test_device_fields.py::test_ac_032_passkey_login_stores_method" -v` → **2 failed** (1.15s); each traceback's only failing line is the "Then"-clause assertion on the issued `SessionEntry` (all device fields `None`) — no setup/fixture/ImportError. This is the expected RED for T-006 (storing device fields + login method at login is the unimplemented behavior).
+
+**T-001…T-005 still GREEN (no regression):** the **57 passed** are unchanged from the S4.2 (T-005) GREEN baseline; no T-001/T-002/T-003/T-004/T-005 test appears in the failure list. No previously-passing test now fails.
+
+**The 8 expected-still-failing later-task tests (T-007…T-009) are STILL failing for their OWN reasons** (their tasks are not implemented yet) — **not newly broken by T-006**. The 8 `FAILED` + 2 `ERROR` in this run are exactly the baseline's 10 later-task tests (the 2 T-006 tests are the picked task, RED as expected):
+  - T-006 device storage at login: `test_ac_008_login_stores_device_fields`, `test_ac_032_passkey_login_stores_method` (2 FAILED) — the picked task, RED as expected.
+  - T-007 settings registration: `test_ac_039_register_settings_defaults` (1 FAILED) — unchanged.
+  - T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED) + `test_ac_041_singleton_created_once`/`test_ac_043_reset_session_service` (2 ERROR at setup on `ImportError: cannot import name 'reset_session_service'`) — unchanged.
+  - T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected) — unchanged.
+
+**RED confirmed for T-006.** No implementation code written in this step; no commits in this step (S4.5 commits). No test modifications.
+
+**Evidence:** this section.
+
+### S4.2 (T-006) Implement + confirm GREEN
+
+**Date:** 2026-09-18
+
+**Task:** T-006 — "Device identification at login: store device fields + login method on the issued Session row (password + passkey paths)" (REQ-016; AC-008, AC-032).
+
+**Implementation summary** (follows T-006 `implementation_steps` exactly; minimal, additive, backward-compatible):
+
+- `src/backend/authentication/service.py` — the only file changed:
+  - `_issue_session(user, method, user_agent=None, ip=None, device_name=None)`: now accepts optional `user_agent`/`ip`/`device_name` parameters and stores them on the issued `Session` row together with `login_method=method` (so `login_method` is `"password"` for the password path and `"passkey"` for the passkey path). Omitted device fields are stored as `None`; pre-feature rows remain `NULL` (REQ-016, ADR-062).
+  - `login` (password path): now passes the device fields from the `LoginRequest` (`request.user_agent`/`request.ip`/`request.device_name`) to `_issue_session` (REQ-016, ADR-062).
+  - `complete_passkey_login` (passkey path): unchanged — it already calls `_issue_session(user, method="passkey")`; with the new signature the device fields default to `None` and `login_method` is stored as `"passkey"` (REQ-016, AC-032).
+
+**Design constraints honored:** device identification captured at login (login path stores provided fields + method); additive/backward-compatible per authentication NFR-003 (all existing behavior remains valid); omitted device fields → `None` stored, existing rows remain `NULL`; `login_method` distinguishes password and passkey sessions (AC-008, AC-032, ADR-062). No raw tokens/hashes in outputs. No test modifications.
+
+**GREEN gate — targeted T-006 tests:** `uv run pytest tests/integration/sessionmanagement/test_device_fields.py -v` → **2 passed** (0.92s):
+- `test_ac_008_login_stores_device_fields` — **PASSED**
+- `test_ac_032_passkey_login_stores_method` — **PASSED**
+
+**GREEN gate — full suite (the hanging later-task T-009 test deselected):**
+
+- Command: `uv run pytest tests/acceptance/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+- Result: **6 failed, 59 passed, 1 deselected, 2 errors** (45.30s).
+- **Pass count vs. S4.1 (T-006) RED baseline:** RED was **8 failed / 57 passed / 2 errors**; GREEN is **6 failed / 59 passed / 2 errors**. Delta is exactly **−2 failed / +2 passed = T-006's 2 `tests_to_create`** (RED → GREEN). Pass count 59 ≥ RED baseline 57. No previously-passing test now fails.
+
+**T-001…T-005 still GREEN (no regression):** all T-001/T-002/T-003/T-004/T-005 tests remain in the **59 passed**; none appears in the failure list. No previously-passing test now fails.
+
+**The 6 expected-still-failing later-task tests (T-007…T-009) are STILL failing for their OWN reasons** (their tasks are not implemented yet) — **unchanged vs. the RED baseline** (identical set, minus T-006's 2 which are now GREEN):
+- T-007 settings registration: `test_ac_039_register_settings_defaults` (1 FAILED) — unchanged.
+- T-008 module singleton: `test_ac_042_singleton_first_call_without_repository_value_error` (1 FAILED) + `test_ac_041_singleton_created_once`/`test_ac_043_reset_session_service` (2 ERROR at setup on `ImportError: cannot import name 'reset_session_service'`) — unchanged.
+- T-009 cross-cutting: `test_ac_038_none_publisher_no_events_no_subscriptions`, `test_ac_044_no_tokens_in_outputs`, `test_nfr_004_traced_service_publishes_events`, `test_nfr_003_public_api_contract` (4 FAILED) + `test_ac_045_traced_methods_no_tokens_in_logs` (HANG — deselected) — unchanged.
+
+**Ruff gate:** `uv run ruff check .` → **6 errors, all pre-existing PLR0917** (5 in other `src/backend/` files: `filemanagement/errors.py`, `filemanagement/service.py`, `logging/_decorator.py` ×2, `mail/transport.py`; 1 in `src/backend/authentication/service.py:86` = the pre-existing `AuthService.__init__` (15 positional args), which is **not** in T-006's changed region — confirmed pre-existing by re-running ruff on the committed-HEAD baseline of `service.py`, which also reports exactly that 1 PLR0917 at line 86). **Zero NEW ruff errors in T-006's changed paths.** Pre-existing PLR0917 noted, not fixed (out of scope for S4.2).
+
+**No commits in this step (S4.5 commits).** No test modifications. GREEN confirmed for T-006.
+
+**Evidence:** this section.
+
+### S4.3 (T-006) Ruff
+
+**Date:** 2026-09-18
+
+**Task:** T-006 — Ruff gate on T-006's changed paths (only changed path: `src/backend/authentication/service.py`).
+
+**Ruff gate — changed path:** `uv run ruff check src/backend/authentication/service.py` → **1 error**, the **pre-existing PLR0917 at line 86** (`AuthService.__init__`, 15 positional args) — **not** in T-006's changed region (`_issue_session` device-field/login-method storage). **Zero NEW errors in T-006's changed region.**
+
+**Ruff gate — whole repo:** `uv run ruff check .` → **6 errors, all pre-existing PLR0917** (5 in other files: `filemanagement/errors.py:63`, `filemanagement/service.py:284`, `logging/_decorator.py:71`, `logging/_decorator.py:109`, `mail/transport.py:44`; 1 in `src/backend/authentication/service.py:86`). **No NEW errors introduced by T-006.**
+
+**Gate result: PASS** — zero new lint errors in T-006's changed paths. Pre-existing PLR0917 noted, not fixed (out of scope for S4.3; a repo-wide lint fix is a separate, explicit step).
+
+**No commits in this step (S4.5 commits).** No test or implementation modifications.
+
+**Evidence:** this section.
+
+### S4.4 (T-006) Refactor (keep GREEN)
+
+**Date:** 2026-09-18
+
+**Task:** T-006 — Refactor the T-006 implementation's code structure WITHOUT changing observable behavior (re-run the GREEN gate after the refactor and confirm it stays GREEN).
+
+**Refactor decision: NO refactor made — the T-006 implementation is already clean and minimal.**
+
+The T-006 changed region in `src/backend/authentication/service.py` was reviewed:
+- `_issue_session` — the signature extension is additive (3 optional params, `None` defaults), exactly per the design constraint "additive and backward-compatible per authentication NFR-003".
+- The `Session` constructor stores `user_agent`/`ip`/`device_name` + `login_method=method` with a 2-line comment documenting the *why* (REQ-016, ADR-062; omitted → `None`; pre-feature rows remain NULL) — it explains the design rationale, not the code.
+- `login` (password path) — explicit keyword pass of `request.user_agent`/`request.ip`/`request.device_name`; no indirection, no duplication.
+- The passkey path is unchanged (device fields default to `None`), per AC-032.
+
+No duplication, dead code, or complexity was found; the parameter pass is already the simplest form. There is no worthwhile, behavior-preserving refactor to make, so **no changes were made** (a valid DONE per the step objective).
+
+**Observable behavior unchanged:** no code was modified, so the specified behavior (REQ-016, AC-008, AC-032) is identical by construction. The S4.2 (T-006) GREEN state stands: T-006's 2 `tests_to_create` (`test_ac_008_login_stores_device_fields`, `test_ac_032_passkey_login_stores_method`) remain **2/2 PASS**, and the full-suite state (6 failed / 59 passed / 1 deselected / 2 errors — all failures/errors are later-task T-007…T-009 tests failing for their own reasons) is unchanged. No GREEN re-run was required (no changes made).
+
+**Ruff:** not re-run (no changes made). The S4.3 (T-006) result stands: zero new errors in T-006's changed region (only the pre-existing PLR0917 at line 86, outside the changed region).
+
+**No commits in this step (S4.5 commits).** No test modifications.
+
+**Evidence:** this section.
