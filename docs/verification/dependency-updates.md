@@ -238,3 +238,37 @@
 **Known/broken (out of scope, user-authorized):** the hanging pre-existing test `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` (P-20) remains broken — it hangs on `main` as well; it is deselected in the regression runs and may remain broken.
 
 **VERDICT: VERIFIED** — REFACTOR gates satisfied: full regression GREEN and identical to baseline (zero test changes beyond the two documented, zero-assertion-change categories), architecture N/A, lint clean, mypy PASS, traceability matrix unchanged, no observable behavior change.
+
+---
+
+## Phase 6 — Review report (REFACTOR)
+
+**Normative basis (REFACTOR):** baseline + scope — GREEN baseline (556 passed, 1 skipped, 0 failed; the true per-category row-sum baseline, with the user-authorized "GREEN except the marked broken tests" deviation and the 300 s run cap recorded in the Baseline section) plus the exact refactor scope (dev-group additions, `pytest-random` → `pytest-randomly` rename, `pyyaml` → `ruamel.yaml` replacement WITH behavior-preserving code migration, `pillow` update). The REFACTOR contract: no externally observable behavior change, no test weakened or deleted, no new behavior, no NEW test failures beyond the baseline's marked broken test.
+
+### S6.1 — Review vs. normative basis
+
+- **Inventory:** all **32 changed files** classified against the scope — **2 scoped dependency files** (`pyproject.toml`, lockfile), **1 scoped src migration** (`src/backend/settings/repository.py`), **26 authorized test files** (the 4 mechanical pyyaml → ruamel.yaml import-migration files + the Q-65 singleton-leak source-fix set, all zero assertion changes), **3 process records** (verification doc, problem log, AI questions), **0 unexpected files**.
+- **Scope check: PASS** — no change beyond the scoped changes; no more, no less.
+- **Invariant check: PASS** — no observable behavior change (settings YAML semantics preserved: safe YAML, block style, sorted keys; suite result identical to baseline); no test weakened or deleted (zero assertion changes; no test function/file removed or added); no new behavior; no NEW test failures beyond the marked broken test.
+- **Finding F-1 (cosmetic, ACCEPTED):** the historical P-20 problem-log entry carries a stale "616" test count; the verification doc (this file) is the authoritative record (true baseline = 556 passed, 1 skipped, 0 failed; the "616" was an internal doc error already corrected in the Baseline section and in S4.5). No action — accepted as a historical-entry artifact.
+
+### S6.2 — Traceability + boundaries
+
+- **Traceability: PASS** — `docs/verification/traceability.md` unchanged (`git diff main...HEAD` empty); the requirement mapping of the changed tests is unchanged (REFACTOR introduces no new requirements and changes no behavior).
+- **Feature boundaries: PASS** — the only `src/` change is the settings feature's own `src/backend/settings/repository.py`; no cross-feature internal imports introduced.
+- **Architecture rules: PASS** — no `model/`, `services/`, or `shared/` paths touched.
+- **Tests not weakened: PASS** — 0 test functions removed/added; no test file deleted; 8/8 assert statements identical after whitespace normalization (every removed assertion re-added verbatim, only re-indented/moved inside the restore-on-teardown context-manager blocks).
+- **Finding F-2 (informational, RESOLVED):** a raw grep miscounted a docstring line in a removed helper as an assert; it is not an assertion — resolved, no impact on the zero-assertion-change conclusion.
+
+### Findings
+
+| ID | Severity | Status | Disposition |
+|---|---|---|---|
+| F-1 | Cosmetic | **Accepted** | Stale "616" count in the historical P-20 problem-log entry; the verification doc is authoritative. No action. |
+| F-2 | Informational | **Resolved** | Docstring line miscounted as an assert by raw grep; not an assertion. No action. |
+
+**All findings resolved/accepted — none open.**
+
+### Review verdict
+
+**CLEAN** — the change is complete per the Review Gate (REFACTOR): every REFACTOR gate satisfied — full suite GREEN (556 passed, 1 skipped, 0 failed) and identical to baseline with zero test weakening/deletion (only the two documented, zero-assertion-change categories), no observable behavior changed, feature boundaries and architecture rules respected, lint clean, mypy PASS, traceability matrix unchanged.
