@@ -12,7 +12,7 @@ import time
 from collections.abc import Iterator
 
 import pytest
-from eventbus_test_helpers import BaseEvent, OrderPlaced, UserCreated, wait_for
+from eventbus_test_helpers import BaseEvent, OrderPlaced, UserCreated, isolated_event_bus, wait_for
 
 from backend.eventbus import EventBus, get_event_bus, reset_event_bus
 
@@ -185,13 +185,14 @@ def test_ac_010_context_manager() -> None:
 
 def test_ac_011_singleton() -> None:
     """AC-011: get_event_bus() returns the same instance (singleton)."""
-    reset_event_bus()
-    try:
-        a = get_event_bus()
-        b = get_event_bus()
-        assert a is b, "get_event_bus() did not return a singleton"
-    finally:
+    with isolated_event_bus():
         reset_event_bus()
+        try:
+            a = get_event_bus()
+            b = get_event_bus()
+            assert a is b, "get_event_bus() did not return a singleton"
+        finally:
+            reset_event_bus()
 
 
 def test_ac_012_bounded_queue_drop() -> None:

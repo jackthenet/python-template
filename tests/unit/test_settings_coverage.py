@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from settings_test_helpers import install_isolated_registry
+from settings_test_helpers import install_isolated_registry, isolated_registry
 
 from backend.settings import (
     ListSpec,
@@ -25,7 +25,6 @@ from backend.settings import (
     SettingsRegistry,
     YamlValueRepository,
     get_settings_registry,
-    reset_settings_registry,
 )
 from backend.settings.exceptions import (
     SettingsValidationError,
@@ -38,9 +37,10 @@ _CUSTOM_QUEUE_SIZE = 500
 
 @pytest.fixture(autouse=True)
 def _reset_registry() -> Iterator[None]:
-    reset_settings_registry()
-    yield
-    reset_settings_registry()
+    # Reset the singleton for the test; the previous singleton is restored on
+    # teardown (no state leak).
+    with isolated_registry(install=False):
+        yield
 
 
 def test_no_import_side_effects() -> None:

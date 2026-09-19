@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 from ruamel.yaml import YAML
-from settings_test_helpers import wait_for
+from settings_test_helpers import restore_singleton, wait_for
 
 from backend.eventbus import EventBus
 from backend.settings import (
@@ -31,7 +31,6 @@ from backend.settings import (
     SliderSpec,
     YamlValueRepository,
     get_settings_registry,
-    reset_settings_registry,
 )
 from backend.settings.exceptions import (
     SettingsNotFoundError,
@@ -278,12 +277,15 @@ def test_ac_017_status_transitions(registry: SettingsRegistry) -> None:
 
 
 def test_ac_018_singleton() -> None:
+    # Save the current singleton so the reset below does not leak the suite
+    # state (restored on exit).
+    saved = get_settings_registry(required=False)
     try:
         a = get_settings_registry()
         b = get_settings_registry()
         assert a is b
     finally:
-        reset_settings_registry()
+        restore_singleton(saved)
 
 
 # --- Template CRUD (AC-019 .. AC-029) ---

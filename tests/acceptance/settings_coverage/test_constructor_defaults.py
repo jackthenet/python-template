@@ -12,14 +12,12 @@ from backend.settings import SettingDefinition, SettingKind
 @pytest.fixture(autouse=True)
 def _reset_registry() -> Iterator[None]:
     # Install an isolated registry (temp-dir value repository) so no value is
-    # persisted to the shared default "settings/" directory (test isolation).
-    from settings_test_helpers import install_isolated_registry
+    # persisted to the shared default "settings/" directory (test isolation);
+    # the previous singleton is restored on teardown (no state leak).
+    from settings_test_helpers import isolated_registry
 
-    install_isolated_registry()
-    yield
-    from backend.settings import reset_settings_registry
-
-    reset_settings_registry()
+    with isolated_registry():
+        yield
 
 
 def test_constructor_default_registry_value() -> None:

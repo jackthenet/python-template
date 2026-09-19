@@ -18,6 +18,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
+from eventbus_test_helpers import isolated_event_bus
 from sessionmanagement_test_helpers import make_session
 
 from backend.authentication import InvalidSessionError, LoginSucceeded
@@ -36,9 +37,10 @@ def fresh_shared_bus():
     ``session_service`` fixture, so the service always subscribes to a fresh
     bus. The post-test reset removes this file's handlers from the singleton.
     """
-    reset_event_bus()
-    yield
-    reset_event_bus()
+    with isolated_event_bus():
+        reset_event_bus()
+        yield
+        reset_event_bus()
 
 
 def _now() -> datetime:

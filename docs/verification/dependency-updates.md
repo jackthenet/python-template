@@ -31,7 +31,9 @@
   | `tests/integration` | 22 passed | 5.37 s |
   | `tests/property` | 55 passed | 47.77 s |
   | `tests/unit` | 166 passed | 17.69 s |
-  | **TOTAL** | **616 passed, 1 skipped, 0 failed, 1 broken (hanging)** | — |
+  | **TOTAL** | **556 passed, 1 skipped, 0 failed, 1 broken (hanging)** | — |
+
+  - **TOTAL row corrected (S4.5):** the original "616 passed" was an internal doc error; the per-category rows sum to **556 passed**, confirmed by S4.4's collection count (557 collected = 556 row-sum + 1 skipped).
 
 - **Broken (marked) test node IDs** (marked in `docs/workflow/PROBLEMS.md`, entry **P-20**):
   - `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` — **HANGS** (never completes within the 300 s cap, even in isolation; pre-existing).
@@ -112,3 +114,64 @@
 - **No test weakened or deleted:** only the authorized mechanical yaml import migration (S4.2; 4 settings test files; all assertions unchanged).
 - **No observable product behavior change:** settings `values.yaml` / template `.yaml` format semantics preserved per the S4.2 format probe (safe YAML, block style, sorted keys); only `src/backend/settings/repository.py` changed in `src/`.
 - **GATE NOT MET:** the REFACTOR invariant "no NEW test failures beyond the marked broken test" is violated by `test_service_registry_classes_traced` under the S4.1 test-ordering change. Phase 4 is **NOT complete**; re-entry is required (decision belongs to the orchestrator/user: e.g., make the order-dependent test robust, or reconsider the `pytest-randomly` swap). No fix was attempted in this step.
+
+## Phase 4 (continued — S4.5, re-entry #2)
+
+### S4.5 Fix the settings/event-bus singleton leak at the source + full regression
+
+**User decision (Q-65, commit `e46ddc6`):** fix the leak at the source (restore-on-teardown fixture pattern in the affected test files). **No test weakening: ZERO assertion changes** (only registry/event-bus acquisition + teardown changes).
+
+**Two-singleton leak mechanism (verified):**
+- The failing test `tests/acceptance/logging_coverage/test_services_traced.py::test_service_registry_classes_traced` expects exactly **2** `SettingsRegistry.has` entry records: one from its explicit `bus = EventBus()` (the constructor's guarded read, AC-017/AC-018 — happens only when the settings-registry module singleton exists) and one from its own `reg.has("some.key")`.
+- `SettingsRegistry.__init__` calls `get_event_bus()`; if the **event-bus** module singleton does NOT exist, it creates a new `EventBus()` — whose constructor (when the settings singleton exists) makes ANOTHER `has` call → 3 records → also a failure.
+- So the test requires **BOTH** singletons to exist at test time; the suite must leave both singletons in a well-defined state after every test (restore-on-teardown). Failure modes: settings singleton missing → 1 record (`assert 1 == 2`, the observed S4.4 failure); event-bus singleton missing → 3 records.
+
+**Leak sources (all fixed):**
+1. **Settings-registry singleton** — tests that called `reset_settings_registry()` without restoring:
+   - `tests/acceptance/settings/test_settings.py` (`test_ac_018_singleton`)
+   - `tests/acceptance/settings_coverage/{test_constructor_defaults,test_live_reads,test_persistence,test_registration}.py` (autouse `_reset_registry` fixtures)
+   - `tests/contract/settings_coverage/test_inventory.py`, `tests/property/test_settings_coverage.py`, `tests/unit/test_settings_coverage.py` (autouse fixtures)
+   - `tests/{acceptance,contract,integration,property,unit}/mail/conftest.py` (autouse fixtures)
+2. **Event-bus singleton** — tests that called `reset_event_bus()` without restoring:
+   - `tests/acceptance/eventbus/test_eventbus.py` (`test_ac_011_singleton`)
+   - `tests/acceptance/sessionmanagement/test_cap_eviction.py` (autouse `fresh_shared_bus` fixture)
+   - `tests/acceptance/sessionmanagement/test_events.py` (`test_ac_038`)
+   - `tests/contract/eventbus/test_eventbus_contracts.py` (`test_nfr_004`)
+   - `tests/integration/eventbus/test_eventbus_integration.py` (`test_multi_feature_publish_subscribe`)
+   - `tests/property/sessionmanagement/test_sessionmanagement_properties.py` (`test_inv_003`)
+3. **Inventory-based reset (the source missed by the first S4.5 pass):** `tests/acceptance/logging_coverage/test_services_traced.py` (`test_module_functions_traced`) calls `INVENTORY_MODULE_FUNCTIONS`, which includes `reset_settings_registry` and `reset_event_bus` (module functions under test), and never restored. Found via a temporary state-probe pytest plugin (recorded the singleton slots before/after each test; the probe also confirmed the restore-on-teardown fixtures work for the settings/mail suites — the inventory test was the only additional true leak source). The probe plugin was deleted after use.
+
+**Fix (fixture pattern, zero assertion changes):**
+- `tests/settings_test_helpers.py`: new `isolated_registry(install=True|False)` context manager + `restore_singleton(saved)` — setup: save the current singleton (`get_settings_registry(required=False)`; may be `None`), reset, optionally install a fresh isolated registry (temp-dir value repository); teardown: restore the saved object into the module singleton slot (same mechanism as `install_isolated_registry()`); if the saved was `None`, leave it reset.
+- `tests/eventbus_test_helpers.py`: new `isolated_event_bus()` context manager — teardown: if the event-bus singleton slot is missing (the test's own `reset_event_bus()` call shuts down the previous instance and leaves the slot missing), install a fresh singleton so a well-defined singleton exists after every test.
+- Affected test files: bare reset calls replaced with the context managers (tests obtain the registry/bus from the fixtures); where a test reset AND installed a specific instance, that exact behavior is preserved — only the restore-on-teardown was added.
+- **Leftover-state decision:** the previous (cut-off) S4.5 run left uncommitted changes covering the settings-singleton side (`isolated_registry`/`restore_singleton` helpers + the settings/mail test files). Evaluated via `git diff`: sound, consistent with the design, zero assertion changes → **completed from this state** (settings side kept; event-bus side + inventory-test fix added). The leftover temp file `regression_out.txt` was deleted.
+
+**Per-file summary (what changed — ZERO assertion changes anywhere):**
+- `tests/settings_test_helpers.py` — added `isolated_registry()` + `restore_singleton()` helpers (new code; no test changed).
+- `tests/eventbus_test_helpers.py` — added `isolated_event_bus()` helper (new code; no test changed).
+- `tests/mail_test_helpers.py` — removed now-unused `reset_registry()`/`setup_isolated_registry()` (superseded by `isolated_registry()`).
+- `tests/acceptance/settings/test_settings.py` — `test_ac_018_singleton`: save the singleton + `restore_singleton` in `finally` (was: bare `reset_settings_registry()` in `finally`).
+- `tests/acceptance/settings_coverage/test_constructor_defaults.py`, `test_live_reads.py` — autouse fixture: `with isolated_registry():` (was: install + bare reset in teardown).
+- `tests/acceptance/settings_coverage/test_persistence.py`, `test_registration.py` — autouse fixture: `with isolated_registry(install=False):` (was: bare reset setup + teardown).
+- `tests/contract/settings_coverage/test_inventory.py`, `tests/property/test_settings_coverage.py`, `tests/unit/test_settings_coverage.py` — autouse fixture: `with isolated_registry(install=False):` (was: bare reset setup + teardown).
+- `tests/{acceptance,contract,integration,property,unit}/mail/conftest.py` — autouse fixture: `with isolated_registry():` (was: `setup_isolated_registry()` + bare reset in teardown).
+- `tests/acceptance/eventbus/test_eventbus.py` — `test_ac_011_singleton`: wrapped in `with isolated_event_bus():`.
+- `tests/acceptance/sessionmanagement/test_cap_eviction.py` — autouse `fresh_shared_bus`: wrapped in `with isolated_event_bus():`.
+- `tests/acceptance/sessionmanagement/test_events.py` — `test_ac_038`: reset block wrapped in `with isolated_event_bus():`.
+- `tests/contract/eventbus/test_eventbus_contracts.py` — `test_nfr_004`: reset block wrapped in `with isolated_event_bus():`.
+- `tests/integration/eventbus/test_eventbus_integration.py` — `test_multi_feature_publish_subscribe`: body wrapped in `with isolated_event_bus():`.
+- `tests/property/sessionmanagement/test_sessionmanagement_properties.py` — `test_inv_003`: body wrapped in `with isolated_event_bus():`.
+- `tests/acceptance/logging_coverage/test_services_traced.py` — `test_module_functions_traced`: saves the settings singleton before the inventory call; body wrapped in `isolated_event_bus()`; settings singleton restored in `finally` (the inventory includes `reset_settings_registry`/`reset_event_bus` as module functions under test).
+
+**Verification:**
+- **Adversarial-order run** (settings + mail tests first, then the previously failing test):
+  `uv run pytest tests/acceptance/settings tests/acceptance/settings_coverage tests/contract/settings tests/contract/settings_coverage tests/property/test_settings_coverage.py tests/unit/test_settings_coverage.py tests/acceptance/mail tests/contract/mail tests/acceptance/logging_coverage/test_services_traced.py -q` → **119 passed** (all GREEN).
+- **Full regression** (300 s cap on the pytest run; broken hanging test deselected):
+  - Run 1: **556 passed, 1 skipped, 0 failed** (1 deselected) in 161.41 s.
+  - Run 2: **556 passed, 1 skipped, 0 failed** (1 deselected) in 162.46 s.
+  - (Additionally, a probe-instrumented run: 556 passed — the state probe confirmed **no test leaves either singleton missing**; the only state change in the run was the session fixture's installation before the first test.)
+- **Baseline comparison: IDENTICAL** — the true baseline is **556 passed, 1 skipped, 0 failed** (per-category row-sum; the Baseline TOTAL row was corrected in this step: the original "616" was an internal doc error, confirmed by S4.4's collection count).
+- **Ruff:** `uv run ruff check .` → **All checks passed!** (clean).
+
+**Gate: MET** — the REFACTOR invariant "no NEW test failures beyond the marked broken test" holds under the `pytest-randomly` ordering; the full regression is identical to the true baseline.

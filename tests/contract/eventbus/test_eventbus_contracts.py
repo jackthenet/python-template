@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 
-from eventbus_test_helpers import OrderPlaced, UserCreated
+from eventbus_test_helpers import OrderPlaced, UserCreated, isolated_event_bus
 
 from backend.eventbus import EventBus, get_event_bus, reset_event_bus
 
@@ -108,10 +108,11 @@ def test_nfr_004_api_backward_compatible() -> None:
     finally:
         bus.shutdown()
     # get_event_bus / reset_event_bus exist and work.
-    reset_event_bus()
-    try:
-        a = get_event_bus()
-        b = get_event_bus()
-        assert a is b
-    finally:
+    with isolated_event_bus():
         reset_event_bus()
+        try:
+            a = get_event_bus()
+            b = get_event_bus()
+            assert a is b
+        finally:
+            reset_event_bus()
