@@ -70,6 +70,7 @@ def _is_private_method(name: str) -> bool:
 
 def _wrap_sync(
     func: Callable[..., Any],
+    *,
     level: str,
     slow_threshold_ms: float | None,
     include_args: bool,
@@ -108,6 +109,7 @@ def _wrap_sync(
 
 def _wrap_async(
     func: Callable[..., Any],
+    *,
     level: str,
     slow_threshold_ms: float | None,
     include_args: bool,
@@ -165,9 +167,23 @@ def logged(
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         threshold = _resolve_slow_threshold(slow_threshold_ms, slow_threshold_setting)
         if inspect.iscoroutinefunction(f):
-            wrapper = _wrap_async(f, level, threshold, include_args, context_getter, depth)
+            wrapper = _wrap_async(
+                f,
+                level=level,
+                slow_threshold_ms=threshold,
+                include_args=include_args,
+                context_getter=context_getter,
+                depth=depth,
+            )
         else:
-            wrapper = _wrap_sync(f, level, threshold, include_args, context_getter, depth)
+            wrapper = _wrap_sync(
+                f,
+                level=level,
+                slow_threshold_ms=threshold,
+                include_args=include_args,
+                context_getter=context_getter,
+                depth=depth,
+            )
         # Mark the wrapper as traced and expose the resolved threshold so callers
         # (and the logging-coverage suite) can inspect it (REQ-005/REQ-007).
         wrapper.__logged__ = True  # type: ignore[attr-defined]

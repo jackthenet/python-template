@@ -45,6 +45,7 @@ class SmtpTransportImpl(SmtpTransport):
         self,
         host: str,
         port: int,
+        *,
         username: str,
         password: str,
         use_tls: bool,

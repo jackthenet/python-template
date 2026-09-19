@@ -64,6 +64,7 @@ class FileValidationError(FileManagementError):
         self,
         key: str | None,
         reason: str,
+        *,
         declared: str | None = None,
         detected: str | None = None,
         width: int | None = None,

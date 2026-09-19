@@ -286,6 +286,7 @@ class FileService:
         key: str,
         namespace: str,
         content: bytes,
+        *,
         limit: int,
         registry: SettingsRegistry,
         original_filename: str | None,
@@ -359,7 +360,11 @@ class FileService:
         limit = self._effective_limit(registry, namespace)
         content, original_filename = self._resolve_source(source, key, namespace, limit, original_filename)
         detected = self._validate_content(
-            key, namespace, content, limit, registry, original_filename, declared_mime_type
+            key, namespace, content,
+            limit=limit,
+            registry=registry,
+            original_filename=original_filename,
+            declared_mime_type=declared_mime_type,
         )
 
         # Atomic write with mutual rollback (REQ-008, ADR-053).
@@ -466,7 +471,11 @@ class FileService:
         limit = self._effective_limit(registry, "avatars")
         content, original_filename = self._resolve_source(source, key, "avatars", limit, None)
         detected = self._validate_content(
-            key, "avatars", content, limit, registry, original_filename, declared_mime_type
+            key, "avatars", content,
+            limit=limit,
+            registry=registry,
+            original_filename=original_filename,
+            declared_mime_type=declared_mime_type,
         )
         self._validate_avatar_image(key, content)
 

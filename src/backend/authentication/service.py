@@ -90,6 +90,7 @@ class AuthService:
         session_repository: SessionRepository,
         reset_repository: PasswordResetRepository,
         webauthn_repository: WebAuthnCredentialRepository,
+        *,
         webauthn_provider: WebAuthnProvider | None = None,
         event_bus: EventPublisher | None = None,
         attempt_tracker: AttemptTracker | None = None,
