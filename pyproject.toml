@@ -37,7 +37,7 @@ dev = [
     # Dependency checker (unused/missing/transitive deps).
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
-    "hypothesis>=6.155.0",
+    "hypothesis>=6.168.0",
     # MkDocs plugin: API docs from docstrings.
     "mkdocstrings>=1.0.6",
     # Static type checking for the source tree.
