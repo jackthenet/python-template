@@ -17,26 +17,36 @@ dependencies = [
     "sqlmodel>=0.0.42",
     "argon2-cffi>=25.1.0",
     "email-validator>=2.3.0",
-    # Safe YAML serialization for template storage.
-    "pyyaml>=6.0.1",
     "filetype>=1.2.0",
     # Image decode validation + variant generation (file-management avatars).
-    "pillow>=10.0.0",
+    "pillow>=12.3.0",
+    # Safe YAML serialization for settings value/template storage.
+    "ruamel-yaml>=0.19.1",
 ]
 
 [dependency-groups]
 # Development-only tooling installed by `uv sync`; keep runtime packages out of
 # this group so deploy and compatibility mirrors stay minimal.
 dev = [
+    # Database schema migration tooling.
+    "alembic>=1.20.0",
+    # Security-focused static analysis for Python code.
     "bandit>=1.9.4",
     # Complexity reporting used during refactors and cleanup work.
     "complexipy>=8.0.1",
+    # Dependency checker (unused/missing/transitive deps).
+    "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.155.0",
+    # MkDocs plugin: API docs from docstrings.
+    "mkdocstrings>=1.0.6",
     # Static type checking for the source tree.
     "mypy>=1.10",
-    # Pre-commit automation for local quality gates.
+    # Vulnerability scanning for installed dependencies.
     "pip-audit>=2.10.1",
+    # Test data factories for pydantic models.
+    "polyfactory>=3.3.0",
+    # Pre-commit automation for local quality gates.
     "pre-commit>=4.6.2",
     # Low-overhead sampling profiler for live Python processes and spawned commands.
     "py-spy>=0.4.2",
@@ -44,12 +54,17 @@ dev = [
     "pytest>=9.1.1",
     # Coverage reporting for the verify phase (spec/branch coverage evidence).
     "pytest-cov>=6.0",
-    # Randomized pytest ordering to expose order-dependent test coupling.
-    "pytest-random>=0.2",
+    # Randomized pytest ordering (maintained successor to pytest-random).
+    "pytest-randomly>=5.0.0",
     # Parallel pytest execution for faster focused and full-suite runs.
     "pytest-xdist>=3.8.0",
+    # httpx mocking for outbound-call tests.
+    "respx>=0.23.1",
     # Linting, formatting, and autofix checks.
     "ruff>=0.16.7",
+    # Time travel for time-dependent tests.
+    "time-machine>=3.5.1",
+    # Fast type checker for the source tree.
     "ty>=0.0.81",
 ]
 

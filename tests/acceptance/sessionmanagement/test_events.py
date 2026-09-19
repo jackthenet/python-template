@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime, timedelta
 
+from eventbus_test_helpers import isolated_event_bus
 from sessionmanagement_test_helpers import build_session_service, make_session
 
 from backend.authentication import LoginSucceeded
@@ -149,13 +150,14 @@ def test_ac_038_none_publisher_no_events_no_subscriptions(session_repository, se
     fresh_base = datetime.now(UTC)
     for i in range(num_sessions):
         make_session(session_repository, user_id, created_at=fresh_base + timedelta(minutes=i))
-    reset_event_bus()
-    try:
-        bus = get_event_bus()
-        bus.publish(UserPasswordChanged(user_id=user_id))
-        bus.publish(LoginSucceeded(user_id=user_id, method="password"))
-        time.sleep(1.0)  # grace period for async dispatch
-        entries = service.list_sessions(user_id=user_id)
-        assert len(entries) == num_sessions  # no revocation occurred
-    finally:
+    with isolated_event_bus():
         reset_event_bus()
+        try:
+            bus = get_event_bus()
+            bus.publish(UserPasswordChanged(user_id=user_id))
+            bus.publish(LoginSucceeded(user_id=user_id, method="password"))
+            time.sleep(1.0)  # grace period for async dispatch
+            entries = service.list_sessions(user_id=user_id)
+            assert len(entries) == num_sessions  # no revocation occurred
+        finally:
+            reset_event_bus()

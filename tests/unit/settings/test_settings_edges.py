@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import tempfile
 from collections.abc import Iterator
+from io import StringIO
 from pathlib import Path
 
 import pytest
-import yaml
+from ruamel.yaml import YAML
 from settings_test_helpers import EventCollector
 
 from backend.eventbus import EventBus
@@ -279,9 +280,12 @@ def test_edge_024_directory_created(tmp_path: Path) -> None:
 
 def test_edge_025_schema_invalid_file(tmp_path: Path) -> None:
     # Valid YAML but schema-invalid: values is a list, not a map.
-    (tmp_path / "bad.yaml").write_text(
-        yaml.safe_dump({"name": "bad", "category": "app", "group": None, "values": ["x"]})
-    )
+    _yaml = YAML(typ="safe")
+    _yaml.default_flow_style = False
+    _buf = StringIO()
+    _yaml.dump({"name": "bad", "category": "app", "group": None, "values": ["x"]}, _buf)
+
+    (tmp_path / "bad.yaml").write_text(_buf.getvalue())
     repo = YamlTemplateRepository(tmp_path)
     with pytest.raises(TemplateStorageError):
         repo.get("bad")

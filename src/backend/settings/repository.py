@@ -15,15 +15,36 @@ from __future__ import annotations
 import os
 import threading
 from abc import ABC, abstractmethod
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
-import yaml
 from loguru import logger
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 
 from backend.logging import logged_class
 from backend.settings.exceptions import TemplateStorageError, ValueStorageError
 from backend.settings.models import Template
+
+
+def _dump_yaml(data: dict[str, Any]) -> str:
+    """Dump ``data`` as safe YAML: block style, sorted keys.
+
+    A fresh ``YAML`` instance is used per call: ruamel instances hold
+    per-call state and are not thread-safe, so this keeps the dump
+    stateless (and thread-safe) per invocation.
+    """
+    yaml = YAML(typ="safe")
+    yaml.default_flow_style = False
+    buf = StringIO()
+    yaml.dump(data, buf)
+    return buf.getvalue()
+
+
+def _load_yaml(text: str) -> Any:
+    """Load ``text`` as safe YAML (unsafe tags are rejected)."""
+    return YAML(typ="safe").load(text)
 
 
 @logged_class(slow_threshold_ms=100)
@@ -63,7 +84,7 @@ target), so the file is always either absent or valid YAML.
 
     def save(self, values: dict[str, Any]) -> None:
         with self._lock:
-            text = yaml.safe_dump(values, sort_keys=True, default_flow_style=False)
+            text = _dump_yaml(values)
             tmp = self._directory / ".values.yaml.tmp"
             tmp.write_text(text, encoding="utf-8")
             os.replace(tmp, self._path())
@@ -75,9 +96,9 @@ target), so the file is always either absent or valid YAML.
                 path = self._path()
                 if not path.exists():
                     return None
-                data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                data = _load_yaml(path.read_text(encoding="utf-8"))
                 result = self._parse(data)
-        except yaml.YAMLError as e:
+        except YAMLError as e:
             logger.error("value storage failure: reason={}", e)
             raise ValueStorageError(f"corrupted values file: {e}") from e
         except ValueStorageError as e:
@@ -171,7 +192,7 @@ class YamlTemplateRepository(TemplateRepository):
                 "group": template.group,
                 "values": template.values,
             }
-            text = yaml.safe_dump(data, sort_keys=True, default_flow_style=False)
+            text = _dump_yaml(data)
             tmp = self._directory / f".{template.name}.yaml.tmp"
             tmp.write_text(text, encoding="utf-8")
             os.replace(tmp, self._path(template.name))
@@ -183,9 +204,9 @@ class YamlTemplateRepository(TemplateRepository):
                 path = self._path(name)
                 if not path.exists():
                     return None
-                data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                data = _load_yaml(path.read_text(encoding="utf-8"))
                 result = self._parse(name, data)
-        except yaml.YAMLError as e:
+        except YAMLError as e:
             logger.error("template storage failure: name={} reason={}", name, e)
             raise TemplateStorageError(f"corrupted template file {name}: {e}") from e
         except TemplateStorageError as e:
@@ -205,9 +226,9 @@ class YamlTemplateRepository(TemplateRepository):
         try:
             with self._lock:
                 for path in sorted(self._directory.glob("*.yaml")):
-                    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                    data = _load_yaml(path.read_text(encoding="utf-8"))
                     templates.append(self._parse(path.stem, data))
-        except yaml.YAMLError as e:
+        except YAMLError as e:
             logger.error("template storage failure: reason={}", e)
             raise TemplateStorageError(f"corrupted template file: {e}") from e
         except TemplateStorageError as e:

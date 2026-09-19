@@ -190,3 +190,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 iteration (caught during S4.1 (T-009) RED; routed to a fresh test-skill fix step)
 - **Resolution:** A fresh test-skill step fixes ONLY the tuple access in the 3 tests (mechanical alignment, not a weakening; the asserted AC-038/AC-044/NFR-004 behavior is unchanged): `rows[0].id` → `rows[0][0].id` (access the `Session` object from the tuple). After the fix, S4.1 (T-009) is re-entered to confirm the real RED reason.
 - **Date:** 2026-09-19
+
+## P-20 — Pre-existing broken test in baseline suite: `test_ac_045_traced_methods_no_tokens_in_logs` HANGS (discovered at REFACTOR baseline)
+- **Problem:** Pre-existing broken test(s) in the baseline suite — 1 failing test, a HANG (never completes within the 300 s cap, even in isolation): `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs`. The test body is a simple synchronous assertion sequence; the hang is in its fixture/service interaction (the session-management service publishes events to the event-bus background worker; the run never returns). All other 616 tests in the full suite PASS (1 skipped: `test_ac_031_symlink_rejected` — symlinks not available on this host).
+- **Step / Phase:** S1 (Phase 1 REFACTOR baseline) — dependency-updates
+- **Change:** dependency-updates / REFACTOR
+- **Duration / iterations:** 1 (discovered at baseline)
+- **Resolution:** marked BROKEN per user instruction (2026-09-16) — out of scope for dependency-updates; baseline = "GREEN except the marked broken tests"; Phase 4/5 invariant = no NEW failures beyond these marked tests (they may remain broken; do not fix them in this change).
+- **Date:** 2026-09-16

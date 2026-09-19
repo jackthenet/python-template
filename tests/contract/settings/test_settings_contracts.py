@@ -176,11 +176,15 @@ def test_nfr_004_observability(log_records: list, tmp_path: Path) -> None:
     assert "DEBUG" in _levels("t1"), "template creation not logged at DEBUG"
 
     # Storage failure is logged at ERROR.
-    import yaml as _yaml
+    from io import StringIO
+    from ruamel.yaml import YAML
 
-    (tmp_path / "bad.yaml").write_text(
-        _yaml.safe_dump({"name": "bad", "category": "app", "group": None, "values": ["x"]})
-    )
+    _yaml = YAML(typ="safe")
+    _yaml.default_flow_style = False
+    _buf = StringIO()
+    _yaml.dump({"name": "bad", "category": "app", "group": None, "values": ["x"]}, _buf)
+
+    (tmp_path / "bad.yaml").write_text(_buf.getvalue())
     repo = YamlTemplateRepository(tmp_path)
     with pytest.raises(TemplateStorageError):
         repo.get("bad")

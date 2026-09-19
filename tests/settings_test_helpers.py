@@ -8,7 +8,8 @@ helper pattern (async delivery is observed via ``wait_for``).
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 
 from backend.eventbus import EventBus
 from backend.settings import SettingsRegistry
@@ -51,10 +52,10 @@ def make_registry(event_bus: EventBus | None = None) -> tuple[SettingsRegistry, 
 def install_isolated_registry() -> SettingsRegistry:
     """Install a fresh isolated registry into the module singleton.
 
-    Mirrors the mail test suite's ``setup_isolated_registry()``: the registry is
-    backed by a temp-dir value repository, so no value is ever persisted to the
-    shared default ``settings/`` directory and nothing written by one test leaks
-    into another (test isolation). Returns the installed registry.
+    The registry is backed by a temp-dir value repository, so no value is ever
+    persisted to the shared default ``settings/`` directory and nothing written
+    by one test leaks into another (test isolation). Returns the installed
+    registry.
     """
     import tempfile
 
@@ -65,6 +66,55 @@ def install_isolated_registry() -> SettingsRegistry:
     isolated = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
     _registry_module._registry[0] = isolated
     return isolated
+
+
+@contextmanager
+def isolated_registry(install: bool = True) -> Iterator[None]:
+    """Save the settings singleton, reset it, and restore it on exit (no leak).
+
+    With ``install=True`` (the default) a fresh isolated registry (temp-dir
+    value repository, as ``install_isolated_registry()`` installs) is put in
+    the singleton slot for the duration of the block; with ``install=False``
+    the singleton stays reset for the duration of the block. On exit the
+    previously saved singleton object is restored into the module singleton
+    slot (or the slot stays reset if there was no singleton) — the suite state
+    after the block is exactly the state before it (no state leak).
+    """
+    import tempfile
+
+    from backend.settings import (
+        YamlValueRepository,
+        get_settings_registry,
+        reset_settings_registry,
+    )
+    from backend.settings import registry as _registry_module
+
+    saved = get_settings_registry(required=False)
+    reset_settings_registry()
+    if install:
+        _registry_module._registry[0] = SettingsRegistry(
+            value_repository=YamlValueRepository(tempfile.mkdtemp())
+        )
+    try:
+        yield
+    finally:
+        restore_singleton(saved)
+
+
+def restore_singleton(saved: SettingsRegistry | None) -> None:
+    """Restore a previously saved singleton into the module singleton slot.
+
+    Pairs with ``get_settings_registry(required=False)`` (the save). The slot
+    is reset first, then the saved object is put back (or the slot stays
+    reset if ``saved`` is None) — the suite state after the call is exactly
+    the state before the save (no state leak). Uses the same mechanism as
+    ``install_isolated_registry()``.
+    """
+    from backend.settings import registry as _registry_module
+
+    _registry_module.reset_settings_registry()
+    if saved is not None:
+        _registry_module._registry[0] = saved
 
 
 class EventCollector:

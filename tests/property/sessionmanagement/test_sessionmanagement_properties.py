@@ -10,6 +10,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+from eventbus_test_helpers import isolated_event_bus
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from sessionmanagement_test_helpers import EventCollector, build_session_service, make_session
@@ -72,35 +73,36 @@ def test_inv_002_valid_only_listing(specs: list[dict]) -> None:
 @given(existing=st.integers(min_value=0, max_value=12), cap=st.integers(min_value=1, max_value=10))
 def test_inv_003_cap_held_after_login(existing: int, cap: int) -> None:
     """INV-003: after LoginSucceeded handling, the user's valid session count is at most the cap."""
-    reset_event_bus()
-    try:
-        user_id = uuid4()
-        repo = SqliteSessionRepository("sqlite:///:memory:")
-        registry = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-        registry.register(
-            SettingDefinition(
-                key="sessionmanagement.max_sessions_per_user",
-                kind=SettingKind.NUMBER,
-                default=cap,
-                min_value=1,
-                category="sessionmanagement",
-            )
-        )
-        service = build_session_service(repo, event_bus=EventCollector(), settings_registry=registry)
-        base = datetime.now(UTC)
-        for i in range(existing):
-            make_session(repo, user_id, created_at=base - timedelta(minutes=existing - i))
-        # the login issues a new session, then LoginSucceeded is dispatched
-        make_session(repo, user_id, created_at=base)
-        dispatched = threading.Event()
-        bus = get_event_bus()
-        bus.subscribe(LoginSucceeded, lambda event: dispatched.set())
-        bus.publish(LoginSucceeded(user_id=user_id, method="password"))
-        assert dispatched.wait(timeout=5.0), "LoginSucceeded was not dispatched"
-        entries = service.list_sessions(user_id=user_id)
-        assert len(entries) <= cap
-    finally:
+    with isolated_event_bus():
         reset_event_bus()
+        try:
+            user_id = uuid4()
+            repo = SqliteSessionRepository("sqlite:///:memory:")
+            registry = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+            registry.register(
+                SettingDefinition(
+                    key="sessionmanagement.max_sessions_per_user",
+                    kind=SettingKind.NUMBER,
+                    default=cap,
+                    min_value=1,
+                    category="sessionmanagement",
+                )
+            )
+            service = build_session_service(repo, event_bus=EventCollector(), settings_registry=registry)
+            base = datetime.now(UTC)
+            for i in range(existing):
+                make_session(repo, user_id, created_at=base - timedelta(minutes=existing - i))
+            # the login issues a new session, then LoginSucceeded is dispatched
+            make_session(repo, user_id, created_at=base)
+            dispatched = threading.Event()
+            bus = get_event_bus()
+            bus.subscribe(LoginSucceeded, lambda event: dispatched.set())
+            bus.publish(LoginSucceeded(user_id=user_id, method="password"))
+            assert dispatched.wait(timeout=5.0), "LoginSucceeded was not dispatched"
+            entries = service.list_sessions(user_id=user_id)
+            assert len(entries) <= cap
+        finally:
+            reset_event_bus()
 
 
 @settings(max_examples=_MAX_EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])

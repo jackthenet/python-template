@@ -15,8 +15,8 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-import yaml
-from settings_test_helpers import wait_for
+from ruamel.yaml import YAML
+from settings_test_helpers import restore_singleton, wait_for
 
 from backend.eventbus import EventBus
 from backend.settings import (
@@ -31,7 +31,6 @@ from backend.settings import (
     SliderSpec,
     YamlValueRepository,
     get_settings_registry,
-    reset_settings_registry,
 )
 from backend.settings.exceptions import (
     SettingsNotFoundError,
@@ -278,12 +277,15 @@ def test_ac_017_status_transitions(registry: SettingsRegistry) -> None:
 
 
 def test_ac_018_singleton() -> None:
+    # Save the current singleton so the reset below does not leak the suite
+    # state (restored on exit).
+    saved = get_settings_registry(required=False)
     try:
         a = get_settings_registry()
         b = get_settings_registry()
         assert a is b
     finally:
-        reset_settings_registry()
+        restore_singleton(saved)
 
 
 # --- Template CRUD (AC-019 .. AC-029) ---
@@ -435,7 +437,7 @@ def test_ac_030_yaml_file_written(tmp_path: Path) -> None:
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     f = tmp_path / "t1.yaml"
     assert f.exists()
-    data = yaml.safe_load(f.read_text())
+    data = YAML(typ="safe").load(f.read_text())
     assert data["name"] == "t1"
     assert data["category"] == "app"
     assert data["values"] == {"app.a": "x", "app.b": 1}

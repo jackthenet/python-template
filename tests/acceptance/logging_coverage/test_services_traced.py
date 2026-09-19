@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
+from eventbus_test_helpers import isolated_event_bus
 from logging_coverage_test_helpers import (
     INVENTORY_MODULE_FUNCTIONS,
     entry_records,
@@ -19,6 +20,7 @@ from logging_coverage_test_helpers import (
     for_qualname,
     parse_elapsed_ms,
 )
+from settings_test_helpers import restore_singleton
 
 from backend.authentication.repository import (
     SqlitePasswordResetRepository,
@@ -28,6 +30,7 @@ from backend.authentication.repository import (
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
 from backend.eventbus.eventbus import EventBus
+from backend.settings import get_settings_registry
 from backend.settings.registry import SettingsRegistry
 from backend.settings.repository import MemoryTemplateRepository, YamlTemplateRepository, YamlValueRepository
 from backend.usermanagement.repository import SqliteUserRepository
@@ -99,20 +102,28 @@ def test_concrete_repo_provider_traced(log_records: list[Any], tmp_path: Any) ->
 
 def test_module_functions_traced(log_records: list[Any]) -> None:
     """AC-005: every public module-level function produces entry + exit records."""
-    # Call each inventory module function.
-    for name, fn in INVENTORY_MODULE_FUNCTIONS.items():
-        if name == "hash_token":
-            fn("probe")
-        else:
-            fn()
+    # The inventory includes reset_settings_registry / reset_event_bus (module
+    # functions under test); save the singletons so the suite state is
+    # restored on exit (no state leak into later tests).
+    saved_registry = get_settings_registry(required=False)
+    with isolated_event_bus():
+        try:
+            # Call each inventory module function.
+            for name, fn in INVENTORY_MODULE_FUNCTIONS.items():
+                if name == "hash_token":
+                    fn("probe")
+                else:
+                    fn()
 
-    for name in INVENTORY_MODULE_FUNCTIONS:
-        # Match the exact qualname (module functions have no class prefix).
-        # "At least 1" (not "exactly 1"): a traced function may be invoked
-        # internally by another traced function (e.g. get_settings_registry
-        # calls get_event_bus), so the requirement is that it produces
-        # records, not that it is called exactly once.
-        entries = [r for r in entry_records(log_records) if str(r).startswith(f">> {name} called")]
-        exits = [r for r in exit_records(log_records) if str(r).startswith(f"<< {name} returned")]
-        assert len(entries) >= 1, f"{name}: expected at least 1 entry record"
-        assert len(exits) >= 1, f"{name}: expected at least 1 exit record"
+            for name in INVENTORY_MODULE_FUNCTIONS:
+                # Match the exact qualname (module functions have no class prefix).
+                # "At least 1" (not "exactly 1"): a traced function may be invoked
+                # internally by another traced function (e.g. get_settings_registry
+                # calls get_event_bus), so the requirement is that it produces
+                # records, not that it is called exactly once.
+                entries = [r for r in entry_records(log_records) if str(r).startswith(f">> {name} called")]
+                exits = [r for r in exit_records(log_records) if str(r).startswith(f"<< {name} returned")]
+                assert len(entries) >= 1, f"{name}: expected at least 1 entry record"
+                assert len(exits) >= 1, f"{name}: expected at least 1 exit record"
+        finally:
+            restore_singleton(saved_registry)
