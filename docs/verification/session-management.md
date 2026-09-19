@@ -1108,3 +1108,141 @@ The configured 92% floor is reached (`fail_under = 92`). Per AGENTS.md, code/bra
 - **Branch coverage** (S5.4 — 93.60% scoped, secondary signal, 92% floor reached).
 
 **Phase 5 VERIFY complete.** Next phase: Phase 6 REVIEW.
+
+---
+
+## Phase 6 REVIEW
+
+### S6.1 Review vs. normative basis
+
+**Normative basis:** `docs/specs/session-management.md` (approved; spec PR #38 merged to `main`).
+**Scope reviewed:** full diff `main..HEAD` — `src/backend/sessionmanagement/` (new: `__init__.py`, `events.py`, `feature_settings.py`, `models.py`, `service.py`), `src/backend/authentication/` (`models.py`, `repositories.py`, `repository.py`, `service.py`), `src/backend/filemanagement/` (`errors.py`, `service.py`), `src/backend/logging/_decorator.py`, `src/backend/mail/transport.py`, and all new test files under `tests/` (acceptance / integration / property / contract / unit / helpers).
+
+**Result: COMPLIANT — every REQ is implemented; no behavior was introduced that is not represented in the spec; the tests trace back to normative requirements.**
+
+#### REQ coverage (22/22 implemented)
+
+| REQ | Implementation | Verdict |
+|-----|----------------|---------|
+| REQ-001 | `SessionService.list_sessions` — exactly one of `token`/`user_id`, else `ValueError` | ✓ |
+| REQ-002 | Token path resolves via `get_by_token_hash(hash_token(token))` (same token-at-rest contract as authentication's `session_info`); unknown/revoked/expired → re-raised authentication `InvalidSessionError` | ✓ |
+| REQ-003 | Valid-only filter (`not revoked and expires_at > now`, one `now` snapshot); zero valid sessions → empty list | ✓ |
+| REQ-004 | `SessionEntry` exposes exactly `session_id`, `created_at`, `expires_at`, `is_current`, `user_agent`, `ip`, `device_name`, `login_method`; `None` for pre-feature rows (nullable columns) | ✓ |
+| REQ-005 | `is_current` `True` for exactly the token-resolved session; admin path all `False` | ✓ |
+| REQ-006 | `created_at` descending (repository `list_for_user` ordering), current session pinned first | ✓ |
+| REQ-007 | `limit` default = live-read `sessionmanagement.max_listed_sessions`; `limit < 1` → `ValueError`; truncation to `limit`; no offset | ✓ |
+| REQ-008 | `revoke_session` — unknown/already-revoked idempotent no-op (no error, no event) | ✓ |
+| REQ-009 | `logout_all_sessions` — revokes all incl. caller's; invalid token → `InvalidSessionError` | ✓ |
+| REQ-010 | `logout_other_sessions` — revokes all except caller's; invalid token → `InvalidSessionError` | ✓ |
+| REQ-011 | `revoke_all_sessions(user_id, exclude_session_id=None)` — admin, returns count | ✓ |
+| REQ-012 | `cleanup_expired() -> int` bounded by live-read `sessionmanagement.cleanup_batch_size`; no threads/workers | ✓ |
+| REQ-013 | No expiration-mode/activity-tracking/`expires_at` update anywhere in the feature | ✓ |
+| REQ-014 | `_on_login_succeeded` — cap on `LoginSucceeded`, oldest-first eviction until count == cap, new session kept | ✓ |
+| REQ-015 | `_on_user_lifecycle` — subscriptions to `UserPasswordChanged`/`UserDeactivated`/`UserDeleted`, revoke all | ✓ |
+| REQ-016 | `LoginRequest` gains optional `user_agent`/`ip`/`device_name`; `Session` row gains nullable columns incl. `login_method`; password path stores provided fields + `"password"`; passkey path stores `"passkey"` (additive, backward-compatible) | ✓ |
+| REQ-017 | Reuses authentication's `Session` table + `SessionRepository` (constructor-injected); ABC extended additively with `get`, `list_for_user`, `revoke_user_sessions`, optional `limit` on `delete_expired`; existing ABC methods retained unchanged; no second session store | ✓ |
+| REQ-018 | Publishes `SessionRevoked`, `AllSessionsRevoked` (0-revoked → no event), `ExpiredSessionsDeleted` (0 → no event), `SessionsListed`; `None` publisher → no events and no subscriptions | ✓ |
+| REQ-019 | Feature-owned `register_settings(registry)` — 3 keys, defaults 100/5/1000, `min_value=1`; live reads via `_read_setting`; unregistered keys fall back to hardcoded defaults; no duplicate TTL key | ✓ |
+| REQ-020 | Constructor DI (`SessionRepository`, optional `event_bus`, optional `settings_registry` → shared `get_settings_registry()`); `get_session_service()` module singleton (first call requires a repository, else `ValueError`; subsequent calls return the existing instance); `reset_session_service()` clears it | ✓ |
+| REQ-021 | No raw tokens/hashes in entries, events, error messages (`"invalid session"`), or logs (`include_args=False`) | ✓ |
+| REQ-022 | `@logged_class(slow_threshold_ms=100, include_args=False)` on `SessionService`; `@logged` on `register_settings`/`get_session_service`/`reset_session_service` | ✓ |
+
+#### No unspecified behavior (no more, no less)
+
+- **Public API** of `backend.sessionmanagement` matches spec §3 / NFR-003 exactly: `SessionService`, `SessionEntry`, the 4 events, `register_settings`, `get_session_service`, `reset_session_service` (plus the `EventPublisher` structural protocol defined in spec §3). No extra endpoints, no extra events, no extra public functions.
+- **No new exception types** (spec design decision): argument errors are `ValueError`; invalid-token failures re-raise authentication's `InvalidSessionError`. No `errors.py` in the feature package.
+- **Constraints honored:** backend-only in-process service (no HTTP/REST, no frontend); no threads/background workers; no second session store; no change to expiration semantics.
+- **Authentication changes are strictly the spec's additive extensions** (§2 "Overlap & Extension"): nullable `Session` columns, optional `LoginRequest` fields, additive `SessionRepository` ABC methods + optional `delete_expired` limit, and the login path passing the device fields / `login_method` onto the issued row (REQ-016). No authentication behavior beyond the spec was changed; no spec amendment to `authentication.md` (recorded decision).
+- **`filemanagement/`, `logging/`, `mail/` changes are the 6 pre-existing PLR0917 lint fixes** (keyword-only `*` markers + in-repo call-site updates) required by the Phase 5 repo-wide ruff gate — pre-existing lint errors are in scope per AGENTS.md. No behavior change (full suite GREEN, no call site relied on the old positional forms).
+
+#### Tests trace back to normative requirements
+
+- **All test functions are named after normative IDs** and match the spec's test strategy (§10) 1:1: AC-001…AC-045 (45), EDGE-001…EDGE-012 (12), INV-001…INV-005 (5, Hypothesis property tests), NFR-001 (3 contract/performance), NFR-003 (contract), NFR-004 (acceptance), NFR-005 (integration). No orphaned tests.
+- **All test files are new** (`A` status in `git diff main --name-status`): no existing test was modified, deleted, or weakened to achieve GREEN.
+- Spot-checked assertions (e.g., `test_ac_027_cap_evicts_oldest_at_sixth_login`, `test_ac_028_no_eviction_below_cap`, `test_edge_011_cap_eviction_at_exact_cap`, event collector fixtures, `sessionmanagement_test_helpers`) prove the specified behavior (eviction of exactly the oldest row, token immediately unusable, exact count/event semantics) rather than being vacuous.
+
+#### Findings (all resolved/accepted)
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| F-1 | The cap-eviction handler (`_on_login_succeeded`) subscribes to the shared event bus (`get_event_bus()`), while the user-lifecycle handlers subscribe to the injected `event_bus` (when it has `subscribe`). | **Accepted** — the spec (REQ-014/REQ-015) mandates event-driven handling but not which bus; ADR-063/ADR-064 record the event-driven decision; AC-038 (`None` publisher → no subscriptions) is satisfied (all subscriptions are guarded by `event_bus is not None`). |
+| F-2 | 6 pre-existing PLR0917 lint fixes in `filemanagement/`, `logging/`, `mail/` (keyword-only markers + in-repo call-site updates). | **Accepted** — required by the Phase 5 repo-wide ruff gate (pre-existing lint errors in scope per AGENTS.md); no behavior change; suite GREEN. |
+| F-3 | The token path resolves via `get_by_token_hash(hash_token(token))` rather than calling `AuthService.session_info(token)`. | **Accepted** — mandated by the spec's own constructor signature (§3: the service holds the `SessionRepository`, not an `AuthService`); it reuses the same token-at-rest contract as authentication's `session_info`, and the observable behavior matches REQ-002/AC-004 exactly. |
+
+**S6.1 gate: PASS** — the code changes were reviewed against the approved spec; every REQ (22/22) is implemented with matching behavior; no behavior was introduced that is not represented in the spec; the tests trace back to normative requirements (no orphaned, no weakened, no deleted tests). 3 findings, all accepted. Next: S6.2 (Traceability + boundaries).
+
+### S6.2 Traceability + boundaries
+
+**Date:** 2026-09-19
+
+**Result: PASS — traceability confirmed (every REQ has a GREEN test, no orphaned tests); feature boundaries respected (code in `src/backend/sessionmanagement/`, no cross-feature internal imports); architecture rules consistent; acceptance tests not weakened or deleted.**
+
+#### 1. Traceability
+
+Citing the "Session Management Matrix" in `docs/verification/traceability.md` (updated in S5.3: 69 rows, all GREEN):
+
+- **Every REQ has at least one GREEN test (22/22):** REQ-001 (AC-001/002/003), REQ-002 (AC-004), REQ-003 (AC-005/006), REQ-004 (AC-007/008), REQ-005 (AC-001/002), REQ-006 (AC-009/010), REQ-007 (AC-011/012/013), REQ-008 (AC-014/015/016), REQ-009 (AC-017/018), REQ-010 (AC-019/020), REQ-011 (AC-021/022/023), REQ-012 (AC-024/025), REQ-013 (AC-026), REQ-014 (AC-027/028), REQ-015 (AC-029/030/031), REQ-016 (AC-008/032), REQ-017 (AC-033), REQ-018 (AC-034/035/036/037/038), REQ-019 (AC-039/040), REQ-020 (AC-041/042/043), REQ-021 (AC-044), REQ-022 (AC-045) — all GREEN rows.
+- **No orphaned tests:** an inventory of the five test directories (`tests/{acceptance,integration,property,contract,unit}/sessionmanagement/`) yields exactly **68 test functions** — AC-001…AC-045 (45), EDGE-001…EDGE-012 (12), INV-001…INV-005 (5), NFR-001 ×3 / NFR-003 / NFR-004 / NFR-005 (6). Every function is named after a normative ID and appears in the matrix; **zero test functions exist outside the matrix** (bidirectional traceability holds; the matrix's 69 rows share 2 tests across REQ-001/REQ-005 and INV-004/NFR-002, hence 69 rows / 68 unique tests).
+- **GREEN re-confirmed in this step:** `uv run pytest tests/acceptance/sessionmanagement/ tests/integration/sessionmanagement/ tests/property/sessionmanagement/ tests/contract/sessionmanagement/ tests/unit/sessionmanagement/ --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -q` → **67 passed, 1 deselected** (the deselected test is the known hanging test — loguru `enqueue=True` file-sink hang in a `@logged` wrapper, a logging-infrastructure issue, not session-management logic; its substance is covered by GREEN `test_ac_044_no_tokens_in_outputs` and `test_inv_004_no_tokens_in_outputs` per the S5.3 known-hang note).
+
+#### 2. Feature boundaries
+
+- **Code lives in the correct feature directory:** `src/backend/sessionmanagement/` (`__init__.py`, `events.py`, `feature_settings.py`, `models.py`, `service.py`). No session-management code exists elsewhere in `src/`; the only other `src/` changes are the spec-mandated additive authentication extensions (nullable `Session` columns, optional `LoginRequest` fields, additive `SessionRepository` ABC methods, login path storing device fields/`login_method` — REQ-016/REQ-017, reviewed in S6.1) and the 6 pre-existing PLR0917 lint fixes (S6.1 F-2).
+- **No cross-feature internal imports.** All imports in `src/backend/sessionmanagement/`:
+  - Package-root (public) imports: `backend.authentication` (`InvalidSessionError`, `LoginSucceeded`, `hash_token`), `backend.eventbus` (`get_event_bus`), `backend.logging` (`logged`, `logged_class`), `backend.settings` (`SettingsRegistry`, `get_settings_registry`), `backend.usermanagement` (`UserDeactivated`, `UserDeleted`, `UserEvent`, `UserPasswordChanged`) — every imported object is in the target feature's public `__all__`.
+  - Two submodule imports: `backend.authentication.models` (`Session`) and `backend.authentication.repositories` (`SessionRepository`) — both objects are in authentication's public `__all__` (`Session` line 96, `SessionRepository` line 98); the submodules are the canonical definition sites; the spec mandates these exact types in the constructor (`§3`, REQ-017). No `_`-prefixed (private) module is imported anywhere in the feature.
+  - Nothing outside the feature imports its internals: no `src/` code references `backend.sessionmanagement` at all (the feature is consumed only via its public package API, by the test suite and future application code).
+- **Finding (minor, accepted):** the two `backend.authentication.{models,repositories}` submodule imports deviate from the repo's cross-feature root-import convention (e.g., `authentication/service.py:72: from backend.usermanagement import ...`). Resolution: **accepted** — the imported objects are public API (in `__all__`), the spec mandates them in the constructor signature, and no internal implementation detail is exposed; the boundary rule (public interfaces only) is satisfied.
+
+#### 3. Architecture rules
+
+- The feature uses a **flat module layout** — `models.py` (domain concept: `SessionEntry`), `service.py` (use case: `SessionService` + module singleton), `events.py` (typed events), `feature_settings.py` (feature-owned settings registration), `__init__.py` (explicit public interface per NFR-003). This is consistent with the project structure principles in AGENTS.md: "Do not create layers or directories prematurely. `model/` and `services/` are architectural roles, not mandatory folders. Small features may use simple modules and should be split only when complexity justifies it." The architectural roles (domain concept vs. use case) are respected within the modules.
+- No `shared/` additions — nothing in the feature is genuinely shared by multiple features (the session store is authentication's, reused via constructor injection per REQ-017).
+- Architecture rules: `model/` contains domain concepts, `services/` contains use cases, `shared/` deliberately small — **consistent** (no premature layers, no feature-specific logic in shared, public interface explicit).
+
+#### 4. Acceptance tests not weakened or deleted
+
+- `git diff main --name-status -- tests/`: **25 files, all `A` (added)** — no existing test file was modified, deleted, or weakened to achieve GREEN.
+- The only test edits during Phase 4 were mechanical bug fixes **within the same new files** (verified against the S3.1 (T-004) ×2 and S3.1 (T-009) P-19 records): tuple-access alignment (`rows[0].id` → `rows[0][0].id`, `{r.id for r in rows}` → `{r[0].id for r in rows}`) fixing `AttributeError`-at-argument-evaluation bugs so the tests fail for the correct behavior reason; the asserted behavior (AC-027/AC-028/EDGE-011/INV-003/AC-038/AC-044/NFR-004) is unchanged in every case, and one fix **added** a spec-mandated size assertion (`len(token_entries) == cap`, INV-003) — a strengthening, not a weakening.
+- S6.1 spot-checked assertions (cap eviction, event collectors, helpers) prove specified behavior rather than being vacuous.
+
+#### Findings
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| B-1 | Two cross-feature submodule imports (`backend.authentication.models` → `Session`, `backend.authentication.repositories` → `SessionRepository`) deviate from the repo's root-import convention for cross-feature imports. | **Accepted** — both objects are in authentication's public `__all__` (canonical definition sites); the spec mandates these types in the constructor (§3, REQ-017); no private/internal module is imported; the public-interface-only boundary rule is satisfied. |
+
+No other findings.
+
+**S6.2 gate: PASS** — traceability confirmed (every REQ has at least one GREEN test; no orphaned tests; GREEN re-confirmed 67 passed / 1 known-hang deselected); feature boundaries respected (all feature code in `src/backend/sessionmanagement/`; all cross-feature imports are public interfaces; nothing imports the feature's internals); architecture rules consistent (flat module layout per the project structure principles); acceptance tests not weakened or deleted (25 test files, all new). 1 finding, accepted. **No commit** — Phase 6 commits happen at S6.4. Next: S6.3 (Review report).
+
+### S6.3 Review report
+
+**Date:** 2026-09-19
+
+#### Summary
+
+**The change is CLEAN** — all Phase 6 review steps passed:
+
+- **S6.1 Review vs. normative basis — PASS.** The code changes were reviewed against the approved spec (`docs/specs/session-management.md`, spec PR #38 merged to `main`): every REQ (22/22) is implemented with matching behavior; no behavior was introduced that is not represented in the spec; all tests trace back to normative requirements (no orphaned, no weakened, no deleted tests).
+- **S6.2 Traceability + boundaries — PASS.** Traceability confirmed (every REQ has at least one GREEN test; no orphaned tests; GREEN re-confirmed 67 passed / 1 known-hang deselected); feature boundaries respected (all feature code in `src/backend/sessionmanagement/`; all cross-feature imports are public interfaces; nothing imports the feature's internals); architecture rules consistent (flat module layout per the project structure principles); acceptance tests not weakened or deleted (25 test files, all new).
+- Supporting gates from Phase 5 (carried into the review): spec coverage = 100%; full suite GREEN (556 passed, 0 failed, 1 known-hang deselected); lint clean (repo-wide ruff = 0 errors); types clean (mypy PASS).
+
+#### Findings and resolutions
+
+All 4 findings from S6.1 and S6.2 are **resolved (accepted)** — no open findings:
+
+| # | Source | Finding | Resolution |
+|---|--------|---------|------------|
+| F-1 | S6.1 | The cap-eviction handler (`_on_login_succeeded`) subscribes to the shared event bus (`get_event_bus()`), while the user-lifecycle handlers subscribe to the injected `event_bus` (when it has `subscribe`). | **Accepted** — the spec (REQ-014/REQ-015) mandates event-driven handling but not which bus; ADR-063/ADR-064 record the event-driven decision; AC-038 (`None` publisher → no subscriptions) is satisfied (all subscriptions are guarded by `event_bus is not None`). |
+| F-2 | S6.1 | 6 pre-existing PLR0917 lint fixes in `filemanagement/`, `logging/`, `mail/` (keyword-only `*` markers + in-repo call-site updates). | **Accepted** — required by the Phase 5 repo-wide ruff gate (pre-existing lint errors in scope per AGENTS.md); no behavior change; full suite GREEN. |
+| F-3 | S6.1 | The token path resolves via `get_by_token_hash(hash_token(token))` rather than calling `AuthService.session_info(token)`. | **Accepted** — mandated by the spec's own constructor signature (§3: the service holds the `SessionRepository`, not an `AuthService`); it reuses the same token-at-rest contract as authentication's `session_info`, and the observable behavior matches REQ-002/AC-004 exactly. |
+| B-1 | S6.2 | Two cross-feature submodule imports (`backend.authentication.models` → `Session`, `backend.authentication.repositories` → `SessionRepository`) deviate from the repo's root-import convention for cross-feature imports. | **Accepted** — both objects are in authentication's public `__all__` (canonical definition sites); the spec mandates these types in the constructor (§3, REQ-017); no private/internal module is imported; the public-interface-only boundary rule is satisfied. |
+
+**Open findings: none.**
+
+#### Gate statement
+
+**The review report is CLEAN** — all review steps passed (S6.1, S6.2), all findings (F-1, F-2, F-3, B-1) are resolved/accepted, and no open findings remain. Per the Review Gate (AGENTS.md), **the change is considered COMPLETE**.
+
+**No commit** — Phase 6 commits happen at S6.4 (bump version + open PR).
