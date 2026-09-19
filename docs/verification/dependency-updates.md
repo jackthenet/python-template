@@ -67,3 +67,48 @@
 - The **MkDocs site setup** (mkdocs dependency, `mkdocs.yml`, `userdocs/` source directory) — separate future change (Q-63).
 - The `userdocs/` source-directory naming decision is **binding for that future change** (Q-64).
 - The **marked broken test(s)** — not fixed in this change (may remain broken).
+
+## Phase 4 (Implement — behavior-preserving steps)
+
+**Steps (all committed on `refactor/dependency-updates`):**
+
+| Step | Change | Commit |
+|---|---|---|
+| S4.1 | dev deps: add `alembic`, `polyfactory`, `respx`, `time-machine`, `mkdocstrings`, `deptry`; replace `pytest-random` with `pytest-randomly` | `73db415` |
+| S4.2 | runtime: replace `pyyaml` with `ruamel.yaml` (settings repository migration + mechanical import migration in exactly 4 settings test files; format probe: safe YAML, block style, sorted keys preserved) | `ab876bc` |
+| S4.3 | runtime: update `pillow` to current version | `adc4ed4` |
+| S4.4 | Full regression vs. baseline (this section) | this commit |
+
+### S4.4 Full regression result
+
+- **Command:** `uv run pytest tests/ -q --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` (300 s cap on the pytest run; the broken hanging test deselected — it can never complete — per the user-authorized procedure).
+- **Runs (2, for reproducibility under different per-session random seeds):**
+  - Run 1: **1 failed, 555 passed, 1 skipped, 1 deselected** in 172.50 s — 300 s cap NOT hit.
+  - Run 2: **1 failed, 555 passed, 1 skipped, 1 deselected** in 173.65 s — 300 s cap NOT hit.
+- **NEW failure (both runs, deterministic across seeds):** `tests/acceptance/logging_coverage/test_services_traced.py::test_service_registry_classes_traced` — assertion `assert 1 == 2` (entry-record count for `SettingsRegistry.has`).
+
+### Comparison to baseline: NOT IDENTICAL
+
+- Baseline (sum of the per-category rows in the Baseline section): **556 passed, 1 skipped, 0 failed** (+1 broken hanging test, deselected).
+  - **Baseline doc inconsistency (flagged):** the Baseline TOTAL row says "616 passed", but the per-category rows sum to **556 passed**. This run collected **557 tests** (555 passed + 1 skipped + 1 failed), exactly the row-sum + the skipped test. The row-sum is therefore the true baseline total; the "616" in the TOTAL row is an internal documentation error.
+- **Diff vs. baseline:**
+  - **1 NEW failure:** `test_service_registry_classes_traced` (was GREEN in the baseline as part of `tests/acceptance/logging_coverage` = 16 passed).
+  - **0 other changed outcomes** (all other tests: same pass/skip outcomes; the 1 skip is the pre-existing filemanagement symlink skip).
+  - **Test count identical:** 557 collected in this run vs. 556 passed + 1 skipped = 557 in the baseline row-sum.
+
+### Characterization of the new failure (diagnostic only — NOT fixed in this step)
+
+- The test asserts that the `EventBus()` constructor produces a `SettingsRegistry.has` entry record (expects 2 total: one from the constructor, one from the test's own `reg.has(...)` call).
+- `EventBus.__init__` (`src/backend/eventbus/eventbus.py`) calls `registry.has("eventbus.max_queue_size")` **only when the settings-registry module singleton exists** (`get_settings_registry(required=False)` is non-`None`); the singleton is created by other tests during a full-suite run.
+- The test **passes in isolation** (`tests/acceptance/logging_coverage/test_services_traced.py`: 3 passed in 0.45 s) and passed in the baseline full-suite ordering (under `pytest-random`).
+- Under the new test-ordering regime introduced by **S4.1** (`pytest-random` → `pytest-randomly`, per-session shuffling), the singleton is not created before this test in either full run → an **order/state-dependent test failure exposed by the S4.1 dependency swap** (test file unchanged in this change; verified via `git diff 78286eb..HEAD -- tests/` — only the 4 authorized yaml-migration files touched).
+
+### Ruff gate
+
+- `uv run ruff check .` → **All checks passed!** (clean).
+
+### Invariant check
+
+- **No test weakened or deleted:** only the authorized mechanical yaml import migration (S4.2; 4 settings test files; all assertions unchanged).
+- **No observable product behavior change:** settings `values.yaml` / template `.yaml` format semantics preserved per the S4.2 format probe (safe YAML, block style, sorted keys); only `src/backend/settings/repository.py` changed in `src/`.
+- **GATE NOT MET:** the REFACTOR invariant "no NEW test failures beyond the marked broken test" is violated by `test_service_registry_classes_traced` under the S4.1 test-ordering change. Phase 4 is **NOT complete**; re-entry is required (decision belongs to the orchestrator/user: e.g., make the order-dependent test robust, or reconsider the `pytest-randomly` swap). No fix was attempted in this step.
