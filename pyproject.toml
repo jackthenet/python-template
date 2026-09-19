@@ -7,7 +7,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     # Domain and request/response validation models.
-    "pydantic>=2.13.1",
+    "pydantic>=2.13.5",
     # Structured application logging across backend and UI integrations.
     "loguru>=0.7.3",
     # High-performance JSON serialization/deserialization.
