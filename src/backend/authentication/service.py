@@ -90,6 +90,7 @@ class AuthService:
         session_repository: SessionRepository,
         reset_repository: PasswordResetRepository,
         webauthn_repository: WebAuthnCredentialRepository,
+        *,
         webauthn_provider: WebAuthnProvider | None = None,
         event_bus: EventPublisher | None = None,
         attempt_tracker: AttemptTracker | None = None,
@@ -136,7 +137,14 @@ class AuthService:
             user = self._user_repository.get_by_email(identifier)
         return user
 
-    def _issue_session(self, user: UserRead, method: str) -> LoginResult:
+    def _issue_session(
+        self,
+        user: UserRead,
+        method: str,
+        user_agent: str | None = None,
+        ip: str | None = None,
+        device_name: str | None = None,
+    ) -> LoginResult:
         token = new_token()
         now = datetime.now(UTC)
         session = Session(
@@ -145,6 +153,12 @@ class AuthService:
             created_at=now,
             expires_at=now + self._session_ttl,
             revoked=False,
+            # Device identification at login (session-management REQ-016, ADR-062):
+            # omitted fields are stored as None; pre-feature rows remain NULL.
+            user_agent=user_agent,
+            ip=ip,
+            device_name=device_name,
+            login_method=method,  # "password" | "passkey"
         )
         self._session_repository.add(session)
         session_info = SessionInfo(user_id=user.id, created_at=now, expires_at=now + self._session_ttl)
@@ -175,7 +189,13 @@ class AuthService:
             raise InvalidCredentialsError("invalid credentials")
 
         self._attempt_tracker.record_success(identifier)
-        return self._issue_session(user, method="password")
+        return self._issue_session(
+            user,
+            method="password",
+            user_agent=request.user_agent,
+            ip=request.ip,
+            device_name=request.device_name,
+        )
 
     # --- sessions ---
 

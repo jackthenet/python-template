@@ -39,8 +39,34 @@ class SessionRepository(ABC):
         """Mark all of a user's sessions revoked."""
 
     @abstractmethod
-    def delete_expired(self) -> int:
-        """Delete expired sessions and return the count."""
+    def get(self, session_id: UUID) -> Session | None:
+        """Return the session row for a session id (any revocation state), or ``None``.
+
+        Additive extension for the session-management feature (REQ-017, ADR-061).
+        """
+
+    @abstractmethod
+    def list_for_user(self, user_id: UUID) -> Sequence[Session]:
+        """Return ALL rows for a user (any revocation state), ``created_at`` descending.
+
+        Additive extension for the session-management feature (REQ-017, ADR-061).
+        """
+
+    @abstractmethod
+    def revoke_user_sessions(self, user_id: UUID, exclude_session_id: UUID | None = None) -> int:
+        """Revoke all of a user's sessions except the excluded one; return the count revoked.
+
+        Additive extension for the session-management feature (REQ-017, ADR-061).
+        """
+
+    @abstractmethod
+    def delete_expired(self, limit: int | None = None) -> int:
+        """Delete up to ``limit`` expired sessions (``None`` = all, the previous behavior)
+        and return the count.
+
+        Backward-compatible signature extension for the session-management feature
+        (REQ-017, ADR-061).
+        """
 
 
 @logged_class(slow_threshold_ms=100)

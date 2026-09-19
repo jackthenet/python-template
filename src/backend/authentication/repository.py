@@ -111,11 +111,36 @@ class SqliteSessionRepository(SessionRepository):
                     s.add(row)
             s.commit()
 
-    def delete_expired(self) -> int:
+    def get(self, session_id: UUID) -> Session | None:
+        with self._session() as s:
+            return _attach_utc(s.get(Session, session_id))
+
+    def list_for_user(self, user_id: UUID) -> list[Session]:
+        with self._session() as s:
+            statement = (
+                select(Session).where(Session.user_id == user_id).order_by(Session.created_at.desc(), Session.id.desc())
+            )
+            return [_attach_utc(row) for row in s.exec(statement).all()]
+
+    def revoke_user_sessions(self, user_id: UUID, exclude_session_id: UUID | None = None) -> int:
+        with self._session() as s:
+            statement = select(Session).where(Session.user_id == user_id)
+            count = 0
+            for row in s.exec(statement).all():
+                if row.id != exclude_session_id and not row.revoked:
+                    row.revoked = True
+                    s.add(row)
+                    count += 1
+            s.commit()
+        return count
+
+    def delete_expired(self, limit: int | None = None) -> int:
         now = datetime.now(UTC)
         with self._session() as s:
-            statement = select(Session).where(Session.expires_at <= now)
+            statement = select(Session).where(Session.expires_at <= now).order_by(Session.expires_at.asc())
             rows = list(s.exec(statement).all())
+            if limit is not None:
+                rows = rows[:limit]
             for row in rows:
                 s.delete(row)
             s.commit()

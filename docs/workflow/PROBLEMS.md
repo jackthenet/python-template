@@ -158,3 +158,35 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 run (recovered by the subagent itself: file deduplicated, committed cleanly)
 - **Resolution:** Handoff verified by the orchestrator (section count = 1; diff = 4 in-scope files; tree clean). Follow-up: (a) step subagents that edit a file MUST re-read it after the edit to verify the edit landed exactly once before the next tool call; (b) when a handoff reports a loop/anomaly, the orchestrator MUST verify artifact counts (e.g., `grep -c` on the section header) before marking the step complete.
 - **Date:** 2026-09-15
+
+## P-16 — S4.2 (T-002) subagent stopped mid-run by user request (no handoff) left complete uncommitted work
+- **Problem:** The S4.2 (T-002) Implement subagent was stopped by user request after 6469.7s / 23 tool uses with no output/handoff. It left a complete, uncommitted implementation in the working tree (`src/backend/sessionmanagement/service.py` + `docs/verification/session-management.md`): all four revocation operations (`revoke_session`, `logout_all_sessions`, `logout_other_sessions`, `revoke_all_sessions`) plus the `_resolve_token` helper. Orchestrator re-ran T-002's 17 tests: **17/17 PASS** (GREEN) — the work was actually done, just not recorded/handed off.
+- **Step / Phase:** S4.2 Implement — Phase 4 (T-002)
+- **Change:** session-management / FEATURE
+- **Duration / iterations:** 1 stopped run + 1 fresh relaunch (S4.2 T-002) to verify GREEN and record the handoff
+- **Resolution:** Per the execution model (a subagent that does not return is a failed step; never resume a stuck one), the orchestrator logged this problem and relaunched S4.2 (T-002) with a fresh subagent to verify the in-tree implementation is GREEN, record evidence, and return the structured handoff. The in-tree work was preserved (not reverted).
+- **Date:** 2026-09-18
+
+## P-17 — S4.2 (T-004) subagent stopped mid-run (no handoff) left uncommitted cap-eviction implementation
+- **Problem:** The S4.2 (T-004) Implement subagent stopped mid-run with no output/handoff. It left an uncommitted cap-eviction implementation in the working tree (`src/backend/sessionmanagement/service.py`: `DEFAULT_MAX_SESSIONS_PER_USER = 5`, the constructor `LoginSucceeded` subscription on the shared event bus, and the `_on_login_succeeded` handler) plus the S4.1 (T-004) RED record and the S3.1 (T-004) test-fix record in `docs/verification/session-management.md`, and the two-line test fix in `tests/acceptance/sessionmanagement/test_cap_eviction.py`. GREEN was never confirmed or recorded.
+- **Step / Phase:** S4.2 (T-004 implement + confirm GREEN) — Phase 4 (T-004)
+- **Change:** session-management / FEATURE
+- **Duration / iterations:** 1 stopped run + 1 fresh relaunch (S4.2 T-004) to verify GREEN and record the handoff
+- **Resolution:** Per the execution model (a subagent that does not return is a failed step; never resume a stuck one), the orchestrator logged this problem and relaunched S4.2 (T-004) with a fresh subagent to verify the in-tree implementation is GREEN, record evidence, and return the structured handoff. The in-tree work was preserved (not reverted).
+- **Date:** 2026-09-18
+
+## P-18 — T-004 test-contract bug: `test_edge_011` final assertion incompatible with spec-mandated token-path listing (discovered in S4.2 T-004 GREEN)
+- **Problem:** `test_edge_011_cap_eviction_at_exact_cap` (derived in S3.1) has a final assertion incompatible with the spec-mandated token-path listing: `assert [e.session_id for e in token_entries] == [new_row.id]` compares the full 5-entry valid-session list (new session pinned first + the 4 other valid sessions, `created_at` descending) to the 1-element list `[new_row.id]`. No implementation satisfying REQ-006/AC-009/INV-005 can make the token path return a single entry, so T-004's GREEN gate (all 4 `tests_to_create` pass) was blocked by the test, not the implementation. The implementation correctly evicts the oldest and keeps the new session (EDGE-011/REQ-014) — the test's own preceding assertions (`oldest_row.id not in ids`, `second_oldest_row.id in ids`, `len(entries) == cap`) all pass.
+- **Step / Phase:** S4.2 (T-004 implement + confirm GREEN) — Phase 4 (T-004); test-contract bug in S3.1-derived `tests/acceptance/sessionmanagement/test_cap_eviction.py`
+- **Change:** session-management / FEATURE
+- **Duration / iterations:** 1 iteration (caught during S4.2 (T-004) GREEN; routed to a fresh test-skill fix step)
+- **Resolution:** The S4.2 (T-004) subagent flagged the bug precisely (line 143; correct assertion: `token_entries[0].session_id == new_row.id` — new session valid through the token path and pinned first, per REQ-006/INV-005). A fresh test-skill step re-derives ONLY that assertion line (mechanical alignment, not a weakening; the asserted EDGE-011/REQ-014 behavior is unchanged), then S4.2 (T-004) is re-entered for GREEN.
+- **Date:** 2026-09-18
+
+## P-19 — T-009 test-contract bug: 3 tests access `.id` on the tuple returned by `make_session` (discovered in S4.1 T-009 RED)
+- **Problem:** Three T-009 tests fail with `AttributeError: 'tuple' object has no attribute 'id'` — the test helper `make_session` (tests/sessionmanagement_test_helpers.py) returns `tuple[Session, str]` = `(row, raw_token)`, and the tests build `rows = [make_session(...) ...]` (a list of tuples). They correctly unpack `_, token = rows[1]`, but then call `service.revoke_session(rows[0].id)` — `rows[0]` is a tuple, not a `Session`, so `.id` raises `AttributeError` at argument evaluation, BEFORE the feature code under test runs. The bug masks the real RED reason (unimplemented None-publisher/observability/tracing behavior). Affected: `tests/acceptance/sessionmanagement/test_events.py::test_ac_038_none_publisher_no_events_no_subscriptions`, `tests/acceptance/sessionmanagement/test_observability.py::test_ac_044_no_tokens_in_outputs`, `tests/acceptance/sessionmanagement/test_observability.py::test_nfr_004_traced_service_publishes_events`.
+- **Step / Phase:** S4.1 (T-009 pick task + confirm RED) — Phase 4 (T-009); test-contract bug in S3.1-derived tests
+- **Change:** session-management / FEATURE
+- **Duration / iterations:** 1 iteration (caught during S4.1 (T-009) RED; routed to a fresh test-skill fix step)
+- **Resolution:** A fresh test-skill step fixes ONLY the tuple access in the 3 tests (mechanical alignment, not a weakening; the asserted AC-038/AC-044/NFR-004 behavior is unchanged): `rows[0].id` → `rows[0][0].id` (access the `Session` object from the tuple). After the fix, S4.1 (T-009) is re-entered to confirm the real RED reason.
+- **Date:** 2026-09-19
