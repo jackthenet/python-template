@@ -61,7 +61,7 @@ dev = [
     # httpx mocking for outbound-call tests.
     "respx>=0.23.1",
     # Linting, formatting, and autofix checks.
-    "ruff>=0.16.7",
+    "ruff>=0.16.8",
     # Time travel for time-dependent tests.
     "time-machine>=3.5.1",
     # Fast type checker for the source tree.
