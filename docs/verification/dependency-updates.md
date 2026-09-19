@@ -175,3 +175,21 @@
 - **Ruff:** `uv run ruff check .` → **All checks passed!** (clean).
 
 **Gate: MET** — the REFACTOR invariant "no NEW test failures beyond the marked broken test" holds under the `pytest-randomly` ordering; the full regression is identical to the true baseline.
+
+---
+
+## Phase 5 — S5.1 (REFACTOR) — full regression + architecture rules
+
+**Command:** full regression with 300 s cap on the pytest run, broken hanging test deselected (P-20):
+`uv run pytest tests/ -q --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs`
+
+**Full regression result (independent confirmation — Phase 5 run):**
+- **556 passed, 1 skipped, 0 failed** (1 deselected — the broken hanging test, may remain broken per P-20).
+- Duration: **160.38 s** (0:02:40) — **timeout NOT hit** (cap 300 s).
+- Skipped: `tests/acceptance/filemanagement/test_filemanagement.py:364` (symlinks not available on this host) — same as baseline.
+
+**Baseline comparison: IDENTICAL** — true baseline is **556 passed, 1 skipped, 0 failed** (docs/verification/dependency-updates.md, Baseline section). No diff.
+
+**Architecture rules:** `uv run pytest tests/architecture/ -v` → **N/A — no architecture test directory in this repo** (`tests/architecture/` does not exist).
+
+**Gate: MET** — the REFACTOR invariant "suite result identical to baseline" holds on an independent Phase 5 run.
