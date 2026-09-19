@@ -203,3 +203,38 @@
 **Type check (the gate):** `uv run mypy src/` → **Success: no issues found in 56 source files** (PASS).
 
 **Gate: MET** — lint clean and type checks pass over the whole repo (including the change's `src/backend/settings/repository.py` migration + test files + dependency changes).
+
+---
+
+## Phase 5 — Verification report (REFACTOR)
+
+**Gate summary (REFACTOR gate set):**
+
+| Check | Result | Evidence |
+|---|---|---|
+| Full regression suite (S5.1) | **556 passed, 1 skipped, 0 failed** (160.38 s; 1 deselected — the broken hanging test P-20) — **IDENTICAL to true baseline** | S5.1 section above |
+| Architecture rules | **N/A** — no `tests/architecture/` directory in this repo | S5.1 section above |
+| Lint (S5.2, whole repo, matching CI) | `uv run ruff check .` → **All checks passed!** (clean) | S5.2 section above |
+| Type check (S5.2, the gate) | `uv run mypy src/` → **Success: no issues found in 56 source files** (PASS) | S5.2 section above |
+
+**Spec coverage: N/A for REFACTOR** — no spec change, no new requirements; REFACTOR changes no externally observable behavior and is not tracked against REQ/AC IDs.
+
+**Traceability: matrix UNCHANGED** — REFACTOR introduces no new requirements and changes no behavior, so `docs/verification/traceability.md` is not affected.
+- Evidence: `git diff main...HEAD -- docs/verification/traceability.md` → **empty** (no diff). File present (43,600 bytes).
+
+**Test-change audit (REFACTOR: no test weakened/deleted — authorized test changes documented):**
+- `git diff main...HEAD --stat -- tests/` → **26 files changed, 260 insertions(+), 190 deletions(-)**.
+- **No test deleted:** `git diff main...HEAD --diff-filter=D --name-only -- tests/` → empty. **No test file added:** `--diff-filter=A` → empty. **No test function removed or added:** diff contains zero removed/added `def test_` lines.
+- **Zero assertion changes:** the diff removes 8 assertion lines and adds 8 assertion lines; after whitespace normalization the two sets are **identical** (every removed assertion is re-added verbatim — only re-indented, moved inside the restore-on-teardown context-manager blocks). One further removed line containing "assert" is a docstring comment ("this changes no test assertion"), not an assertion.
+- **The 26 changed test files fall into exactly the two authorized categories:**
+  - **(a) Mechanical pyyaml → ruamel.yaml import migration** (user instruction "replace pyyaml with ruamel.yaml") — exactly 4 settings test files: `tests/acceptance/settings/test_settings.py`, `tests/contract/settings/test_settings_contracts.py`, `tests/contract/settings_coverage/test_value_repository.py`, `tests/unit/settings/test_settings_edges.py`. Changes are limited to `import yaml` → `from ruamel.yaml import YAML`, `yaml.safe_load(...)` → `YAML(typ="safe").load(...)`, `yaml.safe_dump(...)` → ruamel block-style dump. Zero assertion changes.
+  - **(b) Singleton-leak source fix (Q-65 — restore-on-teardown fixture pattern)** — helpers: `tests/settings_test_helpers.py` (new `isolated_registry()` + `restore_singleton()`), `tests/eventbus_test_helpers.py` (new `isolated_event_bus()`), `tests/mail_test_helpers.py` (removed superseded `reset_registry()`/`setup_isolated_registry()` — helper functions only, no assertions); plus 23 test/conftest files (settings/mail/eventbus/sessionmanagement/logging-coverage) whose fixtures/test bodies are wrapped in the context managers. Zero assertion changes.
+  - The 4 files of category (a) also received the category (b) fixture pattern (overlap); no file shows any other kind of change.
+
+**Invariant check — no observable behavior change:**
+- Suite result **identical to baseline** (556 passed, 1 skipped, 0 failed; same skip — symlinks unavailable on host; same deselected broken test).
+- Settings YAML format semantics preserved per the S4.2 format probe: **safe YAML, block style, sorted keys** (ruamel `YAML(typ="safe")` with `default_flow_style = False` reproduces the pyyaml `safe_dump`/`safe_load` semantics for the settings store).
+
+**Known/broken (out of scope, user-authorized):** the hanging pre-existing test `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` (P-20) remains broken — it hangs on `main` as well; it is deselected in the regression runs and may remain broken.
+
+**VERDICT: VERIFIED** — REFACTOR gates satisfied: full regression GREEN and identical to baseline (zero test changes beyond the two documented, zero-assertion-change categories), architecture N/A, lint clean, mypy PASS, traceability matrix unchanged, no observable behavior change.
