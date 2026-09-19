@@ -724,3 +724,25 @@ Each question is a section with the following fields:
 - **Date:** 2026-09-15
 - **Status:** ANSWERED
 - **Incorporated:** yes
+
+## Q-63 — MkDocs site setup scope (Phase 0, dependency-updates)
+- **Step:** Phase 0 — Classify (orchestrator)
+- **Change:** dependency-updates, REFACTOR
+- **Why needed:** The user's message lists `mkdocstrings` (an MkDocs plugin) among the new dependencies and includes a statement about MkDocs source-directory naming, but does not list the `mkdocs` core dependency or request the site setup (mkdocs.yml + source directory). Scope decision needed before worktree creation.
+- **Context:** User message: "add alembic, polyfactory, respx, time-machine,mkdocstrings and deptry. pytest-random, pyyaml replace with pytest-randomly, ruamel.yaml. Update pillow to current version." + "Calling MkDocs's source directory something else (userdocs///) is actually the more honest naming, since it separates 'internal process record' from 'published documentation.'"
+- **Question:** Is the MkDocs site setup itself (mkdocs dependency + mkdocs.yml + source directory) part of this dependency change, or a separate follow-up?
+- **Answer:** **Deps only** — this change = the 6 additions (alembic, polyfactory, respx, time-machine, mkdocstrings, deptry), the 2 replacements (pytest-random→pytest-randomly, pyyaml→ruamel.yaml), and the pillow update. The MkDocs site setup is a separate future change; the naming decision (Q-64) is recorded and binding for it.
+- **Date:** 2026-09-16
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-64 — MkDocs source directory naming (binding decision, user-initiated)
+- **Step:** Phase 0 — Classify (orchestrator; user statement)
+- **Change:** future MkDocs site change (recorded for it; not part of dependency-updates)
+- **Why needed:** The user stated a naming decision for the MkDocs site's source directory. It must be recorded so the future MkDocs site change applies it.
+- **Context:** User statement: "Calling MkDocs's source directory something else (userdocs///) is actually the more honest naming, since it separates 'internal process record' from 'published documentation.'" The repo's `docs/` directory is the internal process record (specs, decisions, verification, workflow). The published documentation (MkDocs site source) must NOT live in `docs/`.
+- **Question:** What should the MkDocs site's source directory be named?
+- **Answer:** **`userdocs/`** (repo root) — the MkDocs site source directory is `userdocs/`, NOT the default `docs/`. Rationale (user): it separates "internal process record" (`docs/`) from "published documentation" (`userdocs/`). Binding for the future MkDocs site change.
+- **Date:** 2026-09-16
+- **Status:** ANSWERED
+- **Incorporated:** yes (recorded; applies to the future MkDocs site change)
