@@ -637,6 +637,19 @@ The session-management feature (`docs/specs/session-management.md`) uses its own
 | NFR-004 | — | `test_nfr_004_traced_service_publishes_events` | GREEN |
 | NFR-005 | — | `test_nfr_005_concurrent_threads_safe` | GREEN |
 
+## Issue: hanging-observability-test (reproduction test)
+
+Issue `hanging-observability-test` (type ISSUE; triage: `docs/verification/hanging-observability-test.md`). The reproduction test is `test_ac_045_traced_methods_no_tokens_in_logs` (session-management test directory, already exists — not modified). **RED for this issue = the test hangs (never finishes)**; re-confirmed 2026-09-20 with `timeout 90` → exit 124. Affected spec IDs (session-management `docs/specs/session-management.md`; logging `docs/specs/logging.md`) mapped to the reproduction test:
+
+| Feature | Requirement | Acceptance Criterion | Reproduction test | Status |
+|---------|-------------|---------------------|-------------------|--------|
+| session-management | REQ-022 | AC-045 | `test_ac_045_traced_methods_no_tokens_in_logs` | RED (hang) |
+| session-management | REQ-021 | AC-044 | `test_ac_045_traced_methods_no_tokens_in_logs` (no raw token/hash in log records) | RED (hang) |
+| session-management | NFR-004 | — | `test_ac_045_traced_methods_no_tokens_in_logs` | RED (hang) |
+| logging | REQ-001 | AC-001 | `test_ac_045_traced_methods_no_tokens_in_logs` (enqueued file sink mandated) | RED (hang) |
+| logging | NFR-001 | — | `test_ac_045_traced_methods_no_tokens_in_logs` (setup must not block) | RED (hang) |
+| logging | NFR-002 | — | `test_ac_045_traced_methods_no_tokens_in_logs` (decorator overhead must not block) | RED (hang) |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:

@@ -64,3 +64,24 @@ The observed behavior (the AC-045 test hangs and never finishes) deviates from t
 
 - The fix must preserve `enqueue=True` (per logging REQ-001/AC-001). If the fix turns out to require **removing `enqueue=True`** or **changing the logging feature to not deadlock** (behavior the spec does not state), it must be **escalated** (Spec Amendment PR or reclassification per the Escalation Rules).
 - Based on the current analysis, the fix is a **test-side fix** that does not require behavior the spec does not state. So **no escalation is needed** at this time.
+
+## RED Evidence
+
+Reproduction test: `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` (already exists; not modified).
+
+**RED for this issue = the test hangs (never finishes).** The defect is a deadlock, not a wrong assertion: the test does not fail — it never completes. RED was therefore re-confirmed by running the test under a 90 s timeout; exit 124 (timeout) is the observed RED signal.
+
+### AC-045 (REQ-022) — reproduction test
+
+RED:
+  command: timeout 90 uv run pytest tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v
+  result: HANG — exit 124 after 90 s (test never completes)
+  failure mode: hang (deadlock in the loguru `enqueue=True` file-sink `multiprocessing.SimpleQueue` pipe when a `@logged` method emits a record during the test) — not an assertion failure and not a setup error; the test contract sanity check passes because the hang is the spec-defined defect (logging must not block/hang: logging NFR-001/NFR-002)
+  affected IDs covered by this reproduction test: session-management AC-045/REQ-022, AC-044/REQ-021, NFR-004; logging REQ-001/AC-001, NFR-001, NFR-002
+  date: 2026-09-20
+  commit: (this commit — `issue(hanging-observability-test): RED confirmed`)
+
+GREEN:
+  command: (pending Phase 4 — minimal fix; expected: the test completes and passes without a timeout)
+  result: (pending)
+  commit: (pending)
