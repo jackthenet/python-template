@@ -193,3 +193,13 @@
 **Architecture rules:** `uv run pytest tests/architecture/ -v` → **N/A — no architecture test directory in this repo** (`tests/architecture/` does not exist).
 
 **Gate: MET** — the REFACTOR invariant "suite result identical to baseline" holds on an independent Phase 5 run.
+
+---
+
+## Phase 5 — S5.2 (REFACTOR) — lint + types
+
+**Lint (whole repo, matching CI):** `uv run ruff check .` → **All checks passed!** (0 errors, clean).
+
+**Type check (the gate):** `uv run mypy src/` → **Success: no issues found in 56 source files** (PASS).
+
+**Gate: MET** — lint clean and type checks pass over the whole repo (including the change's `src/backend/settings/repository.py` migration + test files + dependency changes).
