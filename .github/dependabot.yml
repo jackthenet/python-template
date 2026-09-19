@@ -1,12 +1,41 @@
 version: 2
 
 updates:
-  # uv lockfile (uv.lock) — the dedicated ecosystem for uv-managed Python projects.
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
-  # GitHub Actions.
+    groups:
+      lint-and-types:
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "ty"
+          - "bandit"
+          - "complexipy"
+      test-tooling:
+        patterns:
+          - "pytest*"
+          - "hypothesis"
+          - "polyfactory"
+          - "respx"
+          - "time-machine"
+      dev-utilities:
+        patterns:
+          - "pre-commit"
+          - "py-spy"
+          - "pip-audit"
+          - "deptry"
+          - "mkdocstrings"
+      runtime-core:
+        patterns:
+          - "pydantic"
+          - "sqlmodel"
+          - "loguru"
+          - "orjson"
+          - "httpx"
+    versioning-strategy: increase
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
