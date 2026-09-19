@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from ruamel.yaml import YAML
 
 from backend.settings import YamlValueRepository
 
@@ -27,7 +27,7 @@ def test_atomic_write(tmp_path: Path) -> None:
 
     path = tmp_path / "values" / "values.yaml"
     # The written file parses as valid YAML.
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
     assert data == {"a": "x"}
     # No temp files remain in the directory.
     leftovers = [p for p in (tmp_path / "values").iterdir() if p.name.endswith(".tmp")]

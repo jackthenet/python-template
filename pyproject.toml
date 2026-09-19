@@ -17,11 +17,11 @@ dependencies = [
     "sqlmodel>=0.0.42",
     "argon2-cffi>=25.1.0",
     "email-validator>=2.3.0",
-    # Safe YAML serialization for template storage.
-    "pyyaml>=6.0.1",
     "filetype>=1.2.0",
     # Image decode validation + variant generation (file-management avatars).
     "pillow>=10.0.0",
+    # Safe YAML serialization for settings value/template storage.
+    "ruamel-yaml>=0.19.1",
 ]
 
 [dependency-groups]

@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-import yaml
+from ruamel.yaml import YAML
 from settings_test_helpers import wait_for
 
 from backend.eventbus import EventBus
@@ -435,7 +435,7 @@ def test_ac_030_yaml_file_written(tmp_path: Path) -> None:
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     f = tmp_path / "t1.yaml"
     assert f.exists()
-    data = yaml.safe_load(f.read_text())
+    data = YAML(typ="safe").load(f.read_text())
     assert data["name"] == "t1"
     assert data["category"] == "app"
     assert data["values"] == {"app.a": "x", "app.b": 1}
