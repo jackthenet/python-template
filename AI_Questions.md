@@ -746,3 +746,13 @@ Each question is a section with the following fields:
 - **Date:** 2026-09-16
 - **Status:** ANSWERED
 - **Incorporated:** yes (recorded; applies to the future MkDocs site change)
+
+## Q-65 — Order-dependent test exposed by the pytest-randomly swap (Phase 4, dependency-updates)
+- **Step:** S4.4 (Phase 4, REFACTOR) — dependency-updates
+- **Why needed:** The `pytest-random` → `pytest-randomly` swap (user instruction) exposed a pre-existing order-dependent test: `tests/acceptance/logging_coverage/test_services_traced.py::test_service_registry_classes_traced` fails (`assert 1 == 2`) when a settings test that resets the registry singleton runs before it. The full regression (S4.4) was therefore NOT identical to the baseline.
+- **Context:** Mechanism: the session-scoped autouse fixture in `tests/conftest.py` creates the settings-registry module singleton (`install_isolated_registry()`); ~6 settings test files call `reset_settings_registry()` and do NOT restore it; the failing test expects 2 `SettingsRegistry.has` log records — one from its own call, one from the `EventBus()` constructor's guarded read (AC-017/AC-018), which happens only when the singleton exists. Pre-existing state leak, exposed (not caused) by the new shuffle.
+- **Question:** How should it be handled — (a) targeted order-independence fix in that one test, (b) mark broken (P-21) and proceed, or (c) fix the leak at the source (the ~6 settings test files restore the singleton after resetting it, fixture pattern)?
+- **Answer:** **(c) Fix the leak at the source** — the ~6 settings test files that reset the singleton must restore it (fixture pattern). No test weakening (assertions unchanged; only the registry acquisition/teardown changes).
+- **Date:** 2026-09-19
+- **Status:** ANSWERED
+- **Incorporated:** yes (S4.5 step)
