@@ -72,3 +72,51 @@ jobs:
         run: uv sync --only-group dev
       # PR-time dependency gate (lockfile diff review).
       - uses: actions/dependency-review-action@v5
+
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      - name: Run deptry (gate)
+        run: uv run deptry .
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      - name: Run mkdocs build (gate)
+        run: uv run mkdocs build --strict
+
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      # Validate the alembic scaffold end-to-end against a temp file-based SQLite DB.
+      - name: Run alembic upgrade head (gate)
+        env:
+          ALEMBIC_DATABASE_URL: sqlite:////tmp/alembic-ci.db
+        run: uv run alembic upgrade head
