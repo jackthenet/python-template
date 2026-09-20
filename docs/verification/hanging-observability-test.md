@@ -94,3 +94,50 @@ GREEN:
 - result: **3 passed in 0.57 s** — `test_ac_044_no_tokens_in_outputs` PASSED, `test_ac_045_traced_methods_no_tokens_in_logs` PASSED, `test_nfr_004_traced_service_publishes_events` PASSED (no hang; completes well under the 60 s budget)
 - ruff: `uv run ruff check .` → All checks passed!
 - timestamp: 2026-09-20 13:22 (local)
+
+## Phase 5 — Verify
+
+ISSUE Phase 5 gate: reproduction test GREEN (no hang) + full regression suite with no new failures + lint clean + type checks reported + traceability matrix updated.
+
+### 1. Reproduction test (GREEN, no hang)
+
+- command: `uv run pytest tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v` (run under a 180 s timeout guard)
+- result: **1 passed in 0.25 s** — no hang; completes in a fraction of the guard budget.
+
+### 2. Full regression suite (no new failures)
+
+- command: `uv run pytest tests/ -q -p no:randomly` (600 s timeout guard)
+- result: **557 passed, 1 skipped, 0 failed** in 161.34 s (0:02:41).
+- Classification: zero failures — no pre-existing failures and no regressions to classify. The single skip is environmental and pre-existing: `tests/acceptance/filemanagement/test_filemanagement.py:364` — "symlinks not available on this host" (legitimate environment skip, unrelated to this change).
+- The AC-045 reproduction test was included in the full-suite run (no deselect exists in `pyproject.toml`/`conftest.py`) and passed.
+
+### 3. Lint
+
+- command: `uv run ruff check .`
+- result: **All checks passed!** (clean)
+
+### 4. Type checks
+
+- command: `uv run mypy src/`
+- result: **Success: no issues found in 56 source files** (clean; no pre-existing mypy errors — this change touched no `src/` file).
+
+### 5. Traceability matrix update
+
+- `docs/verification/traceability.md`:
+  - "Issue: hanging-observability-test (reproduction test)" section: all six affected-ID rows updated from `RED (hang)` to `GREEN (Phase 5, 2026-09-20; was RED/hang)`, with the Phase 5 evidence (reproduction test GREEN under timeout guard; full regression suite 557 passed / 1 skipped / 0 failed; no new failures) recorded in the section intro.
+  - Session Management Matrix note: the stale "known hanging test … deselected in full-suite runs" note corrected — the hang is fixed by this issue (root cause: infinite loop in the test's own assertion loop; fix commit `fe35f82`, test-side only) and GREEN re-confirmed in Phase 5; the AC-045 row remains GREEN.
+
+### Gate result
+
+| Check | Result |
+|-------|--------|
+| Reproduction test GREEN (no hang) | PASS (1 passed in 0.25 s, 180 s guard) |
+| Full regression suite — no NEW failures | PASS (557 passed, 1 skipped (environmental, pre-existing), 0 failed) |
+| Lint (`uv run ruff check .`) | PASS (clean) |
+| Type checks (`uv run mypy src/`) | PASS (clean, 56 source files) |
+| Traceability matrix updated | PASS (`docs/verification/traceability.md`) |
+
+**ISSUE Phase 5 gate: SATISFIED.**
+
+- timestamp: 2026-09-20 13:48 (local)
+- branch: `issue/hanging-observability-test`
