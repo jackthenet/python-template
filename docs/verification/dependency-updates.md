@@ -272,3 +272,50 @@
 ### Review verdict
 
 **CLEAN** — the change is complete per the Review Gate (REFACTOR): every REFACTOR gate satisfied — full suite GREEN (556 passed, 1 skipped, 0 failed) and identical to baseline with zero test weakening/deletion (only the two documented, zero-assertion-change categories), no observable behavior changed, feature boundaries and architecture rules respected, lint clean, mypy PASS, traceability matrix unchanged.
+
+---
+
+# Verification: dependency-updates — Cycle 2 (REFACTOR, 2026-09-20)
+
+> New change cycle, branched from `main` @ `51b530a` (merge of PR #40, the previous dependency-updates cycle recorded above). The previous cycle's record is preserved as-is for history.
+
+## Classification
+
+- **Type:** REFACTOR
+- **Rationale:** Update all project dependencies (in `pyproject.toml`) to their current releases, per repo precedent (PR #40 did the same). Behavior-preserving: no observable behavior change; the full test suite stays GREEN (identical to the baseline below, with the same known-hanging test deselected); no test changes.
+- **Date:** 2026-09-20.
+- **Base:** `main` @ `51b530a`.
+
+## Baseline (Phase 1 — GREEN)
+
+- **Command (all full-suite runs for this change):**
+  ```
+  timeout 600 uv run pytest tests/ -q -p no:randomly --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs
+  ```
+- **Known-hanging test deselected (documented, per change instruction):** `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` — a known-hanging test on `main` (infinite loop in the test's own assertion loop). It is **fixed in a separate in-flight change** `hanging-observability-test` (PR #44, not yet merged into `main`). The deselect is **not a regression of this change** and applies to the baseline and all subsequent full-suite runs for this change.
+- **Runs (2026-09-20):**
+
+  | Run | Result | Duration | Note |
+  |---|---|---|---|
+  | 1 | 1 failed, 555 passed, 1 skipped, 1 deselected | 162.86 s | Failure: `tests/property/settings/test_settings_properties.py::test_inv_002_get_value_always_valid` (pre-existing flaky; passes in isolation and in subsequent runs — see classification below) |
+  | 2 | **556 passed, 1 skipped, 1 deselected** | 159.02 s | **GREEN — the baseline** |
+  | 3 | 1 failed, 555 passed, 1 skipped, 1 deselected | 162.76 s | Failure: `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format` with `hypothesis.errors.DeadlineExceeded` (288.56 ms > default 200 ms deadline) wrapped in `FlakyFailure` (pre-existing timing flakiness under full-suite load) |
+
+- **Baseline determination: GREEN** — Run 2: **556 passed, 1 skipped, 1 deselected** (0 failed).
+- **Skipped test (pre-existing environmental skip, part of the baseline):** `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_031_symlink_rejected` — "symlinks not available on this host".
+- **Classification of the flaky property-test failures (Runs 1 and 3):**
+  - **Pre-existing:** this change has not started — no file changes, no dependency updates (working tree clean at `51b530a`). Any failure observed is pre-existing by definition.
+  - **Environmental (timing):** Hypothesis's default 200 ms per-example deadline is occasionally exceeded when the full suite runs on this Windows host under load. The affected property tests set `max_examples` (and health-check suppressions) but **no `deadline` override**, so the 200 ms default applies. Both failing tests pass in isolation and in subsequent runs; a different property test is hit on each run. This is a known class of host-timing flakiness, not a behavior defect.
+  - **Not caused by this change; not fixed in this step** (out of scope — see Refactor scope / Out of scope).
+
+## Refactor scope
+
+- **What changes (Phase 4):** update all project dependencies (in `pyproject.toml`) to their current releases.
+- **Invariants that MUST hold:**
+  1. **No observable behavior change** — the full suite stays GREEN, identical to the baseline (same command, same known-hanging-test deselect): **556 passed, 1 skipped, 1 deselected** (modulo the documented pre-existing flaky Hypothesis-deadline failures, which are environmental noise, not behavior).
+  2. **No test changes** — no test added, removed, or modified (no assertion changes, no test weakening or deletion).
+  3. **No `src/` behavior change** beyond what the dependency updates require (e.g., a behavior-preserving code migration forced by a dependency API change is in scope, per the PR #40 precedent).
+- **Out of scope:**
+  - Fixing the hanging test `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` (that is PR #44, a separate in-flight change).
+  - Any behavior change that a dependency update might require: **if a dependency update breaks the suite, STOP and report — do not force it** (Escalation Rules apply).
+  - Fixing the pre-existing flaky Hypothesis-deadline property-test failures (environmental; out of scope for this change).
