@@ -52,7 +52,7 @@ The FEATURE/CROSS-CUTTING path is decomposed into four atomic steps. Each has a 
 - **Objective:** Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief.
 - **Inputs:** the feature idea; the existing features' specs in `docs/specs/` (to check overlap); the change worktree.
 - **Outputs:** a feature brief (goals, constraints, out-of-scope, edge cases) — intermediate, folded into the spec (not a separate `.brief.md`); the questions recorded in `AI_Questions.md`.
-- **Done-criteria:** at least 20 questions asked and recorded in `AI_Questions.md` (returned as `BLOCKED-USER` in batches of up to 4 per round-trip); the feature brief captures goals, constraints, out-of-scope, edge cases; existing features' specs checked for overlap (no double work).
+- **Done-criteria:** at least 20 questions asked and recorded in `AI_Questions.md` in **one** `BLOCKED-USER` batch (the orchestrator presents the batch in as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first); the feature brief captures goals, constraints, out-of-scope, edge cases; existing features' specs checked for overlap (no double work).
 - **MUST create questions** (the trigger): record each question in `AI_Questions.md` (step S1.1, why needed, context, question, answer, status, incorporated). Do NOT call `ask_user_question`.
 
 ### S1.2 Draft spec
@@ -146,7 +146,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 - The change type MUST be classified (Phase 0) before any other work, and recorded in `docs/verification/<name>.md`.
 - Stay strictly on the change's branch/worktree. Do not modify unrelated changes, branches, or worktrees. Keep all changes isolated to this change.
 - Ask MORE questions than feels necessary during interrogation (FEATURE/CROSS-CUTTING).
-- Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). **Record each in `AI_Questions.md`** and return them in the handoff in batches of up to 4 per round-trip (the orchestrator presents each batch to the user, records the answers in `AI_Questions.md`, and resumes this subagent with the answers) until the total reaches at least 20.
+- Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). **Record each in `AI_Questions.md`** and return the **complete batch in a single** `BLOCKED-USER` handoff (the orchestrator presents the batch in as few `ask_user_question` rounds as possible — ≤ 4 per round, most blocking first — records the answers in `AI_Questions.md`, and relaunches this step **once** with the full answer set). Do not return partial batches across multiple round-trips.
 - Check other features' specs and the current branch's specs before specifying (FEATURE/CROSS-CUTTING). Reuse or extend existing/planned work — do not do double work.
 - The feature brief MUST capture goals, constraints, out-of-scope items, and edge cases. The brief is intermediate — do **not** commit it as a separate `.brief.md` file; fold it into the spec.
 - Every normative requirement MUST have a stable `REQ-XXX` ID.
@@ -179,7 +179,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 - The change type is classified and recorded in `docs/verification/<name>.md`.
 - FEATURE/CROSS-CUTTING:
   - The feature brief captures goals, constraints, out-of-scope items, and edge cases (intermediate — folded into the spec, not a separate file).
-  - At least 20 questions were asked during interrogation and **recorded in `AI_Questions.md`** (multiple `BLOCKED-USER` round-trips of up to 4 each; the orchestrator presents each batch to the user and records the answers).
+  - At least 20 questions were asked during interrogation and **recorded in `AI_Questions.md`** (one `BLOCKED-USER` batch; the orchestrator presents it in as few rounds as possible, ≤ 4 per round, and records the answers).
   - Existing features' specs and the current branch's specs were checked for overlap; no work was double-specified.
   - The specification has stable IDs for every requirement, acceptance criterion, invariant, edge case, and non-functional requirement.
   - The specification passes the self-consistency checklist (no internal inconsistencies).

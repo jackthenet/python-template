@@ -42,10 +42,11 @@ The decompose phase is decomposed into two atomic steps. Each has a **single obj
 
 ### S2.1 Create ADRs
 
-- **Objective:** Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
+- **Objective:** Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT) — or record a justified skip when none qualify.
 - **Inputs:** the approved specification; the significant design decisions to record.
-- **Outputs:** ADRs in `docs/decisions/`.
-- **Done-criteria:** an ADR is created for every significant design decision (WHY, not WHAT); the ADRs are committed.
+- **Threshold (when an ADR is required):** a decision that introduces a **new dependency**, a **new pattern/architecture element**, or a **cross-feature interface**. A small change (no new dependency, no new pattern, impact confined to one feature and a handful of files) qualifies for **no** ADRs.
+- **Outputs:** ADRs in `docs/decisions/` — or, when nothing qualifies, the skip + rationale recorded in `docs/verification/[name].md`.
+- **Done-criteria:** an ADR is created for every significant design decision (WHY, not WHAT); the ADRs (or the skip + rationale) are committed.
 
 ### S2.2 Decompose into task DAG
 
@@ -56,16 +57,16 @@ The decompose phase is decomposed into two atomic steps. Each has a **single obj
 
 ## Process
 
-1. Verify the specification is approved (merged into `main`).
+1. Verify the specification is approved — read the **cached** approval result from `docs/verification/[name].md` (verified once before Phase 2; do NOT re-run `git log main -- ...`). If the cached result is missing (re-entry), run the check once and record it.
 2. Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
 3. Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[name].tasks.json`.
 4. For each task, specify:
    - `requirements`: REQ-XXX IDs covered by this task.
    - `acceptance_criteria`: AC-XXX IDs covered by this task.
    - `tests_to_create`: Test functions to write (MUST come before implementation scope).
-   - `red_command`: Command to confirm RED state.
+   - `red_command`: Command to confirm RED state — **targeted** (the task's `tests_to_create` + directly affected tests), not the full suite.
    - `implementation_steps`: Explicit steps for implementation.
-   - `green_command`: Command to confirm GREEN state.
+   - `green_command`: Command to confirm GREEN state — **targeted** (the task's tests), not the full suite (the full suite is a Phase 5 gate).
    - `design_constraints`: Constraints that must be respected.
    - `completion_gates`: Gates that must pass before the task is complete.
 5. CROSS-CUTTING: group tasks by affected feature so each feature's changes are independently verifiable.
@@ -82,7 +83,7 @@ When a task's gate is narrowed (a DAG correction), record that the **un-exercise
 
 ## Rules
 
-- ADRs MUST be created for significant design decisions (WHY, not WHAT).
+- ADRs MUST be created for significant design decisions (WHY, not WHAT) — per the S2.1 threshold (new dependency, new pattern/architecture element, or cross-feature interface); a small change records a justified skip instead.
 - The task DAG MUST be machine-readable JSON.
 - Every task MUST specify `requirements` (REQ-XXX IDs).
 - Every task MUST specify `acceptance_criteria` (AC-XXX IDs).
@@ -103,7 +104,7 @@ When a task's gate is narrowed (a DAG correction), record that the **un-exercise
 
 ## Definition of Done
 
-- ADRs are created for significant design decisions.
+- ADRs are created for significant design decisions (or a justified skip is recorded for a small change, per the S2.1 threshold).
 - The task DAG is committed to `docs/tasks/`.
 - Every task has requirements, acceptance_criteria, tests_to_create, red_command, implementation_steps, green_command, design_constraints, and completion_gates.
 - The task DAG is copied to `.github/task-runner/tasks.json`.

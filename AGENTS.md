@@ -19,8 +19,8 @@ If asked to implement a new feature, refactor core components, or build a system
 ## Tooling & Execution Environment
 This repository utilizes modern Python tooling managed via `uv`:
 - **Package Manager:** `uv` (Use `uv run <command>` for isolated execution)
-- **Quality Assurance & Formatting:** `ruff` (`uv run ruff check .` / `uv run ruff format .`). The verify phase lints the whole repo with `uv run ruff check .`, matching CI (`.github/workflows/lint.yml`) exactly — pre-existing lint errors are in scope, not out of scope.
-- **Type Checking:** `mypy` (`uv run mypy src/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool
+- **Quality Assurance & Formatting:** `ruff` (`uv run ruff check .` / `uv run ruff format .`). **Scope split:** per-task steps (S3.2, S4.3, S4.4) lint only the step's changed paths (`uv run ruff check <changed-paths>`); the whole-repo sweep (`uv run ruff check .`) runs **once at Phase 5** (verify), matching CI (`.github/workflows/lint.yml`) exactly — pre-existing lint errors are in scope, not out of scope. Ruff's built-in content-hash cache (`.ruff_cache`) makes re-runs over unchanged files cheap.
+- **Type Checking:** `mypy` (`uv run mypy src/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool. mypy runs on `src/` (the import closure needs the whole package); its built-in cache (`.mypy_cache`) is keyed on file hashes, so unchanged files are not re-checked.
 - **Test Runner:** `pytest` (`uv run pytest`)
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`
@@ -217,6 +217,7 @@ Every workflow step is executed by a **new subagent** launched via the `subagent
 - **Synchronous — never background.** Every subagent is launched with `run_in_background: false` (the default). The orchestrator **waits for the subagent to complete its step and return a handoff** before proceeding to the next step. A subagent is never left running in the background and is never polled. If a subagent does not return (timeout / network / error), the orchestrator treats it as a **failed step**: it logs the problem (Problem Log), launches a **fresh** subagent for the same step (never resumes a stuck one), and continues. A step subagent MUST end with the **structured handoff**; a step that returns without it (e.g., ends with an intermediate statement) is treated as a **FAILED step** and relaunched with a fresh subagent (completion guard, P-3/P-7).
 - **Atomic steps.** Each phase is broken into **atomic steps** (table below). An atomic step has a **single objective**, clear **inputs/outputs**, a **required skill**, a **dedicated subagent**, a clear **“done” definition**, and a **validation** before the next step. A step subagent executes **exactly one atomic step** — never more. Small steps exist so a subagent can actually **finish** its work.
 - **One subagent per atomic step.** Every time an atomic step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4/3) and reclassification re-runs — the orchestrator launches a **new** subagent. A `BLOCKED-USER` step is re-entered with a **fresh** subagent; the orchestrator includes the user's recorded answers in the new launch prompt. The orchestrator **NEVER** resumes/restores a previously launched subagent session (its context is full/stale) — every (re-)entry, including after BLOCKED-USER, after a failed gate, and after reclassification, launches a **new** subagent.
+- **In-step fix-and-recheck (trivial self-introduced issues).** The fresh-subagent rule governs step **re-entries**, not internal retries. A step subagent that hits a **trivial, self-introduced** issue while finishing its step (a single lint violation, a formatting nit, a missed import) MUST fix it and re-check **within the same execution**, then return one handoff — it does NOT return `FAILED` for a nit it can fix itself. `FAILED` (which triggers a fresh-subagent relaunch) is reserved for substantive failures: done-criteria genuinely not met, missing context, or a block the subagent cannot resolve on its own.
 - **Naming.** The orchestrator names each step subagent's description `Sx.x: <short objective>` (e.g., `S4.2: implement FileService.upload`); for per-task steps it includes the task ID (e.g., `S4.2 (T-005): implement FileService.upload`).
 
 #### Atomic Steps
@@ -233,7 +234,7 @@ The six phases are the **gates** (entry/exit criteria per the Phase Matrix). Wit
 | **6 Review** | **S6.1 Review vs. normative basis** → **S6.2 Traceability + boundaries** → **S6.3 Review report** → **S6.4 Bump version + open PR** |
 | **Post-merge** | **S7.1 Cleanup** (verify merge + remove worktree + delete branches) |
 
-**Ruff gate.** Every atomic step that writes or modifies **tests or implementation code** MUST run `uv run ruff check .` before it returns and record the result in the handoff (`ruff` field). A step that leaves lint errors is **not done**. Scope `uv run ruff check --fix` + `uv run ruff format` to the **task's changed paths** (not repo-wide) — repo-wide `--fix`/`format` during a task step modifies out-of-scope files and can introduce new errors (P-6); a repo-wide lint fix is a separate, explicit step (or the verify phase).
+**Ruff gate.** Every atomic step that writes or modifies **tests or implementation code** MUST run ruff on the **step's changed paths** (`uv run ruff check <changed-paths>`) before it returns and record the result in the handoff (`ruff` field). A step that leaves lint errors is **not done**. The **whole-repo** sweep (`uv run ruff check .`) is a **Phase 5** gate (verify) — per-task steps do NOT run it implicitly. Scope `uv run ruff check --fix` + `uv run ruff format` to the **task's changed paths** (not repo-wide) — repo-wide `--fix`/`format` during a task step modifies out-of-scope files and can introduce new errors (P-6); a repo-wide lint fix is a separate, explicit step (or the verify phase).
 
 #### Task-Definition Contract
 
@@ -258,7 +259,7 @@ The step subagent MUST end with a structured handoff:
 - `status` — `DONE` (done-criteria met) | `BLOCKED-USER` (needs user input) | `BLOCKED-HUMAN` (needs human governance: spec approval, PR merge) | `FAILED` (done-criteria not met, with reason).
 - `gate` — the step's validation result and where the evidence is recorded (`docs/verification/<name>.md`).
 - `artifacts` — the files, commits, and PRs created.
-- `ruff` — the `uv run ruff check .` result (for steps that write tests/implementation), or `n/a`.
+- `ruff` — the ruff result on the step's changed paths (`uv run ruff check <changed-paths>`; the whole-repo sweep is a Phase 5 gate) (for steps that write tests/implementation), or `n/a`.
 - `questions` (BLOCKED-USER only) — the questions for the user (each also recorded in `AI_Questions.md`).
 - `problem` (optional) — a friction point to log (see Problem Log).
 - `next` — the next atomic step, or `STOP`.
@@ -269,6 +270,7 @@ Questions that need user input are recorded persistently in `AI_Questions.md` (r
 
 - **MAY create questions:** any step, when it meets an ambiguity, a missing requirement, or a decision that requires user input.
 - **MUST create questions:** the **Interrogate** step (**S1.1**) MUST create a question for every ambiguity, missing requirement, edge case, and scope boundary it identifies — the spec phase is where user input is most needed. Any step that returns `BLOCKED-USER` MUST have its questions recorded in `AI_Questions.md`.
+- **Batching (one round-trip per step):** a step that needs user input MUST collect **all** of its open questions into a **single** `BLOCKED-USER` batch (one set of `AI_Questions.md` entries, one handoff) — never one round-trip per question, and never partial batches across re-entries. For **S1.1**: interrogate fully first, then return the complete question batch. The orchestrator presents the batch in as few `ask_user_question` rounds as possible (≤ 4 questions per round; the most blocking questions first), records all answers in `AI_Questions.md`, and relaunches the step **once** with the full answer set. This keeps human-response latency off the critical path of every individual question.
 - **Workflow stop:** when a step returns `BLOCKED-USER`, the orchestrator **stops the workflow**, presents the questions to the user (via `ask_user_question`), records the answers in `AI_Questions.md`, marks them **incorporated**, and **relaunches the same step** with the answers. The workflow never proceeds past a `BLOCKED-USER` step until the user has answered. If the BLOCKED-USER subagent's session is released (resume unavailable) and the only remaining work is verifying already-recorded answers, the orchestrator may record the answers, mark the step done directly, and commit — without relaunching (P-2).
 
 #### Problem Log (`docs/workflow/PROBLEMS.md`)
@@ -285,7 +287,7 @@ The orchestrator MUST verify a handoff before marking the step's todo `completed
 
 #### Fast Path
 
-Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing failing test, `--skip-spec`) bypass the workflow entirely — no phases, no subagents.
+Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing failing test, `--skip-spec`) bypass the workflow entirely — no phases, no subagents. (The **Light ISSUE tier** at the end of this document is the in-workflow counterpart — it shrinks Phase 5, it does not bypass the workflow.)
 
 ### Todo Tracking Discipline (todo tool)
 
@@ -368,7 +370,7 @@ Single entry point for all change types (specify skill).
 
 ### Phase 2: DECOMPOSE (`docs/decisions/`, `docs/tasks/`)
 FEATURE and CROSS-CUTTING only. Once the specification file is merged into `main`:
-1. Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT).
+1. Create ADRs in `docs/decisions/` for significant design decisions (WHY, not WHAT). **Threshold:** an ADR is required only for a decision that introduces a **new dependency**, a **new pattern/architecture element**, or a **cross-feature interface**. A small change (no new dependency, no new pattern, impact confined to one feature and a handful of files) creates **no** ADRs — S2.1 records the skip + rationale in `docs/verification/[name].md` instead (the step still runs; its output is the recorded skip).
 2. Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[name].tasks.json`.
 3. Each task MUST specify:
    - `requirements`: REQ-XXX IDs covered by this task.
@@ -384,7 +386,7 @@ FEATURE and CROSS-CUTTING only. Once the specification file is merged into `main
 ### Phase 3: TEST & RED (`tests/`)
 FEATURE, CROSS-CUTTING, and ISSUE.
 
-Test derivation is **per task in the DAG** (S3.1): one fresh subagent derives one task's `tests_to_create`; S3.2 stays a single ruff + RED gate over the whole suite.
+Test derivation is **per task in the DAG** (S3.1): one fresh subagent derives one task's `tests_to_create`; S3.2 stays a single ruff + RED gate, run **targeted** (the newly derived tests must fail on behavior — the full suite is a Phase 5 gate, not a per-task or per-derivation run).
 
 **FEATURE / CROSS-CUTTING** (after the task DAG is initialized):
 1. Write acceptance tests derived directly from the spec's acceptance criteria.
@@ -403,6 +405,8 @@ Test derivation is **per task in the DAG** (S3.1): one fresh subagent derives on
 4. Update the traceability matrix with the issue's test references (affected REQ/AC + reproduction test).
 ### Phase 4: IMPLEMENT
 All types.
+
+**Targeted GREEN (cost control).** `red_command` / `green_command` run **only the task's targeted tests** (the task's `tests_to_create` plus directly affected tests) — not the full suite. The full suite is a **Phase 5 gate** (and the REFACTOR per-step gate); it catches anything a targeted run misses, so per-task full-suite runs are not needed.
 
 **FEATURE / CROSS-CUTTING** (when instructed to execute tasks):
 1. Pick a ready task from the task DAG.
@@ -438,7 +442,7 @@ All types.
    CROSS-CUTTING additionally: update the traceability matrix rows of every affected feature.
 
 **ISSUE**:
-9. Run the reproduction tests (GREEN) and the full regression suite (no new failures).
+9. Run the reproduction tests (GREEN) and the full regression suite (no new failures) — **Light-tier ISSUE** (see "Light ISSUE tier" under Emergency / Fast-Path Exception): targeted + smoke instead, with the full regression suite as the Phase 6 pre-merge gate.
 10. Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`).
 11. Update the traceability matrix with the issue's evidence rows.
 12. If the regression suite shows a failure, classify it as in the FEATURE path (pre-existing vs regression).
@@ -867,6 +871,17 @@ The spec-and-task workflow is bypassed **ONLY** for:
 - Direct user commands explicitly containing the keyword `--skip-spec`.
 
 The boundary is concrete: if the change alters externally observable behavior, the full workflow for the change's type applies regardless of how small the change appears.
+
+### Light ISSUE tier (in-workflow, not fast-path)
+
+A small, localized ISSUE fix may shrink Phase 5 without leaving the workflow. An ISSUE qualifies for the **light tier** when **all** of the following hold:
+
+- Single feature; the fix touches ≤ 3 files (excluding tests).
+- No new dependency, no new public interface, no cross-feature change.
+- The existing test suite already covers the affected area (the triage record names the covering tests).
+
+For a light-tier ISSUE, Phase 5 runs **targeted + smoke** instead of full regression: the reproduction tests, the covering tests named in the triage record, and the affected feature's test directory (`uv run pytest tests/<affected-dir> -v`), plus lint and type checks. The **full regression suite** runs as a **Phase 6 pre-merge gate** (S6.4, before the PR opens) and must pass; the result is recorded in the review report. Record the light-tier qualification in the triage record (`docs/verification/[name].md`).
+
 ## Spec Approval Gate (GitHub Review)
 A specification file `docs/specs/[name].md` is considered **HUMAN APPROVED** if and only if it has been merged through the repository's configured GitHub review process. This gate applies to FEATURE and CROSS-CUTTING changes (the only types that produce a spec).
 
@@ -877,6 +892,8 @@ Before starting Phase 2, verify approval via:
 - Commit logs appear: Verify the commit was introduced by a merged PR (not a direct push to `main`). **PROCEED** only if the spec was reviewed.
 
 **Direct commits to `main` do NOT constitute approval.** The spec must go through GitHub PR review to maintain the boundary: human controls WHAT, agent controls HOW.
+
+**Verify once per change (cache the result).** The approval check runs **once**, before Phase 2, and its result (approved + merge commit + date) is recorded in `docs/verification/[name].md`. A merged spec cannot become unapproved, so later phases and step subagents MUST NOT re-run the check — they read the cached result (if the cached result is missing on re-entry, run the check once and record it). Re-running `git log main -- docs/specs/[name].md` at later phase transitions is wasted round-trips.
 
 ## Project Structure
 The project is organized around a single `src/` package, with `frontend` and `backend` as the primary runtime boundaries inside it.

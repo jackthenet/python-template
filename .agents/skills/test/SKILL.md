@@ -58,15 +58,15 @@ The test phase is decomposed into two atomic steps. Each has a **single objectiv
 - **Objective:** Run ruff, confirm RED state (tests fail before implementation), and record RED evidence.
 - **Inputs:** the derived tests.
 - **Outputs:** a clean ruff run; RED confirmed (each red test is an assertion failure, not a setup error — test contract sanity check passed); RED evidence recorded in `docs/verification/<name>.md`; the traceability matrix updated.
-- **Done-criteria:** ruff is clean (`uv run ruff check .`); RED is observed and recorded in `docs/verification/<name>.md` (using `TDD-evidence-template.md`, including the failure mode per test); the traceability matrix is updated in `docs/verification/traceability.md`; the tests are committed.
+- **Done-criteria:** ruff is clean on the step's changed paths (`uv run ruff check <changed-paths>`; the whole-repo sweep is a Phase 5 gate); RED is observed and recorded in `docs/verification/<name>.md` (using `TDD-evidence-template.md`, including the failure mode per test); the traceability matrix is updated in `docs/verification/traceability.md`; the tests are committed.
 
 ## MUST
 
 - FEATURE/CROSS-CUTTING: derive one or more test functions per `AC-XXX`.
 - Test names MUST reference the `AC-XXX` ID (e.g., `test_ac_001_valid_request`).
 - Test externally observable behavior only — not implementation details.
-- Run the test suite and confirm RED state (tests fail before implementation).
-- **Run ruff** (`uv run ruff check .`) after deriving the tests and require it to be clean before confirming RED (S3.2).
+- Confirm RED on the **newly derived tests** (targeted RED — the new tests fail before implementation; the full suite is a Phase 5 gate, not a per-derivation run).
+- **Run ruff** on the step's changed paths (`uv run ruff check <changed-paths>`) after deriving the tests and require it to be clean before confirming RED (S3.2; the whole-repo sweep is a Phase 5 gate).
 - Record RED evidence in `docs/verification/<name>.md` using `TDD-evidence-template.md`.
 - Update the traceability matrix in `docs/verification/traceability.md`.
 - FEATURE/CROSS-CUTTING: write property tests for every `INV-XXX` using Hypothesis in `tests/property/<name>/`.
@@ -124,7 +124,7 @@ Commit:
 
 - Tests exist and reference `AC-XXX` IDs.
 - Tests fail (RED confirmed) before implementation — each as an **assertion failure**, not a setup error (test contract sanity check passed).
-- **Ruff is clean** (`uv run ruff check .`).
+- **Ruff is clean** on the step's changed paths (`uv run ruff check <changed-paths>`; the whole-repo sweep is a Phase 5 gate).
 - RED evidence recorded (including failure mode per test).
 - Traceability matrix updated.
 - Tests committed.

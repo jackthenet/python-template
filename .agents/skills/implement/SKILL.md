@@ -55,21 +55,21 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 - **Objective:** Implement the minimum behavior in `allowed_files.source_files` (following `implementation_steps` or the triage's fix scope) and confirm GREEN (the task's tests pass 100%).
 - **Inputs:** the picked task; the failing tests (RED).
 - **Outputs:** implemented logic in `allowed_files.source_files`; GREEN confirmed (the task's tests pass 100%).
-- **Done-criteria:** the implementation follows `implementation_steps` (FEATURE/CROSS-CUTTING) or the triage's fix scope (ISSUE); the task's tests PASS 100% (`green_command`); GREEN evidence is recorded in `docs/verification/<name>.md`.
+- **Done-criteria:** the implementation follows `implementation_steps` (FEATURE/CROSS-CUTTING) or the triage's fix scope (ISSUE); the task's tests PASS 100% (`green_command` — **targeted**: the task's tests, not the full suite; the full suite is a Phase 5 gate); GREEN evidence is recorded in `docs/verification/<name>.md`.
 
 ### S4.3 Ruff
 
 - **Objective:** Run ruff and fix any lint errors (formatting, unused imports, etc.) without changing behavior.
 - **Inputs:** the implemented code.
 - **Outputs:** a clean ruff run.
-- **Done-criteria:** ruff is clean (`uv run ruff check .`); no behavior changed.
+- **Done-criteria:** ruff is clean on the task's changed paths (`uv run ruff check <changed-paths>`; the whole-repo sweep is a Phase 5 gate); no behavior changed.
 
 ### S4.4 Refactor (keep GREEN)
 
 - **Objective:** Improve code structure (duplication, complexity, naming, boundaries) without changing observable behavior; keep GREEN.
 - **Inputs:** the implemented code.
 - **Outputs:** improved code structure; GREEN maintained.
-- **Done-criteria:** the code structure is improved (duplication, complexity, naming, boundaries); the full suite stays GREEN after every meaningful refactoring step; ruff stays clean; no observable behavior changed.
+- **Done-criteria:** the code structure is improved (duplication, complexity, naming, boundaries); the task's tests stay GREEN (`green_command`) after every meaningful refactoring step (the full suite is a Phase 5 gate); ruff stays clean on the task's changed paths; no observable behavior changed.
 
 ### S4.5 Commit + update status
 
@@ -94,11 +94,11 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 
 ### 3. Ruff (lint gate) — FEATURE/CROSS-CUTTING/ISSUE
 
-7. **Ruff:** run `uv run ruff check .` after implementation (S4.2) and after refactoring (S4.4). It MUST be clean before the other gates. Fix any lint errors (formatting, unused imports, etc.) without changing behavior.
+7. **Ruff:** run `uv run ruff check <changed-paths>` (the task's changed paths; the whole-repo sweep is a Phase 5 gate) after implementation (S4.2) and after refactoring (S4.4). It MUST be clean before the other gates. Fix any lint errors (formatting, unused imports, etc.) without changing behavior.
 
 ### 4. Refactor (improve structure, keep GREEN) — FEATURE/CROSS-CUTTING
 
-8. **Refactor:** Identify code structure issues (duplication, complexity, naming, boundaries). Make small, focused refactoring changes without changing observable behavior. Re-run `green_command` and `uv run ruff check .` after every meaningful refactoring step. Confirm GREEN is maintained and ruff stays clean.
+8. **Refactor:** Identify code structure issues (duplication, complexity, naming, boundaries). Make small, focused refactoring changes without changing observable behavior. Re-run `green_command` and `uv run ruff check <changed-paths>` after every meaningful refactoring step. Confirm GREEN is maintained and ruff stays clean.
 
 ### 5. REFACTOR (behavior-preserving steps)
 
@@ -125,7 +125,7 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 - DOCS/CHORE: only the scoped non-behavior changes; no test files, no behavior.
 - Refactoring MUST NOT change observable behavior.
 - Tests MUST be re-run after every meaningful refactoring step.
-- **Ruff MUST be clean** after implementation (S4.2) and after refactoring (S4.4) — run `uv run ruff check .` and require it to pass before the other gates.
+- **Ruff MUST be clean** after implementation (S4.2) and after refactoring (S4.4) — run `uv run ruff check <changed-paths>` (the task's changed paths; the whole-repo sweep is a Phase 5 gate) and require it to pass before the other gates.
 - GREEN MUST be maintained throughout refactoring.
 - The task status MUST be set to `VERIFIED` when complete (FEATURE/CROSS-CUTTING).
 - Do NOT modify the specification in this phase.
@@ -144,6 +144,6 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 - The task's acceptance tests pass (GREEN).
 - RED and GREEN evidence are recorded.
 - The code structure is improved with observable behavior unchanged.
-- The test suite is GREEN after refactoring.
+- The task's tests are GREEN after refactoring (the full suite is a Phase 5 gate).
 - The task status is set to `VERIFIED`.
 - The specification was not modified.

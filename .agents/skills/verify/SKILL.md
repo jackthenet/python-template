@@ -54,7 +54,7 @@ The verify phase is decomposed into four atomic steps. Each has a **single objec
 - **Objective:** Run lint and type checks and confirm they pass.
 - **Inputs:** the implementation.
 - **Outputs:** a clean lint run; a clean type-check run.
-- **Done-criteria:** lint is clean (`uv run ruff check .`, matching CI exactly); type checks pass (`uv run mypy src/`).
+- **Done-criteria:** lint is clean on the **whole repo** (`uv run ruff check .`, matching CI exactly — this is the one full-repo sweep; per-task steps lint only changed paths); type checks pass (`uv run mypy src/`).
 
 ### S5.3 Update traceability
 
@@ -92,6 +92,7 @@ The verify phase is decomposed into four atomic steps. Each has a **single objec
 
 - Run the reproduction tests and confirm they pass (GREEN).
 - Run the full regression suite and confirm no new failures (classify failures as in the FEATURE path).
+- **Light-tier ISSUE** (per the "Light ISSUE tier" section of `AGENTS.md`): instead of the full regression suite, run the reproduction tests, the covering tests named in the triage record, and the affected feature's test directory (`uv run pytest tests/<affected-dir> -v`), plus lint and type checks. The full regression suite runs as the Phase 6 pre-merge gate (S6.4) and must pass.
 - Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`) and confirm they pass.
 - Update the traceability matrix with the issue's evidence rows.
 
