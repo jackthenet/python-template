@@ -384,3 +384,26 @@ end-to-end check is run with `--hook-stage pre-push` (exit 0). Both requirements
 recorded here as resolved in favor of the explicit stage override.
 
 **Ruff:** n/a — no Python written in this step (pre-commit hook + CI job configuration only).
+
+### S5.1 — Full test suite (DOCS/CHORE light: confirm no regression)
+
+**Date:** 2026-09-21
+**Tree under test:** `e29688833dd18a03508eda0a072c0d3ac86605f8` (HEAD at run time)
+
+**Command:** `uv run pytest tests/ -v`
+
+**Result: GREEN — 557 passed, 0 failed, 0 errors, 1 skipped (183.69s, exit 0).**
+
+- The 1 skip is platform-conditional and pre-existing:
+  `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_031_symlink_rejected`
+  — "symlinks not available on this host" (win32). Not a failure; no change
+  in skip behavior vs baseline.
+- **Helper collection check (scope gate):** `tests/tooling_test_helpers.py` was
+  **NOT collected** — zero collection/execution lines for it in the `-v` output
+  (the filename does not match pytest's default `test_*.py` pattern; it starts
+  with `tooling_`). No scope violation.
+- **No-behavior-delta confirmation:** the change touches no `src/` file and no
+  existing test file; the suite ran to completion with 0 failures and 0 errors,
+  so no regression is present. Nothing required classification (no failures).
+
+**Ruff:** n/a — no code written in this step (test run only).
