@@ -295,3 +295,43 @@ change.
 | `uv run deptry .` (post-commit re-run) | PASS — exit 0 (committed state verified) |
 
 **Ruff:** n/a — no Python written in this step (dependency declarations + tool configuration only).
+
+### S4.4 — mkdocs site (userdocs/ + mkdocs.yml) (DOCS/CHORE, make the change)
+
+**Date:** 2026-09-21
+**Commit:** `e5c4890428ee259800467bb322c2497c7bb00db0`
+(`chore(dev-tooling-wiring): mkdocs site (userdocs/ + mkdocs.yml)`)
+
+**Change made (scope items 3 and 4):**
+
+- `mkdocs.yml` (repo root, minimal and clean):
+  - `site_name: python-template`; `docs_dir: userdocs` (binding Q-64 — `docs/`
+    is the internal process record and is not part of the site);
+  - Material theme (`theme: name: material`; `mkdocs-material` installed in
+    S4.3);
+  - plugins: `search` + `mkdocstrings` with `default_handler: python`;
+  - no `site_url` (no hosting configured), no deploy step.
+- `userdocs/` (new, repo root):
+  - `index.md` — concise project overview: project name/description matching
+    the template's identity (`python-template` / "Default template for Python
+    projects."), the eight backend features, a link to the API reference, and
+    a short "building the site" note (`uv run mkdocs build --strict`; the
+    `userdocs/` vs `docs/` separation).
+  - `api.md` — API reference auto-documenting each backend feature's public
+    API via mkdocstrings (`::: backend.<feature>` per feature):
+    authentication, eventbus, filemanagement, logging, mail,
+    sessionmanagement, settings, usermanagement (each exposes its public API
+    from its package `__init__`).
+- `.gitignore`: no change — the build-artifact `site/` directory is already
+  ignored (`.gitignore:155` `/site`), so nothing new was added; `site/` was
+  never committable.
+- No other files touched; no `src/`, no `tests/`, no behavior delta.
+
+**Gate commands + results:**
+
+| Command | Result |
+|---|---|
+| `uv run mkdocs build --strict` | PASS — exit 0 ("Documentation built in 1.54 seconds"; strict mode: every warning fails the build). The "Warning from the Material for MkDocs team" block on stderr is the theme's promotional banner (an MkDocs 2.0 announcement), not an MkDocs warning — the build exited 0. |
+| render sanity check (not a gate) | `site/api/index.html` contains rendered mkdocstrings content for all eight `backend.*` modules (234 `mkdocstrings` references) |
+
+**Ruff:** n/a — no Python written in this step (MkDocs site: YAML + Markdown only).
