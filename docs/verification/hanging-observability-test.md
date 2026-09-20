@@ -141,3 +141,46 @@ ISSUE Phase 5 gate: reproduction test GREEN (no hang) + full regression suite wi
 
 - timestamp: 2026-09-20 13:48 (local)
 - branch: `issue/hanging-observability-test`
+
+## Phase 6 — Review
+
+ISSUE Phase 6 gate: review the change against its normative basis (the triage record + affected spec IDs), confirm no test was weakened/deleted, no `src/` change, feature boundaries/architecture respected, traceability intact, and no behavior introduced beyond the affected spec IDs. The review report is CLEAN if all checks pass.
+
+### Scope reviewed
+
+- Diff: `git diff 51b530a..HEAD` (branch `issue/hanging-observability-test`, 5 commits ahead of `main` at `51b530a`):
+  - `tests/acceptance/sessionmanagement/test_observability.py` (+13/−5, single hunk: the AC-045 assertion loop)
+  - `docs/verification/hanging-observability-test.md` (triage + RED/GREEN + Phase 5 evidence)
+  - `docs/verification/traceability.md` (issue section + session-management matrix note)
+  - `docs/workflow/PROBLEMS.md` (P-21 entry)
+- Normative basis: this triage record + affected spec IDs (session-management AC-045/REQ-022, AC-044/REQ-021, NFR-004; logging REQ-001/AC-001, NFR-001, NFR-002).
+
+### Findings
+
+| # | Check | Result | Evidence / resolution |
+|---|-------|--------|----------------------|
+| 1 | **Normative basis (ISSUE)** — fix consistent with the triage record; no behavior beyond the affected spec IDs | PASS | The triage record mandates a **test-side fix** that preserves `enqueue=True` (logging REQ-001/AC-001) and requires no escalation. The applied fix is test-side only (single hunk in the failing test; `enqueue=True` untouched in `src/`). It introduces no behavior beyond the affected spec IDs: the asserted AC-045 behavior (entry/exit/exception records produced; no log record contains a raw token or token hash) is unchanged. Note: the triage record's initial root-cause analysis (queue deadlock) was corrected to the actual root cause (infinite loop in the test's own assertion loop; the queue block was a secondary effect) — the correction is logged as P-21 (`docs/workflow/PROBLEMS.md`) and reflected in the GREEN evidence section and the traceability note; the final fix is consistent with the corrected analysis. |
+| 2 | **No test weakened/deleted** — asserted AC-045 behavior preserved | PASS | The test was not deleted (re-confirmed GREEN this review: `uv run pytest tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v` → **1 passed in 0.24 s**, no hang). All assertions are still present and meaningful: per-record `token not in dumped`, `token_hash not in dumped`, `"bogus-token" not in dumped`, `bogus_hash not in dumped`; plus `token not in joined`, `token_hash not in joined`, `"bogus-token" not in joined`. The fix computes `hash_token(token)` / `hash_token("bogus-token")` **once** before the loop and iterates over a **snapshot** `list(log_records)`. Semantic equivalence holds because `hash_token` is pure/deterministic (`hashlib.sha256(token.encode("utf-8")).hexdigest()` — `src/backend/authentication/tokens.py`), so a once-computed hash equals a per-record computation. The snapshot is taken **after** the two `hash_token` calls, so it includes their log records; the loop body performs no logging, so no records are missed. Coverage of the asserted behavior is therefore complete, not weakened. |
+| 3 | **No `src/` change** — fix is test-side only | PASS | `git diff 51b530a..HEAD --stat`: only the test file + 3 docs files. `git diff 51b530a..HEAD -- tests/conftest.py` is empty (the prior failed subagent's uncommitted conftest reconfigure fix was removed; `tests/conftest.py` matches the committed version). No `src/` file was modified. |
+| 4 | **Feature boundaries / architecture** — confined to test + docs; no cross-feature imports; no architecture violation | PASS | The code change is a single hunk inside `tests/acceptance/sessionmanagement/test_observability.py` (the session-management test directory). No imports were added or changed (the test's existing imports are untouched). No `src/` change ⇒ no dependency/architecture change. No cross-feature internal imports introduced. |
+| 5 | **Traceability** — every affected REQ/AC references the reproduction test as GREEN | PASS | `docs/verification/traceability.md` has an "Issue: hanging-observability-test (reproduction test)" section mapping all six affected IDs (session-management REQ-022/AC-045, REQ-021/AC-044, NFR-004; logging REQ-001/AC-001, NFR-001, NFR-002) to the reproduction test `test_ac_045_traced_methods_no_tokens_in_logs`, each **GREEN (Phase 5, 2026-09-20; was RED/hang)**, with the Phase 5 evidence (reproduction test GREEN under timeout guard; full regression suite 557 passed / 1 skipped (environmental, pre-existing) / 0 failed; no new failures) recorded in the section intro. The Session Management Matrix note was corrected (the stale "known hanging test … deselected" note replaced with the fix + GREEN re-confirmation). No orphaned tests, no missing traceability links. |
+| 6 | **No behavior introduced** — fix is a test-side loop-termination fix; asserted behavior unchanged | PASS | No `src/` change ⇒ zero runtime behavior change. The test-side change only makes the assertion loop terminate (hashes computed once + snapshot iteration); the asserted AC-045 behavior is byte-for-byte the same set of assertions (modulo the once-computed deterministic hashes, which are semantically identical). No new behavior was introduced. |
+| 7 | **Regression suite** (ISSUE: no new failures) | PASS | Phase 5: `uv run pytest tests/ -q -p no:randomly` → **557 passed, 1 skipped, 0 failed** (the skip is environmental and pre-existing: "symlinks not available on this host"); no new failures, no regression. Lint clean (`uv run ruff check .`), type checks clean (`uv run mypy src/`, 56 source files). |
+| 8 | **Reusable shared capability → AGENTS.md note** | N/A | This is a test-side loop-termination fix, not a reusable shared capability — no AGENTS.md note required. |
+
+### Gate result
+
+| Check | Result |
+|-------|--------|
+| Normative basis (ISSUE) — fix consistent with triage record; no behavior beyond affected spec IDs | PASS |
+| No test weakened/deleted — asserted AC-045 behavior preserved | PASS |
+| No `src/` change — fix is test-side only | PASS |
+| Feature boundaries / architecture respected | PASS |
+| Traceability — all affected REQ/AC reference the reproduction test as GREEN | PASS |
+| No behavior introduced | PASS |
+| Regression suite — no new failures | PASS |
+
+**ISSUE Phase 6 review report: CLEAN.**
+
+- timestamp: 2026-09-20 (local)
+- branch: `issue/hanging-observability-test`
