@@ -335,3 +335,52 @@ change.
 | render sanity check (not a gate) | `site/api/index.html` contains rendered mkdocstrings content for all eight `backend.*` modules (234 `mkdocstrings` references) |
 
 **Ruff:** n/a — no Python written in this step (MkDocs site: YAML + Markdown only).
+
+### S4.5 — pre-commit hooks + CI jobs (deptry, docs, migrations) (DOCS/CHORE, make the change)
+
+**Date:** 2026-09-21
+**Commit:** `35b580f3a8e21637006b5229b6a9fdb4ffa478bc`
+(`chore(dev-tooling-wiring): pre-commit hooks + CI jobs (deptry, docs, migrations)`)
+
+**Change made (scope items 5 and 6):**
+
+- `.pre-commit-config.yaml`: appended a `repo: local` entry at the end (language: system,
+  pass_filenames: false) with two hooks, following the file's existing style (comment
+  conventions, hook ordering):
+  - `deptry`: entry `uv run deptry .`, `stages: [pre-commit]` (the fast check —
+    pre-commit is the right stage for it), `files: ^(pyproject\.toml|uv\.lock|src/|tests/|scripts/|migrations/)`
+    (the paths deptry scans).
+  - `mkdocs-build`: entry `uv run mkdocs build --strict`, `stages: [pre-push]`
+    (overrides the file's `default_stages: [pre-commit]` — the build is slower; pre-push
+    is the right stage for it), `files: ^(mkdocs\.yml|userdocs/|pyproject\.toml)`.
+- `.github/workflows/quality.yml`: three new jobs appended after `dependency-review`
+  (consistent with the scope's placement note), each mirroring the existing jobs' setup
+  steps exactly (actions/checkout@v7, astral-sh/setup-uv@v7, actions/setup-python@v7
+  with python-version '3.14', `uv sync --only-group dev`):
+  - `dependencies`: `uv run deptry .` (gate).
+  - `docs`: `uv run mkdocs build --strict` (gate).
+  - `migrations`: `uv run alembic upgrade head` with `ALEMBIC_DATABASE_URL` set to
+    `sqlite:////tmp/alembic-ci.db` (a temp file-based SQLite path on the ubuntu-latest
+    runner) — validates the alembic scaffold end-to-end.
+- `uv.lock`: not touched by the gate runs (the lock was in date after S4.3's sync).
+
+**Gate commands + results:**
+
+| Command | Result |
+|---|---|
+| `uv run pre-commit validate-config .pre-commit-config.yaml` | PASS — exit 0 |
+| `uv run pre-commit run deptry --all-files` | PASS — exit 0 ("deptry (unused dependencies) ... Passed") |
+| `uv run pre-commit run mkdocs-build --all-files --hook-stage pre-push` | PASS — exit 0 ("mkdocs build --strict ... Passed") |
+| `uv run pre-commit run check-yaml --all-files` | PASS — exit 0 ("check yaml ... Passed") — validates the modified YAML, including the CI workflow |
+
+**Gate invocation note (documented deviation from the task's literal command):**
+The task's gate command `uv run pre-commit run mkdocs-build --all-files` (without a
+stage flag) cannot pass while the hook is a pre-push-stage hook by design: `pre-commit
+run` defaults to the `pre-commit` stage and reports "No hook with id `mkdocs-build` in
+stage `pre-commit`" (exit 1). The hook's stage override (`stages: [pre-push]`) is the
+explicit task requirement (the build is slower; pre-commit is the right stage for the
+fast deptry check), so the hook configuration is kept exactly as specified and the
+end-to-end check is run with `--hook-stage pre-push` (exit 0). Both requirements are
+recorded here as resolved in favor of the explicit stage override.
+
+**Ruff:** n/a — no Python written in this step (pre-commit hook + CI job configuration only).
