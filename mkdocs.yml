@@ -1,0 +1,14 @@
+# MkDocs site configuration.
+# The published site source is userdocs/ — NOT docs/, which is the internal
+# process record (specs, decisions, verification, workflow) and is not part
+# of the site.
+site_name: python-template
+docs_dir: userdocs
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
