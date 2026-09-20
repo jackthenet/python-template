@@ -82,6 +82,15 @@ RED:
   commit: (this commit — `issue(hanging-observability-test): RED confirmed`)
 
 GREEN:
-  command: (pending Phase 4 — minimal fix; expected: the test completes and passes without a timeout)
-  result: (pending)
-  commit: (pending)
+  command: timeout 120 uv run pytest tests/acceptance/sessionmanagement/test_observability.py -v -p no:randomly
+  result: 3 passed in 0.57 s (test_ac_044_no_tokens_in_outputs PASSED, test_ac_045_traced_methods_no_tokens_in_logs PASSED, test_nfr_004_traced_service_publishes_events PASSED) — no hang, completes well under the 60 s budget
+  fix: test-side only — compute hash_token(token) / hash_token("bogus-token") once before the assertion loop and iterate over a snapshot (list(log_records)) so the @logged hash_token calls no longer grow the list while it is iterated (root cause: infinite loop in the test's own assertion loop, not a queue deadlock); removed the conftest `_reconfigure_file_sink_non_enqueued` reconfigure fix (secondary effect, deviates from the spec-mandated enqueue=True file sink, logging REQ-001/AC-001); asserted AC-045 behavior unchanged (no log record contains a raw token or token hash)
+  date: 2026-09-20 13:22 (local)
+  commit: (this commit — `issue(hanging-observability-test): fix infinite loop in AC-045 assertion loop (GREEN)`)
+
+## GREEN Evidence (Phase 4 — minimal fix)
+
+- command: `timeout 120 uv run pytest tests/acceptance/sessionmanagement/test_observability.py -v -p no:randomly`
+- result: **3 passed in 0.57 s** — `test_ac_044_no_tokens_in_outputs` PASSED, `test_ac_045_traced_methods_no_tokens_in_logs` PASSED, `test_nfr_004_traced_service_publishes_events` PASSED (no hang; completes well under the 60 s budget)
+- ruff: `uv run ruff check .` → All checks passed!
+- timestamp: 2026-09-20 13:22 (local)

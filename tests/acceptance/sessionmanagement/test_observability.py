@@ -81,14 +81,19 @@ def test_ac_045_traced_methods_no_tokens_in_logs(
     assert "returned in" in joined
     assert "raised InvalidSessionError" in joined
     # no log record contains a raw token or token hash
-    for record in log_records:
+    # hash_token is @logged, so calling it inside the loop would append new
+    # records to log_records and the loop would never terminate. Compute the
+    # hashes once and iterate over a snapshot of log_records.
+    token_hash = hash_token(token)
+    bogus_hash = hash_token("bogus-token")
+    for record in list(log_records):
         dumped = str(record["record"])
         assert token not in dumped
-        assert hash_token(token) not in dumped
+        assert token_hash not in dumped
         assert "bogus-token" not in dumped
-        assert hash_token("bogus-token") not in dumped
+        assert bogus_hash not in dumped
     assert token not in joined
-    assert hash_token(token) not in joined
+    assert token_hash not in joined
     assert "bogus-token" not in joined
 
 
