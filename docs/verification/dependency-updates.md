@@ -379,3 +379,64 @@ timeout 600 uv run pytest tests/ -q -p no:randomly --deselect tests/acceptance/s
 ### Gate: MET
 
 The REFACTOR invariant "no observable behavior change; full suite stays GREEN, identical to the baseline" holds: 4 consecutive GREEN full-suite runs (556 passed, 1 skipped, 1 deselected, 0 failed), identical to the Phase 1 baseline, modulo the documented pre-existing flaky Hypothesis-deadline failure (which passed on 4 of 6 runs and in isolation).
+
+---
+
+## Phase 5 — Verify (REFACTOR)
+
+**Date:** 2026-09-20 16:55 (all runs 2026-09-20 16:35–16:55).
+
+### S5.1 — Full regression suite (MUST be GREEN, zero test changes, identical to baseline)
+
+**Command (all runs):**
+```
+timeout 600 uv run pytest tests/ -q -p no:randomly --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs
+```
+
+**Runs (3):**
+
+| Run | Result | Duration | Note |
+|---|---|---|---|
+| 1 | **556 passed, 1 skipped, 1 deselected** (0 failed) | 158.24 s | **GREEN — identical to baseline** |
+| 2 | 1 failed, 555 passed, 1 skipped, 1 deselected | 160.86 s | Failure: `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_003_metadata_matches_content` — documented pre-existing flaky class (see classification) |
+| 3 | **556 passed, 1 skipped, 1 deselected** (0 failed) | 160.65 s | **GREEN — identical to baseline** |
+
+**Baseline comparison: IDENTICAL** — the two clean GREEN runs (1 and 3) are **556 passed, 1 skipped, 1 deselected** (0 failed), identical to the Phase 1 baseline (556 passed, 1 skipped, 1 deselected). The skip is the pre-existing filemanagement symlink skip (`test_ac_031_symlink_rejected` — symlinks not available on this host); the deselect is the documented known-hanging test (fixed in PR #44, a separate in-flight change).
+
+**Classification of the Run 2 failure (pre-existing / environmental — NOT a regression):**
+- **Test:** `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_003_metadata_matches_content`.
+- **Documented pre-existing class:** this is the exact class documented in the Phase 1 baseline and change instruction — Hypothesis's default 200 ms per-example deadline is occasionally exceeded when the full suite runs on this Windows host under load; the affected property tests set `max_examples` but no `deadline` override; **a different property test is hit on each run** (Phase 1: `settings::test_inv_002_get_value_always_valid`, `filemanagement::test_inv_005_avatar_url_format`; Phase 4: `filemanagement::test_inv_005_avatar_url_format`; Phase 5 Run 2: `filemanagement::test_inv_003_metadata_matches_content`).
+- **Environmental, not a behavior defect:** the test **passes in isolation** (`1 passed in 1.13 s`) and **passed on the other two Phase 5 full-suite runs** (Runs 1 and 3). A real behavior regression would fail consistently (in isolation and in the full suite); this fails only under load.
+- **Not fixed in this step** (out of scope — environmental noise, per change instruction).
+
+**Zero test changes: CONFIRMED** — `git diff 51b530a..HEAD -- tests/` → **empty** (no test added, removed, or modified). `git diff 51b530a..HEAD --stat -- src/` → **empty** (no `src/` file changed). The only changed files vs. base are `pyproject.toml` and `uv.lock` (plus this verification record).
+
+**Gate: MET** — full regression suite GREEN and identical to the baseline (2 clean GREEN runs), zero test changes.
+
+### S5.2 — Architecture rules + lint + types
+
+**Architecture rules:** `uv run pytest tests/architecture/ -q -p no:randomly` → **N/A — no `tests/architecture/` directory in this repo** (same as Cycle 1). No architecture rules to run; nothing to violate.
+
+**Lint (whole repo, matching CI):** `uv run ruff check .` → **All checks passed!** (0 errors, clean).
+
+**Type check (the gate):** `uv run mypy src/` → **Success: no issues found in 56 source files** (PASS). This change touched no `src/` file, so no new mypy errors — confirmed.
+
+**Gate: MET** — architecture N/A, lint clean, types pass.
+
+### No observable behavior change (REFACTOR invariant)
+
+- Suite result **identical to the baseline** on both clean Phase 5 runs: **556 passed, 1 skipped, 1 deselected, 0 failed** (same skip — filemanagement symlink; same deselect — the known-hanging test, PR #44).
+- No `src/` file changed; no test file changed; only `pyproject.toml` + `uv.lock` (dependency lower bounds raised to current releases; all updates backward-compatible — no behavior-preserving code migration was required).
+
+### Gate summary (REFACTOR Phase 5 gate set)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Full regression suite (S5.1) | **556 passed, 1 skipped, 1 deselected, 0 failed** (Runs 1 and 3; 158.24 s / 160.65 s) — **IDENTICAL to baseline**; Run 2 hit the documented pre-existing flaky class (passes in isolation) | S5.1 section above |
+| Zero test changes | `git diff 51b530a..HEAD -- tests/` → **empty** (and `-- src/` → empty) | S5.1 section above |
+| Architecture rules (S5.2) | **N/A** — no `tests/architecture/` directory in this repo | S5.2 section above |
+| Lint (S5.2, whole repo, matching CI) | `uv run ruff check .` → **All checks passed!** (clean) | S5.2 section above |
+| Type check (S5.2, the gate) | `uv run mypy src/` → **Success: no issues found in 56 source files** (PASS; no new errors — no `src/` file touched) | S5.2 section above |
+| No observable behavior change | Suite result identical to the baseline; only `pyproject.toml` + `uv.lock` changed | "No observable behavior change" section above |
+
+**VERDICT: VERIFIED** — REFACTOR Phase 5 gates satisfied: full regression suite GREEN and identical to the baseline (556 passed, 1 skipped, 1 deselected, 0 failed; 2 clean GREEN runs), zero test changes, architecture N/A, lint clean, mypy PASS, no observable behavior change.
