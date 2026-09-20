@@ -219,3 +219,79 @@ change.
 | temp DB cleanup | PASS — temp DB file deleted; no `data/` directory, no `.db`/`.sqlite` artifacts left in the worktree; none committed |
 
 **Ruff:** `uv run ruff check migrations/` → All checks passed (exit 0).
+
+### S4.3 — deps + deptry config (mkdocs trio, [tool.deptry]) (DOCS/CHORE, make the change)
+
+**Date:** 2026-09-21
+**Commit:** `d615f4054ef663086b3defa8d8c2a2cded6cad28`
+(`chore(dev-tooling-wiring): deps + deptry config (mkdocs trio, [tool.deptry])`)
+
+**Change made (scope item 1):**
+
+- `pyproject.toml` dev group: added `"mkdocs>=1.6"` and `"mkdocs-material>=9.5"`
+  (alphabetical position, before mkdocstrings); replaced
+  `"mkdocstrings>=1.0.6"` with `"mkdocstrings[python]>=1.0.6"`; the group's
+  comment style/ordering preserved (new comments: MkDocs static site build
+  system / MkDocs Material theme; mkdocstrings comment updated for the
+  `[python]` extra).
+- `pyproject.toml` new `[tool.deptry]` section (placed with the other
+  `[tool.*]` sections, between `[tool.coverage.report]` and `[tool.mypy]`):
+  - `known_first_party = ["backend"]` (the source is a `backend.*` namespace
+    package under `src/`); `package_module_name_map = { "ruamel-yaml" = "ruamel" }`
+    (the ruamel-yaml distribution is imported as the top-level module `ruamel`;
+    justified dry-run addition).
+  - `per_rule_ignores` (each entry commented):
+    - `DEP002` = the 14 feedback entries (bandit, complexipy, mkdocs,
+      mkdocs-material, mkdocstrings, mypy, pip-audit, pre-commit, py-spy,
+      pytest-cov, pytest-randomly, pytest-xdist, ruff, ty) + `httpx`, `orjson`
+      (declared runtime capabilities not yet imported from source).
+    - `DEP001` = `webauthn` (optional production dependency: deferred-imported
+      inside `PyWebAuthnProvider`, the fake provider is the test seam —
+      documented design, ADR-031; intentionally not declared).
+    - `DEP003` = `sqlalchemy` (transitive runtime dep via sqlmodel, directly
+      imported by the repositories and the alembic scaffold `migrations/env.py`).
+    - `DEP004` = `alembic` (the `migrations/` scaffold is tooling code that
+      legitimately imports alembic, a dev dependency).
+- `uv sync`: installed mkdocs, mkdocs-material, mkdocstrings[python] (+
+  transitive deps: babel, backrefs, griffelib, paginate, mkdocs-material-
+  extensions, mkdocstrings-python); `uv.lock` updated, including the stale
+  self-version entry 0.4.0 → 0.4.1 (deliberately absorbed in this step).
+- **Root-cause fix for a false-positive finding (1-line change, documented):**
+  the unanchored `.gitignore` pattern `settings/` made deptry's
+  gitignore-aware file finder exclude `src/backend/settings/` (and
+  `tests/**/settings/`) from the scan, producing a false `DEP002 ruamel-yaml`
+  finding (the dependency IS imported in `src/backend/settings/repository.py`).
+  The pattern is now anchored to `/settings/` — the entry's stated intent
+  (the repo-root test-run artifact directory of the default
+  `YamlValueRepository('settings')`; the root artifact stays ignored; tracked
+  files unaffected — no behavior delta). A `DEP002` ignore for ruamel-yaml was
+  deliberately NOT added: it would have permanently masked the settings feature
+  from the unused-dependency check. After the anchor fix, `package_module_name_map`
+  makes ruamel-yaml "used" correctly.
+
+**Deviations from the task's baseline `[tool.deptry]` block (justified by the dry run):**
+
+- Baseline `DEP001 = ["sqlalchemy"]` → the actual finding is `DEP003` (a
+  transitive import, not a missing one), so sqlalchemy is ignored under
+  `DEP003` (same intent; the baseline's DEP001 entry would have been dead
+  config).
+- Baseline `DEP002` (14 entries) → + `httpx`, `orjson` (declared but not yet
+  imported — scope-allowed justified dry-run additions).
+- + `DEP001 = ["webauthn"]` (intentionally optional dependency; deferred
+  import; not a real dependency issue — the design is documented in
+  `src/backend/authentication/webauthn.py`).
+- + `DEP004 = ["alembic"]` (tooling-scaffold import of a dev dependency).
+- + `package_module_name_map` (ruamel-yaml → ruamel).
+- No finding was a real dependency issue: no dependency declarations were
+  added/removed to silence anything; nothing genuinely problematic was
+  ignored.
+
+**Gate commands + results:**
+
+| Command | Result |
+|---|---|
+| `uv sync` | PASS — mkdocs, mkdocs-material, mkdocstrings[python] (+ transitive deps) installed; `uv.lock` updated (self-version entry 0.4.0 → 0.4.1 absorbed) |
+| `uv run deptry .` (final config, pre-commit) | PASS — "Success! No dependency issues found." (exit 0; scanning 59 files) |
+| `uv run deptry .` (post-commit re-run) | PASS — exit 0 (committed state verified) |
+
+**Ruff:** n/a — no Python written in this step (dependency declarations + tool configuration only).
