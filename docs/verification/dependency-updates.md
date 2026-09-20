@@ -272,3 +272,233 @@
 ### Review verdict
 
 **CLEAN** — the change is complete per the Review Gate (REFACTOR): every REFACTOR gate satisfied — full suite GREEN (556 passed, 1 skipped, 0 failed) and identical to baseline with zero test weakening/deletion (only the two documented, zero-assertion-change categories), no observable behavior changed, feature boundaries and architecture rules respected, lint clean, mypy PASS, traceability matrix unchanged.
+
+---
+
+# Verification: dependency-updates — Cycle 2 (REFACTOR, 2026-09-20)
+
+> New change cycle, branched from `main` @ `51b530a` (merge of PR #40, the previous dependency-updates cycle recorded above). The previous cycle's record is preserved as-is for history.
+
+## Classification
+
+- **Type:** REFACTOR
+- **Rationale:** Update all project dependencies (in `pyproject.toml`) to their current releases, per repo precedent (PR #40 did the same). Behavior-preserving: no observable behavior change; the full test suite stays GREEN (identical to the baseline below, with the same known-hanging test deselected); no test changes.
+- **Date:** 2026-09-20.
+- **Base:** `main` @ `51b530a`.
+
+## Baseline (Phase 1 — GREEN)
+
+- **Command (all full-suite runs for this change):**
+  ```
+  timeout 600 uv run pytest tests/ -q -p no:randomly --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs
+  ```
+- **Known-hanging test deselected (documented, per change instruction):** `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` — a known-hanging test on `main` (infinite loop in the test's own assertion loop). It is **fixed in a separate in-flight change** `hanging-observability-test` (PR #44, not yet merged into `main`). The deselect is **not a regression of this change** and applies to the baseline and all subsequent full-suite runs for this change.
+- **Runs (2026-09-20):**
+
+  | Run | Result | Duration | Note |
+  |---|---|---|---|
+  | 1 | 1 failed, 555 passed, 1 skipped, 1 deselected | 162.86 s | Failure: `tests/property/settings/test_settings_properties.py::test_inv_002_get_value_always_valid` (pre-existing flaky; passes in isolation and in subsequent runs — see classification below) |
+  | 2 | **556 passed, 1 skipped, 1 deselected** | 159.02 s | **GREEN — the baseline** |
+  | 3 | 1 failed, 555 passed, 1 skipped, 1 deselected | 162.76 s | Failure: `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format` with `hypothesis.errors.DeadlineExceeded` (288.56 ms > default 200 ms deadline) wrapped in `FlakyFailure` (pre-existing timing flakiness under full-suite load) |
+
+- **Baseline determination: GREEN** — Run 2: **556 passed, 1 skipped, 1 deselected** (0 failed).
+- **Skipped test (pre-existing environmental skip, part of the baseline):** `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_031_symlink_rejected` — "symlinks not available on this host".
+- **Classification of the flaky property-test failures (Runs 1 and 3):**
+  - **Pre-existing:** this change has not started — no file changes, no dependency updates (working tree clean at `51b530a`). Any failure observed is pre-existing by definition.
+  - **Environmental (timing):** Hypothesis's default 200 ms per-example deadline is occasionally exceeded when the full suite runs on this Windows host under load. The affected property tests set `max_examples` (and health-check suppressions) but **no `deadline` override**, so the 200 ms default applies. Both failing tests pass in isolation and in subsequent runs; a different property test is hit on each run. This is a known class of host-timing flakiness, not a behavior defect.
+  - **Not caused by this change; not fixed in this step** (out of scope — see Refactor scope / Out of scope).
+
+## Refactor scope
+
+- **What changes (Phase 4):** update all project dependencies (in `pyproject.toml`) to their current releases.
+- **Invariants that MUST hold:**
+  1. **No observable behavior change** — the full suite stays GREEN, identical to the baseline (same command, same known-hanging-test deselect): **556 passed, 1 skipped, 1 deselected** (modulo the documented pre-existing flaky Hypothesis-deadline failures, which are environmental noise, not behavior).
+  2. **No test changes** — no test added, removed, or modified (no assertion changes, no test weakening or deletion).
+  3. **No `src/` behavior change** beyond what the dependency updates require (e.g., a behavior-preserving code migration forced by a dependency API change is in scope, per the PR #40 precedent).
+- **Out of scope:**
+  - Fixing the hanging test `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` (that is PR #44, a separate in-flight change).
+  - Any behavior change that a dependency update might require: **if a dependency update breaks the suite, STOP and report — do not force it** (Escalation Rules apply).
+  - Fixing the pre-existing flaky Hypothesis-deadline property-test failures (environmental; out of scope for this change).
+
+## Phase 4 — Implement (REFACTOR — behavior-preserving steps)
+
+**Date:** 2026-09-20 15:57.
+
+### Dependencies updated to current releases
+
+All 29 direct project dependencies (runtime + dev groups) were checked against PyPI. Exactly **4 were outdated** and updated to their current releases; the other 25 were already at their current release. Two additional lower bounds (those packages already at the current release) were raised to the current release to reflect it (PR #40 pattern: bound = current release; no installed-version change).
+
+| Package | Group | Old (installed / bound) | → Current release | Bound change |
+|---|---|---|---|---|
+| `pydantic` | runtime | 2.13.4 / `>=2.13.1` | **2.13.5** | `>=2.13.1` → `>=2.13.5` |
+| `hypothesis` | dev | 6.155.0 / `>=6.155.0` | **6.168.0** | `>=6.155.0` → `>=6.168.0` |
+| `ruff` | dev | 0.16.7 / `>=0.16.7` | **0.16.8** | `>=0.16.7` → `>=0.16.8` |
+| `ty` | dev | 0.0.81 / `>=0.0.81` | **0.0.82** | `>=0.0.81` → `>=0.0.82` |
+| `mypy` | dev | 2.3.1 / `>=1.10` | 2.3.1 (already current) | `>=1.10` → `>=2.3.1` (bound only) |
+| `pytest-cov` | dev | 7.1.0 / `>=6.0` | 7.1.0 (already current) | `>=6.0` → `>=7.1.0` (bound only) |
+
+**Transitive (lockfile only, no `pyproject.toml` change):** `pydantic-core` 2.46.4 → 2.46.5 (required by `pydantic` 2.13.5).
+
+**Already at current release (no change):** loguru 0.7.3, orjson 3.12.0, httpx 0.28.1, sqlmodel 0.0.42, argon2-cffi 25.1.0, email-validator 2.3.0, filetype 1.2.0, pillow 12.3.0, ruamel-yaml 0.19.1, alembic 1.20.0, bandit 1.9.4, complexipy 8.0.1, deptry 0.25.1, mkdocstrings 1.0.6, pip-audit 2.10.1, polyfactory 3.3.0, pre-commit 4.6.2, py-spy 0.4.2, pytest 9.1.1, pytest-randomly 5.0.0, pytest-xdist 3.8.0, respx 0.23.1, time-machine 3.5.1.
+
+### Behavior-preserving code migration
+
+**None required.** No dependency update introduced a breaking API change in `src/`. The `pydantic` 2.13.4 → 2.13.5, `hypothesis` 6.155.0 → 6.168.0, `ruff` 0.16.7 → 0.16.8, and `ty` 0.0.81 → 0.0.82 updates are all backward-compatible (no `src/` changes needed). No `src/` files were modified.
+
+### Full-suite results (hanging test deselected, deterministic ordering)
+
+**Command (all runs):**
+```
+timeout 600 uv run pytest tests/ -q -p no:randomly --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs
+```
+
+| Run | Result | Duration | Note |
+|---|---|---|---|
+| 1 | 1 failed, 555 passed, 1 skipped, 1 deselected | 161.17 s | Failure: `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format` (pre-existing flaky — see classification) |
+| 2 | 1 failed, 555 passed, 1 skipped, 1 deselected | 159.32 s | Same pre-existing flaky failure |
+| 3 | **556 passed, 1 skipped, 1 deselected** | 159.27 s | **GREEN — identical to baseline** |
+| 4 | **556 passed, 1 skipped, 1 deselected** | (n/a) | **GREEN — identical to baseline** |
+| 5 | **556 passed, 1 skipped, 1 deselected** | (n/a) | **GREEN — identical to baseline** |
+| 6 | **556 passed, 1 skipped, 1 deselected** | 161.91 s | **GREEN — identical to baseline** |
+
+**Baseline comparison: IDENTICAL** — the GREEN runs (3–6) are **556 passed, 1 skipped, 1 deselected** (0 failed), identical to the Phase 1 baseline (Run 2: 556 passed, 1 skipped, 1 deselected). The skip is the pre-existing filemanagement symlink skip (`test_ac_031_symlink_rejected` — symlinks not available on this host).
+
+### Classification of the flaky failure (Runs 1–2)
+
+- **Test:** `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format`.
+- **Pre-existing:** this is the exact test documented in the Phase 1 baseline (Run 3) as a `hypothesis.errors.DeadlineExceeded` failure (Hypothesis's default 200 ms per-example deadline exceeded under full-suite load on this Windows host; the test sets `max_examples` but no `deadline` override). It is a documented pre-existing environmental flaky failure, NOT a regression of this change.
+- **Not a behavior defect:** the test **passes in isolation** (1 passed in 1.80 s) and **passed on 4 of 6 full-suite runs** (Runs 3–6). A real behavior regression would fail consistently (in isolation and in the full suite); this fails only under load.
+- **Not fixed in this step** (out of scope — see Refactor scope / Out of scope).
+
+### Invariant check
+
+- **No observable behavior change:** suite result identical to baseline (GREEN runs: 556 passed, 1 skipped, 1 deselected, 0 failed); the dependency updates are backward-compatible (no `src/` changes).
+- **No test changes:** no test added, removed, or modified (only `pyproject.toml` + `uv.lock` changed).
+- **No `src/` behavior change:** no `src/` files changed.
+
+### Gate: MET
+
+The REFACTOR invariant "no observable behavior change; full suite stays GREEN, identical to the baseline" holds: 4 consecutive GREEN full-suite runs (556 passed, 1 skipped, 1 deselected, 0 failed), identical to the Phase 1 baseline, modulo the documented pre-existing flaky Hypothesis-deadline failure (which passed on 4 of 6 runs and in isolation).
+
+---
+
+## Phase 5 — Verify (REFACTOR)
+
+**Date:** 2026-09-20 16:55 (all runs 2026-09-20 16:35–16:55).
+
+### S5.1 — Full regression suite (MUST be GREEN, zero test changes, identical to baseline)
+
+**Command (all runs):**
+```
+timeout 600 uv run pytest tests/ -q -p no:randomly --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs
+```
+
+**Runs (3):**
+
+| Run | Result | Duration | Note |
+|---|---|---|---|
+| 1 | **556 passed, 1 skipped, 1 deselected** (0 failed) | 158.24 s | **GREEN — identical to baseline** |
+| 2 | 1 failed, 555 passed, 1 skipped, 1 deselected | 160.86 s | Failure: `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_003_metadata_matches_content` — documented pre-existing flaky class (see classification) |
+| 3 | **556 passed, 1 skipped, 1 deselected** (0 failed) | 160.65 s | **GREEN — identical to baseline** |
+
+**Baseline comparison: IDENTICAL** — the two clean GREEN runs (1 and 3) are **556 passed, 1 skipped, 1 deselected** (0 failed), identical to the Phase 1 baseline (556 passed, 1 skipped, 1 deselected). The skip is the pre-existing filemanagement symlink skip (`test_ac_031_symlink_rejected` — symlinks not available on this host); the deselect is the documented known-hanging test (fixed in PR #44, a separate in-flight change).
+
+**Classification of the Run 2 failure (pre-existing / environmental — NOT a regression):**
+- **Test:** `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_003_metadata_matches_content`.
+- **Documented pre-existing class:** this is the exact class documented in the Phase 1 baseline and change instruction — Hypothesis's default 200 ms per-example deadline is occasionally exceeded when the full suite runs on this Windows host under load; the affected property tests set `max_examples` but no `deadline` override; **a different property test is hit on each run** (Phase 1: `settings::test_inv_002_get_value_always_valid`, `filemanagement::test_inv_005_avatar_url_format`; Phase 4: `filemanagement::test_inv_005_avatar_url_format`; Phase 5 Run 2: `filemanagement::test_inv_003_metadata_matches_content`).
+- **Environmental, not a behavior defect:** the test **passes in isolation** (`1 passed in 1.13 s`) and **passed on the other two Phase 5 full-suite runs** (Runs 1 and 3). A real behavior regression would fail consistently (in isolation and in the full suite); this fails only under load.
+- **Not fixed in this step** (out of scope — environmental noise, per change instruction).
+
+**Zero test changes: CONFIRMED** — `git diff 51b530a..HEAD -- tests/` → **empty** (no test added, removed, or modified). `git diff 51b530a..HEAD --stat -- src/` → **empty** (no `src/` file changed). The only changed files vs. base are `pyproject.toml` and `uv.lock` (plus this verification record).
+
+**Gate: MET** — full regression suite GREEN and identical to the baseline (2 clean GREEN runs), zero test changes.
+
+### S5.2 — Architecture rules + lint + types
+
+**Architecture rules:** `uv run pytest tests/architecture/ -q -p no:randomly` → **N/A — no `tests/architecture/` directory in this repo** (same as Cycle 1). No architecture rules to run; nothing to violate.
+
+**Lint (whole repo, matching CI):** `uv run ruff check .` → **All checks passed!** (0 errors, clean).
+
+**Type check (the gate):** `uv run mypy src/` → **Success: no issues found in 56 source files** (PASS). This change touched no `src/` file, so no new mypy errors — confirmed.
+
+**Gate: MET** — architecture N/A, lint clean, types pass.
+
+### No observable behavior change (REFACTOR invariant)
+
+- Suite result **identical to the baseline** on both clean Phase 5 runs: **556 passed, 1 skipped, 1 deselected, 0 failed** (same skip — filemanagement symlink; same deselect — the known-hanging test, PR #44).
+- No `src/` file changed; no test file changed; only `pyproject.toml` + `uv.lock` (dependency lower bounds raised to current releases; all updates backward-compatible — no behavior-preserving code migration was required).
+
+### Gate summary (REFACTOR Phase 5 gate set)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Full regression suite (S5.1) | **556 passed, 1 skipped, 1 deselected, 0 failed** (Runs 1 and 3; 158.24 s / 160.65 s) — **IDENTICAL to baseline**; Run 2 hit the documented pre-existing flaky class (passes in isolation) | S5.1 section above |
+| Zero test changes | `git diff 51b530a..HEAD -- tests/` → **empty** (and `-- src/` → empty) | S5.1 section above |
+| Architecture rules (S5.2) | **N/A** — no `tests/architecture/` directory in this repo | S5.2 section above |
+| Lint (S5.2, whole repo, matching CI) | `uv run ruff check .` → **All checks passed!** (clean) | S5.2 section above |
+| Type check (S5.2, the gate) | `uv run mypy src/` → **Success: no issues found in 56 source files** (PASS; no new errors — no `src/` file touched) | S5.2 section above |
+| No observable behavior change | Suite result identical to the baseline; only `pyproject.toml` + `uv.lock` changed | "No observable behavior change" section above |
+
+**VERDICT: VERIFIED** — REFACTOR Phase 5 gates satisfied: full regression suite GREEN and identical to the baseline (556 passed, 1 skipped, 1 deselected, 0 failed; 2 clean GREEN runs), zero test changes, architecture N/A, lint clean, mypy PASS, no observable behavior change.
+
+---
+
+## Phase 6 — Review (REFACTOR)
+
+**Date:** 2026-09-20.
+**Scope reviewed:** `git diff 51b530a..HEAD` (branch `refactor/dependency-updates`, 3 commits ahead of `main` @ `51b530a` — `e571cec` Phase 1 baseline, `aedc54b` Phase 4 implement, `73afcba` Phase 5 verify).
+
+**Normative basis (REFACTOR):** baseline + refactor scope (Cycle 2 sections above) — GREEN baseline (Run 2: 556 passed, 1 skipped, 1 deselected, 0 failed, with the known-hanging test deselected per change instruction; that test is fixed in PR #44) plus the exact refactor scope (update all project dependencies in `pyproject.toml` to their current releases). REFACTOR contract: no observable behavior change, no test changes, no `src/` behavior change beyond what the dependency updates require, no NEW test failures.
+
+### S6.1 — Review vs. normative basis
+
+- **Diff scope check: PASS** — `git diff 51b530a..HEAD --name-only` → exactly **3 files**: `pyproject.toml`, `uv.lock`, `docs/verification/dependency-updates.md` (this verification record). No other file changed — no more, no less than the scoped change.
+- **No test changes: PASS** — `git diff 51b530a..HEAD -- tests/` → **empty** (no test added, removed, or modified; zero assertion changes).
+- **No `src/` behavior change: PASS** — `git diff 51b530a..HEAD -- src/` → **empty** (no `src/` file changed — all dependency updates are backward-compatible; no behavior-preserving code migration was required).
+- **`pyproject.toml` check: PASS** — exactly **6 lower-bound raises** and nothing else:
+
+  | Package | Bound change |
+  |---|---|
+  | `pydantic` | `>=2.13.1` → `>=2.13.5` |
+  | `hypothesis` | `>=6.155.0` → `>=6.168.0` |
+  | `mypy` | `>=1.10` → `>=2.3.1` (bound only; installed version already 2.3.1) |
+  | `pytest-cov` | `>=6.0` → `>=7.1.0` (bound only; installed version already 7.1.0) |
+  | `ruff` | `>=0.16.7` → `>=0.16.8` |
+  | `ty` | `>=0.0.81` → `>=0.0.82` |
+
+- **`uv.lock` check: PASS** — exactly **5 package version bumps** + **6 manifest specifier updates**, no other dependency-graph changes:
+
+  | Package | Lockfile change |
+  |---|---|
+  | `hypothesis` | 6.155.0 → 6.168.0 (wheel set now per-platform `cp310-abi3` wheels — expected for the version bump) |
+  | `pydantic` | 2.13.4 → 2.13.5 |
+  | `pydantic-core` | 2.46.4 → 2.46.5 (transitive; required by `pydantic` 2.13.5) |
+  | `ruff` | 0.16.7 → 0.16.8 |
+  | `ty` | 0.0.81 → 0.0.82 |
+
+- **Dependencies at current releases: PASS** — re-verified against PyPI (2026-09-20): pydantic **2.13.5**, hypothesis **6.168.0**, mypy **2.3.1**, pytest-cov **7.1.0**, ruff **0.16.8**, ty **0.0.82** — all 6 bounds equal the current PyPI releases.
+- **No observable behavior change: PASS** — independent Phase 6 full-suite run (same command as baseline / Phase 4 / Phase 5):
+  ```
+  timeout 600 uv run pytest tests/ -q -p no:randomly --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs
+  ```
+  → **556 passed, 1 skipped, 1 deselected** (0 failed) in 158.56 s (600 s cap NOT hit) — **IDENTICAL to the Phase 1 baseline** (Run 2). The skip is the pre-existing filemanagement symlink skip (`test_ac_031_symlink_rejected` — symlinks not available on this host); the deselect is the documented known-hanging test (fixed in PR #44, a separate in-flight change).
+
+### S6.2 — Traceability + boundaries
+
+- **Traceability: PASS** — REFACTOR introduces no new requirements and changes no behavior; `docs/verification/traceability.md` is not in the diff (unchanged).
+- **Feature boundaries / architecture: PASS** — no `src/` file touched; no feature directory, `model/`, `services/`, or `shared/` path touched.
+- **Tests not weakened: PASS** — zero test changes (empty `tests/` diff; nothing added, removed, or modified).
+
+### Findings
+
+| ID | Severity | Status | Disposition |
+|---|---|---|---|
+| — | — | — | No findings. |
+
+**No open findings.**
+
+### Review verdict
+
+**CLEAN** — the change is complete per the Review Gate (REFACTOR): the diff is confined to `pyproject.toml` + `uv.lock` + this verification record; exactly 6 lower bounds raised to the current PyPI releases (re-verified against PyPI); the lockfile carries exactly the 5 expected version bumps (incl. transitive `pydantic-core`) and nothing else; zero test changes; zero `src/` changes; the full suite is GREEN and identical to the baseline (independent Phase 6 run: 556 passed, 1 skipped, 1 deselected, 0 failed); no observable behavior changed.
+
+**Version bump: NONE** — REFACTOR → no version bump (per the Versioning section).
