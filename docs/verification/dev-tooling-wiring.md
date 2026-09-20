@@ -173,3 +173,49 @@ change.
   `tests/`, and it is recorded here as an explicit scope decision (shared test tooling
   capability; the DOCS/CHORE gate "no test files touched" is interpreted as "no existing
   test modified/affected", which holds).
+
+---
+
+## Phase 4 — Evidence
+
+### S4.2 — alembic scaffold wired to SQLModel metadata (DOCS/CHORE, make the change)
+
+**Date:** 2026-09-21
+**Commit:** `e395815d85f55eb4ce8627d76cb1dab1e9b1ae23`
+(`chore(dev-tooling-wiring): alembic scaffold wired to SQLModel metadata`)
+
+**Change made (scope item 2):**
+
+- `uv run alembic init migrations` generated `alembic.ini` + `migrations/` (env.py,
+  script.py.mako, README, versions/); `migrations/versions/.gitkeep` added so the
+  empty versions directory is tracked.
+- `alembic.ini`: `script_location = %(here)s/migrations` (generated default); default
+  `sqlalchemy.url = sqlite:///./data/migrations.db` — file-based SQLite under the common
+  persistence root `data/` (gitignored, `.gitignore:220`; ADR-056). No generated DB
+  file is committed.
+- `migrations/env.py` wired to the project metadata:
+  - imports the three model modules that define SQLModel tables, each with a
+    `# noqa: F401` comment naming the tables (aliased so each import is a distinct
+    binding): `backend.authentication.models` (Session, PasswordReset,
+    WebAuthnCredential), `backend.filemanagement.models` (FileRecord, UserAvatar),
+    `backend.usermanagement.models` (User);
+  - `target_metadata = SQLModel.metadata` (from `sqlmodel`);
+  - the standard online/offline migration patterns from the alembic init template;
+  - URL resolution: environment variable `ALEMBIC_DATABASE_URL` if set, else
+    `alembic.ini`'s `sqlalchemy.url` (a small, standard extension so CI can point at a
+    temp DB).
+- No migration revisions created (the scaffold is the deliverable; the initial
+  revision is out of scope).
+- `uv.lock`: `uv run` re-synced the stale self-version entry (0.4.0 → 0.4.1) during the
+  gate runs; the change was reverted before committing (S4.3 re-syncs it deliberately).
+
+**Gate commands + results:**
+
+| Command | Result |
+|---|---|
+| `uv run ruff check migrations/` | PASS — "All checks passed" (exit 0) |
+| `uv run alembic heads` | PASS — exit 0 (0 revisions → no heads) |
+| `ALEMBIC_DATABASE_URL=sqlite:///<temp-file>.db uv run alembic upgrade head` | PASS — exit 0; env.py fully executed (engine connected to the temp SQLite DB, the three model imports resolved, `SQLModel.metadata` loaded); 0 revisions → no-op upgrade |
+| temp DB cleanup | PASS — temp DB file deleted; no `data/` directory, no `.db`/`.sqlite` artifacts left in the worktree; none committed |
+
+**Ruff:** `uv run ruff check migrations/` → All checks passed (exit 0).
