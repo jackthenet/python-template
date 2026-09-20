@@ -198,3 +198,18 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 (discovered at baseline)
 - **Resolution:** marked BROKEN per user instruction (2026-09-16) — out of scope for dependency-updates; baseline = "GREEN except the marked broken tests"; Phase 4/5 invariant = no NEW failures beyond these marked tests (they may remain broken; do not fix them in this change).
 - **Date:** 2026-09-16
+
+## P-21 — Phase 4 (minimal fix) subagent looped 30 min; root cause was misdiagnosed as a queue deadlock (it is an infinite loop in the test's assertion loop)
+- **Problem:** The Phase 4 (minimal fix → GREEN) subagent for hanging-observability-test ran ~1803.9s / 24 tool uses and was stopped by the user ("the subagent was in an endless loop"). It left an uncommitted test-side fix in `tests/conftest.py` (`_reconfigure_file_sink_non_enqueued`, +32 lines) that reconfigures the `enqueue=True` file sink to non-enqueued after `setup_logger()`. That fix does NOT make the test pass — the test still hangs (exit 124 under timeout).
+- **Step / Phase:** Phase 4 (minimal fix → GREEN) — hanging-observability-test / ISSUE
+- **Change:** hanging-observability-test / ISSUE
+- **Duration / iterations:** 1 failed run (30 min) + orchestrator investigation + 1 fresh relaunch
+- **Root cause (orchestrator investigation, 2026-09-20):** The hang is NOT a `multiprocessing.SimpleQueue` pipe deadlock. A py-spy/standalone diagnosis + a diagnostic pytest test using the same fixtures showed no `enqueue=True` handler is present and `list_sessions(token=...)` returns OK. The real hang is an **infinite loop in the test's own assertion loop** (`tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs`):
+  ```python
+  for record in log_records:
+      dumped = str(record["record"])
+      assert hash_token(token) not in dumped   # hash_token is @logged
+  ```
+  `hash_token` is `@logged` (AGENTS.md mandates `@logged` on public module-level functions), so each call appends **new** records to `log_records` (the `log_records` fixture's sink). The loop iterates over a list that grows as it iterates → infinite loop. The captured run produced **808,286 lines** and `hash_token` was called **404,071 times**. The original "queue deadlock" stack trace (main thread blocked at `multiprocessing/queues.py:394 put` → `connection.py:303 _send_bytes`) was a **secondary effect**: the infinite loop produced records faster than the `enqueue=True` pipe could drain, blocking `queue.put`.
+- **Resolution:** The conftest reconfigure fix addresses the secondary effect, not the root cause, and deviates from the spec-mandated `enqueue=True` (logging REQ-001/AC-001) — it is removed. The correct fix is in the test: compute `hash_token(token)` / `hash_token("bogus-token")` **once** before the loop and iterate over a **snapshot** of `log_records` (`list(log_records)`), so the loop body no longer appends records and terminates. A fresh Phase 4 subagent is relaunched with this context.
+- **Date:** 2026-09-20

@@ -563,7 +563,7 @@ The file-management feature (`docs/specs/file-management.md`) uses its own REQ/A
 
 ## Session Management Matrix
 
-The session-management feature (`docs/specs/session-management.md`) uses its own REQ/AC ID space (REQ-001..022, AC-001..045, INV-001..005, EDGE-001..012, NFR-001..005) that overlaps other features' IDs, so its matrix is kept separate. Rows are ordered per the task DAG (`.github/task-runner/tasks.json`: T-001…T-009). Status `GREEN`: all rows pass (Phase 5, S5.1) — every REQ has at least one GREEN test, every AC has at least one executable (GREEN) test, every INV has a property test (GREEN), every EDGE has a test (GREEN), every NFR has a test (GREEN). Note: `test_ac_045_traced_methods_no_tokens_in_logs` (AC-045) is a **known hanging test** (loguru `enqueue=True` file-sink hang in a `@logged` wrapper — logging-infrastructure issue, not session-management logic; established deselect pattern, recorded under "Known friction" in `docs/verification/session-management.md`) and is deselected in full-suite runs; AC-045's substance (entry/exit/exception records produced, no raw token/hash in log records) is verified by the GREEN `test_ac_044_no_tokens_in_outputs`, `test_inv_004_no_tokens_in_outputs`, and the record-presence assertions confirmed during S5.3.
+The session-management feature (`docs/specs/session-management.md`) uses its own REQ/AC ID space (REQ-001..022, AC-001..045, INV-001..005, EDGE-001..012, NFR-001..005) that overlaps other features' IDs, so its matrix is kept separate. Rows are ordered per the task DAG (`.github/task-runner/tasks.json`: T-001…T-009). Status `GREEN`: all rows pass (Phase 5, S5.1) — every REQ has at least one GREEN test, every AC has at least one executable (GREEN) test, every INV has a property test (GREEN), every EDGE has a test (GREEN), every NFR has a test (GREEN). Note: `test_ac_045_traced_methods_no_tokens_in_logs` (AC-045) was previously a **known hanging test** (root cause: infinite loop in the test's own assertion loop — it iterated `log_records` while `@logged` `hash_token` calls appended new records, so the loop never terminated; fix: issue `hanging-observability-test`, commit `fe35f82`, test-side only — hashes computed once before the loop, iteration over a snapshot `list(log_records)`); GREEN re-confirmed in Phase 5 (2026-09-20: 1 passed in 0.25 s, no hang, under a 180 s timeout guard; included in the full-suite run — 557 passed, 1 skipped, 0 failed). AC-045's substance (entry/exit/exception records produced, no raw token/hash in log records) is additionally verified by the GREEN `test_ac_044_no_tokens_in_outputs`, `test_inv_004_no_tokens_in_outputs`, and the record-presence assertions confirmed during S5.3.
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
@@ -636,6 +636,19 @@ The session-management feature (`docs/specs/session-management.md`) uses its own
 | NFR-003 | — | `test_nfr_003_public_api_contract` | GREEN |
 | NFR-004 | — | `test_nfr_004_traced_service_publishes_events` | GREEN |
 | NFR-005 | — | `test_nfr_005_concurrent_threads_safe` | GREEN |
+
+## Issue: hanging-observability-test (reproduction test)
+
+Issue `hanging-observability-test` (type ISSUE; triage: `docs/verification/hanging-observability-test.md`). The reproduction test is `test_ac_045_traced_methods_no_tokens_in_logs` (session-management test directory, already exists — not modified). **RED for this issue = the test hangs (never finishes)**; re-confirmed 2026-09-20 with `timeout 90` → exit 124. **GREEN (Phase 5, 2026-09-20 13:48):** root cause = infinite loop in the test's own assertion loop (iterating `log_records` while `@logged` `hash_token` calls appended new records); fix (commit `fe35f82`) computes the hashes once before the loop and iterates over a snapshot (`list(log_records)`); asserted AC-045 behavior unchanged (no log record contains a raw token or token hash); no `src/` file changed. Reproduction test re-confirmed GREEN under a 180 s timeout guard: `uv run pytest tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v` → **1 passed in 0.25 s** (no hang). Full regression suite `uv run pytest tests/ -q -p no:randomly` → **557 passed, 1 skipped, 0 failed** (the skip is environmental and pre-existing: `tests/acceptance/filemanagement/test_filemanagement.py:364` — "symlinks not available on this host"); no new failures, no regression. Affected spec IDs (session-management `docs/specs/session-management.md`; logging `docs/specs/logging.md`) mapped to the reproduction test:
+
+| Feature | Requirement | Acceptance Criterion | Reproduction test | Status |
+|---------|-------------|---------------------|-------------------|--------|
+| session-management | REQ-022 | AC-045 | `test_ac_045_traced_methods_no_tokens_in_logs` | GREEN (Phase 5, 2026-09-20; was RED/hang) |
+| session-management | REQ-021 | AC-044 | `test_ac_045_traced_methods_no_tokens_in_logs` (no raw token/hash in log records) | GREEN (Phase 5, 2026-09-20; was RED/hang) |
+| session-management | NFR-004 | — | `test_ac_045_traced_methods_no_tokens_in_logs` | GREEN (Phase 5, 2026-09-20; was RED/hang) |
+| logging | REQ-001 | AC-001 | `test_ac_045_traced_methods_no_tokens_in_logs` (enqueued file sink mandated) | GREEN (Phase 5, 2026-09-20; was RED/hang) |
+| logging | NFR-001 | — | `test_ac_045_traced_methods_no_tokens_in_logs` (setup must not block) | GREEN (Phase 5, 2026-09-20; was RED/hang) |
+| logging | NFR-002 | — | `test_ac_045_traced_methods_no_tokens_in_logs` (decorator overhead must not block) | GREEN (Phase 5, 2026-09-20; was RED/hang) |
 
 ## Drift Checks
 
