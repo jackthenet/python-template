@@ -237,3 +237,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 (adapted in-step per the task definition's "verify, do not assume" guidance)
 - **Resolution:** The helper wraps the real API (`model_factory(MyModel)` → `ModelFactory.create_factory(MyModel)`); the smoke test exercised factory build/override/batch.
 - **Date:** 2026-09-20
+
+## P-25 — S5.2 subagent ended with an intermediate statement (no structured handoff, no commit); step relaunched with a fresh subagent
+- **Problem:** The S5.2 subagent (lint + types + no-delta confirmation + verification report) terminated with an intermediate statement ("Now the whole-repo lint gate:") instead of the required structured handoff. No S5.2 commit exists, no evidence was recorded, working tree clean — the step is incomplete (the diff review it reported passing was not persisted).
+- **Step / Phase:** S5.2 (lint + types + verification report) — Phase 5
+- **Change:** dev-tooling-wiring / DOCS/CHORE
+- **Duration / iterations:** 1 failed run + 1 fresh relaunch
+- **Resolution:** Relaunched with a fresh subagent (completion guard, P-3/P-7); the relaunch prompt re-states all done criteria so the step is self-contained.
+- **Date:** 2026-09-21
