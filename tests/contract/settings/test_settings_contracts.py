@@ -177,6 +177,7 @@ def test_nfr_004_observability(log_records: list, tmp_path: Path) -> None:
 
     # Storage failure is logged at ERROR.
     from io import StringIO
+
     from ruamel.yaml import YAML
 
     _yaml = YAML(typ="safe")
