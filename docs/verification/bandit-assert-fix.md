@@ -121,3 +121,44 @@ uv run bandit -r src/
 This is **RED**: the current (defective) code fails the bandit gate. The CI security job requires `uv run bandit -r src/` to exit `0`; the observed exit code is `1` with exactly the 1 issue named in the triage's Reproduction Plan (B101:assert_used at `service.py:180:8`, Severity Low, Confidence High, CWE-703). The failure mode is a bandit finding (not an environment/invocation error) — the command ran to completion and reported the issue at the expected location.
 
 **Next:** Phase 4 (S4) — minimal fix (replace the assert with an explicit `AssertionError`-raising check) → GREEN (bandit exits `0`).
+
+## Phase 4 (GREEN)
+
+- **Date:** 2026-09-21
+- **Step:** S4 (Phase 4 — minimal fix, GREEN)
+
+### The change (before/after)
+
+File: `src/backend/sessionmanagement/service.py` (line 180, in `SessionService.list_sessions`)
+
+Before:
+
+```python
+        assert user_id is not None  # validated above (exactly one of token/user_id)
+```
+
+After:
+
+```python
+        if user_id is None:
+            raise AssertionError("user_id must not be None")  # validated above (exactly one of token/user_id)
+```
+
+### Gate results
+
+| Gate | Command | Result |
+|---|---|---|
+| bandit (GREEN) | `uv run bandit -r src/` | **exit 0** — "No issues identified." (5671 lines scanned, 0 skipped, 0 potential issues skipped; severity Low 0 / Medium 0 / High 0) |
+| mypy | `uv run mypy src/` | **clean** — "Success: no issues found in 56 source files" (exit 0) |
+| ruff | `uv run ruff check src/backend/sessionmanagement/service.py` | **clean** — "All checks passed!" (exit 0) |
+| behavior | `uv run pytest tests/acceptance/sessionmanagement/ -v` | **47 passed** in 8.05s (exit 0) — no new failures |
+
+### Behavior-preservation confirmation
+
+- **Same condition, same exception type:** an `assert X` statement compiles to `if not X: raise AssertionError`. The replacement is exactly `if user_id is None: raise AssertionError(...)` — the same check (`user_id is None`), the same exception type (`AssertionError`), and it is active in all compilation modes (not stripped in optimized mode, which is what bandit B101 objects to).
+- **Unreachable branch, unchanged in practice:** `user_id` is guaranteed non-`None` at this point — the token path sets `user_id = session.user_id` where `Session.user_id` is non-nullable `UUID`, and the admin path guarantees non-`None` via the "exactly one of token or user_id" validation at the top of the method (which raises `ValueError` otherwise). The `if user_id is None` branch exists only to narrow the type for mypy and to satisfy bandit.
+- **mypy narrowing intact:** mypy understands the `if x is None: raise` pattern and narrows `user_id` to `UUID` for the rest of the method — confirmed by the clean mypy run (56 source files, no issues), so the remainder of `list_sessions` (which uses `user_id` as `UUID`) type-checks unchanged.
+- **bandit clean:** no `assert` statement remains in `src/` (B101 flags `assert` statements only, not `if ... raise`); the full bandit run over `src/` reports no issues.
+- **Behavior preserved:** the sessionmanagement acceptance suite (covering `list_sessions` per REQ-001..REQ-007 of `docs/specs/session-management.md`) passes 47/47 — no observable behavior change.
+
+**Next:** Phase 5 (S5) — verify, light gate set (targeted + smoke: covering tests + affected feature test directory + lint/types; full regression suite as the Phase 6 pre-merge gate).
