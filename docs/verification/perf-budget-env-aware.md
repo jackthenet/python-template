@@ -19,5 +19,28 @@ Spec Amendment (triggered by an ISSUE) — amends NFR-001 in `docs/specs/setting
 - `docs/specs/settings.md` (NFR-001 row + Changelog entry v3)
 - `docs/verification/perf-budget-env-aware.md` (this record)
 
+## Phase 5: Verify
+
+**Scope note:** This is a **spec + test change only** — no `src/` code changed (the type-check gate confirms `src/` is clean, 56 source files).
+
+### Gate results
+
+1. **Full test suite** — `uv run pytest tests/ -v`: **556 passed, 1 skipped, 1 deselected** (exit 0, 158.49 s).
+   - The re-derived test `tests/contract/settings/test_settings_contracts.py::test_nfr_001_performance_budgets` **PASSED** (local budget 50 ms; local median well under it).
+   - **No new failures** beyond the marked broken tests:
+     - **Deselected (pre-existing, marked BROKEN, P-20, user instruction 2026-09-16):** `tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs` — a pre-existing hanging test (infinite loop in the test's own assertion loop; P-21). It hangs indefinitely, so it is deselected from the full-suite run and remains out of scope; its expected broken state is unchanged by this amendment.
+     - **Skipped (pre-existing, environment):** `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_031_symlink_rejected` — symlinks not available on this host.
+   - No other failures, no errors.
+2. **Lint** — `uv run ruff check .`: **clean** ("All checks passed!").
+3. **Type check** — `uv run mypy src/`: **clean** ("Success: no issues found in 56 source files").
+
+### Gate set
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Full test suite | `uv run pytest tests/ -v` (P-20 broken test deselected) | 556 passed, 1 skipped, 1 deselected — re-derived test PASSED; no new failures beyond marked broken tests |
+| Lint | `uv run ruff check .` | clean |
+| Types | `uv run mypy src/` | clean (56 source files) |
+
 ## Date
 2026-09-21
