@@ -1124,9 +1124,9 @@ Each question is a section with the following fields:
 - **Step:** S1.4 Present for approval — Phase 1
 - **Change:** user-roles-permissions, CROSS-CUTTING
 - **Why needed:** The user is going to bed and pre-approves the spec PR without merging it. This is a governance decision that changes the normal "present and STOP" behavior: the spec is treated as HUMAN APPROVED, but the PR must NOT be merged (human governance is preserved for the merge).
-- **Context:** Per the Spec Approval Gate, a spec is HUMAN APPROVED only when merged through the GitHub review process. The user is pre-approving it in advance (going to bed) and explicitly forbids the merge. Phase 2 (Decompose) may proceed on the pre-approval, but the spec PR stays open/unmerged until the user merges it.
-- **Question:** Confirm: treat the spec PR as HUMAN APPROVED (pre-approved) but do NOT merge it (leave the PR open for the user to merge)?
-- **Answer:** Yes — the user pre-approves the spec PR (going to bed) and instructs NOT to merge it. The spec is treated as HUMAN APPROVED for Phase 2 onward; the spec PR remains open/unmerged for the user to merge.
+- **Context:** Per the Spec Approval Gate, a spec is HUMAN APPROVED only when merged through the GitHub review process, and the Phase 2 entry gate is the merge itself (`git log main -- docs/specs/[name].md` must be non-empty). The user is pre-approving the spec in advance (going to bed) and explicitly forbids the merge. So the spec is treated as HUMAN APPROVED, but because it is not merged, the Phase 2 entry gate is NOT yet satisfied — Phase 2 (Decompose) waits until the user merges the spec PR.
+- **Question:** Confirm: treat the spec PR as HUMAN APPROVED (pre-approved) but do NOT merge it (leave the PR open for the user to merge), and stop after Phase 1 because Phase 2 is gated on the merge?
+- **Answer:** Yes — the user pre-approves the spec PR (going to bed) and instructs NOT to merge it. The spec is treated as HUMAN APPROVED, and the spec PR is approved (not merged) per the directive. Because the Phase 2 entry gate is the merge itself, Phase 2 (Decompose) waits until the user merges the spec PR. The workflow stops after Phase 1 (spec PR open + approved, unmerged).
 - **Date:** 2026-07-10
 - **Status:** ANSWERED
 - **Incorporated:** yes
