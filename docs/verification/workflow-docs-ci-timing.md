@@ -48,3 +48,31 @@ Per change:
 - **Change C:** test-timing (CI robustness) only — product behavior unchanged; no assertion weakened (the specific line still must reach the file; only the allowed time increases from 5s to 15s). **No behavior delta.**
 
 **Overall:** this change does not alter externally observable (product) behavior. It consists of two documentation edits (A, B) and one test-timing adjustment (C). No product source file is modified; no behavioral assertion is added, removed, or weakened.
+
+---
+
+## Phase 5 (Verify)
+
+**Date:** 2026-08-16 · **Gate:** DOCS/CHORE (light) · **Change commit:** `8a981b1`
+
+### Check results
+
+| Check | Command | Result |
+|-------|---------|--------|
+| Affected logging tests | `uv run pytest tests/acceptance/logging/ tests/contract/logging/ tests/integration/logging/ -v` | **PASS** — 8 passed in 1.81s (0 failed) |
+| Ruff (changed test paths) | `uv run ruff check tests/logging_test_helpers.py tests/acceptance/logging/test_logging.py tests/contract/logging/test_logging_contracts.py tests/integration/logging/test_logging_integration.py` | **CLEAN** — "All checks passed!" |
+| Scope confirmation | `git diff main...HEAD` + `git log main..HEAD` | **CONFIRMED** — only the three scoped no-behavior changes |
+
+### Scope confirmation detail (vs `main`)
+
+Files changed on the branch (7): `.agents/skills/implement/SKILL.md`, `AGENTS.md`, `docs/verification/workflow-docs-ci-timing.md` (this scope record), and the four Change C test files.
+
+- **Test-file changes (Change C):** only the timeout values `5` → `15` / `5.0` → `15.0` (6 occurrences: `tests/logging_test_helpers.py` default, `tests/acceptance/logging/test_logging.py` ×1, `tests/contract/logging/test_logging_contracts.py` ×1, `tests/integration/logging/test_logging_integration.py` ×3). **No assertion changed** — each `wait_for_file_content(...)` call keeps the identical predicate lambda; only the `timeout=` keyword argument differs. `enqueue=True` unchanged — `tests/acceptance/logging/test_logging.py` still asserts `file_opts["enqueue"] is True` (spec AC-001).
+- **No product source file (`src/`) modified.**
+- **Change A** (`.agents/skills/implement/SKILL.md`): documentation only — adds the "zero file changes → `green_command` re-run skipped" rule to the S4.4 Done-criteria bullet and process step 8.
+- **Change B** (`AGENTS.md`): documentation only — adds the per-worktree `.ruff_cache`/`.mypy_cache` bullet to the Git Worktrees "Rules" list.
+- **`docs/verification/workflow-docs-ci-timing.md`:** the scope record (only other change).
+
+### Verdict
+
+All light-gate checks pass: affected logging tests PASS (8/8), ruff clean on the changed test paths, scope confirmed (only the three scoped no-behavior changes; no unscoped test/source changes; no behavioral change; no `src/` change). The DOCS/CHORE change is **verified**.
