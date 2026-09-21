@@ -1,0 +1,96 @@
+# Triage Record: bandit-assert-fix
+
+- **Type:** ISSUE (light tier)
+- **Change name:** `bandit-assert-fix`
+- **Branch:** `issue/bandit-assert-fix` (based on `origin/main` @ `10066d5`)
+- **Date:** 2026-07-22
+
+## Classification Record
+
+**Why ISSUE:** The CI `security` job's bandit step is failing — `uv run bandit -r src/` exits 1 because bandit flags an `assert` statement (B101:assert_used). This is a deviation from the project's own CI contract (the security job requires bandit to pass over `src/`); it is a defect, not new behavior. The fix introduces no new behavior: it replaces the `assert` with an explicit check that raises the same exception type (`AssertionError`), preserving behavior exactly.
+
+**Why light tier:**
+- Single feature (`backend.sessionmanagement`).
+- The fix touches **1 file** excluding tests (`src/backend/sessionmanagement/service.py`).
+- No new dependency, no new public interface, no cross-feature change.
+- The existing test suite already covers the affected area (the sessionmanagement acceptance test suite; see Covering Tests).
+
+## Affected Gate
+
+The `security` job in `.github/workflows/quality.yml` — step **"Run bandit"**:
+
+```yaml
+- name: Run bandit
+  run: uv run bandit -r src/
+```
+
+The step is currently failing (exit code 1), which fails the security job.
+
+## Defect Confirmation
+
+- **Observed behavior:** `uv run bandit -r src/` exits **1**, reporting exactly 1 issue: `B101:assert_used` at `src/backend/sessionmanagement/service.py:180:8` (Severity Low, Confidence High, CWE-703).
+- **Required behavior:** `uv run bandit -r src/` exits **0** — no flagged issues in `src/` (the CI security job's contract).
+- **Deviation confirmed:** the bandit run reports 1 issue where 0 are permitted.
+
+## Affected Requirements (existing approved spec)
+
+Spec: `docs/specs/session-management.md` (approved, merged on `main`).
+
+The assert sits in `SessionService.list_sessions` (spec **REQ-001**: "a single `list_sessions` method serves both self-service (token) and admin (user_id) listing"; admin path **AC-002**, token path **AC-001**, argument validation **AC-003**). The fix MUST preserve REQ-001 behavior exactly — no observable behavior change. The defect itself is against the CI contract, not against REQ-001 behavior.
+
+## Root Cause
+
+The statement at `src/backend/sessionmanagement/service.py:180` is:
+
+```python
+assert user_id is not None  # validated above (exactly one of token/user_id)
+```
+
+The assert is a **pure type-narrowing** check, not a behavioral guard:
+- Line 179 is `user_id = session.user_id` (inside the `if token is not None:` block); `Session.user_id` is non-nullable (`UUID = SField(index=True)` in `src/backend/authentication/models.py`), and the admin path guarantees `user_id` non-None (the method validates "exactly one of token or user_id" at the top, raising `ValueError` otherwise). The value is therefore guaranteed non-None by logic.
+- The assert exists only to tell mypy that `user_id` is non-`None` (narrowing `UUID | None` → `UUID`).
+- Bandit flags `assert` statements (B101) because asserts are stripped when compiling to optimized bytecode, so any logic depending on them silently disappears.
+
+## Reproduction Plan (RED)
+
+1. In the change worktree, run the CI security job's bandit command:
+
+   ```bash
+   uv run bandit -r src/
+   ```
+
+2. **RED:** the command exits **1** and reports exactly 1 issue: `B101:assert_used` at `src/backend/sessionmanagement/service.py:180:8`.
+3. Record RED evidence in this file (Phase 3, S3.2).
+
+## Fix Scope (Phase 4)
+
+Replace the `assert` at `src/backend/sessionmanagement/service.py:180` with an explicit check that raises the same exception type, preserving behavior exactly:
+
+```python
+if user_id is None:
+    raise AssertionError("user_id must not be None")
+```
+
+- **Behavior-preserving:** an `assert X` compiles to `if not X: raise AssertionError`; the explicit form raises the same `AssertionError` in the same (unreachable) case.
+- **mypy:** narrows `user_id` to `UUID` for the code below, same as the assert.
+- **bandit:** clean — no `assert` statement remains.
+
+**Files to change:** `src/backend/sessionmanagement/service.py` (1 file only).
+
+## Covering Tests
+
+- Acceptance test directory: `tests/acceptance/sessionmanagement/` (the assert is in `list_sessions`, covered by `tests/acceptance/sessionmanagement/test_list_sessions.py` for REQ-001..REQ-007 of `docs/specs/session-management.md`).
+- Phase 5 (light tier): run the covering tests named above plus the affected feature's test directory (`uv run pytest tests/acceptance/sessionmanagement/ -v`), plus lint and type checks. The full regression suite runs as the Phase 6 pre-merge gate.
+
+## Light-Tier Qualification
+
+All light-tier criteria hold:
+
+| Criterion | Holds | Evidence |
+|---|---|---|
+| Single feature | ✅ | `backend.sessionmanagement` only |
+| Fix touches ≤ 3 files (excluding tests) | ✅ | 1 file: `src/backend/sessionmanagement/service.py` |
+| No new dependency | ✅ | none added |
+| No new public interface | ✅ | no signature/API change |
+| No cross-feature change | ✅ | confined to `sessionmanagement/service.py` |
+| Existing test suite covers the affected area | ✅ | `tests/acceptance/sessionmanagement/` (named in Covering Tests) |
