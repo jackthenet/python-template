@@ -177,7 +177,8 @@ class SessionService:
                 raise InvalidSessionError("invalid session")
             current_session_id = session.id
             user_id = session.user_id
-        assert user_id is not None  # validated above (exactly one of token/user_id)
+        if user_id is None:
+            raise AssertionError("user_id must not be None")  # validated above (exactly one of token/user_id)
         valid = [row for row in self._repository.list_for_user(user_id) if not row.revoked and row.expires_at > now]
         if current_session_id is not None:
             # Pin the current session first; the remainder is already
