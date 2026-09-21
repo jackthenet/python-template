@@ -407,3 +407,84 @@ recorded here as resolved in favor of the explicit stage override.
   so no regression is present. Nothing required classification (no failures).
 
 **Ruff:** n/a — no code written in this step (test run only).
+
+### S5.2 — Lint + types + no-delta confirmation + verification report (DOCS/CHORE light)
+
+**Date:** 2026-09-21
+
+**Gate commands + results:**
+
+| Command | Result |
+|---|---|
+| `uv run ruff check .` (first run, whole-repo sweep) | 1 error — `I001` (unsorted import block) at `tests/contract/settings/test_settings_contracts.py:179` (a file NOT modified by this change); classified + fixed in-step (below) |
+| `uv run ruff check .` (post-fix, whole-repo sweep) | PASS — "All checks passed!" (exit 0) |
+| `uv run mypy src/` | PASS — "Success: no issues found in 56 source files" (exit 0) |
+
+**Lint finding — classification + in-step fix (recorded precisely):**
+
+- **Finding:** `I001` (import block un-sorted/un-formatted) at
+  `tests/contract/settings/test_settings_contracts.py:179` — a file NOT
+  modified by this change (not in the diff).
+- **Classification: latent pre-existing violation, surfaced by the documented
+  `.gitignore` anchor fix (scope item, S4.3).** On `main`, the unanchored
+  `.gitignore` pattern `settings/` (`.gitignore:223`) matches
+  `tests/contract/settings/`, so ruff's gitignore-aware whole-repo sweep
+  excluded the directory from the scan and the latent violation was never
+  checked (verified: `git check-ignore -v --no-index
+  tests/contract/settings/test_settings_contracts.py` → matches
+  `.gitignore:223:settings/` on main, no match in the worktree; and
+  `uv run ruff check .` on main exits 0). This change's anchor fix
+  (`/settings/`) re-includes the directory, so the Phase 5 sweep now checks
+  the file and surfaces the latent `I001`.
+- **Fix (in-step, scoped):** `uv run ruff check --fix
+  tests/contract/settings/test_settings_contracts.py` — adds one blank line
+  between the stdlib import (`from io import StringIO`) and the third-party
+  import (`from ruamel.yaml import YAML`). Behavior-neutral (import
+  reformatting inside a test function; no runtime effect).
+- **Justification:** AGENTS.md — the Phase 5 whole-repo sweep matches CI
+  exactly and "pre-existing lint errors are in scope, not out of scope";
+  the verify skill — "fix them before marking the change verified, never as
+  out of scope".
+
+**No-behavior-delta confirmation (diff review vs `main`):**
+
+- **Pre-commit state (HEAD, `git diff main...HEAD --stat`):** 17 files, all
+  matching the scope set (Phase 1 "Exact non-behavior changes"). NO `src/`
+  file modified. The only `tests/` change is the NEW
+  `tests/tooling_test_helpers.py`.
+- **Post-commit state (final, `git diff main...HEAD --stat`):** 18 files =
+  the 17 scope files + `tests/contract/settings/test_settings_contracts.py`
+  (the one-line behavior-neutral lint fix above). **Scope-set deviation,
+  recorded precisely:** the 18th file is outside the 17-file scope set; it is
+  the behavior-neutral lint fix mandated by the Phase 5 gate rule (above),
+  not a scope extension of the chore.
+- **File-by-file diff review:** all 17 scope files' diffs are consistent with
+  the scope (Phase 1) and the Phase 4 evidence records (S4.2–S4.5):
+  `pyproject.toml` (dev-group mkdocs trio + `[tool.deptry]`), `uv.lock`
+  (new package entries: babel, backrefs, griffelib, mkdocs-material,
+  mkdocs-material-extensions, mkdocstrings-python, paginate; the
+  mkdocstrings `python` extra; the dev-group list; self-version 0.4.0 →
+  0.4.1; the `mkdocs` 1.6.1 package entry already existed in main's lock),
+  `.gitignore` (the documented 1-line anchor fix + comment), `alembic.ini` +
+  `migrations/` (the scaffold wired to `SQLModel.metadata`), `mkdocs.yml` +
+  `userdocs/` (the site, `docs_dir: userdocs`), `.pre-commit-config.yaml`
+  (the deptry + mkdocs-build hooks), `.github/workflows/quality.yml` (the
+  dependencies + docs + migrations jobs), `tests/tooling_test_helpers.py`
+  (the new helper), `AGENTS.md` (the tooling entries + the test-tooling /
+  migrations sections), `docs/workflow/PROBLEMS.md` (P-22..P-25).
+- **Conclusion:** no `src/` file modified; no existing `tests/` file
+  modified other than the documented one-line behavior-neutral lint fix; no
+  runtime behavior, API, or test-assertion change. No-behavior-delta
+  confirmed.
+
+**Final Phase 5 verification report (DOCS/CHORE gate set):**
+
+| Gate | Result |
+|---|---|
+| Full suite GREEN (S5.1) | PASS — 557 passed, 0 failed, 0 errors, 1 skipped (pre-existing platform skip: `test_ac_031_symlink_rejected`, win32) |
+| `uv run ruff check .` (whole-repo sweep) | PASS — clean (exit 0), after the in-step fix of the latent finding (classified above) |
+| `uv run mypy src/` | PASS — "Success: no issues found in 56 source files" (exit 0) |
+| No-behavior-delta confirmation | PASS — the diff review above (no `src/` change; no existing `tests/` change other than the documented one-line behavior-neutral lint fix) |
+| "Spec coverage" | n/a — DOCS/CHORE (no spec; the type-specific gate is no-behavior-delta + lint/types) |
+
+**Overall status: VERIFIED.**
