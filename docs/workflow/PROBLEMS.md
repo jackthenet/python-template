@@ -245,3 +245,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 failed run + 1 fresh relaunch
 - **Resolution:** Relaunched with a fresh subagent (completion guard, P-3/P-7); the relaunch prompt re-states all done criteria so the step is self-contained.
 - **Date:** 2026-09-21
+
+## P-26 — main's `uv.lock` is stale relative to `pyproject.toml` (self-version 0.4.0 vs 0.4.1): any `uv run` in the primary worktree re-locks and dirties it (discovered in S5.2)
+- **Problem:** main's `uv.lock` still carries the pre-bump self-version (0.4.0) while main's `pyproject.toml` is 0.4.1 (the bump-my-version config updates only `pyproject.toml`, not the lock). Consequence: any `uv run` in the **primary** worktree auto-re-locks and transiently dirties main's `uv.lock`. The S5.2 subagent hit this while verifying pre-existing state in the primary worktree and restored it via `git checkout -- uv.lock`.
+- **Step / Phase:** S5.2 (lint + types + verification report) — Phase 5
+- **Change:** dev-tooling-wiring / DOCS/CHORE
+- **Duration / iterations:** 1 (transient dirtiness, restored; no impact on the change)
+- **Resolution:** The change branch's S4.3 lock sync (self-version 0.4.0 → 0.4.1) fixes main's stale lock when the PR merges. Lesson recorded for the orchestrator: verify pre-existing state with `git show main:<file>` (or a worktree-local run), never with `uv run` in the primary worktree.
+- **Date:** 2026-09-21
