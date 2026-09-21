@@ -202,3 +202,50 @@ No new failures, no new lint/type errors. The change is verified at the light ga
 The **full regression suite** (`uv run pytest tests/ -v`) is the **Phase 6 pre-merge gate** (S6.4, before the PR opens) per the light-tier ISSUE tier in `AGENTS.md`; it runs there and its result is recorded in the review report. It is intentionally not run in this light-tier Phase 5.
 
 **Next:** Phase 6 (S6) — review, clean report + full regression pre-merge gate + PR.
+
+## Phase 6 (Review)
+
+- **Date:** 2026-09-21
+- **Step:** S6.1–S6.3 (Phase 6 — review vs. normative basis + traceability/boundaries + full regression pre-merge gate)
+- **Reviewed commits:** `608b9ed` (triage), `5f489ff` (RED), `3ca3b45` (fix / GREEN), `204df9d` (Phase 5 verify) — base `10066d5`
+
+### S6.1 — Review vs. normative basis (triage record + affected spec IDs)
+
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | CI contract resolved (bandit gate) | ✅ PASS | Re-ran `uv run bandit -r src/` in the worktree: **exit 0** — "No issues identified." (5671 lines scanned, 0 skipped, 0 potential issues skipped; severity Low 0 / Medium 0 / High 0) |
+| 2 | Minimal fix | ✅ PASS | `git diff origin/main...HEAD --stat`: only `src/backend/sessionmanagement/service.py` (1 line removed / 2 lines added — the assert→if-raise replacement) + `docs/verification/bandit-assert-fix.md` (this record). No test, config, or other source changes (`git diff origin/main...HEAD --name-only` confirms exactly these 2 files) |
+| 3 | Behavior preserved | ✅ PASS | The replacement is `if user_id is None: raise AssertionError("user_id must not be None")` — same condition (`user_id is None`), same exception type (`AssertionError`); an `assert X` compiles to `if not X: raise AssertionError`. The branch is unreachable in practice (token path: `Session.user_id` is non-nullable `UUID`; admin path: the "exactly one of token or user_id" validation raises `ValueError` first). No new behavior introduced |
+| 4 | Light-tier qualification holds | ✅ PASS | Single feature (`backend.sessionmanagement`); 1 file excl. tests; no new dependency / public interface / cross-feature change; existing suite covers the area (Covering Tests) |
+
+### S6.2 — Traceability + boundaries
+
+- **Feature boundary:** the change is in `src/backend/sessionmanagement/service.py` (the sessionmanagement feature). The diff adds **no imports** (the import block is unchanged) — no cross-feature import was introduced; existing imports are the feature's established dependencies (authentication session store, event bus, logging, settings, usermanagement events). The change stays within the feature boundary.
+- **Traceability:** the affected spec `docs/specs/session-management.md` (REQ-001, AC-001/AC-002/AC-003 — `list_sessions`) is untouched. The fix preserves `list_sessions` behavior exactly → no new requirement, no behavior change, no traceability-matrix update needed. `list_sessions` coverage is intact: `tests/acceptance/sessionmanagement/test_list_sessions.py` (14 `list_sessions` references) plus the rest of the sessionmanagement acceptance suite (47 tests).
+
+### Full regression suite (light-tier pre-merge gate)
+
+Command (worktree `issue/bandit-assert-fix`):
+
+```bash
+uv run pytest tests/ -v --deselect tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs
+```
+
+(The `--deselect` is required: known-broken hanging test, problem log P-20, per user instruction 2026-09-16.)
+
+**Result:** `3 failed, 553 passed, 1 skipped, 1 deselected in 145.22s`
+
+- **1 skipped:** pre-existing platform skip (`tests/acceptance/filemanagement/test_filemanagement.py:364` — "symlinks not available on this host", win32).
+- **3 failed: pre-existing logging-test failures, NOT introduced by this change:**
+  - `tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks`
+  - `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline`
+  - `tests/contract/logging/test_logging_contracts.py::test_nfr_003_diagnose_false`
+- **Pre-existence verification:** the identical full suite was run on the base commit `10066d5` (temporary detached worktree, removed after the run): **same result** — `3 failed, 553 passed, 1 skipped, 1 deselected in 146.32s` with the **same 3 test IDs**. The change (a 1-line assert→if-raise in sessionmanagement) does not touch logging.
+
+**Gate: PASS** — no NEW failures beyond the deselected broken test and the 3 pre-existing logging failures (identical on the base commit).
+
+### Overall
+
+**Review: CLEAN.** All S6.1 criteria pass; feature boundaries respected; no traceability update required; the full regression pre-merge gate passes (no new failures).
+
+**Next:** S6.4 — bump version (patch) + open PR.
