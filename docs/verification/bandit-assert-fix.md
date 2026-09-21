@@ -94,3 +94,30 @@ All light-tier criteria hold:
 | No new public interface | ✅ | no signature/API change |
 | No cross-feature change | ✅ | confined to `sessionmanagement/service.py` |
 | Existing test suite covers the affected area | ✅ | `tests/acceptance/sessionmanagement/` (named in Covering Tests) |
+
+## Phase 3 (RED)
+
+- **Date:** 2026-09-21
+- **Step:** S3 (Phase 3 — confirm RED; reproduction "test" is the CI security job's bandit command itself)
+
+### Command run
+
+```bash
+uv run bandit -r src/
+```
+
+(Worktree: `python-template_kopie-worktrees/issue/bandit-assert-fix`, branch `issue/bandit-assert-fix` — the exact command of the `security` job's "Run bandit" step in `.github/workflows/quality.yml`.)
+
+### Result
+
+- **Exit code:** `1`
+- **Issues reported:** exactly **1** — `B101:assert_used` at `src/backend/sessionmanagement/service.py:180:8`
+  - Severity: **Low**, Confidence: **High**, CWE: **CWE-703** (total issues: Low 1 / Medium 0 / High 0)
+  - Flagged statement: `assert user_id is not None  # validated above (exactly one of token/user_id)` (line 180)
+- **Scanned:** 5670 lines of code, 0 skipped, 0 potential issues skipped — no other findings.
+
+### RED confirmation
+
+This is **RED**: the current (defective) code fails the bandit gate. The CI security job requires `uv run bandit -r src/` to exit `0`; the observed exit code is `1` with exactly the 1 issue named in the triage's Reproduction Plan (B101:assert_used at `service.py:180:8`, Severity Low, Confidence High, CWE-703). The failure mode is a bandit finding (not an environment/invocation error) — the command ran to completion and reported the issue at the expected location.
+
+**Next:** Phase 4 (S4) — minimal fix (replace the assert with an explicit `AssertionError`-raising check) → GREEN (bandit exits `0`).
