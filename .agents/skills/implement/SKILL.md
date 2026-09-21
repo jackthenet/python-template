@@ -69,7 +69,7 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 - **Objective:** Improve code structure (duplication, complexity, naming, boundaries) without changing observable behavior; keep GREEN.
 - **Inputs:** the implemented code.
 - **Outputs:** improved code structure; GREEN maintained.
-- **Done-criteria:** the code structure is improved (duplication, complexity, naming, boundaries); the task's tests stay GREEN (`green_command`) after every meaningful refactoring step (the full suite is a Phase 5 gate); ruff stays clean on the task's changed paths; no observable behavior changed.
+- **Done-criteria:** the code structure is improved (duplication, complexity, naming, boundaries); the task's tests stay GREEN (`green_command`) after every meaningful refactoring step (the full suite is a Phase 5 gate); if the step made zero file changes (nothing to refactor), the `green_command` re-run is skipped — the GREEN from S4.2/S4.3 still holds; ruff stays clean on the task's changed paths; no observable behavior changed.
 
 ### S4.5 Commit + update status
 
@@ -98,7 +98,7 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 
 ### 4. Refactor (improve structure, keep GREEN) — FEATURE/CROSS-CUTTING
 
-8. **Refactor:** Identify code structure issues (duplication, complexity, naming, boundaries). Make small, focused refactoring changes without changing observable behavior. Re-run `green_command` and `uv run ruff check <changed-paths>` after every meaningful refactoring step. Confirm GREEN is maintained and ruff stays clean.
+8. **Refactor:** Identify code structure issues (duplication, complexity, naming, boundaries). Make small, focused refactoring changes without changing observable behavior. Re-run `green_command` and `uv run ruff check <changed-paths>` after every meaningful refactoring step. If the step made zero file changes (nothing to refactor), the `green_command` re-run is skipped — the GREEN from S4.2/S4.3 still holds. Confirm GREEN is maintained and ruff stays clean.
 
 ### 5. REFACTOR (behavior-preserving steps)
 

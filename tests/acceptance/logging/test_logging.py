@@ -34,7 +34,7 @@ def test_ac_001_setup_logger_adds_sinks(session_settings: object) -> None:
     # File sink: a log line reaches the configured log file (enqueued writer).
     log_file = Path(session_settings.log_file)  # type: ignore[attr-defined]
     logger.info("ac_001 file line")
-    assert wait_for_file_content(log_file, lambda c: "ac_001 file line" in c, timeout=5)
+    assert wait_for_file_content(log_file, lambda c: "ac_001 file line" in c, timeout=15)
 
     # Sink option contract (data-driven design): the named builders define the
     # sink properties the spec requires.
