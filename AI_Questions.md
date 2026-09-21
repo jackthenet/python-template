@@ -756,3 +756,377 @@ Each question is a section with the following fields:
 - **Date:** 2026-09-19
 - **Status:** ANSWERED
 - **Incorporated:** yes (S4.5 step)
+
+## Q-66 — Terminology: "Admin/User" vs. the existing "admin"/"member" role names
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The idea says "Roles such as Admin/User", but the existing user-management feature's default role set is `{"admin", "member"}` (REQ-006; roles are lowercase strings validated at construction). "User" is not an existing role name. This determines whether the new capability builds on the existing names, requires a rename (spec amendment + data migration to user-management), or introduces a third role.
+- **Context:** `docs/specs/user-management.md`: REQ-006 (configurable role set, default `{"admin", "member"}`), D3 (roles are lowercase strings, `UserManager(roles=...)`), AC-009 (custom role sets work), EDGE-010 (uppercase rejected). The user-management spec lists "user groups/teams/permissions beyond roles" as out of scope — this change fills that gap on top of the existing role model.
+- **Question:** Which relationship holds? (a) Keep the existing names as-is — "User" in the idea is informal for the existing `member` role; no rename, no new role; (b) Rename `member` → `user` (spec amendment to user-management, breaking change, data migration of existing role values); (c) Add `user` as a distinct third role alongside `admin`/`member`? Which?
+- **Answer:** (b) Rename `member` -> `user`. The default role set becomes {"admin", "user"}. Requires a user-management spec amendment + data migration of existing role values + test updates.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-67 — Static vs. dynamic role→permission mapping
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** This is the largest fork in the permission model. A static mapping (fixed in code: admin → all, member → fixed subset) is simple with no storage; a dynamic mapping (DB-backed, changeable at runtime via an API — e.g., an admin grants `filemanagement.upload` to `member`) adds tables, a repository, a grant/revoke API, and validation. It determines most of the data model, API surface, and NFRs.
+- **Context:** No permission/authorization code exists anywhere in `src/` (grep: no matches for permission/authorization/authorize). The repo pattern for durable state is SQLModel/SQLite behind a repository ABC (user-management, authentication, file-management, session-management).
+- **Question:** Is the role→permission assignment (a) static in code (a fixed mapping defined at startup; changing it requires a code change), or (b) dynamic/configurable (persisted, changeable at runtime via an API — grant/revoke individual permissions per role)?
+- **Answer:** Dynamic mapping — role->permission grants are stored (SQLite) and changeable at runtime (an admin can change which permissions a role has).
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-68 — Unit of permission: feature-level vs. action-level granularity
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The idea says "Permissions per feature/action" — ambiguous between per-feature (coarse: a role either has "filemanagement" or not) and per-action (fine: a role has `filemanagement.upload` but not `filemanagement.delete`). The unit determines the permission key format and whether fine-grained assignment is possible.
+- **Context:** Existing features expose public service methods as their actions, e.g., `FileService.upload/download/open/delete/list_files/upload_avatar/...`, `UserManager.create_user/set_role/...`, `SessionService.list_sessions/revoke_session/revoke_all_sessions/...`, `SettingsRegistry.register/get_value/set_value/...`, `MailService.send_email/...`.
+- **Question:** What is the unit of permission? (a) Per-feature only (one permission per feature), (b) per-action only (one permission per public method), or (c) hierarchical `feature.action` with feature-level wildcards (a role can hold `filemanagement.*` or individual `filemanagement.upload`)? Must a role be able to hold `filemanagement.upload` without `filemanagement.delete`?
+- **Answer:** Hierarchical `feature.action` (e.g. "usermanagement.set_role"); action-level checks plus feature-level grants via wildcard ("settings.*").
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-69 — Permission vocabulary: static vs. dynamic (custom permissions)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Independent of Q-67 (the mapping), the set of permissions itself could be static (a closed catalog defined in code at startup) or dynamic (DB-backed, creatable at runtime — e.g., an admin defines a new permission `reports.export` without a code change). Dynamic vocabulary adds a catalog table, creation/validation APIs, and a naming rule.
+- **Context:** The idea mentions only "Permissions per feature/action" — no mention of creating custom permissions at runtime. All existing features are in-process services with no HTTP layer.
+- **Question:** Is the permission vocabulary (a) static — a fixed catalog defined in code at startup (closed set; new permissions require a code change), or (b) dynamic — persisted and creatable at runtime (who may create permissions; what naming/validation rules, e.g., `^[a-z0-9_-]+\.[a-z0-9_-]+$`)?
+- **Answer:** Static catalog — a fixed set of permission names derived from the features' declared actions; no runtime creation of permission names.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-70 — Initial permission catalog: which features and actions are covered
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The spec must pin the initial permission catalog (which features' actions are gated). Candidate features with public actions: usermanagement (create_user, get_user, list_users, update_user, delete_user, change_password, verify_password, set_role, activate_user, deactivate_user), authentication (login, logout, session_info, password reset, passkey ops), settings (register, register_feature, get_value, set_value, reset, templates), filemanagement (upload, download, open, delete, get_file, list_files, avatar ops), mail (send_email, high-level sends), sessionmanagement (list_sessions, revoke_session, revoke_all_sessions, logout_all_sessions, logout_other_sessions, cleanup_expired). All public methods, or a curated subset (e.g., only mutating/admin operations)?
+- **Context:** All six features above are implemented and merged in `src/backend/` (sessionmanagement verified implemented in this worktree's base). Each feature's public service methods are its natural action set.
+- **Question:** Which features/actions are in the initial catalog? (a) All public methods of all six features, (b) a curated subset (which ones — e.g., only mutating operations, only admin-grade operations), or (c) a specific per-feature list? Are read operations (get/list) gated at all?
+- **Answer:** All six features' public service methods (usermanagement, authentication, settings, filemanagement, mail, sessionmanagement); every public method is a declared action.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-71 — How features declare their actions to the permission feature
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** If the catalog is built from the features' actions (Q-70), the mechanism must be pinned: a module-level constant per feature, a startup registration call (like the feature-owned `register_settings(registry)` pattern), or auto-discovery (introspection of public methods). This determines whether existing feature packages are modified (cross-cutting impact) and how a new feature joins the catalog.
+- **Context:** Repo pattern for feature-owned registration: each feature exposes `register_settings(registry)` in `feature_settings.py`, called at startup (logging, mail, filemanagement, settings, sessionmanagement). No feature currently declares "actions".
+- **Question:** How does a feature declare its actions? (a) A module-level constant per feature (e.g., `ACTIONS: dict[str, str]` mapping permission key → description), (b) a startup registration call (feature-owned `register_actions(catalog)` in the feature, like `register_settings`), or (c) auto-discovery (introspection of the service's public methods)? Does the mechanism require modifying existing feature packages?
+- **Answer:** Feature-owned registration (e.g. register_actions(...)) called at startup, mirroring the register_settings pattern.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-72 — Check API shape: decorator vs. explicit call; raise vs. bool
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** "Permission checks in the backend" needs a concrete API. Options: a decorator applied to service methods (`@requires_permission("feature.action")`), an explicit call (`check_permission(principal, "feature.action")`), or both. And the denial signal: raise an exception, return a bool, or both styles (`has_permission` → bool, `require_permission` → raise). This is the core public API of the new capability.
+- **Context:** No existing check API in the repo. The repo pattern for cross-cutting function tracing is the `@logged`/`@logged_class` decorator (shared logging feature) — a decorator precedent exists. In-process trust model: existing features perform no per-call auth.
+- **Question:** What is the check API? (a) A decorator `@requires_permission("feature.action")` for service methods, (b) an explicit call `check_permission(principal, "feature.action")` / `require_permission(...)`, or (c) both? And the denial signal: raise an exception, return a bool, or both styles (`has_permission` → bool + `require_permission` → raise)?
+- **Answer:** Both — has_permission(user_id, permission) -> bool and require_permission(user_id, permission) that raises on denial.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-73 — Principal argument: user_id vs. session token vs. UserRead
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** A check needs a principal (who is asking). Options: `user_id: UUID` (the check looks up the user's role via user-management), `UserRead` (the caller passes the representation), or a session token (the check validates the session via authentication, then resolves the user). Note: `SessionInfo` carries only `user_id` (no role), so even token-based checks need a user lookup for the role. This determines the new feature's dependencies (user-management only, or also authentication).
+- **Context:** user-management: `UserManager.get_user(user_id) -> UserRead` (carries `role`). authentication: `AuthService.session_info(token) -> SessionInfo(user_id, created_at, expires_at)` — no role; `LoginResult` carries `UserRead` (with role) at login.
+- **Question:** What does the check take as the principal? (a) `user_id: UUID` (the check resolves the user via user-management), (b) `UserRead` (the caller passes it), (c) a session token (the check validates the session via authentication and resolves the user), or (d) a combination (e.g., `user_id` plus an optional token)? Which dependencies on existing features does this imply?
+- **Answer:** user_id — check(user_id, permission) with a live user lookup.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-74 — Fail-open vs. fail-closed on undeterminable checks
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Security posture: when a check cannot determine the outcome (user not found, lookup raises, the permission feature is not initialized, a permission is unknown), the default must be pinned. Fail-closed (deny) is the standard secure default; fail-open (allow) preserves availability. This is a hard invariant of the capability.
+- **Context:** No existing check exists to reference. The repo's security posture is otherwise strict (tokens hashed at rest, no secrets in logs, argon2id).
+- **Question:** When a check cannot determine the outcome (unknown user, lookup error, uninitialized feature, unknown permission), is the default (a) fail-closed — deny (raise the denial error), or (b) fail-open — allow? Is fail-closed a hard invariant for every undeterminable case?
+- **Answer:** Fail-closed — undeterminable checks (unknown user, storage error, unmapped role) deny and log a warning.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-75 — Cross-cutting scope: does this change wire existing features to enforce checks?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** This determines the size of the Impact Analysis and whether approved specs are amended. Option (a): the change provides only the shared permission capability (check API + role assignment + catalog) and leaves enforcement wiring to the caller (application code) — existing features are untouched except possibly declaring actions. Option (b): the change also modifies existing features (usermanagement, authentication, settings, filemanagement, mail, sessionmanagement) to enforce checks on their operations — a cross-feature change touching six implemented features and their approved specs (spec amendments required).
+- **Context:** All six features are implemented and merged with approved specs and NFR-003 backward-compatibility contracts. The existing in-process trust model means none of them performs per-call auth today. session-management is a recently merged feature (admin operations like `revoke_all_sessions` are natural check targets).
+- **Question:** Which option? (a) Provide only the shared permission capability (check API, role assignment, catalog); enforcement wiring stays the caller's responsibility; existing features are not modified to call checks (they may only declare actions). (b) Also modify existing features to enforce checks on their operations (cross-feature impact; the affected specs are amended via the Spec Amendment Workflow)? Which features, if (b)?
+- **Answer:** Capability + enforcement — also wire existing features (usermanagement, sessionmanagement, settings, ...) to enforce checks at their entry points; requires spec amendments to those features (behavior changes).
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-76 — Role assignment: reuse user-management's `set_role` or a new API?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The idea lists "Role assignment", but user-management already has `set_role(user_id, role) -> UserRead` (REQ-007) with validation (`InvalidRoleError`) and the last-admin guard. Re-specifying role assignment would be double work. The answer pins whether the new feature delegates to `set_role`, wraps it, or moves it.
+- **Context:** `docs/specs/user-management.md`: REQ-007 (`set_role`), REQ-006 (role set validation), REQ-008 (last-admin guard on demote), AC-015/AC-016, EDGE-005 (set_role to same role is a no-op), `UserRoleChanged` event. The user-management spec's out-of-scope list excludes "permissions beyond roles" but NOT role assignment itself.
+- **Question:** Does the new feature (a) reuse/delegate to `UserManager.set_role` (no new role-assignment API; the new feature never stores or mutates roles itself), (b) add its own role-assignment API on the permission service that calls `set_role` (a thin wrapper, possibly adding permission-related validation), or (c) replace `set_role` (role assignment moves into the permission feature)?
+- **Answer:** Reuse UserManager.set_role (preserves the last-admin guard + UserRoleChanged event); no new assignment path.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-77 — Custom roles: is role CRUD (create/list/delete roles) in scope?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The existing role set is fixed at construction time (`UserManager(roles=(...))`, default `{"admin", "member"}`) — roles are not entities that can be created at runtime. "Roles such as Admin/User" might imply only those two, or it might imply custom roles (e.g., an `editor` role created at runtime with its own permission set). Custom roles add role CRUD APIs, a roles table (or extension of the role set), and guards (delete a role in use?).
+- **Context:** user-management D3: roles are lowercase strings validated at construction; no role entity, no role CRUD. With a dynamic mapping (Q-67), a role's permissions live in the permission feature, but the role's existence/validation lives in user-management.
+- **Question:** Are custom roles in scope — i.e., creating new roles at runtime (e.g., `editor`), listing roles, deleting roles, and updating a role's permission set? If yes: where do role CRUD APIs live (the permission feature or user-management), and what guards apply (e.g., deleting a role assigned to users)?
+- **Answer:** Yes, role CRUD — role create/list/delete is in scope; roles become runtime-managed entities.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-78 — Multiple roles per user?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Currently a user has exactly one role (`User.role: str`). Multiple roles (a user is both `member` and `editor`, permissions = union) require a user-management schema change (`role: str` → `roles: list[str]`), a migration, and changes to `UserRead`, `set_role`, the last-admin guard, and events — a significant amendment to an approved spec. Single role keeps the existing schema.
+- **Context:** `docs/specs/user-management.md`: `User.role: str` (single), `UserRead.role: str`, `set_role(user_id, role)`, `UserRoleChanged(old_role, new_role)`, REQ-008 last-admin guard keyed on the single role.
+- **Question:** Does the new feature support multiple roles per user (permission set = union of the roles' permissions — requires a user-management schema change `role: str` → `roles: list[str]`), or does it stay single-role (one role per user, as today)?
+- **Answer:** Multiple roles — a user can hold multiple roles simultaneously (union of permissions); requires a user-management schema change (role list) + migration + test updates.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-79 — Admin role semantics: implicit wildcard vs. explicit enumeration
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** "Admin" typically means full access. If admin is an implicit wildcard (holds every permission, including permissions added later without any update), new actions are automatically admin-accessible. If admin is explicit (enumerated like any other role), every new permission must be granted to admin explicitly — easy to forget. This is a core invariant of the model.
+- **Context:** The idea says "Roles such as Admin/User" without defining admin's semantics. No existing permission model to reference.
+- **Question:** Does the `admin` role implicitly hold all permissions (wildcard — including permissions added later, with no per-permission grant), or must `admin` be granted permissions explicitly like any other role? If wildcard: is the bypass rule "role == admin" or a named wildcard permission (e.g., `*`)?
+- **Answer:** Implicit wildcard — the admin role implicitly grants ALL permissions, including any added later.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-80 — Default permissions of the non-admin role
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The non-admin role ("user"/"member") needs a defined default permission set. Options: zero permissions (deny all — the role is inert until granted), read-only on some features (e.g., `*.get_*`/`*.list_*`), or a specific curated set. With a static mapping (Q-67) this is the fixed subset; with a dynamic mapping it is the initial grant.
+- **Context:** The idea does not state what a regular user may do. Existing features are open in-process today (no gating), so any default set is new behavior.
+- **Question:** What permissions does the non-admin role hold by default? (a) Zero (deny all until granted), (b) read-only on a defined set of features (which?), or (c) a specific curated set (list it)?
+- **Answer:** Zero permissions — the non-admin (user) role starts with zero permissions; grants happen via the dynamic mapping.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-81 — Last-admin guard interaction
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** user-management REQ-008 rejects operations that would leave zero active admins (`LastAdminError` on delete/deactivate/demote). Any new role-assignment path in the permission feature must preserve this guard — either by delegating to `set_role` (which enforces it) or by re-implementing the guard. The spec must state which path enforces it and that no assignment path can bypass it.
+- **Context:** `docs/specs/user-management.md`: REQ-008, AC-017/AC-018/AC-019, INV-003 (at least one active admin while `admin` is in the role set), `LastAdminError`.
+- **Question:** Confirm: every role-assignment path (including any new API in the permission feature) preserves the last-admin guard — demoting/deactivating/deleting the last active admin raises `LastAdminError`. Is the guard enforced by delegation to `UserManager.set_role` (single enforcement point), or does the permission feature re-implement it?
+- **Answer:** Guard always preserved — every role-assignment path preserves the last-admin guard (no bypass).
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-82 — Interaction with authentication sessions: does a check validate the session?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** If a check takes a session token (Q-73c), it must validate the session (unrevoked, unexpired) via authentication — making the permission feature depend on authentication's session store. If a check takes `user_id` only, session validity is the caller's concern (the caller already validated the token to get the user). This pins the dependency graph and whether a revoked session's user can still pass checks.
+- **Context:** authentication: `session_info(token)` raises `InvalidSessionError` for unknown/revoked/expired tokens; `SessionInfo` has no role. The permission feature currently has no dependency on authentication.
+- **Question:** Should a check validate the caller's session (token) via authentication (unrevoked + unexpired) as part of the check — implying a dependency on authentication's session repository — or are checks session-agnostic (`user_id`-based; session validity is the caller's responsibility, e.g., the HTTP/entry layer already validated the token)?
+- **Answer:** Validate session too — a check also validates the session token; a revoked/expired session fails the check (coupling to authentication).
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-83 — System / anonymous principals
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** In-process services are sometimes called without a user (startup wiring, background work, service-to-service). The check API must define what happens for a non-user principal: `user_id=None` (system), an anonymous principal, or reject. If system principals are supported, their permission set (all? none? a named `system` role?) must be pinned.
+- **Context:** Existing features are called in-process with no caller identity (in-process trust model). Features like the event bus and settings are used at startup before any user context exists.
+- **Question:** Are non-user principals in scope — e.g., a system/service principal (`user_id=None`) or an anonymous principal? If yes: what permissions do they hold (all — like a trusted system; none — deny; or a named `system`/`service` role with a defined set)? If no: does a check with `user_id=None` deny (fail-closed)?
+- **Answer:** Configurable system principal — in scope; system/anonymous principals (e.g. background workers) have configurable permissions.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-84 — Caching of permission decisions
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Checks may run on hot paths (every gated operation). Options: fresh lookup per check (always current, one user read per check) or cache the resolved permission set per `user_id` (fast, but must be invalidated on `UserRoleChanged`/role-set changes to avoid stale grants). Caching affects the latency NFR and the invalidation event subscription.
+- **Context:** user-management publishes `UserRoleChanged(user_id, old_role, new_role)` on `set_role`. The shared event bus supports subscriptions. No existing feature caches lookups.
+- **Question:** Should resolved permission sets be cached (per `user_id`, invalidated on `UserRoleChanged` and role-mapping changes), or is every check a fresh lookup (always current, no cache)? If cached: what is the invalidation trigger set, and is a stale-grant window acceptable?
+- **Answer:** No cache — live lookup on each check (fresh data, immediate effect, no invalidation bugs).
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-85 — Inactive users: does a check deny them?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** A deactivated user (`is_active=False`) still has a role. Authentication's `login` rejects inactive users, but user-management reads do not check activity. If a check does not deny inactive users, a deactivated user's `user_id` could still pass permission checks in-process. The behavior must be pinned.
+- **Context:** user-management: `User.is_active` flag, `deactivate_user` (REQ-009); `get_user` does not filter on activity. authentication: login raises `InvalidCredentialsError` for inactive users (REQ-003/EDGE-002).
+- **Question:** Does a check deny when the user is inactive (`is_active=False`)? (a) Yes — inactive users pass no checks, (b) No — activity is the caller's concern (the check only evaluates role→permissions)?
+- **Answer:** Deny — a check for an inactive (deactivated) user denies all permissions.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-86 — Immediate effect of role changes (live lookup vs. session-bound)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** When a user's role is changed (e.g., demoted from admin to member), do permission checks reflect it immediately (live lookup per check — the demoted user loses access at the next check), or do the old permissions stay in effect until the next login/session refresh? Immediate effect is the secure default; session-bound effect would require storing permissions on the session.
+- **Context:** Sessions (authentication) store no role/permission data — only `user_id` and timestamps. A live lookup is the natural design given the current schema.
+- **Question:** When a user's role changes, do permission checks reflect it immediately (live lookup per check — no session refresh needed), or do the old permissions stay in effect until the next login? (Given sessions store no role data, immediate live lookup is the natural default.)
+- **Answer:** Immediate — changes take effect on the next check (live lookup); no re-login needed.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-87 — Storage: tables and repository ABCs
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** If the mapping/vocabulary is dynamic (Q-67/Q-69), the spec must pin the persistence: SQLite tables (e.g., `permissions` catalog, `role_permissions` mapping) behind a repository ABC (repo pattern), sharing the same SQLite database as user-management/authentication. If static, there is no storage — confirm. Table fields, indexes, and the repository ABC methods must be specified.
+- **Context:** Repo pattern: SQLModel/SQLite behind a repository ABC, constructor injection, `create_all` bootstrap (no migration framework), thread-safe SQLite (user-management, authentication, file-management, session-management). The permission feature would share the same database file.
+- **Question:** If dynamic (Q-67/Q-69): which tables and fields (e.g., `permissions(key PK, description, created_at)`, `role_permissions(role, permission, PK(role,permission))`), and which repository ABC methods? If static: confirm no storage (the catalog and mapping live in code/constructor args only)?
+- **Answer:** SQLite + repository ABCs — roles (CRUD), role->permission grants, system-principal config; alembic migration for the new tables.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-88 — Settings registry integration
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Configurable values should use the shared settings registry (repo pattern: feature-owned `register_settings(registry)`, live reads — logging, mail, filemanagement, settings, sessionmanagement all do this). Candidates: the role→permission mapping (as a LIST setting), a fail-open/fail-closed flag, the permission catalog (dynamic), or nothing (constructor args only). This pins which values are live-configurable.
+- **Context:** The settings registry supports TEXT/NUMBER/BOOLEAN/EMAIL/SLIDER/SELECT/LIST kinds with live reads and per-kind validation. Feature-owned registration is the established pattern (`feature_settings.py` + `register_settings(registry)`).
+- **Question:** Which values should this feature register via the settings registry (read live)? Candidates: role→permission mapping (LIST), fail-closed flag (BOOLEAN), catalog (if dynamic), check-latency thresholds. Or: nothing — constructor args only? Which keys, and what defaults?
+- **Answer:** Integrate — feature-owned register_settings(registry) called at startup; live reads (repo convention).
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-89 — Events published by the permission feature
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Per the repo pattern, features publish typed lifecycle events to an injected `EventPublisher` (structural protocol), non-sensitive data only. The event set must be pinned: denial events (audit signal), grant/revoke events (if dynamic mapping), and whether role assignment reuses user-management's `UserRoleChanged` or publishes a new event. Read operations (successful checks) are typically not events.
+- **Context:** user-management publishes `UserRoleChanged(user_id, old_role, new_role)` on `set_role`. Other features publish 6–8 event types each. Events carry non-sensitive data only (repo invariant).
+- **Question:** Which events should the permission feature publish? Candidates: `PermissionDenied(user_id, permission, occurred_at)`, `PermissionGranted(role, permission)` / `PermissionRevoked(role, permission)` (if dynamic mapping), and a role-assignment event (reuse `UserRoleChanged` or new `RoleAssigned`?). Is a successful check an event (probably not)? Non-sensitive data only?
+- **Answer:** Denied + role events — PermissionDenied, RoleCreated/RoleDeleted/RolePermissionsChanged; role assignment reuses user-management's UserRoleChanged.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-90 — Error taxonomy and naming
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The spec needs a structured exception hierarchy (repo pattern: root error with documented context attributes). Naming matters: Python's built-in `PermissionError` exists (OS-level), so the root should not shadow/confuse it. Candidates: root `AuthorizationError` (or `PermissionError`), `PermissionDeniedError(user_id, permission)`, `UnknownPermissionError(permission)`, `UnknownRoleError(role)`. Context attributes must be pinned.
+- **Context:** Repo pattern: `UserManagerError` root (user-management), `AuthenticationError` root (authentication), `FileManagementError` root (file-management), `SessionManagementError`-style (session-management). All carry context attributes; messages are secret-free.
+- **Question:** Confirm the exception hierarchy. Proposed: root `AuthorizationError` (avoiding shadowing the built-in `PermissionError`); `PermissionDeniedError(AuthorizationError)` with `user_id`, `permission`; `UnknownPermissionError(AuthorizationError)` with `permission`; `UnknownRoleError(AuthorizationError)` with `role`, `allowed`. Different root name (e.g., `PermissionError`) or different classes/context?
+- **Answer:** Custom AuthorizationError hierarchy (backend.permissions.errors): PermissionDeniedError (context: user_id, permission, reason) + role errors; avoids colliding with the built-in PermissionError.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-91 — Audit log scope
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** user-management and authentication both list "persistent audit log" as explicitly out of scope. Permission denials are a classic audit target. The scope must be pinned: (a) no persistent audit — denials are logged (loguru WARNING) and published as events (Q-89) only; (b) a persistent audit log of checks (allow/deny rows in SQLite) — new storage + retention questions. This is a significant scope fork.
+- **Context:** user-management Out of Scope: "persistent audit log". authentication Out of Scope: "persistent audit log". The logging feature (loguru) provides transient logs; no feature persists an audit trail today.
+- **Question:** Is a persistent audit log of permission checks (allow/deny, user, permission, timestamp) in scope for this feature? (a) No — denials are logged transiently (loguru) and published as events only, consistent with the existing out-of-scope lists; (b) Yes — a persistent SQLite audit log (then: which events are audited — denials only, or allows too; retention/rotation; size limits)?
+- **Answer:** Logs + events only — no persistent audit table.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-92 — Performance budgets (check latency)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Testable performance budgets are needed (repo pattern: budgets in contract tests, measured including the mandated logging overhead, with the logging context stated). Checks may run on hot paths, so the budget is a core NFR. Values depend on static vs. dynamic (Q-67) and caching (Q-84).
+- **Context:** Repo pattern: user-management NFR-001 (reads < 5 ms median on SQLite), session-management NFR (p95 budgets, local SQLite, INFO console sink). The logging policy mandates `@logged` tracing on public methods.
+- **Question:** What are the performance budgets? Proposed (static, no cache): a check completes in < 1 ms (median) in-process including `@logged` tracing overhead; with a dynamic SQLite-backed mapping: < 5 ms (median) — all measured on local hardware against a local SQLite database with the shared logging feature at default INFO level with a synchronous console sink. Different values?
+- **Answer:** A check completes in < 5 ms INCLUDING user/role/grant SQLite lookups + @logged tracing overhead; measured with the synchronous console sink active.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-93 — Feature/package/service naming
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The package name, service name, and check-function names must be pinned for the spec (and for the AGENTS.md "Using the X Feature" note). Options: `backend.permissions` vs. `backend.authorization`; `PermissionService` vs. `AuthorizationService`; `require_permission`/`has_permission` vs. `check_permission`.
+- **Context:** Existing packages: `backend.usermanagement` (`UserManager`), `backend.authentication` (`AuthService`), `backend.filemanagement` (`FileService`), `backend.sessionmanagement` (`SessionService`), `backend.settings`, `backend.mail`, `backend.logging`, `backend.eventbus`.
+- **Question:** Approve the proposed naming? Package `backend.permissions`; service `PermissionService`; check functions `require_permission(principal, permission)` (raises) and `has_permission(principal, permission) -> bool`; decorator `@requires_permission(permission)`. Or prefer `backend.authorization` / `AuthorizationService` / other names?
+- **Answer:** backend.permissions / PermissionService / require_permission + has_permission.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-94 — Unknown permission / unmapped role behavior
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Edge behaviors must be pinned (they become EDGE cases): (a) code checks a permission that is not in the catalog → deny + WARNING log? raise `UnknownPermissionError`? (b) a role's mapping references an unknown action → ignore? (c) a user's role has no mapping at all → zero permissions (deny all)? Each is a distinct observable behavior.
+- **Context:** No existing permission model to reference. The fail-closed default (Q-74) covers undeterminable checks; these are determinable-but-inconsistent states that need explicit behavior.
+- **Question:** Pin the behaviors: (a) checking a permission not in the catalog → (deny + WARNING log) or (raise `UnknownPermissionError`)? (b) a role mapping that references an unknown action → ignore that entry? (c) a user whose role has no permission mapping → zero permissions (deny all)?
+- **Answer:** Deny + warn — an unknown permission or a role with no permission mapping denies and logs a warning.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-95 — Out-of-scope boundaries
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The idea is a four-bullet list; common authorization capabilities are not mentioned. Explicit boundaries are needed so the spec does not accidentally cover them: frontend UI for role/permission assignment, HTTP/REST layer, multi-tenancy, MFA, JWT, groups/teams (vs. roles), per-user (non-role) permission grants (a direct user→permission grant bypassing roles), persistent audit log (see Q-91), and RBAC beyond roles (ABAC/policy engines).
+- **Context:** All existing features are backend-only in-process services (no HTTP layer, no frontend). user-management lists "user groups/teams/permissions beyond roles" as out of scope. The repo has no policy-engine or ABAC capability.
+- **Question:** Confirm out of scope for this change: frontend UI, HTTP/REST layer, multi-tenancy, MFA, JWT, groups/teams, per-user (non-role) permission grants (direct user→permission grants bypassing roles), and policy-engine/ABAC (only RBAC: roles→permissions). Is anything in that list actually in scope?
+- **Answer:** Confirm the proposed list: frontend UI, HTTP/REST layer, multi-tenancy, MFA, JWT, groups/teams, per-user (non-role) permission grants, ABAC/policy engines.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-96 — DI and testing conventions
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The spec must pin the construction/testing pattern. The repo pattern is constructor injection of repository ABCs + `UserManager` + optional structural `EventPublisher`, in-memory fakes for tests. session-management added a module-level singleton (`get_session_service()`) on top of constructor DI. Whether this feature follows the same, or also exposes a singleton (and how it is reset in tests), must be pinned.
+- **Context:** `AuthService`, `UserManager`, `FileService`, `SessionService` all use constructor DI with repository ABCs and optional event publishers; tests use in-memory/temp-directory fakes. session-management: constructor DI PLUS a module singleton for application use.
+- **Question:** Confirm: `PermissionService` constructed with the repository ABC(s) + `UserManager` + optional `event_bus` (structural `publish` protocol), an in-memory repository for tests/DI, and (like session-management) a module-level singleton (e.g., `get_permission_service()`) with a reset function for tests? Or no singleton (pure constructor DI)?
+- **Answer:** Repo conventions — constructor DI, in-memory repositories for tests, module singleton + reset pattern.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-97 — Backward compatibility: additive only
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** user-management (NFR-003), authentication (NFR-003), and the other features have backward-compatibility contracts on their public APIs. The new capability must not break existing callers: no signature changes, no behavior changes in existing features (unless Q-75 option (b) is chosen), no removals. This is a hard constraint on the change.
+- **Context:** user-management NFR-003: "The public API ... is backward-compatible; adding optional parameters must not break existing callers." Same for authentication NFR-003. Existing features perform no per-call auth (in-process trust model).
+- **Question:** Confirm: no changes to existing public APIs of user-management/authentication/settings/filemanagement/mail/sessionmanagement (additive only; optional parameters at most); no existing behavior changes beyond what Q-75 authorizes. Is this a hard constraint?
+- **Answer:** Breaking changes to existing public APIs are allowed, BUT every break must be fixed within the current scope of this change (all dependent APIs, tests, and features updated as part of this change).
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-98 — Thread safety
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** Checks may run from multiple threads (the repo's SQLite repositories are thread-safe; the settings registry and event bus are thread-safe). The permission feature's check path, cache (Q-84), and repositories must be safe for concurrent use. This is an NFR consistent with the repo pattern.
+- **Context:** Repo pattern: SQLite repositories are thread-safe (user-management NFR-004: "safe for concurrent use from multiple threads"); the settings registry and event bus are thread-safe.
+- **Question:** Confirm: the check path, any cache, and the repositories are safe for concurrent use from multiple threads (repo pattern: thread-safe SQLite, no partial state on concurrent reads/writes)?
+- **Answer:** Thread-safe — the check path, repositories, and internal state are thread-safe.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-99 — Pre-approval of the spec PR (user governance directive)
+- **Step:** S1.4 Present for approval — Phase 1
+- **Change:** user-roles-permissions, CROSS-CUTTING
+- **Why needed:** The user is going to bed and pre-approves the spec PR without merging it. This is a governance decision that changes the normal "present and STOP" behavior: the spec is treated as HUMAN APPROVED, but the PR must NOT be merged (human governance is preserved for the merge).
+- **Context:** Per the Spec Approval Gate, a spec is HUMAN APPROVED only when merged through the GitHub review process. The user is pre-approving it in advance (going to bed) and explicitly forbids the merge. Phase 2 (Decompose) may proceed on the pre-approval, but the spec PR stays open/unmerged until the user merges it.
+- **Question:** Confirm: treat the spec PR as HUMAN APPROVED (pre-approved) but do NOT merge it (leave the PR open for the user to merge)?
+- **Answer:** Yes — the user pre-approves the spec PR (going to bed) and instructs NOT to merge it. The spec is treated as HUMAN APPROVED for Phase 2 onward; the spec PR remains open/unmerged for the user to merge.
+- **Date:** 2026-07-10
+- **Status:** ANSWERED
+- **Incorporated:** yes
