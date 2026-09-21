@@ -162,3 +162,43 @@ After:
 - **Behavior preserved:** the sessionmanagement acceptance suite (covering `list_sessions` per REQ-001..REQ-007 of `docs/specs/session-management.md`) passes 47/47 — no observable behavior change.
 
 **Next:** Phase 5 (S5) — verify, light gate set (targeted + smoke: covering tests + affected feature test directory + lint/types; full regression suite as the Phase 6 pre-merge gate).
+
+## Phase 5 (Verify)
+
+- **Date:** 2026-09-21
+- **Step:** S5 (Phase 5 — verify, light gate set; light-tier ISSUE)
+- **Base commit:** `3ca3b45` (GREEN)
+
+### Gate set (light tier: targeted + smoke, NOT the full regression suite)
+
+| # | Gate | Command | Result |
+|---|------|---------|--------|
+| 1 | Reproduction test (GREEN) | `uv run bandit -r src/` | **exit 0** — "No issues identified." (5671 lines scanned, 0 skipped, 0 potential issues skipped; severity Low 0 / Medium 0 / High 0) |
+| 2 | Covering tests (named in triage) | `uv run pytest tests/acceptance/sessionmanagement/ -v` | **47 passed** in 7.69s (exit 0) — no new failures |
+| 3 | Affected feature test directories | `uv run pytest tests/contract/sessionmanagement/ tests/integration/sessionmanagement/ tests/property/sessionmanagement/ tests/unit/sessionmanagement/ -v` | **21 passed** in 39.91s (exit 0) — no new failures |
+| 4 | Lint (whole repo, matching CI) | `uv run ruff check .` | **clean** — "All checks passed!" (exit 0) |
+| 5 | Type checks | `uv run mypy src/` | **clean** — "Success: no issues found in 56 source files" (exit 0) |
+
+### Sessionmanagement test totals
+
+- `tests/acceptance/sessionmanagement/`: 47 passed
+- `tests/contract/sessionmanagement/` + `tests/integration/sessionmanagement/` + `tests/property/sessionmanagement/` + `tests/unit/sessionmanagement/`: 21 passed
+- **Total: 68 passed, 0 failed** — no new failures.
+
+### Light gate set confirmation
+
+All light-tier Phase 5 gates pass:
+
+- bandit exits **0** — the CI security job's contract is satisfied (the defect is fixed).
+- The covering tests named in the triage record pass (47/47).
+- All sessionmanagement test directories pass (68/68 total).
+- Lint is clean on the whole repo (matching CI) — no new lint errors, and no pre-existing errors surfaced.
+- Type checks are clean (56 source files) — no new type errors.
+
+No new failures, no new lint/type errors. The change is verified at the light gate set.
+
+### Full regression suite
+
+The **full regression suite** (`uv run pytest tests/ -v`) is the **Phase 6 pre-merge gate** (S6.4, before the PR opens) per the light-tier ISSUE tier in `AGENTS.md`; it runs there and its result is recorded in the review report. It is intentionally not run in this light-tier Phase 5.
+
+**Next:** Phase 6 (S6) — review, clean report + full regression pre-merge gate + PR.
