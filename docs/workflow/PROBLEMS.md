@@ -213,3 +213,43 @@ A step MUST log a problem when it:
   `hash_token` is `@logged` (AGENTS.md mandates `@logged` on public module-level functions), so each call appends **new** records to `log_records` (the `log_records` fixture's sink). The loop iterates over a list that grows as it iterates → infinite loop. The captured run produced **808,286 lines** and `hash_token` was called **404,071 times**. The original "queue deadlock" stack trace (main thread blocked at `multiprocessing/queues.py:394 put` → `connection.py:303 _send_bytes`) was a **secondary effect**: the infinite loop produced records faster than the `enqueue=True` pipe could drain, blocking `queue.put`.
 - **Resolution:** The conftest reconfigure fix addresses the secondary effect, not the root cause, and deviates from the spec-mandated `enqueue=True` (logging REQ-001/AC-001) — it is removed. The correct fix is in the test: compute `hash_token(token)` / `hash_token("bogus-token")` **once** before the loop and iterate over a **snapshot** of `log_records` (`list(log_records)`), so the loop body no longer appends records and terminates. A fresh Phase 4 subagent is relaunched with this context.
 - **Date:** 2026-09-20
+
+## P-22 — deptry's first run surfaced 14 findings beyond the baseline config; the baseline's `DEP001 sqlalchemy` prediction was actually a `DEP003`; an unanchored `.gitignore` pattern was silently excluding `src/backend/settings/` from deptry's scan (discovered in S4.3)
+- **Problem:** The scope's `[tool.deptry]` baseline (14 DEP002 entries + `DEP001 = ["sqlalchemy"]`) did not cover reality: `sqlalchemy` is a DEP003 (transitive) finding, not DEP001; `webauthn` (optional, deferred import — ADR-031) fires DEP001; `alembic` (dev dep imported by the `migrations/` scaffold) fires DEP004; `httpx`/`orjson` (declared runtime deps, not yet imported) fire DEP002; `ruamel-yaml` (imported as top-level `ruamel`) needed `package_module_name_map`. Worse, the unanchored `.gitignore` pattern `settings/` made deptry's gitignore-aware file finder silently exclude `src/backend/settings/` (and settings tests) from the scan, producing a *false* `DEP002 ruamel-yaml` finding.
+- **Step / Phase:** S4.3 (deps + deptry config) — Phase 4
+- **Change:** dev-tooling-wiring / DOCS/CHORE
+- **Duration / iterations:** 1 (resolved in-step; gate `uv run deptry .` exit 0)
+- **Resolution:** Each finding resolved with a justified, commented config entry (per-rule ignores / `package_module_name_map`); the `.gitignore` `settings/` → `/settings/` anchor fix (1 line, documented as a root-cause scope deviation in the verification file) removed the false positive — deliberately NOT masked with a `ruamel-yaml` DEP002 ignore (which would permanently mask the settings feature).
+- **Date:** 2026-09-20
+
+## P-23 — Orchestrator task definition was internally inconsistent: the mkdocs-build hook is a pre-push-stage hook, but the gate command was the bare `pre-commit run mkdocs-build --all-files` (discovered in S4.5)
+- **Problem:** The S4.5 task definition required both `stages: [pre-push]` for the mkdocs-build hook (context note: the slower build belongs in pre-push) and a passing bare `uv run pre-commit run mkdocs-build --all-files` (gate) — the latter defaults to the `pre-commit` stage and exits 1 with "No hook with id `mkdocs-build` in stage `pre-commit`" by construction.
+- **Step / Phase:** S4.5 (pre-commit hooks + CI jobs) — Phase 4
+- **Change:** dev-tooling-wiring / DOCS/CHORE
+- **Duration / iterations:** 1 (resolved in-step; the hook config was kept as designed)
+- **Resolution:** The end-to-end check was run as `uv run pre-commit run mkdocs-build --all-files --hook-stage pre-push` (exit 0); the deviation was recorded in the verification file ("Gate invocation note"). Lesson: when a task definition pairs a stage override with a gate command, the gate command must carry the matching `--hook-stage` flag.
+- **Date:** 2026-09-20
+
+## P-24 — polyfactory 3.x API differs from the expected shape: `PydanticModelFactory` does not exist; the real entry point is `ModelFactory.create_factory` (discovered in S4.1)
+- **Problem:** The scope expected a `PydanticModelFactory`-style class; polyfactory 3.3.0's actual API is `polyfactory.factories.pydantic_factory.ModelFactory` + `ModelFactory.create_factory(model)` (no `PydanticModelFactory` in 3.x).
+- **Step / Phase:** S4.1 (shared test tooling helpers) — Phase 4
+- **Change:** dev-tooling-wiring / DOCS/CHORE
+- **Duration / iterations:** 1 (adapted in-step per the task definition's "verify, do not assume" guidance)
+- **Resolution:** The helper wraps the real API (`model_factory(MyModel)` → `ModelFactory.create_factory(MyModel)`); the smoke test exercised factory build/override/batch.
+- **Date:** 2026-09-20
+
+## P-25 — S5.2 subagent ended with an intermediate statement (no structured handoff, no commit); step relaunched with a fresh subagent
+- **Problem:** The S5.2 subagent (lint + types + no-delta confirmation + verification report) terminated with an intermediate statement ("Now the whole-repo lint gate:") instead of the required structured handoff. No S5.2 commit exists, no evidence was recorded, working tree clean — the step is incomplete (the diff review it reported passing was not persisted).
+- **Step / Phase:** S5.2 (lint + types + verification report) — Phase 5
+- **Change:** dev-tooling-wiring / DOCS/CHORE
+- **Duration / iterations:** 1 failed run + 1 fresh relaunch
+- **Resolution:** Relaunched with a fresh subagent (completion guard, P-3/P-7); the relaunch prompt re-states all done criteria so the step is self-contained.
+- **Date:** 2026-09-21
+
+## P-26 — main's `uv.lock` is stale relative to `pyproject.toml` (self-version 0.4.0 vs 0.4.1): any `uv run` in the primary worktree re-locks and dirties it (discovered in S5.2)
+- **Problem:** main's `uv.lock` still carries the pre-bump self-version (0.4.0) while main's `pyproject.toml` is 0.4.1 (the bump-my-version config updates only `pyproject.toml`, not the lock). Consequence: any `uv run` in the **primary** worktree auto-re-locks and transiently dirties main's `uv.lock`. The S5.2 subagent hit this while verifying pre-existing state in the primary worktree and restored it via `git checkout -- uv.lock`.
+- **Step / Phase:** S5.2 (lint + types + verification report) — Phase 5
+- **Change:** dev-tooling-wiring / DOCS/CHORE
+- **Duration / iterations:** 1 (transient dirtiness, restored; no impact on the change)
+- **Resolution:** The change branch's S4.3 lock sync (self-version 0.4.0 → 0.4.1) fixes main's stale lock when the PR merges. Lesson recorded for the orchestrator: verify pre-existing state with `git show main:<file>` (or a worktree-local run), never with `uv run` in the primary worktree.
+- **Date:** 2026-09-21

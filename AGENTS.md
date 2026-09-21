@@ -25,6 +25,12 @@ This repository utilizes modern Python tooling managed via `uv`:
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`
 - **Version Bumping:** `bump-my-version` (`uv tool install bump-my-version`; config in `pyproject.toml` under `[tool.bumpversion]`)
+- **Database Migrations:** `alembic` (`uv run alembic upgrade head` / `uv run alembic revision -m "<description>"`) — schema migrations for the SQLModel tables; the scaffold (`alembic.ini` + `migrations/`) is wired to `SQLModel.metadata` (see "Using Migrations (alembic)").
+- **Dependency Check:** `deptry` (`uv run deptry .`) — detects unused/missing/misplaced dependencies; configuration in `[tool.deptry]` (per-rule ignores for CLI/pytest-plugin tools).
+- **Documentation Site:** `mkdocs` + `mkdocs-material` + `mkdocstrings[python]` (`uv run mkdocs build --strict`) — published docs generated from `userdocs/` (never `docs/` — that is the internal process record).
+- **Test Tooling:** `polyfactory` (factories for Pydantic/SQLModel models), `respx` (httpx mocking), `time-machine` (time travel) — see "Using the Test Tooling".
+
+**MkDocs site note.** Published docs live in `userdocs/` (binding decision Q-64; never `docs/` — that is the internal process record: specs, decisions, verification, workflow). Build gate: `uv run mkdocs build --strict`; CI: the `docs` job in `.github/workflows/quality.yml`; pre-push: the `mkdocs-build` hook in `.pre-commit-config.yaml`.
 
 ---
 
@@ -815,6 +821,50 @@ service = FileService(
 record = service.upload("report.pdf", namespace="general", original_filename="report.pdf")
 content = service.download(record.key)
 ```
+
+---
+
+## Using the Test Tooling (polyfactory, respx, time-machine)
+
+Feature tests MUST use the shared test tooling instead of hand-crafted test data, real time, or ad-hoc fake transports. The shared helpers live at `tests/tooling_test_helpers.py` (import top-level, like the other `*_test_helpers` modules).
+
+- **polyfactory — model factories.** `model_factory(MyModel)` returns a factory class for a Pydantic model: `.build()` produces a schema-valid instance (no hand-crafted field dicts), `.build(field=value)` overrides individual fields, `.batch(n)` produces `n` instances.
+- **time-machine — time travel.** `travel(destination)` freezes the clock for a block (yields the frozen `datetime`); for deadline behavior (TTLs, lockouts, token expiry) pass `tick=True` so the deadline passes. No sleeps, no manual clock mocking.
+- **respx — httpx mocking.** `mock_http()` mocks outbound httpx calls for a block; register routes on the yielded router. Strict defaults hold: an unmocked request raises, and every registered route must be called before the block exits.
+
+```python
+import httpx
+from pydantic import BaseModel
+
+from tooling_test_helpers import model_factory, mock_http, travel
+
+class Person(BaseModel):
+    name: str
+    age: int
+
+factory = model_factory(Person)
+person = factory.build()             # schema-valid instance
+alice = factory.build(name="Alice")  # per-field override
+
+with travel("2024-01-02T03:04:05") as now:
+    ...  # datetime.now() is frozen at `now`
+
+with mock_http() as router:
+    router.route(method="GET", url="https://api.example.com/items").respond(json=[1, 2])
+    items = httpx.Client().get("https://api.example.com/items")
+```
+
+---
+
+## Using Migrations (alembic)
+
+Schema migrations for the SQLModel tables.
+
+- **Rule.** A change to a SQLModel table schema MUST add a migration (`uv run alembic revision -m "<description>"`); never hand-edit an already-applied migration.
+- **Apply.** `uv run alembic upgrade head`.
+- **Scaffold.** `alembic.ini` + `migrations/` are wired to `SQLModel.metadata`; `migrations/env.py` imports the model modules that define tables (backend.authentication.models, backend.filemanagement.models, backend.usermanagement.models) — when a new module defines SQLModel tables, add its import to `env.py`.
+- **CI.** The `migrations` job in `.github/workflows/quality.yml` runs `alembic upgrade head` against a temp database.
+- **Note.** Existing per-repository `SQLModel.metadata.create_all` bootstrapping is unchanged by this.
 
 ---
 

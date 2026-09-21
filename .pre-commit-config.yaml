@@ -24,3 +24,20 @@ repos:
     rev: v5.1.0
     hooks:
       - id: complexipy
+  # Local hooks: run the project's own tooling via uv (system environment).
+  - repo: local
+    hooks:
+      - id: deptry
+        name: deptry (unused dependencies)
+        entry: uv run deptry .
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(pyproject\.toml|uv\.lock|src/|tests/|scripts/|migrations/)
+      - id: mkdocs-build
+        name: mkdocs build --strict
+        entry: uv run mkdocs build --strict
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(mkdocs\.yml|userdocs/|pyproject\.toml)

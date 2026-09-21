@@ -38,8 +38,12 @@ dev = [
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.168.0",
-    # MkDocs plugin: API docs from docstrings.
-    "mkdocstrings>=1.0.6",
+    # MkDocs static site build system.
+    "mkdocs>=1.6",
+    # MkDocs Material theme for the published documentation site.
+    "mkdocs-material>=9.5",
+    # MkDocs plugin: API docs from docstrings (python extra: docstring handler).
+    "mkdocstrings[python]>=1.0.6",
     # Static type checking for the source tree.
     "mypy>=2.3.1",
     # Vulnerability scanning for installed dependencies.
@@ -99,6 +103,30 @@ source = ["src/backend", "src/frontend"]
 [tool.coverage.report]
 # Floor of the 2026-09-15 coverage baseline (92.74%); raise as coverage improves.
 fail_under = 92
+
+[tool.deptry]
+known_first_party = ["backend"]
+# The ruamel-yaml distribution is imported as the top-level module `ruamel`.
+package_module_name_map = { "ruamel-yaml" = "ruamel" }
+
+[tool.deptry.per_rule_ignores]
+# CLI tools / pytest plugins that are never imported from source, plus the
+# declared runtime capabilities (httpx, orjson) not yet imported from source.
+DEP002 = [
+    "bandit", "complexipy", "httpx", "mkdocs", "mkdocs-material", "mkdocstrings",
+    "mypy", "orjson", "pip-audit", "pre-commit", "py-spy", "pytest-cov",
+    "pytest-randomly", "pytest-xdist", "ruff", "ty",
+]
+# Optional production dependency: py-webauthn is deferred-imported inside
+# PyWebAuthnProvider (the fake provider is the test seam), so it is
+# intentionally not declared.
+DEP001 = ["webauthn"]
+# Transitive runtime dep (via sqlmodel) imported by repositories and the
+# alembic scaffold (migrations/env.py).
+DEP003 = ["sqlalchemy"]
+# The alembic scaffold (migrations/env.py) is tooling code that
+# legitimately imports alembic, which is a dev dependency.
+DEP004 = ["alembic"]
 
 [tool.mypy]
 python_version = "3.14"

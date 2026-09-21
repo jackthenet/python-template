@@ -219,7 +219,9 @@ src/data/logs/
 src/data/configuration/
 
 # Test-run artifact: the settings feature's default `YamlValueRepository('settings')`
-# writes runtime values there during tests.
-settings/
+# writes runtime values there during tests. Anchored to the repo root so the
+# feature's own `src/backend/settings/` (and `tests/**/settings/`) directories
+# are not excluded from gitignore-aware tooling (deptry).
+/settings/
 # pi subagent snapshot state.
 .pi/subagents.json
