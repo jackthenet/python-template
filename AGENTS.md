@@ -76,6 +76,7 @@ Exact commands, procedures, and edge cases for each operation live in the git sk
 - Never create two worktrees for the same change branch.
 - Stay strictly inside the change's worktree: do not modify other changes' worktrees or branches.
 - Each worktree has its own `uv` environment; run `uv run <command>` inside the worktree (the global uv cache is shared, so no extra setup is needed).
+- `.ruff_cache` and `.mypy_cache` are per-worktree by default (each is created in the worktree's CWD and is gitignored), so the cheap-re-run benefit does not carry across worktrees — a new change starts with a cold cache. To share them, point both tools' cache dirs at a common location outside the worktrees (ruff: `RUFF_CACHE_DIR`; mypy: `MYPY_CACHE_DIR`).
 - `git worktree remove` fails on a dirty worktree: do NOT use `--force` on an unmerged change. Force-removal is only permitted when the changes are intentionally discarded.
 - If a worktree directory was deleted manually, run `git worktree prune`.
 - Check for leftovers with `git worktree list`; after cleanup, the only worktree should be the primary (`main`).

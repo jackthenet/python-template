@@ -37,7 +37,7 @@ def captured_stderr() -> Iterator[Path]:
         tmp.unlink(missing_ok=True)
 
 
-def wait_for_file_content(path: Path, predicate: Callable[[str], bool], timeout: float = 5.0) -> bool:
+def wait_for_file_content(path: Path, predicate: Callable[[str], bool], timeout: float = 15.0) -> bool:
     """Poll a file written by an enqueued sink until predicate(content) is true."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

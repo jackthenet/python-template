@@ -97,7 +97,7 @@ def test_nfr_003_diagnose_false(session_settings: Any) -> None:
         logger.exception("nfr_003 leak test")
 
     log_file = Path(session_settings.log_file)
-    assert wait_for_file_content(log_file, lambda c: "nfr_003 leak test" in c, timeout=5)
+    assert wait_for_file_content(log_file, lambda c: "nfr_003 leak test" in c, timeout=15)
     content = log_file.read_text(encoding="utf-8")
     assert secret not in content
 

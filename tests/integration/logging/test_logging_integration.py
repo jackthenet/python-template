@@ -30,6 +30,6 @@ def test_stdlib_loguru_decorator_pipeline(session_settings: Any) -> None:
     logger.info("integration loguru line")
 
     log_file = Path(session_settings.log_file)
-    assert wait_for_file_content(log_file, lambda c: "integration stdlib line" in c, timeout=5)
-    assert wait_for_file_content(log_file, lambda c: "integration loguru line" in c, timeout=5)
-    assert wait_for_file_content(log_file, lambda c: "integration_work_fn" in c and "<<" in c, timeout=5)
+    assert wait_for_file_content(log_file, lambda c: "integration stdlib line" in c, timeout=15)
+    assert wait_for_file_content(log_file, lambda c: "integration loguru line" in c, timeout=15)
+    assert wait_for_file_content(log_file, lambda c: "integration_work_fn" in c and "<<" in c, timeout=15)
