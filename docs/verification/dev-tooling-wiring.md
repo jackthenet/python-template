@@ -488,3 +488,75 @@ recorded here as resolved in favor of the explicit stage override.
 | "Spec coverage" | n/a — DOCS/CHORE (no spec; the type-specific gate is no-behavior-delta + lint/types) |
 
 **Overall status: VERIFIED.**
+
+---
+
+## Phase 6 — Review (S6.1: review vs. normative basis + boundaries)
+
+**Date:** 2026-09-21
+**Reviewer:** S6.1 step subagent (independent review — conclusions re-derived from the `git diff main...HEAD` set, not restated from the Phase 5 report).
+
+### Normative basis
+
+The DOCS/CHORE normative basis is the Phase 1 scope record (this file, "Phase 1 — Scope"): 9 exact non-behavior changes (scope items 1–9), the two documented scope allowances (the deptry dry-run additions; the `tests/tooling_test_helpers.py` new-file extension into `tests/`), and the no-behavior-delta invariant.
+
+### Review set (full `git diff main...HEAD --name-status`)
+
+18 files: 17 scope files + `tests/contract/settings/test_settings_contracts.py` (the documented one-line lint fix, S5.2).
+
+| File | Scope item | Review result |
+|---|---|---|
+| `pyproject.toml` | 1 | PASS — dev group: `mkdocs>=1.6` + `mkdocs-material>=9.5` added, `mkdocstrings[python]>=1.0.6` (the `[python]` extra), comments in the group's style; new `[tool.deptry]` section exactly as the S4.3 record (see "Tool wiring" below). No other pyproject change. |
+| `alembic.ini` | 2 | PASS — generated scaffold; `script_location = %(here)s/migrations`; `sqlalchemy.url = sqlite:///./data/migrations.db` (file-based SQLite under the gitignored persistence root; no DB file committed). |
+| `migrations/` (env.py, script.py.mako, README, versions/.gitkeep) | 2 | PASS — `env.py` wired to `target_metadata = SQLModel.metadata` with the three model-module imports (see "Tool wiring"); standard online/offline patterns; `ALEMBIC_DATABASE_URL` override for CI (a small, standard extension, documented). No revisions created (scaffold is the deliverable). |
+| `mkdocs.yml` | 3 | PASS — `docs_dir: userdocs` (binding Q-64), material theme, plugins search + mkdocstrings (`default_handler: python`); no `site_url`/deploy (out of scope, correct). |
+| `userdocs/` (index.md, api.md) | 4 | PASS — project overview + mkdocstrings auto-loading of the eight `backend.*` feature public APIs; consistent with the scope and the Q-64 separation. |
+| `.pre-commit-config.yaml` | 5 | PASS — appended `repo: local` (language: system, pass_filenames: false) hooks: `deptry` (`uv run deptry .`, `stages: [pre-commit]`, files = the deptry-scan paths) and `mkdocs-build` (`uv run mkdocs build --strict`, `stages: [pre-push]`, files = mkdocs.yml/userdocs/pyproject.toml); existing hooks untouched. `uv run pre-commit validate-config` → valid (re-run in this review). |
+| `.github/workflows/quality.yml` | 6 | PASS — three jobs appended after `dependency-review` (the scope's placement), each mirroring the existing jobs' setup steps (checkout@v7, setup-uv@v7, setup-python@v7 '3.14', `uv sync --only-group dev`): `dependencies` (`uv run deptry .`), `docs` (`uv run mkdocs build --strict`), `migrations` (`uv run alembic upgrade head`, `ALEMBIC_DATABASE_URL=sqlite:////tmp/alembic-ci.db` — an absolute temp file path, correct on ubuntu-latest). Existing jobs untouched. |
+| `tests/tooling_test_helpers.py` | 7 | PASS — NEW file only (A in name-status); the documented `tests/` extension; filename does not match pytest's `test_*.py` pattern (S5.1 confirmed it is not collected); provides polyfactory/time-machine/respx helpers; no existing test imports or behavior touched. |
+| `AGENTS.md` | 8 | PASS — "Tooling & Execution Environment" entries (alembic, deptry, mkdocs/mkdocstrings, test tooling) + the "MkDocs site note" + new sections "Using the Test Tooling (polyfactory, respx, time-machine)" and "Using Migrations (alembic)"; consistent with scope item 8; no other AGENTS.md change. |
+| `docs/verification/dev-tooling-wiring.md` | 9 | PASS — this record (scope + Phase 4/5 evidence + this report). |
+| `docs/workflow/PROBLEMS.md` | (problem log) | PASS — P-22..P-26 appended (friction records, consistent with the Phase 4/5 evidence). |
+| `uv.lock` | (lock sync) | PASS — new package entries (babel, backrefs, griffelib, mkdocs-material, mkdocs-material-extensions, mkdocstrings-python, paginate), the mkdocstrings `python` extra, the dev-group list, self-version 0.4.0 → 0.4.1 (the stale-lock fix, P-26); no unrelated lock churn. |
+| `.gitignore` | (deviation 1) | PASS — exactly the documented 1-line anchor fix `settings/` → `/settings/` + comment (see "Scope deviations"). |
+| `tests/contract/settings/test_settings_contracts.py` | (deviation 2) | PASS — exactly one blank line added between the two deferred imports inside `test_nfr_004_observability` (the I001 fix); no assertion, no test logic, no behavior change — NOT a test weakening (see "Scope deviations"). |
+
+### No-behavior-delta invariant (re-derived from the diff)
+
+- **`src/` files modified: 0** (verified: `git diff main...HEAD --name-only | grep -c '^src/'` → 0).
+- **Existing `tests/` files modified: 1** — `tests/contract/settings/test_settings_contracts.py`, exactly one blank line (behavior-neutral import reformatting inside a test function; both imports remain; no assertion touched). This is the documented deviation 2, not a scope extension.
+- **Runtime behavior / API / test-assertion changes: none.** All 18 files are dependency declarations, tool configuration, CI jobs, pre-commit hooks, scaffolds, documentation, or the two documented one-line fixes.
+- **Invariant holds.**
+
+### Scope deviations (the two documented ones — justified and correctly recorded)
+
+1. **`.gitignore` `settings/` → `/settings/` anchor fix (S4.3 root-cause fix).**
+   Justification re-verified: the unanchored pattern matched `src/backend/settings/` (and `tests/**/settings/`), so deptry's gitignore-aware finder excluded the settings feature from the scan, producing the false `DEP002 ruamel-yaml` finding (the dependency IS imported in `src/backend/settings/repository.py`). Anchoring to `/settings/` keeps the stated intent (the repo-root test-run artifact directory of the default `YamlValueRepository('settings')` — the root artifact stays ignored) while re-including the feature's own directories. A `ruamel-yaml` DEP002 ignore was deliberately NOT added (it would permanently mask the settings feature). Recorded: S4.3 evidence ("Root-cause fix for a false-positive finding") + P-22. **Correctly recorded and justified.**
+2. **One-line I001 lint fix in `tests/contract/settings/test_settings_contracts.py` (S5.2 gate-mandated fix).**
+   Justification re-verified: a latent pre-existing violation, never checked on `main` because the same unanchored `.gitignore` pattern excluded `tests/contract/settings/` from ruff's gitignore-aware whole-repo sweep; this change's anchor fix re-includes the directory, so the Phase 5 sweep (which matches CI exactly; "pre-existing lint errors are in scope, not out of scope") surfaced it. The fix is exactly one blank line (import reformatting) — behavior-neutral, no assertion change. Recorded: S5.2 evidence ("Lint finding — classification + in-step fix") + the Phase 5 file-by-file review. **Correctly recorded and justified.**
+
+### Tool wiring (spot-check)
+
+- **`[tool.deptry]` matches the deptry schema.** The `[tool.deptry]` keys are validated by deptry against its CLI parameters (`deptry/config.py` → `read_configuration_from_pyproject_toml`): `known_first_party` (`--known-first-party`), `package_module_name_map` (`--package-module-name-map`), and `per_rule_ignores` (`--per-rule-ignores`) are all valid CLI parameters → valid config keys. The `per_rule_ignores` subtable is parsed as a rule→packages mapping (DEP001/DEP002/DEP003/DEP004). The S4.3 gate `uv run deptry .` (exit 0) empirically confirms the config parses and passes.
+- **Ignore entries are justified.** Each is commented in the config and matches a real, verified condition:
+  - `DEP002` (16 entries): the 14 feedback CLI/pytest-plugin tools (never imported from source) + `httpx`/`orjson` (declared runtime dependencies in `[project] dependencies` not yet imported from source — verified in pyproject).
+  - `DEP001 = ["webauthn"]`: `webauthn` is NOT in `[project] dependencies` (verified) — the optional production dependency is deferred-imported inside `PyWebAuthnProvider` (the fake provider is the test seam; documented design, ADR-031). Correctly a "missing dependency" ignore.
+  - `DEP003 = ["sqlalchemy"]`: `sqlalchemy` is a transitive runtime dep (via `sqlmodel`) directly imported by the repositories and the alembic scaffold (verified: `from sqlalchemy...` in `src/backend/*/repository.py` and `migrations/env.py`). Correctly a "transitive" ignore.
+  - `DEP004 = ["alembic"]`: `alembic` is a dev dependency legitimately imported by the `migrations/` scaffold (tooling code). Correctly a "misplaced dependency" ignore.
+  - `package_module_name_map = { "ruamel-yaml" = "ruamel" }`: the `ruamel-yaml` distribution is imported as top-level `ruamel` (verified in `src/backend/settings/repository.py`). Correct.
+- **Alembic scaffold's `env.py` is wired to `SQLModel.metadata` with the three model-module imports.** Verified: `target_metadata = SQLModel.metadata` (from `sqlmodel`); the three imports are `backend.authentication.models`, `backend.filemanagement.models`, `backend.usermanagement.models` (each `# noqa: F401` with a table-naming comment); the three modules contain exactly the claimed SQLModel table classes (Session/PasswordReset/WebAuthnCredential; FileRecord/UserAvatar; User — verified by grep). Standard online/offline patterns; `ALEMBIC_DATABASE_URL` override for CI.
+- **`mkdocs.yml` has `docs_dir: userdocs` (binding Q-64).** Verified. The site builds (S4.4 gate `uv run mkdocs build --strict` exit 0 — trusted per the task; not re-run here).
+- **Pre-commit hooks are correct.** `deptry` (pre-commit stage, the fast check) + `mkdocs-build` (pre-push stage, the slower build); `language: system`, `pass_filenames: false`; `uv run pre-commit validate-config .pre-commit-config.yaml` → valid (re-run in this review).
+- **The three CI jobs are correct.** `dependencies` (`uv run deptry .`), `docs` (`uv run mkdocs build --strict`), `migrations` (`uv run alembic upgrade head` against a temp file-based SQLite DB via `ALEMBIC_DATABASE_URL=sqlite:////tmp/alembic-ci.db`); each mirrors the existing jobs' setup steps and is placed after `dependency-review` (the scope's placement).
+
+### Feature boundaries / architecture rules
+
+- **No `src/` change → trivially satisfied.** Recorded: 0 `src/` files modified (verified). No feature boundary or architecture rule is touched by this change.
+
+### Findings and resolutions
+
+No open findings. The two scope deviations are both documented, justified, and correctly recorded (above). No unspecified behavior was introduced; no behavior changed beyond the DOCS/CHORE no-behavior-delta contract; no acceptance test was modified, deleted, or weakened (the single existing-test change is a one-line behavior-neutral import reformatting, not a test weakening).
+
+### Overall status
+
+**CLEAN.**
