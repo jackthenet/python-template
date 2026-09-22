@@ -174,3 +174,21 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 | `tests/unit/permissions/test_enforcement_plumbing.py::test_requires_permission_decorator` | ModuleNotFoundError: No module named 'backend.shared' | `tests/unit/permissions/test_enforcement_plumbing.py:58` |
 
 - **Next:** S4.2 (T-001) — implement the shared enforcement plumbing in `src/backend/shared/` and confirm GREEN.
+
+#### T-001 — S4.2 Implement + confirm GREEN — GREEN CONFIRMED
+
+- **Implementation (per T-001 `implementation_steps`, ADR-070/ADR-071):** created the additive `src/backend/shared/` package:
+  - `src/backend/shared/principal.py` — the `Principal` model (`user_id: UUID | None = None`, `session_token: str | None = None`; `Principal()` = the system principal, REQ-025), the structural `PermissionChecker` protocol (`require_permission(user_id, permission, session_token=None) -> None`, `has_permission(user_id, permission, session_token=None) -> bool`), and the `requires_permission(permission_key)` decorator: it resolves the wrapped method's trailing `principal` parameter (default `Principal()`), and — when `self._permission_service` is injected — calls `checker.require_permission(principal.user_id, permission_key, session_token=principal.session_token)` at entry; a denial raises and propagates (the method body never runs); with no checker injected (standalone mode) the method runs open.
+  - `src/backend/shared/__init__.py` — exports the public API: `Principal`, `PermissionChecker`, `requires_permission`.
+  - **No circular import (completion gate):** the package never imports `backend.permissions` (verified at runtime: after `import backend.shared`, `backend.permissions` is absent from `sys.modules`); the decorator calls the injected checker and lets the denial propagate (ADR-070).
+- **GREEN command (targeted — the task's 2 tests, from the DAG; run with the DAG's `::` shorthand expanded to real file paths):**
+  `uv run pytest tests/acceptance/permissions/test_enforcement.py::test_principal_defaults_and_fields tests/unit/permissions/test_enforcement_plumbing.py::test_requires_permission_decorator -v`
+- **Result:** **2 passed, 0 failed** — GREEN confirmed.
+
+| Test | Result |
+|---|---|
+| `tests/acceptance/permissions/test_enforcement.py::test_principal_defaults_and_fields` (AC-032 / REQ-025) | PASSED |
+| `tests/unit/permissions/test_enforcement_plumbing.py::test_requires_permission_decorator` (REQ-025; ADR-070/ADR-071) | PASSED |
+
+- **Ruff (changed paths):** `uv run ruff check src/backend/shared/principal.py src/backend/shared/__init__.py` → All checks passed; `uv run ruff format --check` on the same paths → 2 files already formatted (after an in-step `ruff format` on the new files; GREEN re-confirmed after the format change).
+- **Next:** S4.3 (T-001) — ruff gate on the changed paths.
