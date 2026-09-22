@@ -83,3 +83,69 @@ def test_system_principal_check_and_set() -> None:
     # Atomic replace: p1 is no longer granted.
     assert service.has_permission(None, p1) is False
     assert service.get_system_permissions() == frozenset({p3})
+
+
+# --- AC-023: the settings alias syncs with the system-set table ---
+
+
+def test_system_set_settings_alias_sync() -> None:
+    """AC-023 / REQ-019: the settings alias syncs with the system-set table.
+
+    Given ``register_settings`` called and the registry live, when
+    ``set_value("permissions.system_principal", [p4])`` is called, then the
+    system-set table is updated (via ``SettingChanged``), and when
+    ``set_system_permissions([p5])`` is called, then the registry key is
+    synced (best-effort).
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+        register_settings,
+    )
+    from settings_test_helpers import make_registry, wait_for
+
+    registry, bus = make_registry()
+    try:
+        register_settings(registry)
+
+        # The key is registered with the bootstrap default (a list).
+        default = registry.get_value("permissions.system_principal")
+        assert isinstance(default, list)
+        assert "usermanagement.get_user" in default
+        assert "mail.send_email" in default
+
+        catalog = PermissionCatalog()
+        catalog.register_feature(
+            "mail",
+            {
+                "mail.send_email": "Send an email via the shared mail service",
+                "mail.send_password_reset_email": "Send the built-in password-reset email",
+                "mail.send_email_verification_email": "Send the email-verification email",
+            },
+        )
+        system_repo = MemorySystemPrincipalRepository()
+        manager = UserManager(SqliteUserRepository("sqlite:///:memory:"))
+        service = PermissionService(
+            MemoryRoleRepository(),
+            MemoryGrantRepository(),
+            system_repo,
+            manager,
+            catalog=catalog,
+            event_bus=bus,
+        )
+
+        # A registry write updates the system-set table (via SettingChanged).
+        registry.set_value("permissions.system_principal", ["mail.send_password_reset_email"])
+        assert wait_for(
+            lambda: service.get_system_permissions() == frozenset({"mail.send_password_reset_email"})
+        ), "the system-set table was not updated via SettingChanged"
+
+        # set_system_permissions syncs the registry key (best-effort).
+        service.set_system_permissions({"mail.send_email_verification_email"})
+        assert service.get_system_permissions() == frozenset({"mail.send_email_verification_email"})
+        assert registry.get_value("permissions.system_principal") == ["mail.send_email_verification_email"]
+    finally:
+        bus.shutdown()

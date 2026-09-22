@@ -812,3 +812,39 @@ def test_grant_existing_idempotent() -> None:
     # ...and stored exactly once (no duplicate row).
     rows = [(row.role, row.permission) for row in grant_repo.list_all()]
     assert rows.count(("user", perm)) == 1
+
+
+# --- EDGE-026: an assignment pass-through with an unknown role ---
+
+
+def test_assignment_unknown_role() -> None:
+    """EDGE-026: an assignment pass-through with an unknown role raises
+    ``RoleNotFoundError`` (the service validates against the role store before
+    delegation)."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+        RoleNotFoundError,
+    )
+
+    service, manager, user, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        user_roles=["user"],
+    )
+    unknown = "nonexistent"
+    for operation in (
+        lambda: service.assign_role(user.id, unknown),
+        lambda: service.add_role(user.id, unknown),
+        lambda: service.remove_role(user.id, unknown),
+        lambda: service.set_roles(user.id, [unknown]),
+    ):
+        try:
+            operation()
+            raise AssertionError("expected RoleNotFoundError")
+        except RoleNotFoundError:
+            pass
+    # The user's roles are unchanged (no partial mutation).
+    assert manager.get_user(user.id).roles == ["user"]

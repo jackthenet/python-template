@@ -714,3 +714,202 @@ def test_multi_role_union_of_permissions() -> None:
     assert service.has_permission(user.id, p2) is True
     # A permission granted to neither role is not in the union.
     assert service.has_permission(user.id, "usermanagement.delete_user") is False
+
+
+# --- AC-014: role assignment is delegated to the UserManager ---
+
+
+class _SpyUserManager:
+    """A structural UserManager spy: records the assignment methods and delegates to the real manager.
+
+    The permission service only sees this spy, so every user-role write is
+    observable as a recorded call to the corresponding UserManager method
+    (delegation; the service never writes user roles directly).
+    """
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.set_role_calls: list[tuple] = []
+        self.set_roles_calls: list[tuple] = []
+        self.add_role_calls: list[tuple] = []
+        self.remove_role_calls: list[tuple] = []
+
+    def set_role(self, user_id, role):
+        self.set_role_calls.append((user_id, role))
+        return self._inner.set_role(user_id, role)
+
+    def set_roles(self, user_id, roles):
+        self.set_roles_calls.append((user_id, list(roles)))
+        return self._inner.set_roles(user_id, roles)
+
+    def add_role(self, user_id, role):
+        self.add_role_calls.append((user_id, role))
+        return self._inner.add_role(user_id, role)
+
+    def remove_role(self, user_id, role):
+        self.remove_role_calls.append((user_id, role))
+        return self._inner.remove_role(user_id, role)
+
+    def get_user(self, user_id):
+        return self._inner.get_user(user_id)
+
+
+def test_assignment_delegates_to_user_manager() -> None:
+    """AC-014 / REQ-012: role assignment is delegated to the UserManager.
+
+    Given the permission service, when ``assign_role`` / ``add_role`` /
+    ``remove_role`` / ``set_roles`` are called, then the corresponding
+    ``UserManager`` method is invoked (delegation) and the service does not
+    write user roles directly (the user's roles follow the manager semantics).
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    repo = SqliteUserRepository("sqlite:///:memory:")
+    manager = UserManager(repo)
+    user = manager.create_user(
+        UserCreate(username="u1", email="u1@example.com", password="correct-horse-1", roles=["user"])
+    )
+
+    catalog = PermissionCatalog()
+    catalog.register_feature("mail", {"mail.send_email": "Send an email"})
+
+    role_repo = MemoryRoleRepository()
+    role_repo.add("admin", None, True)
+    role_repo.add("user", None, True)
+
+    spy = _SpyUserManager(manager)
+    service = PermissionService(
+        role_repo,
+        MemoryGrantRepository(),
+        MemorySystemPrincipalRepository(),
+        spy,
+        catalog=catalog,
+    )
+
+    # assign_role delegates to set_role (replace).
+    service.assign_role(user.id, "admin")
+    assert spy.set_role_calls == [(user.id, "admin")]
+    assert manager.get_user(user.id).roles == ["admin"]
+
+    # add_role delegates to add_role (append).
+    service.add_role(user.id, "user")
+    assert spy.add_role_calls == [(user.id, "user")]
+    assert manager.get_user(user.id).roles == ["admin", "user"]
+
+    # remove_role delegates to remove_role.
+    service.remove_role(user.id, "admin")
+    assert spy.remove_role_calls == [(user.id, "admin")]
+    assert manager.get_user(user.id).roles == ["user"]
+
+    # set_roles delegates to set_roles (replace).
+    service.set_roles(user.id, ["user", "admin"])
+    assert spy.set_roles_calls == [(user.id, ["user", "admin"])]
+    assert manager.get_user(user.id).roles == ["user", "admin"]
+
+
+# --- AC-015: the last-admin guard is preserved on the pass-throughs ---
+
+
+def test_last_admin_guard_preserved_via_service() -> None:
+    """AC-015 / REQ-013: the last-admin guard is preserved on the pass-throughs.
+
+    Given the last active admin, when ``remove_role(last_admin_id, "admin")``
+    is called via the service, then a ``LastAdminError`` is raised (from the
+    delegation) and the user's roles are unchanged.
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    from backend.usermanagement import LastAdminError
+
+    repo = SqliteUserRepository("sqlite:///:memory:")
+    manager = UserManager(repo)
+    admin = manager.create_user(
+        UserCreate(username="admin1", email="admin1@example.com", password="correct-horse-1", roles=["admin"])
+    )
+
+    catalog = PermissionCatalog()
+    catalog.register_feature("mail", {"mail.send_email": "Send an email"})
+
+    role_repo = MemoryRoleRepository()
+    role_repo.add("admin", None, True)
+    role_repo.add("user", None, True)
+
+    service = PermissionService(
+        role_repo,
+        MemoryGrantRepository(),
+        MemorySystemPrincipalRepository(),
+        manager,
+        catalog=catalog,
+    )
+
+    try:
+        service.remove_role(admin.id, "admin")
+        raise AssertionError("expected LastAdminError")
+    except LastAdminError:
+        pass
+    # The demotion did not happen: the roles are unchanged.
+    assert manager.get_user(admin.id).roles == ["admin"]
+
+
+# --- AC-016: a granted role takes effect on the next check ---
+
+
+def test_grant_change_takes_effect_immediately() -> None:
+    """AC-016 / REQ-014: a granted role takes effect on the next check.
+
+    Given a user denied ``p``, when the role holding ``p`` is granted to the
+    user, and ``has_permission(user_id, p)`` is called again, then ``True`` is
+    returned (immediate effect, no re-login, no cache).
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    from backend.usermanagement import StaticRoleStore
+
+    repo = SqliteUserRepository("sqlite:///:memory:")
+    manager = UserManager(repo, role_store=StaticRoleStore(("admin", "user", "editor")))
+    user = manager.create_user(
+        UserCreate(username="u1", email="u1@example.com", password="correct-horse-1", roles=["user"])
+    )
+
+    catalog = PermissionCatalog()
+    catalog.register_feature("mail", {"mail.send_email": "Send an email"})
+
+    role_repo = MemoryRoleRepository()
+    role_repo.add("admin", None, True)
+    role_repo.add("user", None, True)
+
+    service = PermissionService(
+        role_repo,
+        MemoryGrantRepository(),
+        MemorySystemPrincipalRepository(),
+        manager,
+        catalog=catalog,
+    )
+
+    perm = "mail.send_email"
+    # The user is denied the permission.
+    assert service.has_permission(user.id, perm) is False
+    # The role holding the permission is created, granted, and assigned to the user.
+    service.create_role("editor")
+    service.grant_permission("editor", perm)
+    service.add_role(user.id, "editor")
+    # Immediate effect on the next check (no re-login, no cache).
+    assert service.has_permission(user.id, perm) is True
