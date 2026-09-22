@@ -60,6 +60,16 @@ def _make_engine(database_url: str):
     return create_engine(database_url, connect_args=connect_args)
 
 
+class _SqliteRepository:
+    """Shared engine bootstrap for the SQLite repositories (the parent dir is
+    auto-created and the tables are bootstrapped via
+    ``SQLModel.metadata.create_all``)."""
+
+    def __init__(self, database_url: str) -> None:
+        self._engine = _make_engine(database_url)
+        SQLModel.metadata.create_all(self._engine)
+
+
 @logged_class(slow_threshold_ms=100)
 class RoleRepository(ABC):
     """The role persistence contract (REQ-022)."""
@@ -125,12 +135,8 @@ class SystemPrincipalRepository(ABC):
         ...
 
 
-class SqliteRoleRepository(RoleRepository):
+class SqliteRoleRepository(_SqliteRepository, RoleRepository):
     """A SQLite/SQLModel implementation of :class:`RoleRepository`."""
-
-    def __init__(self, database_url: str) -> None:
-        self._engine = _make_engine(database_url)
-        SQLModel.metadata.create_all(self._engine)
 
     def add(self, role: str, description: str | None, is_builtin: bool) -> None:
         with Session(self._engine) as session:
@@ -160,33 +166,27 @@ class SqliteRoleRepository(RoleRepository):
             session.commit()
 
 
-class SqliteGrantRepository(GrantRepository):
+class SqliteGrantRepository(_SqliteRepository, GrantRepository):
     """A SQLite/SQLModel implementation of :class:`GrantRepository`."""
 
-    def __init__(self, database_url: str) -> None:
-        self._engine = _make_engine(database_url)
-        SQLModel.metadata.create_all(self._engine)
+    def _find_grant(self, session: Session, role: str, permission: str) -> RolePermission | None:
+        """The existing grant row for ``(role, permission)``, or ``None``."""
+        return session.exec(
+            select(RolePermission).where(
+                RolePermission.role == role,
+                RolePermission.permission == permission,
+            )
+        ).first()
 
     def grant(self, role: str, permission: str) -> None:
         with Session(self._engine) as session:
-            existing = session.exec(
-                select(RolePermission).where(
-                    RolePermission.role == role,
-                    RolePermission.permission == permission,
-                )
-            ).first()
-            if existing is None:
+            if self._find_grant(session, role, permission) is None:
                 session.add(RolePermission(role=role, permission=permission, granted_at=_utcnow()))
                 session.commit()
 
     def revoke(self, role: str, permission: str) -> None:
         with Session(self._engine) as session:
-            existing = session.exec(
-                select(RolePermission).where(
-                    RolePermission.role == role,
-                    RolePermission.permission == permission,
-                )
-            ).first()
+            existing = self._find_grant(session, role, permission)
             if existing is not None:
                 session.delete(existing)
                 session.commit()
@@ -203,12 +203,8 @@ class SqliteGrantRepository(GrantRepository):
             )
 
 
-class SqliteSystemPrincipalRepository(SystemPrincipalRepository):
+class SqliteSystemPrincipalRepository(_SqliteRepository, SystemPrincipalRepository):
     """A SQLite/SQLModel implementation of :class:`SystemPrincipalRepository`."""
-
-    def __init__(self, database_url: str) -> None:
-        self._engine = _make_engine(database_url)
-        SQLModel.metadata.create_all(self._engine)
 
     def set_permissions(self, permissions: Iterable[str]) -> None:
         # Atomic replace within one session (all-or-nothing).
