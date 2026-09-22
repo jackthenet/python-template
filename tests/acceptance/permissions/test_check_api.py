@@ -32,7 +32,7 @@ def _build(
     system_perms=None,
     session_lookup=None,
     event_bus=None,
-    username="u1",
+    username="user1",
 ):
     """Construct a ``PermissionService`` over in-memory repositories for the check tests.
 
@@ -415,7 +415,7 @@ def test_session_validation_in_check() -> None:
 
     # A token belonging to a different user -> deny (session_principal_mismatch).
     other_user = manager.create_user(
-        UserCreate(username="u2", email="u2@example.com", password="correct-horse-1", roles=["admin"])
+        UserCreate(username="user2", email="user2@example.com", password="correct-horse-1", roles=["admin"])
     )
     mismatch_token = "mismatch-token"
     lookup.add(mismatch_token, _SessionRecord(other_user.id, now + timedelta(hours=1), False))
@@ -518,7 +518,7 @@ def _build_grant_scenario(
     *,
     user_roles,
     grants=None,
-    username="u1",
+    username="user1",
     role_store=None,
 ):
     """Construct a ``PermissionService`` over in-memory repositories for the dynamic-grant tests.
@@ -694,7 +694,6 @@ def test_multi_role_union_of_permissions() -> None:
         PermissionCatalog,
         PermissionService,
     )
-
     from backend.usermanagement import StaticRoleStore
 
     service, _, user = _build_grant_scenario(
@@ -773,7 +772,7 @@ def test_assignment_delegates_to_user_manager() -> None:
     repo = SqliteUserRepository("sqlite:///:memory:")
     manager = UserManager(repo)
     user = manager.create_user(
-        UserCreate(username="u1", email="u1@example.com", password="correct-horse-1", roles=["user"])
+        UserCreate(username="user1", email="user1@example.com", password="correct-horse-1", roles=["user"])
     )
 
     catalog = PermissionCatalog()
@@ -830,7 +829,6 @@ def test_last_admin_guard_preserved_via_service() -> None:
         PermissionCatalog,
         PermissionService,
     )
-
     from backend.usermanagement import LastAdminError
 
     repo = SqliteUserRepository("sqlite:///:memory:")
@@ -880,13 +878,12 @@ def test_grant_change_takes_effect_immediately() -> None:
         PermissionCatalog,
         PermissionService,
     )
-
     from backend.usermanagement import StaticRoleStore
 
     repo = SqliteUserRepository("sqlite:///:memory:")
     manager = UserManager(repo, role_store=StaticRoleStore(("admin", "user", "editor")))
     user = manager.create_user(
-        UserCreate(username="u1", email="u1@example.com", password="correct-horse-1", roles=["user"])
+        UserCreate(username="user1", email="user1@example.com", password="correct-horse-1", roles=["user"])
     )
 
     catalog = PermissionCatalog()
@@ -1006,10 +1003,11 @@ def test_initial_catalog_exactly_60_keys() -> None:
     from backend.authentication.feature_actions import register_actions as authentication_actions  # deferred: RED
     from backend.filemanagement.feature_actions import register_actions as filemanagement_actions  # deferred: RED
     from backend.mail.feature_actions import register_actions as mail_actions  # deferred: RED
-    from backend.permissions import PermissionCatalog  # deferred: RED
     from backend.sessionmanagement.feature_actions import register_actions as sessionmanagement_actions  # deferred: RED
     from backend.settings.feature_actions import register_actions as settings_actions  # deferred: RED
     from backend.usermanagement.feature_actions import register_actions as usermanagement_actions  # deferred: RED
+
+    from backend.permissions import PermissionCatalog  # deferred: RED
 
     catalog = PermissionCatalog()
     usermanagement_actions(catalog)

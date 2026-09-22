@@ -66,7 +66,7 @@ def _build(
     catalog_cls,
     *,
     user_roles=None,
-    username="u1",
+    username="user1",
     grants=None,
     session_lookup=None,
     user_manager=None,
@@ -266,7 +266,7 @@ def test_mismatched_token_denied() -> None:
         user_roles=["admin"], session_lookup=lookup,
     )
     other = manager.create_user(
-        UserCreate(username="u2", email="u2@example.com", password="correct-horse-1", roles=["admin"])
+        UserCreate(username="user2", email="user2@example.com", password="correct-horse-1", roles=["admin"])
     )
     lookup.add("mismatch", _SessionRecord(other.id, now + timedelta(hours=1), False))
     assert service.has_permission(user.id, "mail.send_email", session_token="mismatch") is False
@@ -478,7 +478,7 @@ def _build_role(
     catalog_cls,
     *,
     user_roles=None,
-    username="u1",
+    username="user1",
     grants=None,
     role_store=None,
     seed_roles=(),
@@ -643,7 +643,6 @@ def test_delete_in_use_role() -> None:
         PermissionService,
         RoleInUseError,
     )
-
     from backend.usermanagement import StaticRoleStore
 
     service, _, _, _, _ = _build_role(

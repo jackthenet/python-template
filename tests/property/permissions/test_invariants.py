@@ -124,7 +124,7 @@ def _build(
     catalog_cls,
     *,
     user_roles=None,
-    username="u1",
+    username="user1",
     grants=None,
     session_lookup=None,
     user_manager=None,
@@ -190,7 +190,7 @@ def _session_scenario_service(scenario, perm, service_cls, *, role_repo_cls, gra
     system_repo = system_repo_cls()
     manager = UserManager(SqliteUserRepository("sqlite:///:memory:"))
     user = manager.create_user(
-        UserCreate(username="u1", email="u1@example.com", password="correct-horse-1", roles=["user"])
+        UserCreate(username="user1", email="user1@example.com", password="correct-horse-1", roles=["user"])
     )
     lookup = _FakeSessionLookup()
     if scenario == "revoked_session":
@@ -199,7 +199,7 @@ def _session_scenario_service(scenario, perm, service_cls, *, role_repo_cls, gra
         lookup.add("tok", _SessionRecord(user.id, now - timedelta(hours=1), False))
     else:  # mismatched_session
         other = manager.create_user(
-            UserCreate(username="u2", email="u2@example.com", password="correct-horse-1", roles=["user"])
+            UserCreate(username="user2", email="user2@example.com", password="correct-horse-1", roles=["user"])
         )
         lookup.add("tok", _SessionRecord(other.id, now + timedelta(hours=1), False))
     service = service_cls(role_repo, grant_repo, system_repo, manager, session_lookup=lookup, catalog=catalog)
@@ -416,7 +416,6 @@ def test_effective_set_monotone(roles_a, roles_b) -> None:
         PermissionCatalog,
         PermissionService,
     )
-
     from backend.usermanagement import StaticRoleStore
 
     # R = roles_a and R' = roles_a | roles_b, so R ⊆ R' holds by construction.
@@ -441,7 +440,7 @@ def test_effective_set_monotone(roles_a, roles_b) -> None:
         role_store=StaticRoleStore(("admin", "user", *_MONOTONE_ROLE_POOL)),
     )
     user_r = manager.create_user(
-        UserCreate(username="ur", email="ur@example.com", password="correct-horse-1", roles=sorted(r))
+        UserCreate(username="ur1", email="ur1@example.com", password="correct-horse-1", roles=sorted(r))
     )
     user_r_prime = manager.create_user(
         UserCreate(username="urp", email="urp@example.com", password="correct-horse-1", roles=sorted(r_prime))
