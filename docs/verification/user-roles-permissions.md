@@ -233,3 +233,18 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Completion gate 3 (alembic data migration):** applies cleanly to a **fresh** database (no `users` table → no-op; re-applied idempotently) and an **existing** database (seeded pre-amendment `role` column → `member` rewritten to `user`, single role converted to a `roles` list; re-applied idempotently, no data loss).
 - **In-scope note (implementation step 9 — Phase 5 concern):** the amendment is breaking and fixed in scope. The 50 pre-existing usermanagement tests that assert the pre-amendment API (`UserCreate(role=…)`, `UserRead.role`, `UserManager(repo, roles=(…))`, the `usermanagement.roles` setting default `['admin','member']`) now fail; they are **not** part of T-002's `green_command` and must be updated within the change (Phase 5 / a later step) — no test file was modified in S4.2 (step rule). No non-test consumer outside `usermanagement` is affected (consumer analysis: `authentication` uses `UserRead` only as a field type; `sessionmanagement` uses only `event.user_id`; `main.py` only registers usermanagement settings) — `authentication` imports cleanly.
 - **Next:** S4.3 (T-002) — ruff gate on the changed paths.
+
+#### T-003 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-003 "permissions foundation (models, errors, events, catalog, repository ABCs + SQLite + in-memory, feature_settings)" — REQ-004, REQ-020, REQ-021; AC-026.
+- **Ready:** confirmed — `dependencies: []` (no dependencies; T-003 is ready).
+- **RED command (targeted — the task's 1 test, from the DAG; the DAG's `::` shorthand in the directory part is rejected by pytest, so run with real file paths):**
+  `uv run pytest tests/acceptance/permissions/test_errors.py::test_error_context_attributes -v`
+- **Result:** **1 failed, 0 passed** — RED confirmed before implementation.
+- **Failure mode** (the established RED pattern for this change — deferred import of the unimplemented `backend.permissions` package, in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/permissions/test_errors.py::test_error_context_attributes` (AC-026 / REQ-021) | ModuleNotFoundError: No module named 'backend.permissions' | `tests/acceptance/permissions/test_errors.py:24` |
+
+- **Next:** S4.2 (T-003) — implement the permissions foundation (models, errors, events, catalog, repository ABCs + SQLite + in-memory, feature_settings) and confirm GREEN.
