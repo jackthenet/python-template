@@ -150,3 +150,150 @@ def test_enforced_method_denies_without_permission(tmp_path: Path) -> None:
     assert record.key
     assert service.download(record.key) == payload
     assert allow_checker.calls == [(user_id, "filemanagement.upload", session_token)]
+
+
+# --- AC-030: the exempt login performs no check on itself ---
+
+# The bootstrap system set (spec Section 3, D10): the default system principal
+# permission set. It covers the internal login flow (password verification +
+# user read) so login stays reachable for zero-permission users.
+BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset({
+    "usermanagement.get_user",
+    "usermanagement.verify_password",
+    "usermanagement.change_password",
+    "settings.register",
+    "settings.register_feature",
+    "mail.send_email",
+    "mail.send_password_reset_email",
+    "mail.send_email_verification_email",
+    "sessionmanagement.cleanup_expired",
+})
+
+
+class _SpyPermissionChecker:
+    """A structural PermissionChecker that records every check and delegates to the real service.
+
+    The composition-root wiring (the shared PermissionService injected into the
+    services) is observable through the recorded checks: who was checked
+    (user_id / session_token) and against which permission key.
+    """
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.calls: list[tuple[Any, str, Any]] = []
+
+    def require_permission(self, user_id: Any, permission: str, session_token: Any = None) -> None:
+        self.calls.append((user_id, permission, session_token))
+        self._inner.require_permission(user_id, permission, session_token)
+
+    def has_permission(self, user_id: Any, permission: str, session_token: Any = None) -> bool:
+        return self._inner.has_permission(user_id, permission, session_token)
+
+
+class _LazyUserManager:
+    """A structural UserManager indirection that resolves the real manager after both sides exist.
+
+    Breaks the construction cycle of the composition-root wiring: the
+    PermissionService holds the (lazy) manager for its live user lookup, and
+    the manager holds the shared PermissionService as its injected checker
+    (ADR-069).
+    """
+
+    def __init__(self) -> None:
+        self._manager = None
+
+    def set_manager(self, manager: Any) -> None:
+        self._manager = manager
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._manager, name)
+
+
+def test_exempt_login_no_check(tmp_path: Path) -> None:
+    """AC-030 / REQ-024: the exempt login performs no check on itself; the flow succeeds
+    for a zero-permission user (the internal calls are evaluated against the
+    bootstrap system set).
+
+    Given the exempt operation ``authentication.login``, when it is called,
+    then no permission check is performed on ``login`` itself, and the login
+    flow succeeds for a user with zero permissions (the internal
+    user-management/mail calls are evaluated against the bootstrap system set).
+    """
+    from authentication_test_helpers import FakeWebAuthnProvider, db_url
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    from backend.authentication import (
+        AuthService,
+        LoginRequest,
+        SqlitePasswordResetRepository,
+        SqliteSessionRepository,
+        SqliteWebAuthnCredentialRepository,
+    )
+
+    # A zero-permission user (the 'user' role starts with zero permissions,
+    # REQ-011), created before the enforcement wiring (standalone mode).
+    user_repo = SqliteUserRepository(db_url(tmp_path, "users.db"))
+    standalone = UserManager(user_repo)
+    user = standalone.create_user(
+        UserCreate(username="carol", email="carol@example.com", password="carol-password-1", roles=["user"])
+    )
+
+    # The shared PermissionService (the composition-root wiring): its system set
+    # is the bootstrap set (the internal login calls are covered by it).
+    catalog = PermissionCatalog()
+    catalog.register_feature(
+        "usermanagement",
+        {
+            "usermanagement.verify_password": "Verify a user's password",
+            "usermanagement.get_user": "Read a user by id",
+        },
+    )
+    system_repo = MemorySystemPrincipalRepository()
+    system_repo.set_permissions(BOOTSTRAP_SYSTEM_PERMISSIONS)
+
+    lazy_manager = _LazyUserManager()
+    service = PermissionService(
+        MemoryRoleRepository(),
+        MemoryGrantRepository(),
+        system_repo,
+        lazy_manager,
+        catalog=catalog,
+    )
+
+    # The shared checker (spied so every check the wired services perform is
+    # observable) is injected into the UserManager (the internal calls) and
+    # the AuthService (the login flow) — the same instance, as at the
+    # composition root.
+    spy = _SpyPermissionChecker(service)
+    lazy_manager.set_manager(UserManager(user_repo, permission_service=spy))
+    auth_url = db_url(tmp_path, "auth.db")
+    auth = AuthService(
+        lazy_manager,
+        user_repo,
+        SqliteSessionRepository(auth_url),
+        SqlitePasswordResetRepository(auth_url),
+        SqliteWebAuthnCredentialRepository(auth_url),
+        webauthn_provider=FakeWebAuthnProvider(),
+        permission_service=spy,
+    )
+
+    # The login flow succeeds for the zero-permission user.
+    result = auth.login(LoginRequest(identifier="carol", password="carol-password-1"))
+    assert result.token
+    assert result.user.id == user.id
+    assert result.user.roles == ["user"]
+
+    # No permission check is performed on login itself (the exempt set).
+    assert all(permission != "authentication.login" for _, permission, _ in spy.calls)
+
+    # The internal user-management calls (password verification + user read)
+    # are evaluated as the system principal (the default principal) against
+    # the bootstrap system set, which covers them (the login succeeded).
+    assert (None, "usermanagement.verify_password", None) in spy.calls
+    assert (None, "usermanagement.get_user", None) in spy.calls

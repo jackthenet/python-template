@@ -14,7 +14,10 @@ from __future__ import annotations
 import hashlib
 import threading
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
+
+import pytest
 
 from backend.usermanagement import SqliteUserRepository, UserCreate, UserManager
 
@@ -848,3 +851,155 @@ def test_assignment_unknown_role() -> None:
             pass
     # The user's roles are unchanged (no partial mutation).
     assert manager.get_user(user.id).roles == ["user"]
+
+
+# --- EDGE-022 / EDGE-023: the default principal and the bootstrap system set ---
+
+# The bootstrap system set (spec Section 3, D10): the default system principal
+# permission set. It covers the internal login flow (password verification +
+# user read) so login stays reachable for zero-permission users.
+BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset({
+    "usermanagement.get_user",
+    "usermanagement.verify_password",
+    "usermanagement.change_password",
+    "settings.register",
+    "settings.register_feature",
+    "mail.send_email",
+    "mail.send_password_reset_email",
+    "mail.send_email_verification_email",
+    "sessionmanagement.cleanup_expired",
+})
+
+
+class _SpyPermissionChecker:
+    """A structural PermissionChecker that records every check and delegates to the real service."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.calls: list[tuple[Any, str, Any]] = []
+
+    def require_permission(self, user_id: Any, permission: str, session_token: Any = None) -> None:
+        self.calls.append((user_id, permission, session_token))
+        self._inner.require_permission(user_id, permission, session_token)
+
+    def has_permission(self, user_id: Any, permission: str, session_token: Any = None) -> bool:
+        return self._inner.has_permission(user_id, permission, session_token)
+
+
+def test_default_principal_system() -> None:
+    """EDGE-022: an enforced method called without an explicit principal is evaluated
+    as the system principal (the system set).
+
+    Given an enforced method called without an explicit principal (the
+    default), when the check is evaluated, then it is evaluated as the system
+    principal (``user_id=None``) against the system set: the method proceeds
+    while the system set covers the permission key, and the denial propagates
+    to the caller once the system set no longer covers it.
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionDeniedError,
+        PermissionService,
+    )
+    from backend.shared import Principal, requires_permission  # deferred: RED
+
+    catalog = PermissionCatalog()
+    catalog.register_feature("usermanagement", {"usermanagement.get_user": "Read a user by id"})
+
+    system_repo = MemorySystemPrincipalRepository()
+    system_repo.set_permissions({"usermanagement.get_user"})
+
+    service = PermissionService(
+        MemoryRoleRepository(),
+        MemoryGrantRepository(),
+        system_repo,
+        _RaisingUserManager(),  # the system-principal check performs no user lookup
+        catalog=catalog,
+    )
+
+    class _EnforcedService:
+        """A minimal enforced service (the shared decorator contract, ADR-071)."""
+
+        def __init__(self, permission_service: Any) -> None:
+            self._permission_service = permission_service
+
+        @requires_permission("usermanagement.get_user")
+        def get_user(self, user_id: Any, principal: Any = Principal()) -> str:  # noqa: B008 (the ADR-071 contract: the trailing principal default is the system principal)
+            return "ok"
+
+    # Called without an explicit principal: evaluated as the system principal;
+    # the system set covers the key -> the method proceeds.
+    assert _EnforcedService(service).get_user(uuid4()) == "ok"
+
+    # The system set no longer covers the key: the default principal is still
+    # evaluated as the system principal -> the denial propagates to the caller.
+    service.set_system_permissions([])
+    with pytest.raises(PermissionDeniedError):
+        _EnforcedService(service).get_user(uuid4())
+
+
+def test_login_before_permissions() -> None:
+    """EDGE-023: login before any permission exists (a zero-permission user) succeeds
+    (exempt; the internal calls are covered by the bootstrap system set).
+
+    Given ``login`` before any permission exists (no roles, no grants; a
+    zero-permission user), when the login flow's internal user-management calls
+    (password verification + user read) are performed, then they succeed: they
+    are evaluated as the system principal against the bootstrap system set,
+    and no check is performed for the exempt ``authentication.login``
+    operation.
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    # No permission data exists yet: no roles, no grants. The system set is the
+    # bootstrap set (the default system principal permissions).
+    catalog = PermissionCatalog()
+    catalog.register_feature(
+        "usermanagement",
+        {
+            "usermanagement.verify_password": "Verify a user's password",
+            "usermanagement.get_user": "Read a user by id",
+        },
+    )
+    system_repo = MemorySystemPrincipalRepository()
+    system_repo.set_permissions(BOOTSTRAP_SYSTEM_PERMISSIONS)
+
+    service = PermissionService(
+        MemoryRoleRepository(),  # no roles
+        MemoryGrantRepository(),  # no grants
+        system_repo,
+        _RaisingUserManager(),  # the system-principal check performs no user lookup
+        catalog=catalog,
+    )
+    spy = _SpyPermissionChecker(service)
+
+    # A zero-permission user, created before the enforcement wiring
+    # (standalone mode).
+    repo = SqliteUserRepository("sqlite:///:memory:")
+    standalone = UserManager(repo)
+    user = standalone.create_user(
+        UserCreate(username="carol", email="carol@example.com", password="carol-password-1", roles=["user"])
+    )
+    wired = UserManager(repo, permission_service=spy)
+
+    # The login flow's internal calls (password verification + user read) are
+    # evaluated as the system principal against the bootstrap system set.
+    assert wired.verify_password(user.id, "carol-password-1") is True
+    read = wired.get_user(user.id)
+    assert read.id == user.id
+
+    # The internal calls were evaluated as the system principal (the default
+    # principal) and covered by the bootstrap set; the exempt login operation
+    # itself is never checked.
+    assert (None, "usermanagement.verify_password", None) in spy.calls
+    assert (None, "usermanagement.get_user", None) in spy.calls
+    assert all(permission != "authentication.login" for _, permission, _ in spy.calls)

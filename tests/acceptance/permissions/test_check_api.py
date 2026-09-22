@@ -913,3 +913,122 @@ def test_grant_change_takes_effect_immediately() -> None:
     service.add_role(user.id, "editor")
     # Immediate effect on the next check (no re-login, no cache).
     assert service.has_permission(user.id, perm) is True
+
+
+# --- AC-006: the initial catalog is exactly the 60 keys of the spec table ---
+
+# The initial catalog table (spec Section 3; the table is the source of truth):
+# 60 actions across the six features.
+INITIAL_CATALOG_SIZE: int = 60
+EXPECTED_INITIAL_CATALOG: dict[str, tuple[str, ...]] = {
+    "usermanagement": (
+        "usermanagement.create_user",
+        "usermanagement.get_user",
+        "usermanagement.get_user_by_username",
+        "usermanagement.list_users",
+        "usermanagement.update_user",
+        "usermanagement.delete_user",
+        "usermanagement.change_password",
+        "usermanagement.verify_password",
+        "usermanagement.set_role",
+        "usermanagement.activate_user",
+        "usermanagement.deactivate_user",
+    ),
+    "authentication": (
+        "authentication.login",
+        "authentication.session_info",
+        "authentication.logout",
+        "authentication.request_password_reset",
+        "authentication.complete_password_reset",
+        "authentication.begin_passkey_registration",
+        "authentication.complete_passkey_registration",
+        "authentication.begin_passkey_login",
+        "authentication.complete_passkey_login",
+        "authentication.list_passkeys",
+        "authentication.delete_passkey",
+    ),
+    "settings": (
+        "settings.register",
+        "settings.register_feature",
+        "settings.has",
+        "settings.get_definition",
+        "settings.get_value",
+        "settings.set_value",
+        "settings.reset",
+        "settings.reset_all",
+        "settings.get_status",
+        "settings.to_view",
+        "settings.views",
+        "settings.grouped_views",
+        "settings.create_template",
+        "settings.load_template",
+        "settings.update_template",
+        "settings.delete_template",
+        "settings.get_template",
+        "settings.has_template",
+        "settings.list_templates",
+    ),
+    "filemanagement": (
+        "filemanagement.upload",
+        "filemanagement.upload_avatar",
+        "filemanagement.replace_avatar",
+        "filemanagement.delete_avatar",
+        "filemanagement.get_avatar",
+        "filemanagement.download",
+        "filemanagement.open",
+        "filemanagement.delete",
+        "filemanagement.get_file",
+        "filemanagement.list_files",
+    ),
+    "mail": (
+        "mail.send_email",
+        "mail.send_password_reset_email",
+        "mail.send_email_verification_email",
+    ),
+    "sessionmanagement": (
+        "sessionmanagement.list_sessions",
+        "sessionmanagement.revoke_session",
+        "sessionmanagement.logout_all_sessions",
+        "sessionmanagement.logout_other_sessions",
+        "sessionmanagement.revoke_all_sessions",
+        "sessionmanagement.cleanup_expired",
+    ),
+}
+
+
+def test_initial_catalog_exactly_60_keys() -> None:
+    """AC-006 / REQ-005: the six features' register_actions produce exactly the 60 keys.
+
+    Given the six features' ``register_actions`` called at startup, when the
+    catalog is inspected, then it contains exactly the 60 keys of the initial
+    catalog table, grouped by the six features.
+    """
+    from backend.authentication.feature_actions import register_actions as authentication_actions  # deferred: RED
+    from backend.filemanagement.feature_actions import register_actions as filemanagement_actions  # deferred: RED
+    from backend.mail.feature_actions import register_actions as mail_actions  # deferred: RED
+    from backend.permissions import PermissionCatalog  # deferred: RED
+    from backend.sessionmanagement.feature_actions import register_actions as sessionmanagement_actions  # deferred: RED
+    from backend.settings.feature_actions import register_actions as settings_actions  # deferred: RED
+    from backend.usermanagement.feature_actions import register_actions as usermanagement_actions  # deferred: RED
+
+    catalog = PermissionCatalog()
+    usermanagement_actions(catalog)
+    authentication_actions(catalog)
+    settings_actions(catalog)
+    filemanagement_actions(catalog)
+    mail_actions(catalog)
+    sessionmanagement_actions(catalog)
+
+    # Grouped by the six features.
+    assert catalog.features() == frozenset(EXPECTED_INITIAL_CATALOG)
+
+    # Exactly the 60 keys of the initial catalog table (spec Section 3).
+    expected: set[str] = {key for keys in EXPECTED_INITIAL_CATALOG.values() for key in keys}
+    assert len(expected) == INITIAL_CATALOG_SIZE
+    assert {action.permission for action in catalog.actions()} == expected
+
+    # Every key is grouped under its own feature (feature.action).
+    for feature, keys in EXPECTED_INITIAL_CATALOG.items():
+        feature_actions = list(catalog.actions(feature))
+        assert {action.permission for action in feature_actions} == set(keys)
+        assert all(action.feature == feature for action in feature_actions)
