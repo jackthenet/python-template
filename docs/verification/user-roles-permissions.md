@@ -43,6 +43,9 @@ It is not an ISSUE (no deviation from approved spec behavior), not a REFACTOR
 - **PR:** #51 (open, unmerged; the user will merge it later).
 - **Date:** 2026-07-10.
 
-### Phase 2: Decompose — IN PROGRESS
+### Phase 2: Decompose — COMPLETE
 
-(ADRs + task DAG, per the decompose skill.)
+- **Steps:** S2.1 Create ADRs → S2.2 Decompose into task DAG.
+- **ADRs (7):** ADR-069 (permissions feature placement), ADR-070 (shared enforcement plumbing, no circular imports), ADR-071 (enforcement wiring via trailing `principal` param + decorator, standalone mode), ADR-072 (multi-role user-management amendment), ADR-073 (session validation via structural `SessionLookup` seam), ADR-074 (dynamic role→permission mapping), ADR-075 (fail-closed security posture). Commit `572637d`.
+- **Task DAG:** `docs/tasks/user-roles-permissions.tasks.json` — 14 tasks (T-001…T-014), grouped by affected feature (shared plumbing, usermanagement, permissions, per-feature enforcement, cross-cutting integration), covering all 29 REQs + 40 ACs (77 tests), acyclic + gate-satisfiable. Copied to `.github/task-runner/tasks.json`. Commit `a07651f`.
+- **House-format refinements:** `tests_to_create` + red/green use `file::function` paths (name collision + same-directory multi-task); red/green are targeted (not the full suite).
