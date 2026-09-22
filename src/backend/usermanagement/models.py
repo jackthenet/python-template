@@ -8,17 +8,44 @@ service with the :mod:`backend.usermanagement.errors` hierarchy.
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import UniqueConstraint
+from sqlalchemy.types import String, TypeDecorator
 from sqlmodel import Field as SField
 from sqlmodel import SQLModel
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$")
 _ROLE_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+
+
+class RoleListType(TypeDecorator):
+    """Persist a role list as JSON text in a ``VARCHAR`` column (REQ-026).
+
+    The role list is the user's self-contained set of roles (ADR-072); the
+    column stores a JSON array (e.g. ``["admin", "user"]``) so the multi-role
+    amendment is a data migration from the single ``role`` column (member ->
+    user, single role -> one-element list).
+    """
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return json.dumps(list(value))
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return json.loads(value)
+        return list(value)
 
 # Password / display-name length limits (spec NFR-001, ADR-023).
 _PASSWORD_MIN_LEN = 8
@@ -71,7 +98,7 @@ class User(SQLModel, table=True):
     username: str = SField(index=True)
     email: str = SField(index=True)  # stored lowercased (D5)
     display_name: str | None = None
-    role: str
+    roles: list[str] = SField(default_factory=list, sa_type=RoleListType)  # was: role: str
     password_hash: str  # Argon2id hash only (D2)
     profile_picture_url: str | None = None
     is_active: bool = True
@@ -86,7 +113,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     display_name: str | None = None
-    role: str
+    roles: list[str]  # was: role: str; non-empty; each ^[a-z0-9_-]{1,32}$
     profile_picture_url: str | None = None
 
     @field_validator("username")
@@ -106,11 +133,14 @@ class UserCreate(BaseModel):
     def _check_display_name(cls, value: str | None) -> str | None:
         return _validate_display_name(value)
 
-    @field_validator("role")
+    @field_validator("roles")
     @classmethod
-    def _check_role(cls, value: str) -> str:
-        if not _ROLE_RE.fullmatch(value):
-            raise ValueError("role must match ^[a-z0-9_-]{1,32}$")
+    def _check_roles(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("roles must be non-empty")
+        for role in value:
+            if not _ROLE_RE.fullmatch(role):
+                raise ValueError("each role must match ^[a-z0-9_-]{1,32}$")
         return value
 
     @field_validator("profile_picture_url")
@@ -163,7 +193,7 @@ class UserRead(BaseModel):
     username: str
     email: str
     display_name: str | None
-    role: str
+    roles: list[str]  # was: role: str
     profile_picture_url: str | None
     is_active: bool
     created_at: datetime

@@ -8,6 +8,8 @@ log (NFR-002).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 
 class UserManagerError(Exception):
     """Base class for all user-management domain errors."""
@@ -32,9 +34,9 @@ class UserNotFoundError(UserManagerError):
 
 
 class InvalidRoleError(UserManagerError):
-    """The requested role is not in the configured role set."""
+    """The requested role is not in the role store's role set."""
 
-    def __init__(self, role: str, allowed: frozenset[str]) -> None:
+    def __init__(self, role: str, allowed: Sequence[str]) -> None:
         self.role = role
         self.allowed = allowed
         super().__init__(f"role {role!r} is not in the allowed role set {sorted(allowed)}")

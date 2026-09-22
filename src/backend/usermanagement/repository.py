@@ -25,7 +25,7 @@ from datetime import UTC
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import String, func
 from sqlalchemy import select as sa_select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
@@ -96,7 +96,10 @@ class UserRepository(ABC):
     def list_all(self, include_inactive: bool = False) -> Sequence[User]: ...
 
     @abstractmethod
-    def count_active_by_role(self, role: str) -> int: ...
+    def count_active_by_role(self, role: str) -> int:
+        """Count active users whose ``roles`` include ``role`` (multi-role,
+        REQ-026)."""
+        ...
 
 
 @logged_class(slow_threshold_ms=100)
@@ -184,12 +187,18 @@ class SqliteUserRepository(UserRepository):
             return [_attach_utc(user) for user in session.exec(statement).all()]
 
     def count_active_by_role(self, role: str) -> int:
+        # The roles column stores a JSON array (RoleListType); a role value
+        # appears quoted ("admin"), so the quoted pattern matches exactly
+        # that role (role names are ^[a-z0-9_-]{1,32}$ — no LIKE metachars).
+        # Cast to plain String so the LIKE pattern binds as a raw string
+        # (RoleListType's bind processor would json-encode the pattern).
+        pattern = f'%"{role}"%'
         with self._session() as session:
             statement = (
                 sa_select(func.count())
                 .select_from(User)
                 .where(
-                    User.role == role,
+                    User.roles.cast(String).like(pattern),
                     User.is_active == True,  # noqa: E712
                 )
             )
