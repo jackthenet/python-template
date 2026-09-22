@@ -32,6 +32,44 @@ _PERMS = ("mail.send_email", "mail.send_password_reset_email")
 _ALL_ROLES = ("admin", "user", "editor")
 _WILDCARD = "mail.*"
 
+# T-005 (INV-004): the role pool and the fixed grants for the monotonicity invariant.
+_MONOTONE_ROLE_POOL = ("r1", "r2", "r3")
+_MONOTONE_GRANTS = {
+    "r1": ("mail.send_email",),
+    "r2": ("mail.*",),
+    "r3": ("mail.send_password_reset_email",),
+}
+
+# T-005 (INV-006): the catalog and the grant-key space for the valid-grant-keys invariant.
+_INV006_CATALOG = {
+    "mail": {
+        "mail.send_email": "Send an email via the shared mail service",
+        "mail.send_password_reset_email": "Send the built-in password-reset email",
+    },
+    "usermanagement": {
+        "usermanagement.get_user": "Read a user by id",
+    },
+}
+_INV006_VALID_KEYS = frozenset(
+    {
+        "mail.send_email",
+        "mail.send_password_reset_email",
+        "usermanagement.get_user",
+        "mail.*",
+        "usermanagement.*",
+    }
+)
+_INV006_INVALID_KEYS = (
+    "reports.export",  # well-formed key of an unknown feature
+    "mailx.*",  # wildcard of an unknown feature
+    "mail",  # no dot
+    "mail.",  # trailing dot
+    "MAIL.*",  # uppercase
+    "mail.*.*",  # extra wildcard segment
+    "mail.send_email.extra",  # three segments
+)
+_INV006_ALL_KEYS = tuple(sorted(_INV006_VALID_KEYS)) + _INV006_INVALID_KEYS
+
 
 class _SessionRecord:
     """A structural ``SessionRecord`` (the check reads ``user_id`` / ``expires_at`` / ``revoked``)."""
@@ -356,3 +394,110 @@ def test_admin_passes_any_catalog_permission(n) -> None:
         feature = f"f{i}"
         catalog.register_feature(feature, {"act": "desc"})
         assert service.has_permission(user.id, f"{feature}.act") is True
+
+
+# --- INV-004: the effective permission set is monotone in the role set ---
+
+
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    roles_a=st.frozensets(st.sampled_from(_MONOTONE_ROLE_POOL), min_size=1),
+    roles_b=st.frozensets(st.sampled_from(_MONOTONE_ROLE_POOL), min_size=1),
+)
+def test_effective_set_monotone(roles_a, roles_b) -> None:
+    """INV-004: the effective permission set is monotone in the role set.
+
+    For any role sets R ⊆ R', effective(R) ⊆ effective(R').
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    from backend.usermanagement import StaticRoleStore
+
+    # R = roles_a and R' = roles_a | roles_b, so R ⊆ R' holds by construction.
+    r = roles_a
+    r_prime = roles_a | roles_b
+
+    catalog = PermissionCatalog()
+    catalog.register_feature(
+        "mail",
+        {
+            "mail.send_email": "Send an email via the shared mail service",
+            "mail.send_password_reset_email": "Send the built-in password-reset email",
+        },
+    )
+    grant_repo = MemoryGrantRepository()
+    for role, perms in _MONOTONE_GRANTS.items():
+        for perm in perms:
+            grant_repo.grant(role, perm)
+
+    manager = UserManager(
+        SqliteUserRepository("sqlite:///:memory:"),
+        role_store=StaticRoleStore(("admin", "user", *_MONOTONE_ROLE_POOL)),
+    )
+    user_r = manager.create_user(
+        UserCreate(username="ur", email="ur@example.com", password="correct-horse-1", roles=sorted(r))
+    )
+    user_r_prime = manager.create_user(
+        UserCreate(username="urp", email="urp@example.com", password="correct-horse-1", roles=sorted(r_prime))
+    )
+    service = PermissionService(
+        MemoryRoleRepository(), grant_repo, MemorySystemPrincipalRepository(), manager, catalog=catalog
+    )
+
+    def effective(user_id):
+        return {perm for perm in _PERMS if service.has_permission(user_id, perm)}
+
+    # Monotonicity: R ⊆ R' implies effective(R) ⊆ effective(R').
+    assert effective(user_r.id) <= effective(user_r_prime.id)
+
+
+# --- INV-006: the valid grant keys are exactly the catalog actions union feature wildcards ---
+
+
+@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+@given(key=st.sampled_from(_INV006_ALL_KEYS))
+def test_valid_grant_keys_exactly_catalog_plus_wildcards(key) -> None:
+    """INV-006: the set of valid grant keys is exactly the catalog actions union the feature
+    wildcards; a grant of any other key raises.
+    """
+    from backend.permissions import (
+        AuthorizationError,
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    catalog = PermissionCatalog()
+    for feature, actions in _INV006_CATALOG.items():
+        catalog.register_feature(feature, actions)
+    role_repo = MemoryRoleRepository()
+    role_repo.add("user", None, True)
+    grant_repo = MemoryGrantRepository()
+    service = PermissionService(
+        role_repo,
+        grant_repo,
+        MemorySystemPrincipalRepository(),
+        _RaisingUserManager(),  # no user lookup is exercised by this invariant
+        catalog=catalog,
+    )
+
+    if key in _INV006_VALID_KEYS:
+        # A catalog action or a feature wildcard is accepted and stored.
+        service.grant_permission("user", key)
+        assert key in service.get_role_permissions("user")
+    else:
+        # Any other key raises and is not stored.
+        try:
+            service.grant_permission("user", key)
+            raise AssertionError(f"expected a grant of {key!r} to raise")
+        except (AuthorizationError, ValueError):
+            pass
+        assert key not in service.get_role_permissions("user")

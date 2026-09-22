@@ -12,6 +12,7 @@ collects cleanly before the feature is implemented (RED).
 from __future__ import annotations
 
 import hashlib
+import threading
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -464,3 +465,350 @@ def test_expired_session_denied() -> None:
         raise AssertionError("expected PermissionDeniedError")
     except PermissionDeniedError as exc:
         assert exc.reason == "invalid_session"
+
+
+def _build_role(
+    service_cls,
+    role_repo_cls,
+    grant_repo_cls,
+    system_repo_cls,
+    catalog_cls,
+    *,
+    user_roles=None,
+    username="u1",
+    grants=None,
+    role_store=None,
+    seed_roles=(),
+):
+    """Construct a ``PermissionService`` over in-memory repositories for the role management edge cases.
+
+    Returns ``(service, manager, user, role_repo, grant_repo)``. ``user_roles`` of
+    ``None`` creates no user; ``seed_roles`` is an iterable of ``(role, is_builtin)``
+    pairs added to the role repository before the service is constructed; ``role_store``
+    overrides the user manager's role store (needed when the user holds a
+    non-built-in role).
+    """
+    catalog = catalog_cls()
+    catalog.register_feature(
+        "mail",
+        {
+            "mail.send_email": "Send an email via the shared mail service",
+            "mail.send_password_reset_email": "Send the built-in password-reset email",
+        },
+    )
+    grant_repo = grant_repo_cls()
+    for role, perms in (grants or {}).items():
+        for perm in perms:
+            grant_repo.grant(role, perm)
+    role_repo = role_repo_cls()
+    for role, is_builtin in seed_roles:
+        role_repo.add(role, None, is_builtin)
+    system_repo = system_repo_cls()
+    repo = SqliteUserRepository("sqlite:///:memory:")
+    manager = UserManager(repo) if role_store is None else UserManager(repo, role_store=role_store)
+    user = None
+    if user_roles is not None:
+        user = manager.create_user(
+            UserCreate(username=username, email=f"{username}@example.com", password="correct-horse-1", roles=user_roles)
+        )
+    service = service_cls(
+        role_repo,
+        grant_repo,
+        system_repo,
+        manager,
+        catalog=catalog,
+    )
+    return service, manager, user, role_repo, grant_repo
+
+
+# --- EDGE-008: a role with no permission mapping has zero permissions ---
+
+
+def test_role_no_mapping_zero_permissions() -> None:
+    """EDGE-008: a role with no permission mapping — zero permissions: all checks
+    for its holders deny (reason ``unauthorized``)."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionDeniedError,
+        PermissionService,
+    )
+
+    service, _, user, _ = _build(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        user_roles=["user"],
+    )
+    for perm in ("mail.send_email", "mail.send_password_reset_email"):
+        assert service.has_permission(user.id, perm) is False
+        try:
+            service.require_permission(user.id, perm)
+            raise AssertionError("expected PermissionDeniedError")
+        except PermissionDeniedError as exc:
+            assert exc.reason == "unauthorized"
+
+
+# --- EDGE-010: concurrent checks and role changes are thread-safe ---
+
+
+def test_concurrent_thread_safe() -> None:
+    """EDGE-010: concurrent checks and role changes from multiple threads are
+    thread-safe; no partial state."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    service, _, user, _ = _build(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        user_roles=["user"],
+    )
+    perm = "mail.send_email"
+    errors: list[BaseException] = []
+
+    def toggler() -> None:
+        try:
+            for i in range(15):
+                if i % 2 == 0:
+                    service.grant_permission("user", perm)
+                else:
+                    service.revoke_permission("user", perm)
+        except BaseException as exc:
+            errors.append(exc)
+
+    def checker() -> None:
+        try:
+            for _ in range(15):
+                service.has_permission(user.id, perm)
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=toggler), threading.Thread(target=toggler), threading.Thread(target=checker)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"unexpected exceptions: {errors}"
+    # No partial state: the final check is consistent with the final grant state.
+    final_grants = service.get_role_permissions("user")
+    assert final_grants <= frozenset({perm})
+    assert service.has_permission(user.id, perm) is (perm in final_grants)
+
+
+# --- EDGE-012: delete_role of a built-in role is protected ---
+
+
+def test_delete_builtin_role_protected() -> None:
+    """EDGE-012: ``delete_role`` of a built-in role raises ``RoleProtectedError``."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+        RoleProtectedError,
+    )
+
+    service, _, _, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        seed_roles=[("admin", True), ("user", True)],
+    )
+    for builtin in ("admin", "user"):
+        try:
+            service.delete_role(builtin)
+            raise AssertionError(f"expected RoleProtectedError for {builtin}")
+        except RoleProtectedError as exc:
+            assert exc.role == builtin
+
+
+# --- EDGE-013: delete_role of a role assigned to any user ---
+
+
+def test_delete_in_use_role() -> None:
+    """EDGE-013: ``delete_role`` of a role assigned to any user raises
+    ``RoleInUseError``."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+        RoleInUseError,
+    )
+
+    from backend.usermanagement import StaticRoleStore
+
+    service, _, _, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        user_roles=["editor"],
+        role_store=StaticRoleStore(("admin", "user", "editor")),
+        seed_roles=[("editor", False)],
+    )
+    try:
+        service.delete_role("editor")
+        raise AssertionError("expected RoleInUseError")
+    except RoleInUseError as exc:
+        assert exc.role == "editor"
+
+
+# --- EDGE-014: create_role of a duplicate role ---
+
+
+def test_create_duplicate_role() -> None:
+    """EDGE-014: ``create_role`` of a duplicate role raises
+    ``RoleAlreadyExistsError``."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+        RoleAlreadyExistsError,
+    )
+
+    service, _, _, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+    )
+    service.create_role("editor")
+    try:
+        service.create_role("editor")
+        raise AssertionError("expected RoleAlreadyExistsError")
+    except RoleAlreadyExistsError as exc:
+        assert exc.role == "editor"
+
+
+# --- EDGE-015: create_role with a malformed name ---
+
+
+def test_create_malformed_name() -> None:
+    """EDGE-015: ``create_role`` with a malformed name (uppercase, > 32 chars)
+    raises ``ValueError``."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    service, _, _, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+    )
+    for malformed in ("Editor", "a" * 33):
+        try:
+            service.create_role(malformed)
+            raise AssertionError(f"expected ValueError for {malformed!r}")
+        except ValueError:
+            pass
+
+
+# --- EDGE-016: grant_permission of an unknown permission ---
+
+
+def test_grant_unknown_permission() -> None:
+    """EDGE-016: ``grant_permission`` of an unknown permission raises
+    ``UnknownPermissionError``."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+        UnknownPermissionError,
+    )
+
+    service, _, _, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        seed_roles=[("user", True)],
+    )
+    try:
+        service.grant_permission("user", "reports.export")
+        raise AssertionError("expected UnknownPermissionError")
+    except UnknownPermissionError as exc:
+        assert exc.permission == "reports.export"
+
+
+# --- EDGE-017: operations on an unknown role ---
+
+
+def test_unknown_role_operations() -> None:
+    """EDGE-017: ``grant_permission`` / ``revoke_permission`` /
+    ``get_role_permissions`` of an unknown role raise ``RoleNotFoundError``."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+        RoleNotFoundError,
+    )
+
+    service, _, _, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+    )
+    for operation in (
+        lambda: service.grant_permission("ghost", "mail.send_email"),
+        lambda: service.revoke_permission("ghost", "mail.send_email"),
+        lambda: service.get_role_permissions("ghost"),
+    ):
+        try:
+            operation()
+            raise AssertionError("expected RoleNotFoundError")
+        except RoleNotFoundError as exc:
+            assert exc.role == "ghost"
+
+
+# --- EDGE-018: revoke_permission of an absent grant is an idempotent no-op ---
+
+
+def test_revoke_absent_idempotent() -> None:
+    """EDGE-018: ``revoke_permission`` of an absent grant is an idempotent no-op."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    service, _, _, _, _ = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        seed_roles=[("user", True)],
+    )
+    # Revoking a grant that was never made is a no-op (no error).
+    service.revoke_permission("user", "mail.send_email")
+    service.revoke_permission("user", "mail.send_email")
+    assert "mail.send_email" not in service.get_role_permissions("user")
+
+
+# --- EDGE-019: grant_permission of an already-granted permission is idempotent ---
+
+
+def test_grant_existing_idempotent() -> None:
+    """EDGE-019: ``grant_permission`` of an already-granted permission is
+    idempotent (no error, no duplicate row)."""
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    service, _, _, _, grant_repo = _build_role(
+        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        seed_roles=[("user", True)],
+    )
+    perm = "mail.send_email"
+    service.grant_permission("user", perm)
+    service.grant_permission("user", perm)  # idempotent: no error
+    # The permission is present...
+    assert perm in service.get_role_permissions("user")
+    # ...and stored exactly once (no duplicate row).
+    rows = [(row.role, row.permission) for row in grant_repo.list_all()]
+    assert rows.count(("user", perm)) == 1

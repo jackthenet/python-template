@@ -507,3 +507,210 @@ def test_denial_log_and_no_token_leak(log_records) -> None:
     assert any("usermanagement.get_user" in _text(r) for r in log_records), "expected the denial to be logged"
     # No log record contains the session token.
     assert all(token not in _text(r) for r in log_records), "session token leaked in the log"
+
+
+def _build_grant_scenario(
+    service_cls,
+    role_repo_cls,
+    grant_repo_cls,
+    system_repo_cls,
+    catalog_cls,
+    *,
+    user_roles,
+    grants=None,
+    username="u1",
+    role_store=None,
+):
+    """Construct a ``PermissionService`` over in-memory repositories for the dynamic-grant tests.
+
+    Returns ``(service, manager, user)``. The catalog registers the ``usermanagement``,
+    ``mail`` and ``settings`` features; ``grants`` is a mapping ``role -> [permissions]``
+    applied to the grant repository (the repository-level grant, so the check's live
+    lookup reads it); ``role_store`` overrides the user manager's role store (needed
+    when the user holds a non-built-in role).
+    """
+    repo = SqliteUserRepository("sqlite:///:memory:")
+    manager = UserManager(repo) if role_store is None else UserManager(repo, role_store=role_store)
+    user = manager.create_user(
+        UserCreate(username=username, email=f"{username}@example.com", password="correct-horse-1", roles=user_roles)
+    )
+
+    catalog = catalog_cls()
+    catalog.register_feature(
+        "usermanagement",
+        {
+            "usermanagement.get_user": "Read a user by id",
+            "usermanagement.delete_user": "Delete a user account",
+        },
+    )
+    catalog.register_feature("mail", {"mail.send_email": "Send an email"})
+    catalog.register_feature(
+        "settings",
+        {
+            "settings.get_value": "Read a setting value",
+            "settings.set_value": "Set a setting value (validated)",
+        },
+    )
+
+    grant_repo = grant_repo_cls()
+    for role, perms in (grants or {}).items():
+        for perm in perms:
+            grant_repo.grant(role, perm)
+
+    system_repo = system_repo_cls()
+    service = service_cls(
+        role_repo_cls(),
+        grant_repo,
+        system_repo,
+        manager,
+        catalog=catalog,
+    )
+    return service, manager, user
+
+
+# --- AC-001: a granted permission is allowed ---
+
+
+def test_granted_permission_allowed() -> None:
+    """AC-001 / REQ-001: a granted permission is allowed.
+
+    Given a user whose role is granted ``usermanagement.get_user``, when
+    ``has_permission(user_id, "usermanagement.get_user")`` is called, then ``True``
+    is returned; when ``require_permission(user_id, "usermanagement.get_user")`` is
+    called, then no exception is raised.
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    service, _, user = _build(
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["user"],
+        grants={"user": ["usermanagement.get_user"]},
+    )
+
+    assert service.has_permission(user.id, "usermanagement.get_user") is True
+    service.require_permission(user.id, "usermanagement.get_user")
+
+
+# --- AC-004: a feature wildcard grant matches every action of the feature ---
+
+
+def test_feature_wildcard_grant() -> None:
+    """AC-004 / REQ-003: a feature wildcard grant matches every action of the feature.
+
+    Given a role granted ``settings.*``, when ``has_permission(user_id,
+    "settings.get_value")`` is called for a holder of that role, then ``True`` is
+    returned; when ``has_permission(user_id, "mail.send_email")`` is called, then
+    ``False`` is returned.
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    service, _, user = _build_grant_scenario(
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["user"],
+        grants={"user": ["settings.*"]},
+    )
+
+    assert service.has_permission(user.id, "settings.get_value") is True
+    assert service.has_permission(user.id, "mail.send_email") is False
+
+
+# --- AC-005: an unknown permission denies and the grant is rejected ---
+
+
+def test_unknown_permission_denied_and_grant_rejected() -> None:
+    """AC-005 / REQ-004: an unknown permission denies and the grant is rejected.
+
+    Given the catalog built at startup, when a check is made for a key not in the
+    catalog (``reports.export``), then the check denies (reason
+    ``unknown_permission``); when ``grant_permission(role, "reports.export")`` is
+    called, then an ``UnknownPermissionError`` is raised.
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionDeniedError,
+        PermissionService,
+        UnknownPermissionError,
+    )
+
+    service, _, user = _build(
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["user"],
+    )
+
+    assert service.has_permission(user.id, "reports.export") is False
+    try:
+        service.require_permission(user.id, "reports.export")
+        raise AssertionError("expected PermissionDeniedError")
+    except PermissionDeniedError as exc:
+        assert exc.reason == "unknown_permission"
+    try:
+        service.grant_permission("user", "reports.export")
+        raise AssertionError("expected UnknownPermissionError")
+    except UnknownPermissionError:
+        pass
+
+
+# --- AC-011: the multi-role union of permissions ---
+
+
+def test_multi_role_union_of_permissions() -> None:
+    """AC-011 / REQ-009: the effective permission set is the union of the roles' grants.
+
+    Given a user with roles ``[a, b]`` where ``a`` is granted ``p1`` and ``b`` is
+    granted ``p2``, when ``has_permission`` is called for ``p1`` and for ``p2``,
+    then both return ``True`` (union).
+    """
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
+    )
+
+    from backend.usermanagement import StaticRoleStore
+
+    service, _, user = _build_grant_scenario(
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["a", "b"],
+        grants={"a": ["usermanagement.get_user"], "b": ["mail.send_email"]},
+        role_store=StaticRoleStore(("admin", "user", "a", "b")),
+    )
+
+    p1 = "usermanagement.get_user"
+    p2 = "mail.send_email"
+    assert service.has_permission(user.id, p1) is True
+    assert service.has_permission(user.id, p2) is True
+    # A permission granted to neither role is not in the union.
+    assert service.has_permission(user.id, "usermanagement.delete_user") is False
