@@ -123,7 +123,7 @@
         "The public API is exported (NFR-003 contract)."
       ],
       "dependencies": [],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-004",
