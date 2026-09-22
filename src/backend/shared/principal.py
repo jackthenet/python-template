@@ -51,24 +51,26 @@ class PermissionChecker(Protocol):
 def requires_permission(permission_key: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator for enforced service methods (D13, REQ-024/REQ-025; ADR-071).
 
-    The wrapper (1) resolves the wrapped method's trailing ``principal``
-    parameter (the parameter named ``principal``; default ``Principal()`` = the
-    system principal), (2) calls
-    ``self._permission_service.require_permission(principal.user_id,
-    permission_key, session_token=principal.session_token)`` at entry — a no-op
-    when ``self._permission_service is None`` (standalone mode, no enforcement)
-    — and (3) invokes the wrapped method. A denial raises and propagates: the
-    method body never runs. The decorator never imports ``backend.permissions``
-    (it calls the injected checker and lets the denial propagate; ADR-070).
+    The wrapper resolves the owning instance's injected checker
+    (``self._permission_service``); when a checker is present, it resolves the
+    wrapped method's trailing ``principal`` parameter (the parameter named
+    ``principal``; default ``Principal()`` = the system principal) and calls
+    ``checker.require_permission(principal.user_id, permission_key,
+    session_token=principal.session_token)`` at entry, before invoking the
+    wrapped method. A denial raises and propagates: the method body never
+    runs. When ``self._permission_service is None`` (standalone mode, no
+    enforcement), the wrapped method is invoked directly, with no principal
+    resolution. The decorator never imports ``backend.permissions`` (it calls
+    the injected checker and lets the denial propagate; ADR-070).
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            principal = _resolve_principal(func, args, kwargs)
             instance = args[0] if args else kwargs.get("self")
-            checker = getattr(instance, "_permission_service", None) if instance is not None else None
+            checker = getattr(instance, "_permission_service", None)
             if checker is not None:
+                principal = _resolve_principal(func, args, kwargs)
                 checker.require_permission(principal.user_id, permission_key, session_token=principal.session_token)
             return func(*args, **kwargs)
 
