@@ -154,3 +154,23 @@ It is not an ISSUE (no deviation from approved spec behavior), not a REFACTOR
 
 - **TDD evidence:** all 77 tests are RED before implementation (Phase 4 turns them GREEN per task).
 - **Traceability:** `docs/verification/traceability.md` — new "User Roles & Permissions Matrix" section (40 AC + 6 INV + 26 EDGE + 5 NFR rows + the REQ-024 per-feature wiring tests, all RED).
+
+### Phase 4: Implement — IN PROGRESS
+
+Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task, repeated per task in the DAG).
+
+#### T-001 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-001 "shared enforcement plumbing (Principal, PermissionChecker protocol, requires_permission decorator)" — REQ-025, AC-032.
+- **Ready:** confirmed — `dependencies: []` (no dependencies; T-001 is ready).
+- **RED command (targeted — the task's 2 tests, from the DAG):**
+  `uv run pytest tests/acceptance/permissions/test_enforcement.py::test_principal_defaults_and_fields tests/unit/permissions/test_enforcement_plumbing.py::test_requires_permission_decorator -v`
+- **Result:** **2 failed, 0 passed** — RED confirmed before implementation.
+- **Failure mode per test** (the established RED pattern for this change — deferred import of the unimplemented shared enforcement plumbing, in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/permissions/test_enforcement.py::test_principal_defaults_and_fields` | ModuleNotFoundError: No module named 'backend.shared' | `tests/acceptance/permissions/test_enforcement.py:75` |
+| `tests/unit/permissions/test_enforcement_plumbing.py::test_requires_permission_decorator` | ModuleNotFoundError: No module named 'backend.shared' | `tests/unit/permissions/test_enforcement_plumbing.py:58` |
+
+- **Next:** S4.2 (T-001) — implement the shared enforcement plumbing in `src/backend/shared/` and confirm GREEN.
