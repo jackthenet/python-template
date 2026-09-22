@@ -268,3 +268,21 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Ruff (changed paths):** `uv run ruff check src/backend/permissions/{__init__,catalog,errors,events,feature_settings,models,repositories,service}.py` → All checks passed (after in-step `ruff check --fix` + manual fixes on the changed paths only: `__all__` sorted (RUF022), import order (I001), ternary (SIM108), `# noqa: PLR0917` on the spec-mandated 8-dependency `PermissionService.__init__` signature (D19)).
 - **In-scope note (foundation smoke, not a gate):** catalog validation (malformed key / wrong feature / duplicate → `ValueError`), the in-memory repositories (add/duplicate → `RoleAlreadyExistsError`, grant/revoke idempotency, atomic system-set replace), and the SQLite repositories (same behavior on a temp file; `delete` cascades to grants) were smoke-verified in-step.
 - **Next:** S4.3 (T-003) — ruff gate on the changed paths.
+
+#### T-004 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-004 "permissions check core (has_permission/require_permission, fail-closed, admin wildcard, multi-role union, session validation, system principal, tracing, singleton)" — REQ-001, REQ-002, REQ-003, REQ-009, REQ-010, REQ-011, REQ-014, REQ-015, REQ-016, REQ-017, REQ-018, REQ-020, REQ-023, REQ-027, REQ-028; AC-002, AC-003, AC-012, AC-013, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-039.
+- **Ready:** confirmed — `dependencies: ['T-002', 'T-003']`; both **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-002 usermanagement multi-role amendment; T-003 permissions foundation). T-004 is `PENDING` → ready.
+- **RED command (targeted — the task's 27 tests, from the DAG; the DAG's `::` shorthand in the directory part is rejected by pytest, so run with real file paths):**
+  `uv run pytest tests/acceptance/permissions/test_check_api.py::{10 tests} tests/acceptance/permissions/test_system_principal.py::test_system_principal_check_and_set tests/property/permissions/test_invariants.py::{3 tests} tests/unit/permissions/test_edge_cases.py::{13 tests} -v`
+- **Result:** **27 failed, 0 passed, 0 collection errors** — RED confirmed before implementation (all 27 collected cleanly; every failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Failure mode per test** (the established RED pattern for this change — deferred import of the unimplemented check core, in the test body, not a setup/collection error):
+
+| Failure mode | Count | Meaning |
+|---|---|---|
+| `AttributeError: 'PermissionService' object has no attribute 'has_permission'` | 7 | the check core is not implemented (the expected RED signal) |
+| `pydantic_core.ValidationError` (`UserCreate`: `username` must match `^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$`, `input_value='u1'`) | 19 | **test data issue** — the `_build` helper's default `username="u1"` (2 chars) is too short for `UserCreate`'s 3–32 char pattern; user creation fails before the check is reached |
+| `ValueError: permission key 'read' is malformed (expected feature.action)` | 1 | the fail-closed check is triggered on a malformed permission (expected behavior, but the test still fails because the check core is not implemented) |
+
+- **⚠ In-scope note (test data, not a RED defect — will block GREEN):** 19 of the 27 tests use the `_build` helper's default `username="u1"` (and `test_check_api.py` also constructs `username="u2"`), which is **2 chars** and fails `UserCreate`'s username validation (`^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$` = 3–32 chars, `src/backend/usermanagement/models.py:22`). These 19 tests fail at **user creation**, before the `has_permission`/`require_permission` call. **This will block GREEN for S4.2** even after the check core is implemented, because the user creation will still raise `ValidationError`. The test data must be fixed (e.g., `username="user1"`/`"admin1"` — 3+ chars) within the change (S4.2 or a test-data step) — no test file was modified in S4.1 (step rule: only the verification file is touched).
+- **Next:** S4.2 (T-004) — implement the permissions check core (has_permission/require_permission, fail-closed, admin wildcard, multi-role union, session validation, system principal, tracing, singleton) and confirm GREEN.
