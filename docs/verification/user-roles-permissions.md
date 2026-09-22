@@ -192,3 +192,23 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 
 - **Ruff (changed paths):** `uv run ruff check src/backend/shared/principal.py src/backend/shared/__init__.py` → All checks passed; `uv run ruff format --check` on the same paths → 2 files already formatted (after an in-step `ruff format` on the new files; GREEN re-confirmed after the format change).
 - **Next:** S4.3 (T-001) — ruff gate on the changed paths.
+
+#### T-002 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-002 "usermanagement multi-role amendment (User.roles list, RoleStore, set_roles/add_role/remove_role, last-admin guard on all paths, member→user rename, data migration)" — REQ-013, REQ-026; AC-033, AC-034, AC-035, AC-036, AC-037.
+- **Ready:** confirmed — `dependencies: []` (no dependencies; T-002 is ready).
+- **RED command (targeted — the task's 6 tests, from the DAG; the DAG's `::` shorthand in the directory part is rejected by pytest, so run with real file paths):**
+  `uv run pytest tests/acceptance/usermanagement/test_multi_role.py::test_create_user_with_roles_list tests/acceptance/usermanagement/test_multi_role.py::test_add_remove_set_roles tests/acceptance/usermanagement/test_multi_role.py::test_migration_member_to_user_and_role_list tests/acceptance/usermanagement/test_multi_role.py::test_last_admin_guard_all_paths tests/acceptance/usermanagement/test_multi_role.py::test_role_events_carry_lists tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant -v`
+- **Result:** **6 failed, 0 passed** — RED confirmed before implementation.
+- **Failure mode per test** (the established RED pattern for this task — `ValidationError`/`AttributeError` on the pre-amendment model in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/usermanagement/test_multi_role.py::test_create_user_with_roles_list` | ValidationError: 1 validation error for UserCreate (pre-amendment model requires `role`; `roles` not accepted) | `tests/acceptance/usermanagement/test_multi_role.py:81` |
+| `tests/acceptance/usermanagement/test_multi_role.py::test_add_remove_set_roles` | ValidationError: 1 validation error for UserCreate | `tests/acceptance/usermanagement/test_multi_role.py:104` |
+| `tests/acceptance/usermanagement/test_multi_role.py::test_migration_member_to_user_and_role_list` | ValidationError: 1 validation error for UserCreate | `tests/acceptance/usermanagement/test_multi_role.py:263` |
+| `tests/acceptance/usermanagement/test_multi_role.py::test_last_admin_guard_all_paths` | AttributeError: 'UserRead' object has no attribute 'roles'. Did you mean: 'role'? | `tests/acceptance/usermanagement/test_multi_role.py` (UserRead attribute access) |
+| `tests/acceptance/usermanagement/test_multi_role.py::test_role_events_carry_lists` | ValidationError: 1 validation error for UserCreate | `tests/acceptance/usermanagement/test_multi_role.py:225` |
+| `tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant` | ValidationError: 1 validation error for UserCreate | `tests/property/usermanagement/test_multi_role_invariants.py:36` |
+
+- **Next:** S4.2 (T-002) — implement the usermanagement multi-role amendment (User.roles list, RoleStore, set_roles/add_role/remove_role, last-admin guard on all paths, member→user rename, alembic data migration) and confirm GREEN.
