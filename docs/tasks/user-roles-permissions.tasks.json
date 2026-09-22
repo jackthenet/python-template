@@ -84,7 +84,7 @@
         "The alembic data migration applies cleanly to a fresh and an existing database."
       ],
       "dependencies": [],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-003",
