@@ -61,6 +61,11 @@ def _grant_matches(grant: str, perm: str) -> bool:
     return False
 
 
+def _any_grant_matches(grants: Iterable[str], perm: str) -> bool:
+    """Whether any grant key in ``grants`` matches ``perm`` (exact, or a ``<feature>.*`` wildcard)."""
+    return any(_grant_matches(grant, perm) for grant in grants)
+
+
 # Default persistence wiring of the module singleton (D19): the common
 # persistence root ``./data/`` (ADR-056 layout convention), one database per
 # feature.
@@ -180,14 +185,14 @@ class PermissionService:
         if user is None:
             # System principal (D10): the configurable system set (live read).
             system_set = self._system_repository.get_permissions()
-            return None if any(_grant_matches(g, permission) for g in system_set) else "unauthorized"
+            return None if _any_grant_matches(system_set, permission) else "unauthorized"
         # Admin implicit wildcard (REQ-010): every catalog permission, no explicit grant.
         if "admin" in user.roles:
             return None
         # Multi-role union of explicit grants (REQ-009), including feature wildcards (REQ-003).
         for role in user.roles:
             grants = self._grant_repository.get_role_permissions(role)
-            if any(_grant_matches(g, permission) for g in grants):
+            if _any_grant_matches(grants, permission):
                 return None
         return "unauthorized"
 

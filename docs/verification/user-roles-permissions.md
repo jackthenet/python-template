@@ -312,3 +312,22 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Ruff (changed source path):** `uv run ruff check src/backend/permissions/service.py` → All checks passed.
 - **Completion gates (T-004):** acceptance tests for AC-002, AC-003, AC-012, AC-013, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-039 pass (11 acceptance tests GREEN); property tests for INV-001, INV-002, INV-005 pass (3 property tests GREEN); unit edge tests for EDGE-001, EDGE-002, EDGE-003, EDGE-004, EDGE-005, EDGE-006, EDGE-007, EDGE-009, EDGE-011, EDGE-020, EDGE-021, EDGE-024, EDGE-025 pass (13 unit tests GREEN); the check is fail-closed (INV-002 — `test_undeterminable_never_true` GREEN).
 - **Next:** S4.3 (T-004) — ruff gate on the changed paths.
+
+#### T-004 — S4.4 Refactor (keep GREEN) — GREEN MAINTAINED
+
+- **Task:** T-004 "permissions check core (has_permission/require_permission, fail-closed, admin wildcard, multi-role union, session validation, system principal, tracing, singleton)" — REQ-001, REQ-002, REQ-003, REQ-009, REQ-010, REQ-011, REQ-014, REQ-015, REQ-016, REQ-017, REQ-018, REQ-020, REQ-023, REQ-027, REQ-028; AC-002, AC-003, AC-012, AC-013, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-039.
+- **Pre-refactor baseline:** the task's 27 targeted tests GREEN at HEAD (`d1f88ed`), re-confirmed in-step before the refactor (27 passed, 0 failed).
+- **Structure review of the T-004 implementation (`src/backend/permissions/service.py`, the only file T-004 touched):**
+  - `_check` — one early return per denial reason is **intentional** (closed reason set, D12; `# noqa: PLR0911` documented in the docstring); restructuring would obscure the fail-closed order (ADR-075). Kept.
+  - `has_permission` / `require_permission` — 5-line public API surface sharing `_check` + `_deny`; the only delta is the tail action (return `False` vs raise `PermissionDeniedError`). Extraction would add indirection without clarity. Kept.
+  - `_lookup_user` / `_validate_session` / `_deny` / `_is_valid_grant_key` — small, clear, no dead code, docstrings aligned with the module's style (REQ/ADR/EDGE citations). Kept.
+  - **Duplication found and fixed:** the predicate `any(_grant_matches(g, permission) for g in ...)` appeared at **two** call sites in `_check` (the system-principal branch and the multi-role union loop).
+- **Refactor (behavior-preserving, no test changes, no behavior change):**
+  - Extracted the module-level helper `_any_grant_matches(grants: Iterable[str], perm: str) -> bool` (next to `_grant_matches`, untraced, consistent with the existing helper style).
+  - Both call sites in `_check` now use the helper: `return None if _any_grant_matches(system_set, permission) else "unauthorized"` (system principal, D10) and `if _any_grant_matches(grants, permission): return None` (multi-role union, REQ-009).
+  - Net diff: +6 lines (helper), 2 call-site lines simplified. No signature, ordering, or denial-reason changes.
+- **GREEN command (targeted — the task's 27 tests, re-run after the refactor):**
+  `uv run pytest tests/acceptance/permissions/test_check_api.py::{10 tests} tests/acceptance/permissions/test_system_principal.py::test_system_principal_check_and_set tests/property/permissions/test_invariants.py::{3 tests} tests/unit/permissions/test_edge_cases.py::{13 tests} -q`
+- **Result:** **27 passed, 0 failed, 0 errors** — GREEN maintained after the refactor (pytest 9.1.1, Python 3.14.5, `win32`).
+- **Ruff (changed path):** `uv run ruff check src/backend/permissions/service.py` → All checks passed.
+- **Next:** S4.5 (T-004) — commit + update status (VERIFIED).
