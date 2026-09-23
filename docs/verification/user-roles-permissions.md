@@ -376,3 +376,26 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Completion gates (T-005):** acceptance tests for AC-001, AC-004, AC-005, AC-007, AC-008, AC-009, AC-010, AC-011, AC-038 pass (9 acceptance/integration tests GREEN); property tests for INV-004, INV-006 pass (2 property tests GREEN); unit edge tests for EDGE-008, EDGE-010, EDGE-012, EDGE-013, EDGE-014, EDGE-015, EDGE-016, EDGE-017, EDGE-018, EDGE-019 pass (10 unit tests GREEN); grants are idempotent (EDGE-018, EDGE-019 — `test_revoke_absent_idempotent` / `test_grant_existing_idempotent` GREEN).
 - **Regression note:** the broader permissions suite (`tests/acceptance/permissions tests/unit/permissions tests/property/permissions tests/integration/permissions`) shows 14 failed / 52 passed — **all 14 failures are pre-existing RED for other tasks** (T-006 assignment pass-throughs / events / settings-alias-sync / in-memory singleton; T-007 migration; T-008 / T-011 enforcement wiring; T-014 composition root) — none are T-005 tests, and none are T-003 / T-004 tests (those all pass among the 52). No T-005 change regressed a previously-GREEN test.
 - **Next:** S4.3 (T-005) — ruff gate on the changed paths.
+
+#### T-005 — S4.4 Refactor (keep GREEN) — GREEN MAINTAINED
+
+- **Task:** T-005 "permissions role CRUD + dynamic grants (create_role/delete_role + guards, grant/revoke, idempotency, role events)" — REQ-006, REQ-007, REQ-008, REQ-020; AC-001, AC-004, AC-005, AC-007, AC-008, AC-009, AC-010, AC-011, AC-038.
+- **Pre-refactor baseline:** the task's 21 targeted tests GREEN at HEAD (`9fbb901`) — confirmed in the S4.3 handoff (21/21); no pending source changes in the working tree before the refactor.
+- **Structure review of the T-005 implementation (`src/backend/permissions/service.py` — the role CRUD + dynamic grants; `models.py` / `repositories.py` unchanged in this step):**
+  - `create_role` / `delete_role` / `grant_permission` / `revoke_permission` / `get_role_permissions` — guard order, exception types/messages, and event payloads all aligned with the spec (REQ-006/007/008, ADR-074/075). Kept.
+  - `_role_known` / `_role_assigned_to_any_user` / `_is_valid_grant_key` — small, clear, no dead code, docstrings aligned with the module's style (REQ/ADR citations). Kept.
+  - **Duplication found and fixed (3 patterns):**
+    1. The 4-field `RoleRead(...)` construction of a stored `Role` row appeared at **two** call sites (`create_role`, `list_roles`).
+    2. The grant/revoke validation preamble (catalog-key check → `UnknownPermissionError`; role-known check → `RoleNotFoundError`) appeared at **two** call sites (`grant_permission`, `revoke_permission`).
+    3. The optional-publisher guard `if self._event_bus is not None: self._event_bus.publish(...)` appeared at **five** call sites (`create_role`, `delete_role`, `grant_permission`, `revoke_permission`, `_deny`).
+- **Refactor (behavior-preserving, no test changes, no behavior change):**
+  - Extracted the module-level helper `_to_role_read(stored: Role) -> RoleRead` (next to `_any_grant_matches`, untraced, consistent with the existing helper style).
+  - Extracted the private method `_validate_grant(role, permission) -> None` (role section, untraced) centralizing the grant/revoke target-validation contract.
+  - Extracted the private method `_publish(event: object) -> None` (untraced; a no-op when no event bus is injected, AC-025).
+  - All call sites now use the helpers; no signature, ordering, exception, or event-payload changes. The new helpers are private, so `@logged_class` skips them (tracing unchanged).
+  - Net diff: +33 / −33 lines (helpers + simplified call sites).
+- **GREEN command (targeted — the task's 21 tests, re-run after the refactor):**
+  `uv run pytest tests/acceptance/permissions/test_check_api.py::{4 tests} tests/acceptance/permissions/test_role_management.py::{4 tests} tests/integration/permissions/test_thread_safety.py::test_concurrent_checks_and_changes tests/property/permissions/test_invariants.py::{2 tests} tests/unit/permissions/test_edge_cases.py::{10 tests} -v`
+- **Result:** **21 passed, 0 failed, 0 errors** — GREEN maintained after the refactor (pytest 9.1.1, Python 3.14.5, `win32`).
+- **Ruff (changed paths):** `uv run ruff check src/backend/permissions/service.py src/backend/permissions/models.py src/backend/permissions/repositories.py` → All checks passed.
+- **Next:** S4.5 (T-005) — commit + update status (VERIFIED).

@@ -41,7 +41,7 @@ from backend.permissions.errors import (
     UnknownPermissionError,
 )
 from backend.permissions.events import PermissionDenied, RoleCreated, RoleDeleted, RolePermissionsChanged
-from backend.permissions.models import BUILTIN_ROLES, RoleRead, SessionLookup
+from backend.permissions.models import BUILTIN_ROLES, Role, RoleRead, SessionLookup
 from backend.permissions.repositories import (
     GrantRepository,
     RoleRepository,
@@ -76,6 +76,16 @@ def _grant_matches(grant: str, perm: str) -> bool:
 def _any_grant_matches(grants: Iterable[str], perm: str) -> bool:
     """Whether any grant key in ``grants`` matches ``perm`` (exact, or a ``<feature>.*`` wildcard)."""
     return any(_grant_matches(grant, perm) for grant in grants)
+
+
+def _to_role_read(stored: Role) -> RoleRead:
+    """The read-only representation of a stored role row."""
+    return RoleRead(
+        role=stored.role,
+        description=stored.description,
+        is_builtin=stored.is_builtin,
+        created_at=stored.created_at,
+    )
 
 
 # Default persistence wiring of the module singleton (D19): the common
@@ -178,26 +188,12 @@ class PermissionService:
         created = self._role_repository.get(role)
         if created is None:  # defensive: the add above guarantees presence
             raise RoleNotFoundError(role)
-        if self._event_bus is not None:
-            self._event_bus.publish(RoleCreated(role=role))
-        return RoleRead(
-            role=created.role,
-            description=created.description,
-            is_builtin=created.is_builtin,
-            created_at=created.created_at,
-        )
+        self._publish(RoleCreated(role=role))
+        return _to_role_read(created)
 
     def list_roles(self) -> list[RoleRead]:
         """All roles (REQ-006)."""
-        return [
-            RoleRead(
-                role=stored.role,
-                description=stored.description,
-                is_builtin=stored.is_builtin,
-                created_at=stored.created_at,
-            )
-            for stored in self._role_repository.list_all()
-        ]
+        return [_to_role_read(stored) for stored in self._role_repository.list_all()]
 
     def delete_role(self, role: str) -> None:
         """Delete a role (and its grants) with the deletion guards (REQ-007).
@@ -214,8 +210,7 @@ class PermissionService:
         if self._role_assigned_to_any_user(role):
             raise RoleInUseError(role)
         self._role_repository.delete(role)
-        if self._event_bus is not None:
-            self._event_bus.publish(RoleDeleted(role=role))
+        self._publish(RoleDeleted(role=role))
 
     def grant_permission(self, role: str, permission: str) -> None:
         """Grant ``permission`` to ``role`` (REQ-008; idempotent — no duplicate row).
@@ -224,13 +219,9 @@ class PermissionService:
         unknown key raises :class:`UnknownPermissionError`); an unknown role
         raises :class:`RoleNotFoundError`.
         """
-        if not self._is_valid_grant_key(permission):
-            raise UnknownPermissionError(permission)
-        if not self._role_known(role):
-            raise RoleNotFoundError(role)
+        self._validate_grant(role, permission)
         self._grant_repository.grant(role, permission)
-        if self._event_bus is not None:
-            self._event_bus.publish(RolePermissionsChanged(role=role, added=[permission], removed=[]))
+        self._publish(RolePermissionsChanged(role=role, added=[permission], removed=[]))
 
     def revoke_permission(self, role: str, permission: str) -> None:
         """Revoke ``permission`` from ``role`` (REQ-008; idempotent no-op when absent).
@@ -239,14 +230,10 @@ class PermissionService:
         unknown key raises :class:`UnknownPermissionError`); an unknown role
         raises :class:`RoleNotFoundError`.
         """
-        if not self._is_valid_grant_key(permission):
-            raise UnknownPermissionError(permission)
-        if not self._role_known(role):
-            raise RoleNotFoundError(role)
+        self._validate_grant(role, permission)
         if permission in self._grant_repository.get_role_permissions(role):
             self._grant_repository.revoke(role, permission)
-            if self._event_bus is not None:
-                self._event_bus.publish(RolePermissionsChanged(role=role, added=[], removed=[permission]))
+            self._publish(RolePermissionsChanged(role=role, added=[], removed=[permission]))
 
     def get_role_permissions(self, role: str) -> frozenset[str]:
         """The role's explicit grants (REQ-008); an unknown role raises
@@ -254,6 +241,15 @@ class PermissionService:
         if not self._role_known(role):
             raise RoleNotFoundError(role)
         return self._grant_repository.get_role_permissions(role)
+
+    def _validate_grant(self, role: str, permission: str) -> None:
+        """Validate a grant/revoke target (REQ-008): the permission must be a catalog action or
+        a feature wildcard (an unknown key raises :class:`UnknownPermissionError`); an unknown
+        role raises :class:`RoleNotFoundError`."""
+        if not self._is_valid_grant_key(permission):
+            raise UnknownPermissionError(permission)
+        if not self._role_known(role):
+            raise RoleNotFoundError(role)
 
     def _role_known(self, role: str) -> bool:
         """Whether ``role`` is a known role (a built-in role, or a row in the roles table).
@@ -351,8 +347,12 @@ class PermissionService:
             permission,
             reason,
         )
+        self._publish(PermissionDenied(user_id=user_id, permission=permission, reason=reason))
+
+    def _publish(self, event: object) -> None:
+        """Publish ``event`` when an event bus is injected (a no-op otherwise, AC-025)."""
         if self._event_bus is not None:
-            self._event_bus.publish(PermissionDenied(user_id=user_id, permission=permission, reason=reason))
+            self._event_bus.publish(event)
 
     def _is_valid_grant_key(self, permission: str) -> bool:
         """Whether ``permission`` is a valid grant key (a catalog action or a feature wildcard, D18)."""
