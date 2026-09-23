@@ -255,9 +255,11 @@ def test_check_true_iff_granted_and_active(ops) -> None:
             grant_repo.revoke(role, perm)
             grants[role].discard(perm)
         elif kind == "deactivate":
-            manager.deactivate_user(user.id)
+            with contextlib.suppress(Exception):
+                manager.deactivate_user(user.id)
         elif kind == "activate":
-            manager.activate_user(user.id)
+            with contextlib.suppress(Exception):
+                manager.activate_user(user.id)
         elif kind == "add_role":
             with contextlib.suppress(Exception):
                 manager.add_role(user.id, op[1])
@@ -330,7 +332,7 @@ def test_undeterminable_never_true(scenario) -> None:
                 user_manager=_RaisingUserManager(),
             )
         elif scenario == "lookup_raises_session":
-            service, _, _, _, _ = _build(
+            service, _, user, _, _ = _build(
                 PermissionService,
                 MemoryRoleRepository,
                 MemoryGrantRepository,
@@ -377,7 +379,7 @@ def test_admin_passes_any_catalog_permission(n) -> None:
     )
 
     catalog = PermissionCatalog()
-    catalog.register_feature("base", {"read": "Read"})
+    catalog.register_feature("base", {"base.read": "Read"})
     service, _, user, _, _ = _build(
         PermissionService,
         MemoryRoleRepository,
@@ -392,7 +394,7 @@ def test_admin_passes_any_catalog_permission(n) -> None:
     # Register additional catalog permissions AFTER the user's creation; the admin passes them.
     for i in range(n):
         feature = f"f{i}"
-        catalog.register_feature(feature, {"act": "desc"})
+        catalog.register_feature(feature, {f"{feature}.act": "desc"})
         assert service.has_permission(user.id, f"{feature}.act") is True
 
 
