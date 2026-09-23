@@ -757,3 +757,21 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 |---|---|---|
 | `tests/acceptance/mail/test_enforcement_wiring.py::test_mail_enforcement_wiring` | `AssertionError: MailService.send_email: trailing parameter is 'context', expected 'principal'` — the trailing `principal: Principal = Principal()` parameter is not yet added to the public `MailService` methods (T-012 implementation step 1); the ADR-071 contract (last parameter named `principal` with a default) is not yet satisfied | `tests/acceptance/mail/test_enforcement_wiring.py:117` |
 - **Next:** S4.2 (T-012) — implement the mail enforcement wiring (trailing principal parameter on all 3 public `MailService` methods + @requires_permission with the `mail.<method>` keys, optional `permission_service: PermissionChecker | None = None` constructor parameter, feature-owned `feature_actions.py` declaring the mail catalog actions) and confirm GREEN.
+
+#### T-012 — S4.2 Implement + confirm GREEN — GREEN CONFIRMED
+
+- **Task:** T-012 "mail enforcement wiring (principal param + @requires_permission + permission_service constructor + feature_actions)" — REQ-024 (no AC — per-feature test gate).
+- **Implementation (per DAG task T-012, ADR-071/ADR-070/B008/AC-031 — same pattern as T-008/T-009/T-010/T-011):**
+  - `src/backend/mail/service.py`: imported `PermissionChecker`, `Principal`, `requires_permission` from `backend.shared`; added the module-level `_SYSTEM_PRINCIPAL = Principal()` singleton (ADR-071 / B008 — the default trailing principal is the system principal, EDGE-022); added the optional `permission_service: PermissionChecker | None = None` constructor parameter (saved to `self._permission_service`; `None` = standalone mode with no enforcement, AC-031); added the trailing `principal: Principal = _SYSTEM_PRINCIPAL` parameter to **all 3 public `MailService` methods** (`send_email`, `send_password_reset_email`, `send_email_verification_email`); applied `@requires_permission("mail.<method>")` to each (permission keys `mail.send_email`, `mail.send_password_reset_email`, `mail.send_email_verification_email` — the mail exempt set is empty, spec Section 3).
+  - `src/backend/mail/feature_actions.py` (new): feature-owned `register_actions(catalog)` declaring the 3 `mail.<method>` actions via `catalog.register_feature("mail", [...])`; the `PermissionCatalog` import is `TYPE_CHECKING` only (ADR-070 — the feature never imports `backend.permissions` at runtime).
+  - `src/backend/mail/__init__.py`: exports `register_actions` in the public API + `__all__` (same as the T-008/T-010 `__init__` pattern).
+- **GREEN command (targeted — the task's 1 test, from the DAG):** `uv run pytest tests/acceptance/mail/test_enforcement_wiring.py::test_mail_enforcement_wiring -v`.
+- **Result:** **1 passed, 0 failed, 0 collection errors** — GREEN confirmed after implementation.
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/acceptance/mail/test_enforcement_wiring.py::test_mail_enforcement_wiring` (REQ-024 / ADR-071) | **PASSED** | the T-012 mail enforcement wiring is implemented — the ADR-071 contract is satisfied: all 3 public methods take the trailing `principal` (default = the system principal, `user_id=None`/`session_token=None`); the deny checker's denial propagates to the caller with the `mail.<method>` keys recorded in order; the allow path proceeds (the fake transport received the message) evaluating the default principal as the system principal (EDGE-022); an explicit `Principal(user_id, session_token)` reaches the check; the constructor's `permission_service` defaults to `None` (standalone, AC-031); `feature_actions.register_actions` declares the 3 mail catalog actions |
+- **Regression check (the enforcement wiring must not break existing mail tests):** `uv run pytest tests/acceptance/mail/ tests/unit/mail/ tests/integration/mail/ tests/contract/mail/ tests/property/mail/ -v` → **40 passed, 0 failed** with the change (includes the targeted T-012 test). No previously-GREEN mail test regressed.
+- **Ruff (T-012 paths):** `uv run ruff check src/backend/mail/service.py src/backend/mail/feature_actions.py src/backend/mail/__init__.py` → **All checks passed!**; `uv run ruff format --check` on the same paths → **3 files already formatted**.
+- **Next:** S4.3 (T-012) — Ruff gate on the changed paths.
