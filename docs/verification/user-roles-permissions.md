@@ -472,3 +472,24 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Smoke (permissions test directories — NOT a gate; the full suite is the Phase 5 gate):** `tests/unit/permissions tests/acceptance/permissions tests/integration/permissions tests/property/permissions` → 60 passed, 6 failed — **all 6 pre-existing RED for PENDING tasks** (T-007 `test_migration_seeds_roles_and_system_set`; enforcement wiring `test_enforcement.py::test_exempt_login_no_check` / `test_enforced_method_denies_without_permission` / `test_standalone_mode_no_check`, `test_edge_cases.py::test_login_before_permissions`; catalog `test_check_api.py::test_initial_catalog_exactly_60_keys`) — confirmed pre-existing by re-running them without the refactor (identical failures); none are T-006 tests.
 - **Ruff:** `uv run ruff check src/backend/permissions/service.py` → **All checks passed!**; `uv run ruff format --check src/backend/permissions/service.py` → **1 file already formatted** (clean on the changed path).
 - **Next:** S4.5 (T-006) — commit + update status.
+
+#### T-007 — S4.1 Pick task + confirm RED — RED CONFIRMED (partial — 1 of 2 tests RED)
+
+- **Task:** T-007 "permissions persistence (alembic migration for roles/grants/system tables + seeds) + performance contract" — REQ-022, REQ-029; AC-027, AC-040.
+- **Ready:** confirmed — `dependencies: ['T-003', 'T-004']`; both **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-003 permissions foundation; T-004 permissions check core). T-007 is `PENDING` → ready.
+- **RED command (targeted — the task's 2 tests, from the DAG; the DAG's `::` shorthand in the directory part is rejected by pytest, so run with real file paths):**
+  `uv run pytest tests/integration/permissions/test_persistence.py::test_migration_seeds_roles_and_system_set tests/contract/permissions/test_performance.py::test_check_latency_under_5ms_median -v`
+- **Result:** **1 failed, 1 passed, 0 collection errors** — RED confirmed before implementation (both tests collected cleanly; the failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/integration/permissions/test_persistence.py::test_migration_seeds_roles_and_system_set` (AC-027 / REQ-022) | **FAILED** (behavior) | the T-007 alembic migration is not implemented — the expected RED signal |
+| `tests/contract/permissions/test_performance.py::test_check_latency_under_5ms_median` (AC-040 / NFR-001 / REQ-029) | **PASSED** (stable — 4/4 runs) | the performance contract is already satisfied by the T-004 check core + the T-003 SQLite repositories (the `create_all` bootstrap creates the tables, so the missing migration does not break this test) — not RED |
+- **Failure mode of the RED test** (the established RED pattern for this change — the missing migration, in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/integration/permissions/test_persistence.py::test_migration_seeds_roles_and_system_set` | AssertionError: expected the permissions tables after the migration, got `['alembic_version']` (only the usermanagement multi-role migration `eace2f772150` is applied; `roles` / `role_permissions` / `system_principal_permissions` are absent, so their seeds — the built-in roles `admin`/`user` and the bootstrap system set — are absent too) | `tests/integration/permissions/test_persistence.py:160` |
+- **⚠ In-scope note (performance test already GREEN — not a RED defect, not an implementation defect):** `test_check_latency_under_5ms_median` already passes before the T-007 implementation: the check core (T-004) + the SQLite repositories (T-003, `create_all` bootstrap) satisfy NFR-001 (median < 5 ms, measured against a local SQLite database with the shared logging feature at default INFO and the synchronous console sink active). The T-007 S4.2 GREEN gate (both tests) therefore only requires the migration test to turn GREEN; the performance test must stay GREEN (re-verified in S4.2).
+- **Next:** S4.2 (T-007) — create the alembic migration for the `roles` / `role_permissions` / `system_principal_permissions` tables (SQLModel/SQLite) + the seeds (built-in roles `admin`/`user`, both `is_builtin=True`; the bootstrap system set) and confirm GREEN.
