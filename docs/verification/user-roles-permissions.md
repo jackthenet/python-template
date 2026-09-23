@@ -515,3 +515,20 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Idempotency verification (beyond the targeted tests):** ORM-first path checked manually — a database whose permissions tables were bootstrapped by `SQLModel.metadata.create_all` (repositories opened before the migration) survives `alembic upgrade head` (no failure on the existing tables), the chain applies `eace2f772150 → d94b7f2e6a31`, the seeds land (`roles`: `admin`/`user` built-in; system set: 9 rows), and the repositories still work on the same file.
 - **ruff (changed paths):** `uv run ruff check migrations/versions/d94b7f2e6a31_permissions_tables_and_seeds.py migrations/env.py` → **All checks passed!** (the new migration file is also `ruff format`-clean; `migrations/env.py` has one pre-existing format deviation at the untouched `context.configure(...)` block — out of scope for T-007, left as-is).
 - **Next:** S4.3 (T-007) — ruff gate on the changed paths.
+
+#### T-007 — S4.4 Refactor (keep GREEN) — GREEN MAINTAINED (2 passed)
+
+- **Task:** T-007 "permissions persistence (alembic migration for roles/grants/system tables + seeds) + performance contract" — REQ-022, REQ-029; AC-027, AC-040.
+- **Refactor (structure only, no observable behavior change):**
+  - `migrations/versions/d94b7f2e6a31_permissions_tables_and_seeds.py` — split the ~55-line `upgrade()` (which mixed schema creation and data seeding) into single-purpose helpers, aligning with the sibling migration's (`eace2f772150`) helper-based style:
+    - `_create_tables(tables)` — the three guarded `op.create_table` calls (an existing table is a no-op);
+    - `_insert_or_ignore(statement, parameters)` — the idempotent single-row `INSERT OR IGNORE` execute (dedupes the bind/execute pattern);
+    - `_seed_builtin_roles(now)` / `_seed_bootstrap_system_permissions(now)` — the two seed loops;
+    - `upgrade()` is now a 6-line flow (schema, then seeds). Same SQL, same parameters, same order, same guards — no behavior change.
+  - `migrations/env.py` — no change: already well-structured (standard alembic env + `get_database_url()` helper + documented model imports); no meaningful improvement possible without touching out-of-scope lines (the pre-existing format deviation at the untouched `context.configure(...)` block noted in S4.2 remains out of scope).
+- **GREEN command (targeted — the task's 2 tests, re-run after the refactor):**
+  `uv run pytest tests/integration/permissions/test_persistence.py::test_migration_seeds_roles_and_system_set tests/contract/permissions/test_performance.py::test_check_latency_under_5ms_median -v`
+- **Result:** **2 passed, 0 failed** — GREEN maintained.
+- **ruff (changed paths):** `uv run ruff check migrations/versions/d94b7f2e6a31_permissions_tables_and_seeds.py migrations/env.py` → **All checks passed!**; `uv run ruff format --check migrations/versions/d94b7f2e6a31_permissions_tables_and_seeds.py` → **1 file already formatted**.
+- **Constraints honored:** no behavior change, no test modification, no new features.
+- **Next:** S4.5 (T-007) — commit + update status.
