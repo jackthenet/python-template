@@ -5,6 +5,15 @@ stores only Argon2id hashes (REQ-004), returns only :class:`UserRead`
 (ADR-024), and publishes exactly one typed event per successful mutation to
 the injected :class:`EventPublisher` (REQ-016, REQ-017).
 
+Enforcement wiring (REQ-024, ADR-071): every enforced public method takes a
+trailing ``principal: Principal = _SYSTEM_PRINCIPAL`` parameter and is decorated
+with ``@requires_permission("usermanagement.<method>")``; the injected
+``permission_service`` (the structural ``PermissionChecker``; the shared
+PermissionService at the composition root) enforces the permission at entry.
+A ``None`` checker is standalone mode: no check is performed (open, as
+before — AC-031). The feature depends only on ``backend.shared`` plus the
+injected checker, never on ``backend.permissions`` (ADR-070).
+
 The class is traced via the shared logging feature (``@logged_class``);
 ``include_args`` stays at its default ``False`` so method arguments —
 including the password — are never logged (REQ-015, NFR-002).
@@ -20,6 +29,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error
 
 from backend.logging import logged_class
+from backend.shared import PermissionChecker, Principal, requires_permission
 from backend.usermanagement.errors import (
     InvalidRoleError,
     LastAdminError,
@@ -46,6 +56,12 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+# ADR-071: the default trailing principal of every enforced method is the
+# system principal (user_id=None; EDGE-022). A module-level singleton keeps
+# the argument defaults lint-clean (B008) and identical across methods.
+_SYSTEM_PRINCIPAL = Principal()
+
+
 def _to_read(user: User) -> UserRead:
     """Map a table row to the service representation (no ``password_hash``, ADR-024)."""
     return UserRead.model_validate(user.model_dump())
@@ -64,6 +80,7 @@ class UserManager:
         repository: UserRepository,
         role_store: RoleStore | None = None,
         event_bus: EventPublisher | None = None,
+        permission_service: PermissionChecker | None = None,
     ) -> None:
         self._repository = repository
         self._event_bus = event_bus
@@ -72,25 +89,33 @@ class UserManager:
         # RoleStore (default StaticRoleStore(("admin", "user"))); the store
         # is the single source of truth for role names (Q-77).
         self._role_store = role_store if role_store is not None else StaticRoleStore(("admin", "user"))
+        # D13/ADR-071: the injected checker enforces usermanagement.<method>
+        # at entry (REQ-024); None = standalone mode (no enforcement,
+        # today's behavior — AC-031).
+        self._permission_service = permission_service
 
     # --- reads ---
 
-    def get_user(self, user_id: UUID) -> UserRead:
+    @requires_permission("usermanagement.get_user")
+    def get_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         return _to_read(self._get_user_or_raise(user_id))
 
-    def get_user_by_username(self, username: str) -> UserRead:
+    @requires_permission("usermanagement.get_user_by_username")
+    def get_user_by_username(self, username: str, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         user = self._repository.get_by_username(username)
         if user is None:
             raise UserNotFoundError(f"user {username!r} not found")
         return _to_read(user)
 
-    def list_users(self, include_inactive: bool = False) -> list[UserRead]:
+    @requires_permission("usermanagement.list_users")
+    def list_users(self, include_inactive: bool = False, principal: Principal = _SYSTEM_PRINCIPAL) -> list[UserRead]:
         users = self._repository.list_all(include_inactive)
         return [_to_read(user) for user in users]
 
     # --- create ---
 
-    def create_user(self, data: UserCreate) -> UserRead:
+    @requires_permission("usermanagement.create_user")
+    def create_user(self, data: UserCreate, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         self._validate_roles(data.roles)
         now = _utcnow()
         user = User(
@@ -113,7 +138,8 @@ class UserManager:
 
     # --- update / delete ---
 
-    def update_user(self, user_id: UUID, data: UserUpdate) -> UserRead:
+    @requires_permission("usermanagement.update_user")
+    def update_user(self, user_id: UUID, data: UserUpdate, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         user = self._get_user_or_raise(user_id)
         changed_fields: list[str] = []
         if data.email is not None:
@@ -137,7 +163,8 @@ class UserManager:
         self._publish(UserUpdated(user_id=user.id, changed_fields=changed_fields))
         return _to_read(user)
 
-    def delete_user(self, user_id: UUID) -> None:
+    @requires_permission("usermanagement.delete_user")
+    def delete_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         user = self._get_user_or_raise(user_id)
         self._assert_not_last_admin(user, keeps_active_admin=False)
         self._repository.delete(user_id)
@@ -145,14 +172,16 @@ class UserManager:
 
     # --- password ---
 
-    def change_password(self, user_id: UUID, new_password: str) -> None:
+    @requires_permission("usermanagement.change_password")
+    def change_password(self, user_id: UUID, new_password: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         user = self._get_user_or_raise(user_id)
         NewPassword(password=new_password)  # raises pydantic.ValidationError
         user.password_hash = self._hasher.hash(new_password)
         self._repository.update(user)
         self._publish(UserPasswordChanged(user_id=user.id))
 
-    def verify_password(self, user_id: UUID, password: str) -> bool:
+    @requires_permission("usermanagement.verify_password")
+    def verify_password(self, user_id: UUID, password: str, principal: Principal = _SYSTEM_PRINCIPAL) -> bool:
         user = self._get_user_or_raise(user_id)
         try:
             return self._hasher.verify(user.password_hash, password)
@@ -161,7 +190,8 @@ class UserManager:
 
     # --- roles ---
 
-    def set_role(self, user_id: UUID, role: str) -> UserRead:
+    @requires_permission("usermanagement.set_role")
+    def set_role(self, user_id: UUID, role: str, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         # Preserved (replace semantics): set_role = set_roles([role]) (Q-76).
         return self.set_roles(user_id, [role])
 
@@ -194,7 +224,8 @@ class UserManager:
 
     # --- activation ---
 
-    def activate_user(self, user_id: UUID) -> UserRead:
+    @requires_permission("usermanagement.activate_user")
+    def activate_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         user = self._get_user_or_raise(user_id)
         if user.is_active:
             # Already active: idempotent no-op — no event.
@@ -204,7 +235,8 @@ class UserManager:
         self._publish(UserActivated(user_id=user.id))
         return _to_read(user)
 
-    def deactivate_user(self, user_id: UUID) -> UserRead:
+    @requires_permission("usermanagement.deactivate_user")
+    def deactivate_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         user = self._get_user_or_raise(user_id)
         if not user.is_active:
             # Already inactive: idempotent no-op — no event.

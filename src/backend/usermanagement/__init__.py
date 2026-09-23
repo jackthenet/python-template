@@ -26,6 +26,7 @@ from backend.usermanagement.events import (
     UserRoleChanged,
     UserUpdated,
 )
+from backend.usermanagement.feature_actions import register_actions
 from backend.usermanagement.feature_settings import register_settings
 from backend.usermanagement.models import User, UserCreate, UserRead, UserUpdate
 from backend.usermanagement.repository import SqliteUserRepository, UserRepository
@@ -56,5 +57,6 @@ __all__ = [
     "UserRoleChanged",
     "UserUpdate",
     "UserUpdated",
+    "register_actions",
     "register_settings",
 ]
