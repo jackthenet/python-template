@@ -399,3 +399,34 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Result:** **21 passed, 0 failed, 0 errors** — GREEN maintained after the refactor (pytest 9.1.1, Python 3.14.5, `win32`).
 - **Ruff (changed paths):** `uv run ruff check src/backend/permissions/service.py src/backend/permissions/models.py src/backend/permissions/repositories.py` → All checks passed.
 - **Next:** S4.5 (T-005) — commit + update status (VERIFIED).
+
+#### T-006 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-006 "permissions assignment pass-throughs + settings alias sync (delegating to UserManager, SettingChanged subscription)" — REQ-012, REQ-019; AC-014, AC-015, AC-016, AC-023, AC-024, AC-025, AC-028.
+- **Ready:** confirmed — `dependencies: ['T-002', 'T-003', 'T-004', 'T-005']`; all **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-002 usermanagement multi-role amendment; T-003 permissions foundation; T-004 permissions check core; T-005 permissions role CRUD + dynamic grants, commit `6d3fc66`). T-006 is `PENDING` → ready.
+- **RED command (targeted — the task's 8 tests, from the DAG; the DAG's `::` shorthand in the directory part is rejected by pytest (`ERROR: directory argument cannot contain :: selection parts`), so run with real file paths):**
+  `uv run pytest tests/acceptance/permissions/test_check_api.py::{3 tests} tests/acceptance/permissions/test_system_principal.py::test_system_set_settings_alias_sync tests/acceptance/permissions/test_events.py::{2 tests} tests/integration/permissions/test_persistence.py::test_in_memory_repos_and_singleton tests/unit/permissions/test_edge_cases.py::test_assignment_unknown_role -v`
+- **Result:** **8 failed, 0 passed, 0 collection errors** — RED confirmed before implementation (all 8 collected cleanly; every failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Failure mode per test** (the established RED pattern for this change — the unimplemented assignment pass-throughs + settings alias sync, in the test body, not a setup/collection error):
+
+| Failure mode | Count | Meaning |
+|---|---|---|
+| `AttributeError: 'PermissionService' object has no attribute 'assign_role'` / `'add_role'` / `'remove_role'` | 4 | the assignment pass-throughs are not implemented (the expected RED signal) |
+| `AssertionError: the system-set table was not updated via SettingChanged` | 1 | the settings alias sync is not implemented (the expected RED signal) |
+| `pydantic_core.ValidationError` (`UserCreate`: `username` must match `^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$`, `input_value='u1'`) | 3 | **test data issue** — the `_build` helper's default `username="u1"` (2 chars) is too short for `UserCreate`'s 3–32 char pattern; user creation fails before the behavior is reached |
+
+**Per-test failure modes (8):**
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/permissions/test_check_api.py::test_assignment_delegates_to_user_manager` | AttributeError: 'PermissionService' object has no attribute 'assign_role' | `tests/acceptance/permissions/test_check_api.py:795` |
+| `tests/acceptance/permissions/test_check_api.py::test_last_admin_guard_preserved_via_service` | AttributeError: 'PermissionService' object has no attribute 'remove_role'. Did you mean: 'create_role'? | `tests/acceptance/permissions/test_check_api.py:856` |
+| `tests/acceptance/permissions/test_check_api.py::test_grant_change_takes_effect_immediately` | AttributeError: 'PermissionService' object has no attribute 'add_role' | `tests/acceptance/permissions/test_check_api.py:910` |
+| `tests/acceptance/permissions/test_system_principal.py::test_system_set_settings_alias_sync` | AssertionError: the system-set table was not updated via SettingChanged | `tests/acceptance/permissions/test_system_principal.py:142` |
+| `tests/acceptance/permissions/test_events.py::test_events_published_on_operations` | ValidationError: 1 validation error for UserCreate (username 'u1' too short) | `tests/acceptance/permissions/test_events.py:115` → `_build:60` |
+| `tests/acceptance/permissions/test_events.py::test_no_publisher_still_works` | ValidationError: 1 validation error for UserCreate (username 'u1' too short) | `tests/acceptance/permissions/test_events.py:201` → `_build:60` |
+| `tests/integration/permissions/test_persistence.py::test_in_memory_repos_and_singleton` | ValidationError: 1 validation error for UserCreate (username 'u1' too short, inline construction) | `tests/integration/permissions/test_persistence.py:62` |
+| `tests/unit/permissions/test_edge_cases.py::test_assignment_unknown_role` | AttributeError: 'PermissionService' object has no attribute 'assign_role' | `tests/unit/permissions/test_edge_cases.py:841` |
+
+- **⚠ In-scope note (test data, not a RED defect — will block GREEN):** 3 of the 8 tests (`test_events.py::test_events_published_on_operations`, `test_events.py::test_no_publisher_still_works`, `test_persistence.py::test_in_memory_repos_and_singleton`) create a user via the `_build` helper's default `username="u1"` (and `test_persistence.py` constructs `username="u1"` inline at line 62), which is **2 chars** and fails `UserCreate`'s username validation (`^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$` = 3–32 chars, `src/backend/usermanagement/models.py:22`). These 3 tests fail at **user creation**, before the assignment pass-throughs / settings alias sync / in-memory singleton behavior is reached. **This will block GREEN for S4.2** even after the implementation, because the user creation will still raise `ValidationError`. The test data must be fixed (e.g., `username="user1"` — 3+ chars) within the change (S4.2 or a test-data step) — no test file was modified in S4.1 (step rule: only the verification file is touched). Same known pattern recorded in T-004 / T-005 S4.1.
+- **Next:** S4.2 (T-006) — implement the assignment pass-throughs + settings alias sync (assign_role/add_role/remove_role/set_roles delegating to UserManager, last-admin guard preserved, SettingChanged subscription, no-publisher mode, in-memory repositories + singleton) and confirm GREEN.
