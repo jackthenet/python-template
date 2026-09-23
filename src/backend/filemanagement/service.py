@@ -718,6 +718,10 @@ class FileService:
 
     # -- Query use cases --------------------------------------------------------
 
+    # ADR-071 / AC-029: takes the trailing principal parameter (signature
+    # consistency with the other 9 public methods) but no @requires_permission —
+    # the AC-029 test contract requires download to perform no permission check
+    # (the allow checker records only the upload check).
     def download(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> bytes:
         """Return the stored file's bytes (REQ-010).
 
@@ -798,6 +802,10 @@ class FileService:
             raise FileManagementNotFoundError(key)
         return _to_read(record)
 
+    # ADR-071 / AC-029: takes the trailing principal parameter (signature
+    # consistency with the other 9 public methods) but no @requires_permission —
+    # the AC-029 test contract requires list_files to perform no permission check
+    # (it returns [] under a denying checker rather than raising).
     def list_files(
         self,
         namespace: str | None = None,
