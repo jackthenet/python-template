@@ -895,3 +895,69 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Ruff (T-014 paths):** `uv run ruff check src/main.py` → **All checks passed!** (file unchanged by this step).
 - **Artifacts:** no file changes (nothing to refactor; `src/main.py` remains uncommitted — the S4.2 work is deferred to S4.5).
 - **Next:** S4.5 (T-014) — Commit + update status (mark VERIFIED).
+
+### Phase 5: Verify — COMPLETE (gate NOT clean — new failures present)
+
+- **Date:** 2026-09-23
+- **Environment:** pytest 9.1.1, Python 3.14.5, `win32`, worktree `crosscut/user-roles-permissions`.
+- **Entry state:** all 14 DAG tasks (T-001…T-014) VERIFIED; working tree clean (only untracked, gitignored `data/`).
+
+#### S5.1 Run full test suite
+
+- **Full suite** (`uv run pytest tests/ -v`): **125 failed, 509 passed, 1 skipped** (176 s). The failure count varies **121–127** across runs (6 flaky logging tests, see classification below); the **stable** failure set is **121**.
+- **Acceptance** (`uv run pytest tests/acceptance/ -v`): **68 failed, 245 passed, 1 skipped**.
+- **Property** (`uv run pytest tests/property/ -v`): **11 failed, 50 passed**.
+- **Contract** (`uv run pytest tests/contract/ -v`): **8 failed, 34 passed**.
+- **This change's new tests (the 77 derived tests)**: `uv run pytest tests/acceptance/permissions/ tests/unit/permissions/ tests/property/permissions/ tests/integration/permissions/ tests/contract/permissions/ tests/acceptance/usermanagement/test_multi_role.py tests/property/usermanagement/test_multi_role_invariants.py tests/acceptance/authentication/test_enforcement_wiring.py tests/acceptance/settings/test_enforcement_wiring.py tests/acceptance/mail/test_enforcement_wiring.py tests/acceptance/sessionmanagement/test_enforcement_wiring.py` → **77 passed, 0 failed** — all GREEN.
+
+#### S5.2 Lint + types
+
+- **Lint** (`uv run ruff check .`, whole repo): **All checks passed!** (clean).
+- **Type checks** (`uv run mypy src/`): **NOT clean — 1 error** (a new failure introduced by this change, see classification below):
+  - `src/backend/permissions/service.py:353: error: Item "None" of "Any | None" has no attribute "is_active"  [union-attr]` — the `_check` method's `user.is_active` access where `user: UserRead | None` (the `reason is not None` early return does not narrow `user` for mypy).
+
+#### Failure classification (the 125 full-suite failures)
+
+The failures are classified into three buckets. **The context's prior that "all ~125 are UserCreate-roles" is not met** — 9 of the 125 are not UserCreate-roles (2 new test failures + 1 YAML + 6 flaky logging; 4 of the 6 flaky are present in the 125-failure run).
+
+**(a) New failures introduced by this change — 2 test + 1 type (MUST be fixed; NOT out of scope):**
+
+| # | Failure | Root cause | Introduced by |
+|---|---------|-----------|---------------|
+| 1 | `tests/acceptance/logging_coverage/test_behavior_unchanged.py::test_tracing_does_not_change_behavior` — `assert ['key', 'value', 'principal'] == ['key', 'value']` | Pre-existing logging contract test asserts `SettingsRegistry.set_value`'s param names are exactly `["key", "value"]`; the enforcement wiring added the trailing `principal` param (the same test would also fail on `UserManager.create_user`, which gained `principal` too — the test stops at the first failing assertion). | T-010 (settings enforcement wiring) + T-008 (usermanagement enforcement wiring) — the intentional ADR-071 `principal` param. |
+| 2 | `tests/acceptance/logging_coverage/test_new_classes_traced.py::test_new_public_classes_traced_by_default` — `PermissionCatalog (backend.permissions.catalog) is a public class but is not traced` | Pre-existing logging coverage test scans all public classes and requires `@logged_class` tracing; the change added the public `PermissionCatalog` class without tracing. | T-003 (permissions foundation) — the new `PermissionCatalog` class. |
+| 3 | `src/backend/permissions/service.py:353` mypy `union-attr` (`user.is_active` on `UserRead \| None`) | The `_check` method's `user` variable is `UserRead \| None`; the `reason is not None` early return does not narrow `user` for mypy, so `user.is_active` is flagged. | T-004 (permissions check core) — the `_check` method. |
+
+All three are **regressions** (the pre-existing tests pass on `main` without this change; the mypy error is in a new file). They are **not** the UserCreate-roles breaks and are **not** out of scope — they must be fixed before the change is verified (e.g., update the two logging contract tests for the new `principal` signature / add `@logged_class` to `PermissionCatalog`; add a `user is None` guard or non-None assertion for the mypy error). Per the Phase 5 step constraint, no source/test file was modified in this step — these are recorded as findings for the orchestrator.
+
+**(b) Pre-existing breaks to be fixed (UserCreate-roles) — 118 (MUST be fixed within this change's scope; the T-002 multi-role amendment changed `UserCreate.role` → `UserCreate.roles: list[str]`, but pre-existing test helpers still construct the pre-amendment `UserCreate(..., role=...)` API):**
+
+| Area | Count | Files |
+|------|-------|-------|
+| usermanagement | 56 | `tests/acceptance/usermanagement/` (32), `tests/unit/usermanagement/` (12), `tests/property/usermanagement/` (6), `tests/contract/usermanagement/` (4), `tests/integration/usermanagement/` (2) |
+| authentication | 53 | `tests/acceptance/authentication/` (31), `tests/unit/authentication/` (13), `tests/property/authentication/` (4), `tests/contract/authentication/` (3), `tests/integration/authentication/` (2) |
+| other | 9 | `tests/integration/sessionmanagement/test_user_lifecycle.py` (3), `tests/integration/sessionmanagement/test_device_fields.py` (2), `tests/acceptance/sessionmanagement/test_store_reuse.py` (1), `tests/acceptance/settings_coverage/test_live_reads.py` (1), `tests/acceptance/logging_coverage/test_secret_args.py` (1), `tests/contract/filemanagement/test_filemanagement_contracts.py` (1) |
+
+All 118 fail with `pydantic_core.ValidationError: 1 validation error for UserCreate — roles: Field required` (the pre-amendment `role` kwarg is rejected; `roles` is now required). They fail in the test helper (`tests/authentication_test_helpers.py::create_user` and the per-test `UserCreate(..., role=...)` constructions), before the feature code under test is reached. They are **regressions** (pass on `main` without this change) and **must be fixed** within this change's scope (update the pre-existing test helpers to the `roles` API) — but they are **not** new behavior defects.
+
+**(c) Pre-existing unrelated (fail on `main` too / flaky — out of scope):**
+
+| # | Failure | Root cause |
+|---|---------|-----------|
+| 1 | `tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip` — `assert Template(...) == Template(...)` (value `'\x85'`) | Pre-existing YAML roundtrip issue (a special Unicode character `U+0085` does not roundtrip); unrelated to user roles/permissions (the change did not touch the YAML repository layer). |
+| 2 | 6 flaky logging tests (0–6 per run; vary across runs) | `tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks`, `tests/contract/logging/test_logging_contracts.py::test_nfr_003_diagnose_false`, `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline`, `tests/unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level`, `tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records`, `tests/unit/logging/test_logging.py::test_ac_005_intercept_handler_skips_bootstrap` — all pass when run individually but intermittently fail in the full run (timing-sensitive logging tests affected by test interference); unrelated to this change. |
+
+**Reconciliation:** 118 (b) + 2 (a test) + 1 (c YAML) + 4 (c flaky, present in the 125-run) = **125** (the 125-failure run). The stable failure set is **121** (118 + 2 + 1); the 6 flaky logging tests add 0–6 per run (total 121–127).
+
+#### S5.3 Update traceability
+
+- `docs/verification/traceability.md` — the **User Roles & Permissions Matrix** section: all 78 rows (40 AC + 6 INV + 26 EDGE + 5 NFR + the REQ-024 per-feature wiring row) updated **RED → GREEN** (all 77 derived tests pass; the 78th row is the REQ-024 per-feature wiring row covering the 4 enforcement-wiring tests). A new **Affected Features (CROSS-CUTTING)** subsection added listing the six affected features (usermanagement, authentication, settings, filemanagement, mail, sessionmanagement) and their enforcement-wiring tests (all GREEN).
+
+#### S5.4 Verification report (spec coverage = 100%)
+
+- **Specification coverage = 100%:** every `REQ-XXX` (29) has at least one GREEN test (the 77 derived tests all pass; every REQ/AC/INV/EDGE/NFR row in the traceability matrix is GREEN).
+- **Acceptance coverage:** all 40 `AC-XXX` have GREEN acceptance tests.
+- **Branch/edge coverage:** all 26 `EDGE-XXX` have GREEN unit/edge tests; all 6 `INV-XXX` have GREEN property tests; all 5 `NFR-XXX` have GREEN contract/edge tests.
+- **Gate result: NOT clean.** The Phase 5 gate requires the full test suite to pass (with pre-existing failures classified as out of scope) + clean lint + clean types. Lint is clean, but the test suite has **2 new test failures** (not out of scope) and mypy has **1 new error** (not out of scope). The 118 UserCreate-roles breaks are regressions that must be fixed within this change's scope. **The change is NOT verified** until the (a) new failures are fixed and the (b) UserCreate-roles breaks are fixed.
+
+**Next:** the orchestrator must fix the (a) new failures (2 test + 1 mypy) and the (b) UserCreate-roles breaks (118) within this change's scope, then re-run Phase 5. The (c) pre-existing unrelated failures (1 YAML + 6 flaky logging) are out of scope.
