@@ -331,3 +331,20 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **Result:** **27 passed, 0 failed, 0 errors** — GREEN maintained after the refactor (pytest 9.1.1, Python 3.14.5, `win32`).
 - **Ruff (changed path):** `uv run ruff check src/backend/permissions/service.py` → All checks passed.
 - **Next:** S4.5 (T-004) — commit + update status (VERIFIED).
+
+#### T-005 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-005 "permissions role CRUD + dynamic grants (create_role/delete_role + guards, grant/revoke, idempotency, role events)" — REQ-006, REQ-007, REQ-008, REQ-020; AC-001, AC-004, AC-005, AC-007, AC-008, AC-009, AC-010, AC-011, AC-038.
+- **Ready:** confirmed — `dependencies: ['T-002', 'T-003', 'T-004']`; all **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-002 usermanagement multi-role amendment; T-003 permissions foundation; T-004 permissions check core). T-005 is `PENDING` → ready.
+- **RED command (targeted — the task's 21 tests, from the DAG; the DAG's `::` shorthand in the directory part is rejected by pytest (`ERROR: directory argument cannot contain :: selection parts`), so run with real file paths):**
+  `uv run pytest tests/acceptance/permissions/test_check_api.py::{4 tests} tests/acceptance/permissions/test_role_management.py::{4 tests} tests/integration/permissions/test_thread_safety.py::test_concurrent_checks_and_changes tests/property/permissions/test_invariants.py::{2 tests} tests/unit/permissions/test_edge_cases.py::{10 tests} -v`
+- **Result:** **16 failed, 5 passed, 0 collection errors** — RED confirmed before implementation (all 21 collected cleanly; every failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Failure mode per test** (the established RED pattern for this change — the unimplemented role CRUD + dynamic grants, in the test body, not a setup/collection error):
+
+| Failure mode | Count | Meaning |
+|---|---|---|
+| `AttributeError: 'PermissionService' object has no attribute 'create_role'` / `'delete_role'` / `'grant_permission'` / `'revoke_permission'` | 13 | the role CRUD + dynamic grants are not implemented (the expected RED signal) |
+| `pydantic_core.ValidationError` (`UserCreate`: `username` must match `^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$`, `input_value='u1'`) | 3 | **test data issue** — the `_build` helper's default `username="u1"` (2 chars) is too short for `UserCreate`'s 3–32 char pattern; user creation fails before the role CRUD is reached |
+
+- **⚠ In-scope note (test data, not a RED defect — will block GREEN):** 3 of the 16 tests (`test_role_management.py::test_delete_role_guards`, `test_role_management.py::test_wildcard_grant_stored_and_matches`, `test_thread_safety.py::test_concurrent_checks_and_changes`) create a user via the `_build` helper's default `username="u1"` (and `test_thread_safety.py` also constructs `username="u1"` inline), which is **2 chars** and fails `UserCreate`'s username validation (`^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$` = 3–32 chars, `src/backend/usermanagement/models.py:22`). These 3 tests fail at **user creation**, before the `create_role`/`delete_role`/`grant_permission`/`revoke_permission` call. **This will block GREEN for S4.2** even after the role CRUD + dynamic grants are implemented, because the user creation will still raise `ValidationError`. The test data must be fixed (e.g., `username="user1"`/`"admin1"` — 3+ chars) within the change (S4.2 or a test-data step) — no test file was modified in S4.1 (step rule: only the verification file is touched).
+- **Next:** S4.2 (T-005) — implement the permissions role CRUD + dynamic grants (create_role/list_roles/delete_role + guards, grant_permission/revoke_permission/get_role_permissions, idempotency, role events) and confirm GREEN.
