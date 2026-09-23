@@ -16,8 +16,14 @@ session token, REQ-028/NFR-002) and publish the ``PermissionDenied`` event
 (REQ-020). Role CRUD and dynamic grants (T-005): ``create_role`` /
 ``list_roles`` / ``delete_role`` (with the deletion guards) and
 ``grant_permission`` / ``revoke_permission`` / ``get_role_permissions``
-(validated against the catalog, idempotent, role events). The
-role-assignment pass-throughs are implemented by the subsequent task (T-006).
+(validated against the catalog, idempotent, role events). Role assignment
+(T-006): the pass-throughs ``assign_role`` / ``add_role`` / ``remove_role`` /
+``set_roles`` delegate to the ``UserManager`` (D8, REQ-012 — the permission
+service never mutates user roles directly; the role is validated against the
+role store before delegation, EDGE-026) and the settings alias sync (D16,
+REQ-019 — the ``SettingChanged`` subscription updates the system-set table
+when ``permissions.system_principal`` is written; ``set_system_permissions``
+syncs the key best-effort).
 """
 
 from __future__ import annotations
@@ -62,6 +68,11 @@ _PERMISSION_KEY_PATTERN = re.compile(r"^[a-z0-9_-]+\.[a-z0-9_-]+$")
 
 # The role name shape (REQ-006): 1..32 lowercase alphanumeric / ``_`` / ``-``.
 _ROLE_NAME_PATTERN = re.compile(r"^[a-z0-9_-]{1,32}$")
+
+# The settings alias key for the system-principal set (D16, REQ-019): the
+# registry key that mirrors the system-set table (the table is the source of
+# truth; the key is the live-configurable alias).
+_SYSTEM_PRINCIPAL_SETTING_KEY = "permissions.system_principal"
 
 
 def _grant_matches(grant: str, perm: str) -> bool:
@@ -433,7 +444,7 @@ class PermissionService:
     def _on_setting_changed(self, event: object) -> None:
         """Apply a ``SettingChanged`` for ``permissions.system_principal`` to the table."""
         key = getattr(event, "key", None)
-        if key != "permissions.system_principal":
+        if key != _SYSTEM_PRINCIPAL_SETTING_KEY:
             return
         value = getattr(event, "value", None)
         if isinstance(value, (list, tuple, set, frozenset)):
@@ -454,8 +465,8 @@ class PermissionService:
         if registry is None:
             return
         try:
-            if registry.has("permissions.system_principal"):
-                registry.set_value("permissions.system_principal", list(permissions))
+            if registry.has(_SYSTEM_PRINCIPAL_SETTING_KEY):
+                registry.set_value(_SYSTEM_PRINCIPAL_SETTING_KEY, list(permissions))
         except Exception:
             pass  # best-effort: a registry failure never breaks the table write
 
