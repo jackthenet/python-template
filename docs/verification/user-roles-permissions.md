@@ -788,3 +788,21 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **GREEN (targeted — the task's 1 test, re-run in this step's environment):** `uv run pytest tests/acceptance/mail/test_enforcement_wiring.py::test_mail_enforcement_wiring -v` → **1 passed** (GREEN maintained; with zero file changes the S4.2/S4.3 GREEN holds and no regression is possible).
 - **Ruff (T-012 paths):** `uv run ruff check src/backend/mail/service.py src/backend/mail/feature_actions.py src/backend/mail/__init__.py` → **All checks passed!**; `uv run ruff format --check` on the same paths → **3 files already formatted**.
 - **Next:** S4.5 (T-012) — commit + update status.
+
+#### T-013 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-013 "sessionmanagement enforcement wiring (principal param + @requires_permission + permission_service constructor + feature_actions)" — REQ-024 (no AC — per-feature test gate).
+- **Ready:** confirmed — `dependencies: ['T-001', 'T-003']`; all **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-001 shared enforcement plumbing; T-003 permissions foundation). T-013 is `PENDING` → ready.
+- **RED command (targeted — the task's 1 test, from the DAG):** `uv run pytest tests/acceptance/sessionmanagement/test_enforcement_wiring.py::test_sessionmanagement_enforcement_wiring -v` (the DAG's `red_command` is already in the real file path form — no `::`-in-directory issue).
+- **Result:** **1 failed, 0 passed, 0 collection errors** — RED confirmed before implementation (the test collected cleanly; the failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/acceptance/sessionmanagement/test_enforcement_wiring.py::test_sessionmanagement_enforcement_wiring` (REQ-024 / ADR-071) | **FAILED** (behavior) | the T-013 sessionmanagement enforcement wiring is not implemented — the expected RED signal |
+- **Failure mode of the RED test** (the established RED pattern for this change — the missing wiring, in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/sessionmanagement/test_enforcement_wiring.py::test_sessionmanagement_enforcement_wiring` | `AssertionError: SessionService.list_sessions: trailing parameter is 'limit', expected 'principal'` — the trailing `principal: Principal = Principal()` parameter is not yet added to the public `SessionService` methods (T-013 implementation step 1); the ADR-071 contract (last parameter named `principal` with a default) is not yet satisfied | `tests/acceptance/sessionmanagement/test_enforcement_wiring.py:100` |
+- **Next:** S4.2 (T-013) — implement the sessionmanagement enforcement wiring (trailing principal parameter on all 6 public `SessionService` methods + @requires_permission with the `sessionmanagement.<method>` keys, optional `permission_service: PermissionChecker | None = None` constructor parameter, feature-owned `feature_actions.py` declaring the sessionmanagement catalog actions; the session repository `get_by_token_hash` is the real `SessionLookup` implementation) and confirm GREEN.
