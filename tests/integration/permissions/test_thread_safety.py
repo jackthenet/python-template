@@ -49,7 +49,7 @@ def test_concurrent_checks_and_changes() -> None:
         system_repo = SqliteSystemPrincipalRepository(db)
         manager = UserManager(SqliteUserRepository("sqlite:///:memory:"))
         user = manager.create_user(
-            UserCreate(username="u1", email="u1@example.com", password="correct-horse-1", roles=["user"])
+            UserCreate(username="user1", email="user1@example.com", password="correct-horse-1", roles=["user"])
         )
         service = PermissionService(role_repo, grant_repo, system_repo, manager, catalog=catalog)
 

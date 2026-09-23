@@ -24,7 +24,7 @@ def _build(
     catalog_cls,
     *,
     user_roles=None,
-    username="u1",
+    username="user1",
     role_store=None,
     seed_roles=(),
 ):
@@ -125,7 +125,6 @@ def test_delete_role_guards() -> None:
         RoleNotFoundError,
         RoleProtectedError,
     )
-
     from backend.usermanagement import StaticRoleStore
 
     service, _, _, _ = _build(
