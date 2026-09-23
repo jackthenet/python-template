@@ -207,6 +207,11 @@ def test_no_publisher_still_works() -> None:
         user_roles=["user"],
         seed_roles=[("admin", True), ("user", True)],
     )
+    # A second active admin so ``user`` is never the last active admin —
+    # the no-publisher test must not hit the last-admin guard (AC-025).
+    manager.create_user(
+        UserCreate(username="admin2", email="admin2@example.com", password="correct-horse-1", roles=["admin"])
+    )
 
     perm = "mail.send_email"
 

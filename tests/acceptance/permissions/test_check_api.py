@@ -774,6 +774,11 @@ def test_assignment_delegates_to_user_manager() -> None:
     user = manager.create_user(
         UserCreate(username="user1", email="user1@example.com", password="correct-horse-1", roles=["user"])
     )
+    # A second active admin so ``user`` is never the last active admin —
+    # the delegation test must not hit the last-admin guard (AC-014).
+    manager.create_user(
+        UserCreate(username="admin2", email="admin2@example.com", password="correct-horse-1", roles=["admin"])
+    )
 
     catalog = PermissionCatalog()
     catalog.register_feature("mail", {"mail.send_email": "Send an email"})
@@ -834,7 +839,7 @@ def test_last_admin_guard_preserved_via_service() -> None:
     repo = SqliteUserRepository("sqlite:///:memory:")
     manager = UserManager(repo)
     admin = manager.create_user(
-        UserCreate(username="admin1", email="admin1@example.com", password="correct-horse-1", roles=["admin"])
+        UserCreate(username="admin1", email="admin1@example.com", password="correct-horse-1", roles=["admin", "user"])
     )
 
     catalog = PermissionCatalog()
@@ -858,7 +863,7 @@ def test_last_admin_guard_preserved_via_service() -> None:
     except LastAdminError:
         pass
     # The demotion did not happen: the roles are unchanged.
-    assert manager.get_user(admin.id).roles == ["admin"]
+    assert manager.get_user(admin.id).roles == ["admin", "user"]
 
 
 # --- AC-016: a granted role takes effect on the next check ---

@@ -97,6 +97,8 @@ def test_system_set_settings_alias_sync() -> None:
     ``set_system_permissions([p5])`` is called, then the registry key is
     synced (best-effort).
     """
+    from settings_test_helpers import make_registry, wait_for
+
     from backend.permissions import (
         MemoryGrantRepository,
         MemoryRoleRepository,
@@ -105,7 +107,6 @@ def test_system_set_settings_alias_sync() -> None:
         PermissionService,
         register_settings,
     )
-    from settings_test_helpers import make_registry, wait_for
 
     registry, bus = make_registry()
     try:
@@ -135,6 +136,7 @@ def test_system_set_settings_alias_sync() -> None:
             manager,
             catalog=catalog,
             event_bus=bus,
+            settings_registry=registry,
         )
 
         # A registry write updates the system-set table (via SettingChanged).

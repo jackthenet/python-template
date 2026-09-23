@@ -61,6 +61,11 @@ def test_in_memory_repos_and_singleton() -> None:
     user = manager.create_user(
         UserCreate(username="user1", email="user1@example.com", password="correct-horse-1", roles=["user"])
     )
+    # A second active admin so ``user`` is never the last active admin —
+    # the in-memory/singleton test must not hit the last-admin guard (AC-028).
+    manager.create_user(
+        UserCreate(username="admin2", email="admin2@example.com", password="correct-horse-1", roles=["admin"])
+    )
 
     catalog = PermissionCatalog()
     catalog.register_feature(
