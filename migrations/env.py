@@ -10,9 +10,11 @@ from sqlmodel import SQLModel
 # are intentionally unused at runtime (the aliases keep each import a distinct
 # binding); each noqa comment names the tables pulled in: authentication
 # (Session, PasswordReset, WebAuthnCredential), filemanagement (FileRecord,
-# UserAvatar), usermanagement (User).
+# UserAvatar), permissions (Role, RolePermission, SystemPrincipalPermission),
+# usermanagement (User).
 import backend.authentication.models as authentication_models  # noqa: F401  # Session, PasswordReset, WebAuthnCredential
 import backend.filemanagement.models as filemanagement_models  # noqa: F401  # FileRecord, UserAvatar
+import backend.permissions.models as permissions_models  # noqa: F401  # Role, RolePermission, SystemPrincipalPermission
 import backend.usermanagement.models as usermanagement_models  # noqa: F401  # User
 
 # this is the Alembic Config object, which provides
