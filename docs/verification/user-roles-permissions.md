@@ -694,3 +694,22 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **GREEN (targeted — the task's 1 test, re-run in this step's environment):** `uv run pytest tests/acceptance/settings/test_enforcement_wiring.py::test_settings_enforcement_wiring -v` → **1 passed** (GREEN maintained; with zero file changes the S4.2/S4.3 GREEN holds and no regression is possible).
 - **Ruff (T-010 paths):** `uv run ruff check src/backend/settings/registry.py src/backend/settings/__init__.py src/backend/settings/feature_actions.py` → **All checks passed!**; `uv run ruff format --check` on the same paths → `registry.py` reports 2 pre-existing unformatted lines (current lines 70, 93 — verified pre-existing: `ruff format --check` on the pre-change file (`a139da3~1`) reports the same 2 lines at 63, 80; the lines added in T-010 are format-clean; reformatting pre-existing lines is out of T-010 scope).
 - **Next:** S4.5 (T-010) — commit + update status.
+
+#### T-011 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-011 "filemanagement enforcement wiring (principal param + @requires_permission + permission_service constructor + feature_actions)" — REQ-024 / AC-029 (per-feature test gate).
+- **Ready:** confirmed — `dependencies: ['T-001', 'T-003']`; all **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-001 shared enforcement plumbing; T-003 permissions foundation). T-011 is `PENDING` → ready.
+- **RED command (targeted — the task's 1 test, from the DAG):** the DAG's `red_command` uses `::` in the directory part (`tests/acceptance/permissions::test_enforcement.py::...`), which pytest rejects (`ERROR: directory argument cannot contain :: selection parts`). Ran the identical targeted test with the real file path:
+  `uv run pytest tests/acceptance/permissions/test_enforcement.py::test_enforced_method_denies_without_permission -v`
+- **Result:** **1 failed, 0 passed, 0 collection errors** — RED confirmed before implementation (the test collected cleanly; the failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/acceptance/permissions/test_enforcement.py::test_enforced_method_denies_without_permission` (AC-029 / REQ-024 / ADR-071) | **FAILED** (behavior) | the T-011 filemanagement enforcement wiring is not implemented — the expected RED signal |
+- **Failure mode of the RED test** (the established RED pattern for this change — the missing wiring, in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/permissions/test_enforcement.py::test_enforced_method_denies_without_permission` | `TypeError: FileService.__init__() got an unexpected keyword argument 'permission_service'` — the optional `permission_service: PermissionChecker | None = None` constructor parameter is not yet added to `FileService` (T-011 implementation step 3); the ADR-071 contract (enforced method takes an injected checker + a trailing `principal`) is not yet satisfied | `tests/acceptance/permissions/test_enforcement.py:58` |
+- **Next:** S4.2 (T-011) — implement the filemanagement enforcement wiring (trailing principal parameter on all 10 public `FileService` methods + @requires_permission with the `filemanagement.<method>` keys, optional `permission_service: PermissionChecker | None = None` constructor parameter, feature-owned `feature_actions.py` declaring the filemanagement catalog actions) and confirm GREEN.
