@@ -532,3 +532,22 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **ruff (changed paths):** `uv run ruff check migrations/versions/d94b7f2e6a31_permissions_tables_and_seeds.py migrations/env.py` → **All checks passed!**; `uv run ruff format --check migrations/versions/d94b7f2e6a31_permissions_tables_and_seeds.py` → **1 file already formatted**.
 - **Constraints honored:** no behavior change, no test modification, no new features.
 - **Next:** S4.5 (T-007) — commit + update status.
+
+#### T-008 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-008 "usermanagement enforcement wiring (principal param + @requires_permission + permission_service constructor + feature_actions)" — REQ-024; AC-031.
+- **Ready:** confirmed — `dependencies: ['T-001', 'T-002', 'T-003']`; all **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-001 shared enforcement plumbing; T-002 usermanagement multi-role amendment; T-003 permissions foundation). T-008 is `PENDING` → ready.
+- **RED command (targeted — the task's 1 test, from the DAG; the DAG's `::` shorthand in the directory part is rejected by pytest, so run with the real file path):**
+  `uv run pytest tests/acceptance/permissions/test_enforcement.py::test_standalone_mode_no_check -v`
+- **Result:** **1 failed, 0 passed, 0 collection errors** — RED confirmed before implementation (the test collected cleanly; the failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/acceptance/permissions/test_enforcement.py::test_standalone_mode_no_check` (AC-031 / REQ-024) | **FAILED** (behavior) | the T-008 enforcement wiring is not implemented — the expected RED signal |
+- **Failure mode of the RED test** (the established RED pattern for this change — the missing wiring, in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/permissions/test_enforcement.py::test_standalone_mode_no_check` | `TypeError: UserManager.create_user() got an unexpected keyword argument 'principal'` — the trailing `principal: Principal = Principal()` parameter is not yet added to the public `UserManager` methods (T-008 implementation step 1); standalone mode with an explicit principal cannot be exercised yet | `tests/acceptance/permissions/test_enforcement.py:109` |
+- **Next:** S4.2 (T-008) — implement the usermanagement enforcement wiring (trailing principal parameter + @requires_permission on the 11 public methods, optional `permission_service: PermissionChecker | None = None` constructor parameter, feature-owned `feature_actions.py`) and confirm GREEN.
