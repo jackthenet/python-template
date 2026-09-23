@@ -640,3 +640,22 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 - **GREEN (targeted — the task's 1 test, re-run in this step's environment):** `uv run pytest tests/acceptance/authentication/test_enforcement_wiring.py::test_authentication_enforcement_wiring -v` → **1 passed** (GREEN maintained; with zero file changes the S4.2/S4.3 GREEN holds and no regression is possible).
 - **Ruff (T-009 paths):** `uv run ruff check src/backend/authentication/service.py src/backend/authentication/feature_actions.py` → **All checks passed!**; `uv run ruff format --check` on the same paths → **2 files already formatted**.
 - **Next:** S4.5 (T-009) — commit + update status.
+
+#### T-010 — S4.1 Pick task + confirm RED — RED CONFIRMED
+
+- **Task:** T-010 "settings enforcement wiring (principal param + @requires_permission + permission_service constructor + feature_actions)" — REQ-024 (no AC — per-feature test gate).
+- **Ready:** confirmed — `dependencies: ['T-001', 'T-003']`; all **VERIFIED** in `docs/tasks/user-roles-permissions.tasks.json` and `.github/task-runner/tasks.json` (T-001 shared enforcement plumbing; T-003 permissions foundation). T-010 is `PENDING` → ready.
+- **RED command (targeted — the task's 1 test, from the DAG; the DAG's `red_command` already uses the real file path, directly runnable):**
+  `uv run pytest tests/acceptance/settings/test_enforcement_wiring.py::test_settings_enforcement_wiring -v`
+- **Result:** **1 failed, 0 passed, 0 collection errors** — RED confirmed before implementation (the test collected cleanly; the failure is in the **test body (call phase)** — none in setup/fixture/collection/import).
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/acceptance/settings/test_enforcement_wiring.py::test_settings_enforcement_wiring` (REQ-024 / ADR-071) | **FAILED** (behavior) | the T-010 settings enforcement wiring is not implemented — the expected RED signal |
+- **Failure mode of the RED test** (the established RED pattern for this change — the missing wiring, in the test body, not a setup/collection error):
+
+| Test | Failure mode | Location |
+|---|---|---|
+| `tests/acceptance/settings/test_enforcement_wiring.py::test_settings_enforcement_wiring` | `AssertionError: SettingsRegistry.register: trailing parameter is 'definition', expected 'principal'` — the trailing `principal: Principal = Principal()` parameter is not yet added to the public `SettingsRegistry` methods (T-010 implementation step 1); the ADR-071 contract (last parameter named `principal` with a default) is not yet satisfied | `tests/acceptance/settings/test_enforcement_wiring.py:110` |
+- **Next:** S4.2 (T-010) — implement the settings enforcement wiring (trailing principal parameter on all 19 public `SettingsRegistry` methods + @requires_permission with the `settings.<method>` keys, optional `permission_service: PermissionChecker | None = None` constructor parameter, feature-owned `feature_actions.py` declaring the settings catalog actions) and confirm GREEN.
