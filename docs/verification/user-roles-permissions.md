@@ -659,3 +659,26 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 |---|---|---|
 | `tests/acceptance/settings/test_enforcement_wiring.py::test_settings_enforcement_wiring` | `AssertionError: SettingsRegistry.register: trailing parameter is 'definition', expected 'principal'` — the trailing `principal: Principal = Principal()` parameter is not yet added to the public `SettingsRegistry` methods (T-010 implementation step 1); the ADR-071 contract (last parameter named `principal` with a default) is not yet satisfied | `tests/acceptance/settings/test_enforcement_wiring.py:110` |
 - **Next:** S4.2 (T-010) — implement the settings enforcement wiring (trailing principal parameter on all 19 public `SettingsRegistry` methods + @requires_permission with the `settings.<method>` keys, optional `permission_service: PermissionChecker | None = None` constructor parameter, feature-owned `feature_actions.py` declaring the settings catalog actions) and confirm GREEN.
+
+#### T-010 — S4.2 Implement + confirm GREEN — GREEN CONFIRMED
+
+- **Implementation (per DAG task T-010, ADR-071/ADR-070):**
+  - `src/backend/settings/registry.py`:
+    - Module-level `_SYSTEM_PRINCIPAL = Principal()` singleton (B008-blessed, identical to the T-008/T-009 pattern) — the default trailing principal of every enforced method is the system principal (user_id=None; EDGE-022).
+    - Trailing `principal: Principal = _SYSTEM_PRINCIPAL` parameter added to all **19** public `SettingsRegistry` methods (existing positional call sites unaffected).
+    - `@requires_permission("settings.<method>")` applied to all **19** methods (the settings exempt set is empty, spec Section 3) — the check resolves through the injected checker at entry; a denial propagates to the caller.
+    - Constructor gains `permission_service: PermissionChecker | None = None` (stored as `self._permission_service`; `None` = standalone mode, no enforcement — AC-031). The feature imports only `backend.shared` plus the injected checker — never `backend.permissions` (ADR-070).
+  - `src/backend/settings/feature_actions.py` (new): `register_actions(catalog)` declares the **19** settings catalog actions (`settings.<method>`, descriptions from the spec Section 3 initial catalog table).
+  - `src/backend/settings/__init__.py`: `register_actions` added to the public API (import + `__all__`), mirroring the T-008 `usermanagement` pattern.
+- **GREEN command (targeted — the task's 1 test, from the DAG):**
+  `uv run pytest tests/acceptance/settings/test_enforcement_wiring.py::test_settings_enforcement_wiring -v`
+- **Result:** **1 passed, 0 failed** — GREEN confirmed (principal parameter on all 19 methods with the system-principal default; deny propagates on all 19 enforced methods with the `settings.<method>` keys; allow proceeds with the system principal; an explicit principal (user_id + session token) reaches the check; the constructor defaults `permission_service=None` (standalone mode performs no check); `feature_actions.register_actions` declares exactly the 19 settings actions).
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/acceptance/settings/test_enforcement_wiring.py::test_settings_enforcement_wiring` (REQ-024 / ADR-071) | **PASSED** | the T-010 settings enforcement wiring is implemented — GREEN |
+
+- **Regression check (no previously-GREEN test regressed):** the settings suites (`tests/acceptance/settings tests/unit/settings tests/contract/settings tests/property/settings`) show **83 passed, 0 failed** with the change. The broader `-k settings` run (`tests/` filtered to settings-related tests) shows the **same pre-existing failure set with and without the change** (verified by diff of the sorted FAILED lists via `git stash`): the usermanagement/authentication property tests and `tests/acceptance/settings_coverage/test_live_reads.py::test_set_value_affects_running_feature` fail identically in both runs — all pre-existing (the T-002 pre-amendment-API tests: the shared helper still calls `UserCreate(..., role=...)`, the pre-T-002 single-role API; `roles` is now required) — a pre-existing, out-of-T-010-scope issue (tests are not modified in this step). No previously-GREEN test regressed.
+- **Ruff (step's changed paths):** `uv run ruff check src/backend/settings/registry.py src/backend/settings/__init__.py src/backend/settings/feature_actions.py` → **All checks passed!**; `uv run ruff format --check` on the same paths → `registry.py` reports 2 pre-existing unformatted lines (verified pre-existing via `git stash` — identical in the pre-change file; the lines added in this step are format-clean; reformatting pre-existing lines is out of T-010 scope).
+- **Next:** S4.3 (T-010) — Ruff gate on the changed paths.
