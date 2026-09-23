@@ -13,8 +13,11 @@ grants (REQ-009), the live user lookup (REQ-014), session validation via the
 structural ``SessionLookup`` seam (ADR-073), and the system principal
 (``user_id=None``, D10, REQ-018). Denials are logged at WARNING (never the
 session token, REQ-028/NFR-002) and publish the ``PermissionDenied`` event
-(REQ-020). Role CRUD, dynamic grants, and role-assignment pass-throughs are
-implemented by the subsequent tasks (T-005..T-006).
+(REQ-020). Role CRUD and dynamic grants (T-005): ``create_role`` /
+``list_roles`` / ``delete_role`` (with the deletion guards) and
+``grant_permission`` / ``revoke_permission`` / ``get_role_permissions``
+(validated against the catalog, idempotent, role events). The
+role-assignment pass-throughs are implemented by the subsequent task (T-006).
 """
 
 from __future__ import annotations
@@ -30,9 +33,15 @@ from loguru import logger
 
 from backend.logging import logged_class
 from backend.permissions.catalog import PermissionCatalog
-from backend.permissions.errors import PermissionDeniedError, UnknownPermissionError
-from backend.permissions.events import PermissionDenied
-from backend.permissions.models import SessionLookup
+from backend.permissions.errors import (
+    PermissionDeniedError,
+    RoleInUseError,
+    RoleNotFoundError,
+    RoleProtectedError,
+    UnknownPermissionError,
+)
+from backend.permissions.events import PermissionDenied, RoleCreated, RoleDeleted, RolePermissionsChanged
+from backend.permissions.models import BUILTIN_ROLES, RoleRead, SessionLookup
 from backend.permissions.repositories import (
     GrantRepository,
     RoleRepository,
@@ -50,6 +59,9 @@ if TYPE_CHECKING:
 
 # The permission key shape (REQ-002): hierarchical ``feature.action`` keys.
 _PERMISSION_KEY_PATTERN = re.compile(r"^[a-z0-9_-]+\.[a-z0-9_-]+$")
+
+# The role name shape (REQ-006): 1..32 lowercase alphanumeric / ``_`` / ``-``.
+_ROLE_NAME_PATTERN = re.compile(r"^[a-z0-9_-]{1,32}$")
 
 
 def _grant_matches(grant: str, perm: str) -> bool:
@@ -150,6 +162,110 @@ class PermissionService:
     def get_system_permissions(self) -> frozenset[str]:
         """The current system-principal set (live read, D10)."""
         return self._system_repository.get_permissions()
+
+    # --- Role CRUD + dynamic grants (D5) ---
+
+    def create_role(self, role: str, description: str | None = None) -> RoleRead:
+        """Create a runtime-managed role (REQ-006); return its :class:`RoleRead`.
+
+        The role name must match ``^[a-z0-9_-]{1,32}$`` (a malformed name
+        raises ``ValueError``); a duplicate name raises
+        :class:`RoleAlreadyExistsError` (the repository contract).
+        """
+        if not _ROLE_NAME_PATTERN.match(role):
+            raise ValueError(f"role name {role!r} is malformed (expected ^[a-z0-9_-]{{1,32}}$)")
+        self._role_repository.add(role, description, is_builtin=False)
+        created = self._role_repository.get(role)
+        if created is None:  # defensive: the add above guarantees presence
+            raise RoleNotFoundError(role)
+        if self._event_bus is not None:
+            self._event_bus.publish(RoleCreated(role=role))
+        return RoleRead(
+            role=created.role,
+            description=created.description,
+            is_builtin=created.is_builtin,
+            created_at=created.created_at,
+        )
+
+    def list_roles(self) -> list[RoleRead]:
+        """All roles (REQ-006)."""
+        return [
+            RoleRead(
+                role=stored.role,
+                description=stored.description,
+                is_builtin=stored.is_builtin,
+                created_at=stored.created_at,
+            )
+            for stored in self._role_repository.list_all()
+        ]
+
+    def delete_role(self, role: str) -> None:
+        """Delete a role (and its grants) with the deletion guards (REQ-007).
+
+        An unknown role raises :class:`RoleNotFoundError`; a built-in role
+        (``admin``, ``user``) raises :class:`RoleProtectedError`; a role
+        assigned to any user raises :class:`RoleInUseError`.
+        """
+        stored = self._role_repository.get(role)
+        if stored is None:
+            raise RoleNotFoundError(role)
+        if stored.is_builtin:
+            raise RoleProtectedError(role)
+        if self._role_assigned_to_any_user(role):
+            raise RoleInUseError(role)
+        self._role_repository.delete(role)
+        if self._event_bus is not None:
+            self._event_bus.publish(RoleDeleted(role=role))
+
+    def grant_permission(self, role: str, permission: str) -> None:
+        """Grant ``permission`` to ``role`` (REQ-008; idempotent — no duplicate row).
+
+        The permission must be a catalog action or a feature wildcard (an
+        unknown key raises :class:`UnknownPermissionError`); an unknown role
+        raises :class:`RoleNotFoundError`.
+        """
+        if not self._is_valid_grant_key(permission):
+            raise UnknownPermissionError(permission)
+        if not self._role_known(role):
+            raise RoleNotFoundError(role)
+        self._grant_repository.grant(role, permission)
+        if self._event_bus is not None:
+            self._event_bus.publish(RolePermissionsChanged(role=role, added=[permission], removed=[]))
+
+    def revoke_permission(self, role: str, permission: str) -> None:
+        """Revoke ``permission`` from ``role`` (REQ-008; idempotent no-op when absent).
+
+        The permission must be a catalog action or a feature wildcard (an
+        unknown key raises :class:`UnknownPermissionError`); an unknown role
+        raises :class:`RoleNotFoundError`.
+        """
+        if not self._is_valid_grant_key(permission):
+            raise UnknownPermissionError(permission)
+        if not self._role_known(role):
+            raise RoleNotFoundError(role)
+        if permission in self._grant_repository.get_role_permissions(role):
+            self._grant_repository.revoke(role, permission)
+            if self._event_bus is not None:
+                self._event_bus.publish(RolePermissionsChanged(role=role, added=[], removed=[permission]))
+
+    def get_role_permissions(self, role: str) -> frozenset[str]:
+        """The role's explicit grants (REQ-008); an unknown role raises
+        :class:`RoleNotFoundError`."""
+        if not self._role_known(role):
+            raise RoleNotFoundError(role)
+        return self._grant_repository.get_role_permissions(role)
+
+    def _role_known(self, role: str) -> bool:
+        """Whether ``role`` is a known role (a built-in role, or a row in the roles table).
+
+        The built-in roles (``admin``, ``user``) are always known (seeded by the
+        migration in production) even before a row exists in the roles table.
+        """
+        return role in BUILTIN_ROLES or self._role_repository.get(role) is not None
+
+    def _role_assigned_to_any_user(self, role: str) -> bool:
+        """Whether ``role`` is assigned to any user (the multi-role UserRead, REQ-007)."""
+        return any(role in user.roles for user in self._user_manager.list_users(include_inactive=True))
 
     # --- Check core (private; not traced) ---
 

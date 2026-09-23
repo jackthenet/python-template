@@ -81,6 +81,12 @@ class SessionLookup(Protocol):
     def get_by_token_hash(self, token_hash: str) -> SessionRecord | None: ...
 
 
+# The built-in role names (seeded by the migration, REQ-007). These are always
+# valid / "known" roles even before a row exists in the ``roles`` table (the
+# grant path must accept them without a role-repository row).
+BUILTIN_ROLES: frozenset[str] = frozenset({"admin", "user"})
+
+
 BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset({
     "usermanagement.get_user",
     "usermanagement.verify_password",

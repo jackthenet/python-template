@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool, StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from backend.logging import logged_class
@@ -49,7 +49,8 @@ def _sqlite_file_path(database_url: str) -> str | None:
 
 def _make_engine(database_url: str):
     """Create the SQLite engine (parent dir auto-created; busy timeout for
-    file-based URLs; a static pool for ``:memory:``)."""
+    file-based URLs; a static pool for ``:memory:``; a null pool for
+    file-based so the file is released after each operation)."""
     file_path = _sqlite_file_path(database_url)
     if file_path is not None:
         Path(file_path).parent.mkdir(parents=True, exist_ok=True)
@@ -57,7 +58,7 @@ def _make_engine(database_url: str):
     if file_path is None:
         return create_engine(database_url, connect_args=connect_args, poolclass=StaticPool)
     connect_args["timeout"] = 30
-    return create_engine(database_url, connect_args=connect_args)
+    return create_engine(database_url, connect_args=connect_args, poolclass=NullPool)
 
 
 class _SqliteRepository:
