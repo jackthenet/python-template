@@ -133,6 +133,7 @@ class PermissionService:
         self._catalog = catalog if catalog is not None else PermissionCatalog()
         self._event_bus = event_bus
         self._settings_registry = settings_registry
+        self._subscribe_to_setting_changed()
 
     # --- Checks (D1) ---
 
@@ -167,7 +168,9 @@ class PermissionService:
         for permission in permissions:
             if not self._is_valid_grant_key(permission):
                 raise UnknownPermissionError(permission)
-        self._system_repository.set_permissions(permissions)
+        permission_list = list(permissions)
+        self._system_repository.set_permissions(permission_list)
+        self._sync_settings_registry(permission_list)
 
     def get_system_permissions(self) -> frozenset[str]:
         """The current system-principal set (live read, D10)."""
@@ -241,6 +244,58 @@ class PermissionService:
         if not self._role_known(role):
             raise RoleNotFoundError(role)
         return self._grant_repository.get_role_permissions(role)
+
+    # --- Role assignment (delegates to the UserManager; D8, REQ-012) ---
+
+    def assign_role(self, user_id: UUID, role: str) -> UserRead:
+        """Assign ``role`` to ``user_id`` (replace semantics) via the UserManager.
+
+        The permission service never mutates user roles directly (REQ-012):
+        this delegates to :meth:`UserManager.set_role` (``set_roles([role])``).
+        ``role`` is validated against the role store first (EDGE-026); an
+        unknown role raises :class:`RoleNotFoundError`.
+        """
+        self._validate_assignment_role(role)
+        return self._user_manager.set_role(user_id, role)
+
+    def add_role(self, user_id: UUID, role: str) -> UserRead:
+        """Add ``role`` to ``user_id`` (append semantics) via the UserManager.
+
+        Delegates to :meth:`UserManager.add_role` (REQ-012); ``role`` is
+        validated against the role store first (EDGE-026).
+        """
+        self._validate_assignment_role(role)
+        return self._user_manager.add_role(user_id, role)
+
+    def remove_role(self, user_id: UUID, role: str) -> UserRead:
+        """Remove ``role`` from ``user_id`` via the UserManager.
+
+        Delegates to :meth:`UserManager.remove_role` (REQ-012); the last-admin
+        guard is preserved on the delegation (AC-015); ``role`` is validated
+        against the role store first (EDGE-026).
+        """
+        self._validate_assignment_role(role)
+        return self._user_manager.remove_role(user_id, role)
+
+    def set_roles(self, user_id: UUID, roles: Iterable[str]) -> UserRead:
+        """Replace ``user_id``'s roles with ``roles`` via the UserManager.
+
+        Delegates to :meth:`UserManager.set_roles` (REQ-012); every role is
+        validated against the role store first (EDGE-026).
+        """
+        role_list = list(roles)
+        for role in role_list:
+            self._validate_assignment_role(role)
+        return self._user_manager.set_roles(user_id, role_list)
+
+    def _validate_assignment_role(self, role: str) -> None:
+        """Validate an assignment-pass-through role against the role store (EDGE-026).
+
+        An unknown role (not a built-in role and not a row in the roles table)
+        raises :class:`RoleNotFoundError` before the delegation.
+        """
+        if not self._role_known(role):
+            raise RoleNotFoundError(role)
 
     def _validate_grant(self, role: str, permission: str) -> None:
         """Validate a grant/revoke target (REQ-008): the permission must be a catalog action or
@@ -353,6 +408,56 @@ class PermissionService:
         """Publish ``event`` when an event bus is injected (a no-op otherwise, AC-025)."""
         if self._event_bus is not None:
             self._event_bus.publish(event)
+
+    # --- Settings alias sync (D16, REQ-019) ---
+
+    def _subscribe_to_setting_changed(self) -> None:
+        """Subscribe to ``SettingChanged`` so a registry write updates the system-set table.
+
+        The system-set table is the source of truth (D16); the registry key
+        ``permissions.system_principal`` is the live-configurable alias. A
+        registry write publishes ``SettingChanged``; this handler applies it to
+        the table. A structural publisher without a ``subscribe`` method (the
+        no-publisher mode, AC-025) skips the subscription.
+        """
+        bus = self._event_bus
+        if bus is None:
+            return
+        subscribe = getattr(bus, "subscribe", None)
+        if subscribe is None:
+            return
+        from backend.settings import SettingChanged
+
+        subscribe(SettingChanged, self._on_setting_changed)
+
+    def _on_setting_changed(self, event: object) -> None:
+        """Apply a ``SettingChanged`` for ``permissions.system_principal`` to the table."""
+        key = getattr(event, "key", None)
+        if key != "permissions.system_principal":
+            return
+        value = getattr(event, "value", None)
+        if isinstance(value, (list, tuple, set, frozenset)):
+            self._system_repository.set_permissions(list(value))
+
+    def _sync_settings_registry(self, permissions: list[str]) -> None:
+        """Best-effort: sync ``permissions.system_principal`` to the registry (D16, REQ-019).
+
+        The table is the source of truth; this mirrors the new set into the
+        registry key so the alias and the table stay in sync. A missing
+        registry (the no-settings mode) or an unregistered key is a no-op.
+        """
+        registry = self._settings_registry
+        if registry is None:
+            from backend.settings import get_settings_registry
+
+            registry = get_settings_registry(required=False)
+        if registry is None:
+            return
+        try:
+            if registry.has("permissions.system_principal"):
+                registry.set_value("permissions.system_principal", list(permissions))
+        except Exception:
+            pass  # best-effort: a registry failure never breaks the table write
 
     def _is_valid_grant_key(self, permission: str) -> bool:
         """Whether ``permission`` is a valid grant key (a catalog action or a feature wildcard, D18)."""
