@@ -41,7 +41,7 @@ def _build(
     catalog_cls,
     *,
     user_roles=None,
-    username="u1",
+    username="user1",
     seed_roles=(),
     event_bus=None,
 ):

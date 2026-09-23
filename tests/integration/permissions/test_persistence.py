@@ -59,7 +59,7 @@ def test_in_memory_repos_and_singleton() -> None:
     repo = SqliteUserRepository("sqlite:///:memory:")
     manager = UserManager(repo)
     user = manager.create_user(
-        UserCreate(username="u1", email="u1@example.com", password="correct-horse-1", roles=["user"])
+        UserCreate(username="user1", email="user1@example.com", password="correct-horse-1", roles=["user"])
     )
 
     catalog = PermissionCatalog()
