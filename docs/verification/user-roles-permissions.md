@@ -602,3 +602,27 @@ Per-task RED/GREEN evidence (one S4.1 RED confirmation + S4.2 GREEN per DAG task
 |---|---|---|
 | `tests/acceptance/authentication/test_enforcement_wiring.py::test_authentication_enforcement_wiring` | `AssertionError: AuthService.begin_passkey_registration: trailing parameter is 'request', expected 'principal'` — the trailing `principal: Principal = Principal()` parameter is not yet added to the public `AuthService` methods (T-009 implementation step 1); the ADR-071 contract (last parameter named `principal` with a default) is not yet satisfied | `tests/acceptance/authentication/test_enforcement_wiring.py:113` |
 - **Next:** S4.2 (T-009) — implement the authentication enforcement wiring (trailing principal parameter + @requires_permission on the enforced public methods, the exempt set declared but not enforced, optional `permission_service: PermissionChecker | None = None` constructor parameter, feature-owned `feature_actions.py`, `LoginResult.user` carries `UserRead.roles`) and confirm GREEN.
+
+#### T-009 — S4.2 Implement + confirm GREEN — GREEN CONFIRMED
+
+- **Implementation (per DAG task T-009, ADR-071/ADR-070):**
+  - `src/backend/authentication/service.py`:
+    - Module-level `_SYSTEM_PRINCIPAL = Principal()` singleton (B008-blessed, identical to the T-008 pattern) — the default trailing principal of every public method is the system principal (user_id=None; EDGE-022).
+    - Trailing `principal: Principal = _SYSTEM_PRINCIPAL` parameter added to all **11** public `AuthService` methods (existing positional call sites unaffected).
+    - `@requires_permission("authentication.<method>")` applied to the **4 enforced** methods: `begin_passkey_registration`, `complete_passkey_registration`, `list_passkeys`, `delete_passkey` (the check resolves through the injected checker at entry; a denial propagates to the caller).
+    - The **7 exempt** methods (`login`, `session_info`, `logout`, `request_password_reset`, `complete_password_reset`, `begin_passkey_login`, `complete_passkey_login`) take the parameter but carry **no** decorator — declared but not enforced (ADR-071; AC-030/EDGE-023).
+    - Constructor gains `permission_service: PermissionChecker | None = None` (keyword-only; stored as `self._permission_service`; `None` = standalone mode, no enforcement — AC-031). The feature imports only `backend.shared` plus the injected checker — never `backend.permissions` (ADR-070).
+    - `LoginResult.user` already carries `UserRead.roles` (multi-role, T-002) — no change needed (implementation step verified as satisfied).
+  - `src/backend/authentication/feature_actions.py` (new): `register_actions(catalog)` declares the **11** authentication catalog actions (`authentication.<method>`, descriptions from the spec Section 3 initial catalog table), including the exempt set (declared but not enforced).
+- **GREEN command (targeted — the task's 1 test, from the DAG):**
+  `uv run pytest tests/acceptance/authentication/test_enforcement_wiring.py::test_authentication_enforcement_wiring -v`
+- **Result:** **1 passed, 0 failed** — GREEN confirmed (principal parameter on all 11 methods; deny propagates on all 4 enforced methods with the `authentication.<method>` keys; allow proceeds with the system principal; an explicit principal (user_id + session token) reaches the check; the exempt set performs no check (login succeeds for a zero-permission user with a denying checker; the 6 remaining exempt probes reach the method body unchecked); the constructor defaults `permission_service=None`; `feature_actions.register_actions` declares exactly the 11 authentication actions).
+- **Per-test outcome:**
+
+| Test | Result | Meaning |
+|---|---|---|
+| `tests/acceptance/authentication/test_enforcement_wiring.py::test_authentication_enforcement_wiring` (REQ-024 / ADR-071) | **PASSED** | the T-009 authentication enforcement wiring is implemented — GREEN |
+
+- **Regression check (no previously-GREEN test regressed):** the existing authentication suites (`tests/acceptance/authentication tests/unit/authentication tests/integration/authentication tests/contract/authentication tests/property/authentication`) show **53 failed / 15 passed with the change — the failure set is byte-identical to the pre-implementation baseline** (54 failed / 15 passed, the extra failure being the T-009 RED test now turned GREEN — verified by diff of the sorted FAILED lists). All 53 pre-existing failures are the T-002 pre-amendment-API tests: the shared helper `tests/authentication_test_helpers.py::create_user` still calls `UserCreate(..., role=...)` (the pre-T-002 single-role API; `roles` is now required) — a pre-existing, out-of-T-009-scope issue (tests are not modified in this step). The sibling T-008 enforcement test `tests/acceptance/permissions/test_enforcement.py::test_standalone_mode_no_check` remains **PASSED** (no cross-feature regression).
+- **Ruff (step's changed paths):** `uv run ruff check src/backend/authentication/service.py src/backend/authentication/feature_actions.py` → **All checks passed**; `uv run ruff format --check` on the same paths → **2 files already formatted** (formatting applied in-step, formatting-only).
+- **Next:** S4.3 (T-009) — Ruff gate on the changed paths.

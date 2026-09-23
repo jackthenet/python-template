@@ -15,6 +15,22 @@ and passkey (WebAuthn) operations specified by ``docs/specs/authentication.md``.
 - The class is traced via the shared logging feature (``@logged_class``);
   ``include_args`` stays ``False`` so passwords and tokens never appear in log
   records (REQ-022).
+
+Enforcement wiring (REQ-024, ADR-071): every public method takes a trailing
+``principal: Principal = _SYSTEM_PRINCIPAL`` parameter; the enforced methods
+(``begin_passkey_registration``, ``complete_passkey_registration``,
+``list_passkeys``, ``delete_passkey``) are decorated with
+``@requires_permission("authentication.<method>")`` and resolve the check
+through the injected ``permission_service`` (the structural
+``PermissionChecker``; the shared PermissionService at the composition root).
+The exempt set (session-establishment/teardown/introspection operations:
+``login``, ``session_info``, ``logout``, ``request_password_reset``,
+``complete_password_reset``, ``begin_passkey_login``,
+``complete_passkey_login``) is declared in the catalog but not enforced —
+they take the parameter but perform no check. A ``None`` checker is
+standalone mode: no check is performed (open, as before — AC-031). The
+feature depends only on ``backend.shared`` plus the injected checker, never
+on ``backend.permissions`` (ADR-070).
 """
 
 from __future__ import annotations
@@ -69,10 +85,16 @@ from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
 from backend.logging import logged_class
+from backend.shared import PermissionChecker, Principal, requires_permission
 from backend.usermanagement import EventPublisher, UserManager, UserRead, UserRepository
 
 # A fixed Argon2id hash used for dummy verification (timing equalization, REQ-005).
 _DUMMY_HASH = PasswordHasher().hash("dummy-password-for-timing-equalization")
+
+# ADR-071: the default trailing principal of every public method is the
+# system principal (user_id=None; EDGE-022). A module-level singleton keeps
+# the argument defaults lint-clean (B008) and identical across methods.
+_SYSTEM_PRINCIPAL = Principal()
 
 
 @logged_class(slow_threshold_ms=250, include_args=False)
@@ -101,6 +123,7 @@ class AuthService:
         rp_id: str = "localhost",
         rp_name: str = "Python Template",
         origin: str = "http://localhost:3000",
+        permission_service: PermissionChecker | None = None,
     ) -> None:
         self._user_manager = user_manager
         self._user_repository = user_repository
@@ -108,6 +131,11 @@ class AuthService:
         self._reset_repository = reset_repository
         self._webauthn_repository = webauthn_repository
         self._event_bus = event_bus
+        # D13/ADR-071: the injected checker enforces authentication.<method>
+        # at entry for the enforced methods (REQ-024); None = standalone mode
+        # (no enforcement, today's behavior — AC-031). The exempt set is
+        # declared but never enforced.
+        self._permission_service = permission_service
         self._session_ttl = session_ttl
         self._reset_token_ttl = reset_token_ttl
         self._webauthn_provider = (
@@ -167,7 +195,7 @@ class AuthService:
 
     # --- password login ---
 
-    def login(self, request: LoginRequest) -> LoginResult:
+    def login(self, request: LoginRequest, principal: Principal = _SYSTEM_PRINCIPAL) -> LoginResult:
         identifier = request.identifier
 
         if self._attempt_tracker.is_locked(identifier):
@@ -199,13 +227,13 @@ class AuthService:
 
     # --- sessions ---
 
-    def session_info(self, token: str) -> SessionInfo:
+    def session_info(self, token: str, principal: Principal = _SYSTEM_PRINCIPAL) -> SessionInfo:
         session = self._session_repository.get_by_token_hash(hash_token(token))
         if session is None or session.revoked or session.expires_at <= datetime.now(UTC):
             raise InvalidSessionError("invalid session")
         return SessionInfo(user_id=session.user_id, created_at=session.created_at, expires_at=session.expires_at)
 
-    def logout(self, token: str) -> None:
+    def logout(self, token: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         session = self._session_repository.get_by_token_hash(hash_token(token))
         if session is not None and not session.revoked and session.expires_at > datetime.now(UTC):
             self._session_repository.revoke(session.id)
@@ -213,7 +241,9 @@ class AuthService:
 
     # --- password recovery ---
 
-    def request_password_reset(self, request: PasswordResetRequest) -> str | None:
+    def request_password_reset(
+        self, request: PasswordResetRequest, principal: Principal = _SYSTEM_PRINCIPAL
+    ) -> str | None:
         email = request.email.lower()
         user = self._user_repository.get_by_email(email)
         if user is None:
@@ -234,7 +264,7 @@ class AuthService:
         self._publish(PasswordResetRequested(email=email))
         return token
 
-    def complete_password_reset(self, request: PasswordResetComplete) -> None:
+    def complete_password_reset(self, request: PasswordResetComplete, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         reset = self._reset_repository.get_by_token_hash(hash_token(request.token))
         now = datetime.now(UTC)
         if reset is None:
@@ -250,12 +280,18 @@ class AuthService:
 
     # --- passkey (WebAuthn) ---
 
-    def begin_passkey_registration(self, request: PasskeyRegistrationBegin) -> dict[str, Any]:
+    @requires_permission("authentication.begin_passkey_registration")
+    def begin_passkey_registration(
+        self, request: PasskeyRegistrationBegin, principal: Principal = _SYSTEM_PRINCIPAL
+    ) -> dict[str, Any]:
         return self._webauthn_provider.generate_registration_options(
             request.user_id, request.username, request.display_name
         )
 
-    def complete_passkey_registration(self, request: PasskeyRegistrationComplete) -> WebAuthnCredentialRead:
+    @requires_permission("authentication.complete_passkey_registration")
+    def complete_passkey_registration(
+        self, request: PasskeyRegistrationComplete, principal: Principal = _SYSTEM_PRINCIPAL
+    ) -> WebAuthnCredentialRead:
         credential = self._webauthn_provider.verify_registration_response(request.user_id, "", request.response)
         now = datetime.now(UTC)
         row = WebAuthnCredential(
@@ -274,13 +310,17 @@ class AuthService:
             created_at=now,
         )
 
-    def begin_passkey_login(self, request: PasskeyLoginBegin) -> dict[str, Any]:
+    def begin_passkey_login(
+        self, request: PasskeyLoginBegin, principal: Principal = _SYSTEM_PRINCIPAL
+    ) -> dict[str, Any]:
         credential = self._webauthn_repository.get_by_credential_id(request.credential_id)
         if credential is None:
             raise PasskeyCredentialNotFoundError("credential not found")
         return self._webauthn_provider.generate_authentication_options(request.credential_id)
 
-    def complete_passkey_login(self, request: PasskeyLoginComplete) -> LoginResult:
+    def complete_passkey_login(
+        self, request: PasskeyLoginComplete, principal: Principal = _SYSTEM_PRINCIPAL
+    ) -> LoginResult:
         assertion = self._webauthn_provider.verify_authentication_response(request.credential_id, request.response)
         credential = self._webauthn_repository.get_by_credential_id(request.credential_id)
         if credential is None:
@@ -291,7 +331,8 @@ class AuthService:
         user = self._user_manager.get_user(credential.user_id)
         return self._issue_session(user, method="passkey")
 
-    def list_passkeys(self, user_id: UUID) -> list[WebAuthnCredentialRead]:
+    @requires_permission("authentication.list_passkeys")
+    def list_passkeys(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> list[WebAuthnCredentialRead]:
         rows = self._webauthn_repository.list_for_user(user_id)
         return [
             WebAuthnCredentialRead(
@@ -302,7 +343,8 @@ class AuthService:
             for row in rows
         ]
 
-    def delete_passkey(self, user_id: UUID, credential_id: str) -> None:
+    @requires_permission("authentication.delete_passkey")
+    def delete_passkey(self, user_id: UUID, credential_id: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         credential = self._webauthn_repository.get_by_credential_id(credential_id)
         if credential is None or credential.user_id != user_id:
             raise PasskeyCredentialNotFoundError("credential not found")
