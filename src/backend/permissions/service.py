@@ -47,7 +47,7 @@ from backend.permissions.errors import (
     UnknownPermissionError,
 )
 from backend.permissions.events import PermissionDenied, RoleCreated, RoleDeleted, RolePermissionsChanged
-from backend.permissions.models import BUILTIN_ROLES, Role, RoleRead, SessionLookup
+from backend.permissions.models import BUILTIN_ROLES, PermissionRead, Role, RoleRead, SessionLookup
 from backend.permissions.repositories import (
     GrantRepository,
     RoleRepository,
@@ -186,6 +186,16 @@ class PermissionService:
     def get_system_permissions(self) -> frozenset[str]:
         """The current system-principal set (live read, D10)."""
         return self._system_repository.get_permissions()
+
+    # --- Catalog (read-only after startup; D3) ---
+
+    def list_permissions(self, feature: str | None = None) -> list[PermissionRead]:
+        """The declared catalog permissions, optionally restricted to ``feature`` (D3).
+
+        Read-only after startup (the catalog is closed; no runtime creation of
+        permission names, REQ-004/REQ-005).
+        """
+        return list(self._catalog.actions(feature))
 
     # --- Role CRUD + dynamic grants (D5) ---
 

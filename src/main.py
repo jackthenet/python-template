@@ -29,6 +29,7 @@ from backend.authentication import (
     register_settings as register_authentication_settings,
 )
 from backend.authentication.feature_actions import register_actions as register_authentication_actions
+from backend.eventbus import get_event_bus
 from backend.eventbus import register_settings as register_eventbus_settings
 from backend.filemanagement import (
     FileService,
@@ -48,6 +49,7 @@ from backend.permissions import (
     SqliteRoleRepository,
     SqliteSystemPrincipalRepository,
 )
+from backend.permissions import register_settings as register_permissions_settings
 from backend.sessionmanagement import SessionService
 from backend.sessionmanagement.feature_actions import register_actions as register_sessionmanagement_actions
 from backend.settings import SettingsRegistry
@@ -134,6 +136,7 @@ _permission_service = PermissionService(
     SqliteSystemPrincipalRepository(_PERMISSION_DB),
     _user_manager_proxy,  # type: ignore[arg-type]  # the lazy proxy resolves to the real UserManager
     catalog=_catalog,
+    event_bus=get_event_bus(),  # activates the SettingChanged subscription (REQ-019, D16)
     settings_registry=_settings_registry,
 )
 _permission_service_proxy.set_service(_permission_service)
@@ -152,6 +155,7 @@ register_logging_settings(_settings_registry)
 register_authentication_settings(_settings_registry)
 register_usermanagement_settings(_settings_registry)
 register_eventbus_settings(_settings_registry)
+register_permissions_settings(_settings_registry)  # REQ-019: the permissions.system_principal alias
 
 # --- The shared UserManager (one of the six services) ---
 _user_repository = SqliteUserRepository("sqlite:///./data/usermanagement/users.db")
