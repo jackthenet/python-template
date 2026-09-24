@@ -1010,3 +1010,31 @@ All 4 full-suite failures are the (c) pre-existing unrelated flaky logging tests
 - **Gate result: CLEAN.** The full test suite passes (the only failures are the (c) pre-existing unrelated flaky logging tests, out of scope); lint is clean; types are clean. The (a) new failures (3) and the (b) UserCreate-roles breaks (118) are fixed. **The change is VERIFIED.**
 
 **Next:** Phase 6 (Review).
+
+## Phase 6 — S6.1 Review vs. normative basis
+
+- **Date:** 2026-09-24
+- **Reviewer:** S6.1 step subagent (CROSS-CUTTING review vs. the approved spec `docs/specs/user-roles-permissions.md`).
+- **Scope:** behavior vs. the normative basis (no more, no less). Implementation style is out of scope (a later step). The FINAL code state was reviewed, not the commit-by-commit diff.
+- **Method:** read the spec (REQ/AC/INV/EDGE/NFR, test strategy, Impact Analysis, Breaking Changes), the verification artifact, and the final implementation (`src/backend/permissions/`, `src/backend/shared/`, the six features' enforcement wiring, `src/main.py`, the two migrations, the usermanagement amendment); compared the 77 derived test files against the spec's test strategy table and inspected every post-derivation test edit.
+
+### Findings (ordered by severity)
+
+**F-1 (MEDIUM) — Compliance gap ("less than the spec"): the REQ-019 settings alias is not wired into the composition root.**
+- **What:** the spec's REQ-019 / D16 requires the feature-owned `register_settings(registry)` to be "called at startup", registering `permissions.system_principal` (LIST, default = the bootstrap set) as the live-configurable alias for the system set, with "a registry write updates the table (via the `SettingChanged` subscription)". In the composition root (`src/main.py`) the alias is **not** activated:
+  - the permissions feature's `register_settings` is **not called** (the shared `SettingsRegistry` never registers the `permissions.system_principal` key — `main.py` registers logging / authentication / usermanagement / eventbus settings but not permissions);
+  - the shared `PermissionService` is created **without an `event_bus`** (`event_bus=None`), so `_subscribe_to_setting_changed` returns early and no `SettingChanged` subscription exists.
+  - Net effect: in the wired (production) app the REQ-019 alias is **inactive** — it is neither registered nor live-configurable, and a registry write could not update the system-set table.
+- **Where:** `src/main.py` (the composition-root wiring); the mechanism itself is correctly implemented in `src/backend/permissions/service.py` (`_subscribe_to_setting_changed` / `_on_setting_changed` / `_sync_settings_registry`) and in `src/backend/permissions/feature_settings.py` (`register_settings`).
+- **Spec ID:** REQ-019 (also D16, AC-023).
+- **Assessment:** the mechanism is fully implemented and covered by the GREEN AC-023 test (`test_system_set_settings_alias_sync`, explicit wiring), so REQ-019 is *represented* in the final code; but the spec's "called at startup" (the composition root) is not satisfied — the production wiring omits the alias registration and the event-bus subscription. This is a partial non-implementation of a normative requirement in the production composition root (the secondary settings-registry configuration path is inert; the primary `set_system_permissions` path still works).
+
+**F-2 (LOW) — Compliance gap ("less than the spec"): `PermissionService.list_permissions` is missing.**
+- **What:** the spec's service API schema (Section 3, under "Catalog (read-only after startup; D3)") lists `list_permissions(self, feature: str | None = None) -> list[PermissionRead]` as a `PermissionService` method. The final `PermissionService` does **not** implement it (it has `list_roles` but no `list_permissions`).
+- **Where:** `src/backend/permissions/service.py` (the `PermissionService` class).
+- **Spec ID:** none directly — no `REQ-XXX` / `AC-XXX` / test references `list_permissions`; it is part of the spec's normative service API schema. The equivalent read is available via `PermissionCatalog.actions(feature=None)` (the catalog is held by the service), and the top-level NFR-003 public-API contract is fully satisfied (all contract names exported).
+- **Assessment:** a minor API-schema deviation (a convenience read method is absent), not a requirement gap and not a behavior regression; the catalog read capability is available via the catalog object.
+
+### Confirmations (compliant with the normative basis)
+
+- **C-1 — Every `REQ-XXX` is represented in the final code (no missing requirement).** All 29 REQs (REQ-001…REQ-029) are implemented: the check API (REQ-001), hierarchical keys + wildcards (REQ-002/003), the static catalog + feature declarations (REQ-004/005), role CRUD + deletion guards (REQ-006/007), dynamic grants (REQ-008), multi-role union + admin wildcard + zero-permission `user` role (REQ-009/010/011), delegated assignment + last-admin guard (REQ-012/013), live lookup (REQ-014), fail-closed (REQ-015), inactive-user denial (REQ-016), session validation (REQ-017), system principal (REQ-018), settings alias mechanism (REQ-019), events (REQ-020), the `AuthorizationError` hierarchy (REQ-021),
