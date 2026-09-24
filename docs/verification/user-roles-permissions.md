@@ -961,3 +961,52 @@ All 118 fail with `pydantic_core.ValidationError: 1 validation error for UserCre
 - **Gate result: NOT clean.** The Phase 5 gate requires the full test suite to pass (with pre-existing failures classified as out of scope) + clean lint + clean types. Lint is clean, but the test suite has **2 new test failures** (not out of scope) and mypy has **1 new error** (not out of scope). The 118 UserCreate-roles breaks are regressions that must be fixed within this change's scope. **The change is NOT verified** until the (a) new failures are fixed and the (b) UserCreate-roles breaks are fixed.
 
 **Next:** the orchestrator must fix the (a) new failures (2 test + 1 mypy) and the (b) UserCreate-roles breaks (118) within this change's scope, then re-run Phase 5. The (c) pre-existing unrelated failures (1 YAML + 6 flaky logging) are out of scope.
+
+### Phase 5 re-run: Verify — COMPLETE (gate CLEAN)
+
+- **Date:** 2026-09-24
+- **Environment:** pytest 9.1.1, Python 3.14.5, `win32`, worktree `crosscut/user-roles-permissions`.
+- **Entry state:** the (a) new failures (3) fixed (commit `22239c7`); the (b) UserCreate-roles breaks (118) fixed (commit `63593f1`); the (c) pre-existing unrelated failures (1 YAML roundtrip + 6 flaky logging) out of scope.
+
+#### S5.1 Run full test suite
+
+- **Full suite** (`uv run pytest tests/ -v`): **4 failed, 630 passed, 1 skipped** (205 s).
+- **Acceptance** (`uv run pytest tests/acceptance/ -v`): **313 passed, 1 skipped** (49 s) — clean (0 failed).
+- **Property** (`uv run pytest tests/property/ -v`): **61 passed, 0 failed** (50 s) — clean. (An initial parallel-load run showed 2 flaky filemanagement property failures — see the property note in the failure classification; re-run alone is clean.)
+- **Contract** (`uv run pytest tests/contract/ -v`): **42 passed, 0 failed** (80 s) — clean.
+- **This change's new tests (the 77 derived tests):** all GREEN (subset of the passing full suite; no `UserCreate`/`roles` validation errors remain).
+
+#### S5.2 Lint + types
+
+- **Lint** (`uv run ruff check .`, whole repo): **All checks passed!** (clean).
+- **Type checks** (`uv run mypy src/`): **Success: no issues found in 73 source files** (clean — the prior `service.py:353` `union-attr` error is fixed).
+
+#### Failure classification (the 4 full-suite failures)
+
+All 4 full-suite failures are the (c) pre-existing unrelated flaky logging tests (out of scope). The (a) new failures (3) and the (b) UserCreate-roles breaks (118) are **fixed** and no longer appear.
+
+| # | Failure | Bucket |
+|---|---------|--------|
+| 1 | `tests/unit/logging/test_logging.py::test_ac_005_intercept_handler_skips_bootstrap` | (c) flaky logging (out of scope) |
+| 2 | `tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records` | (c) flaky logging (out of scope) |
+| 3 | `tests/unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level` | (c) flaky logging (out of scope) |
+| 4 | `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` | (c) flaky logging (out of scope) |
+
+**Fixed (a) new failures (3) — commit `22239c7`:** (1) `tests/acceptance/logging_coverage/test_behavior_unchanged.py::test_tracing_does_not_change_behavior` (the `principal` param) now passes; (2) `tests/acceptance/logging_coverage/test_new_classes_traced.py::test_new_public_classes_traced_by_default` (the `PermissionCatalog` `@logged_class`) now passes; (3) the `src/backend/permissions/service.py:353` mypy `union-attr` (`user.is_active` on `UserRead | None`) is resolved — mypy is clean.
+
+**Fixed (b) UserCreate-roles breaks (118) — commit `63593f1`:** the pre-existing test helpers now use the `UserCreate(roles=[...])` API; no `roles: Field required` validation errors remain in the full suite.
+
+**(c) YAML roundtrip:** `tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip` did **not** fail this run (flaky/pre-existing, out of scope).
+
+**Property suite note (flaky under parallel load — NOT a regression):** the initial property run (executed in parallel with the acceptance/contract/lint/mypy runs) showed 2 flaky filemanagement property failures: `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_002_concurrent_same_key_last_write_wins` and `::test_inv_001_no_partial_state_on_failure`. These are concurrency/timing-sensitive tests (they spawn threads). Re-run alone (no parallel load): **61 passed, 0 failed**. Isolated flakiness assessment: **8/8 passed** on the change branch and **8/8 passed** on `main` (base, no change). The failures were caused by CPU contention from the parallel execution, NOT by this change (the only filemanagement source change is the ADR-071 enforcement wiring — `@requires_permission` decorators + trailing `principal` param — a no-op in the standalone mode the property tests use). Not a regression.
+
+#### S5.3 Update traceability
+
+- `docs/verification/traceability.md` — the **User Roles & Permissions Matrix** section (all 78 rows GREEN) and the **Affected Features (CROSS-CUTTING)** subsection were updated in the prior Phase 5 run. No change in the re-run (all tests remain GREEN).
+
+#### S5.4 Verification report (spec coverage = 100%)
+
+- **Specification coverage = 100%** (unchanged from the prior run; every `REQ-XXX` (29) has at least one GREEN test; all 40 AC / 6 INV / 26 EDGE / 5 NFR rows GREEN).
+- **Gate result: CLEAN.** The full test suite passes (the only failures are the (c) pre-existing unrelated flaky logging tests, out of scope); lint is clean; types are clean. The (a) new failures (3) and the (b) UserCreate-roles breaks (118) are fixed. **The change is VERIFIED.**
+
+**Next:** Phase 6 (Review).
