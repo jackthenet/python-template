@@ -11,7 +11,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 
+from backend.logging import logged_class
 
+
+@logged_class
 class RoleStore(ABC):
     """The role store interface (D4)."""
 
@@ -26,6 +29,7 @@ class RoleStore(ABC):
         ...
 
 
+@logged_class
 class StaticRoleStore(RoleStore):
     """A fixed role set (the default: ``("admin", "user")``)."""
 

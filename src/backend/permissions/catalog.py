@@ -13,11 +13,13 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
+from backend.logging import logged_class
 from backend.permissions.models import PermissionRead
 
 _PERMISSION_KEY_PATTERN = re.compile(r"^[a-z0-9_-]+\.[a-z0-9_-]+$")
 
 
+@logged_class
 class PermissionCatalog:
     """In-memory registry of declared actions.
 

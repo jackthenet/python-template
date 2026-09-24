@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Protocol
 
 from pydantic import BaseModel
+from sqlalchemy.types import TypeDecorator
 from sqlmodel import SQLModel
 
 _ROOT = pathlib.Path("src/backend")
@@ -38,13 +39,20 @@ def _public_classes() -> list[tuple[str, str]]:
 
 def _is_excluded(cls: type) -> bool:
     """True when the class has no behavior to trace (exception, data model, enum,
-    or protocol)."""
+    or protocol), or cannot be traced (SQLAlchemy ``TypeDecorator``).
+
+    A SQLAlchemy ``TypeDecorator`` subclass MUST NOT be traced with
+    ``@logged_class``: wrapping its methods makes SQLAlchemy's
+    ``method_is_overridden`` detect a spurious override of ``bind_expression``,
+    which flips ``_has_bind_expression`` and breaks SQL compilation.
+    """
     return (
         issubclass(cls, Exception)
         or issubclass(cls, BaseModel)
         or issubclass(cls, SQLModel)
         or issubclass(cls, Enum)
         or issubclass(cls, Protocol)
+        or issubclass(cls, TypeDecorator)
     )
 
 

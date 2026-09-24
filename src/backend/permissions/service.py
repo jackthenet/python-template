@@ -350,6 +350,8 @@ class PermissionService:
             user, reason = self._lookup_user(user_id)
             if reason is not None:
                 return reason
+            if user is None:
+                return "unknown_user"  # Unreachable: _lookup_user pairs None with a denial reason.
             if not user.is_active:
                 return "inactive_user"
         # 3. Session validation (only when a token is provided; ADR-073).

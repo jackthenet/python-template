@@ -38,10 +38,11 @@ def test_tracing_does_not_change_behavior(log_records: list[Any], tmp_path: Any)
             f"{name} is not traced"
         )
 
-    # Public API signatures are unchanged.
+    # Public API signatures are unchanged (the trailing `principal` param is the
+    # ADR-071 enforcement-wiring addition, with a system-principal default).
     assert _param_names(EventBus.publish) == ["event"]
-    assert _param_names(SettingsRegistry.set_value) == ["key", "value"]
-    assert _param_names(UserManager.create_user) == ["data"]
+    assert _param_names(SettingsRegistry.set_value) == ["key", "value", "principal"]
+    assert _param_names(UserManager.create_user) == ["data", "principal"]
 
     # Observable behavior is unchanged: SettingsRegistry set/get round-trip.
     reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
