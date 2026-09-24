@@ -1038,3 +1038,62 @@ All 4 full-suite failures are the (c) pre-existing unrelated flaky logging tests
 ### Confirmations (compliant with the normative basis)
 
 - **C-1 — Every `REQ-XXX` is represented in the final code (no missing requirement).** All 29 REQs (REQ-001…REQ-029) are implemented: the check API (REQ-001), hierarchical keys + wildcards (REQ-002/003), the static catalog + feature declarations (REQ-004/005), role CRUD + deletion guards (REQ-006/007), dynamic grants (REQ-008), multi-role union + admin wildcard + zero-permission `user` role (REQ-009/010/011), delegated assignment + last-admin guard (REQ-012/013), live lookup (REQ-014), fail-closed (REQ-015), inactive-user denial (REQ-016), session validation (REQ-017), system principal (REQ-018), settings alias mechanism (REQ-019), events (REQ-020), the `AuthorizationError` hierarchy (REQ-021),
+
+## Phase 6 — Review report (S6.2 + S6.3)
+
+- **Date:** 2026-09-24
+- **Reviewer:** S6.2 (traceability + boundaries) / S6.3 (review report) step subagent (CROSS-CUTTING).
+- **Scope:** S6.2 verifies traceability, feature boundaries, architecture rules, and that no acceptance test was weakened; S6.3 produces the review report. The review report is **CLEAN** if: every REQ has a GREEN test, every acceptance test traces to a requirement, no behavior beyond the spec, no acceptance test weakened, and feature boundaries + architecture rules are respected.
+- **Method:** re-ran the 77 derived tests; inspected the traceability matrix against the spec's ID space; inspected the final `src/` state for feature boundaries and architecture rules; inspected every post-derivation test edit for weakening; compared the implementation's public API against the spec's service API schema.
+
+### S6.2 — Traceability + boundaries
+
+**Traceability (every REQ has ≥ 1 GREEN test; every acceptance test traces to a requirement): PASS.**
+- The **User Roles & Permissions Matrix** (`docs/verification/traceability.md`) covers all **29 REQ** (REQ-001…REQ-029), all **40 AC** (AC-001…AC-040), all **6 INV** (INV-001…INV-006), all **26 EDGE** (EDGE-001…EDGE-026), and all **5 NFR** (NFR-001…NFR-005) — the spec's full ID space (29/40/6/26/5, verified against `docs/specs/user-roles-permissions.md`). Every row is **GREEN**.
+- The **Affected Features (CROSS-CUTTING)** subsection lists the six affected features (usermanagement, authentication, settings, filemanagement, mail, sessionmanagement) and their enforcement-wiring tests (all GREEN).
+- Re-ran the **77 derived tests** in this step: **77 passed, 0 failed** (the union of the DAG's `red_command`s). Spec coverage = 100%.
+- No matrix update was required (the matrix was already complete and GREEN from the Phase 5 re-run).
+
+**Feature boundaries (code in the correct feature directory; no cross-feature internal imports): PASS.**
+- The new shared permissions feature lives in `src/backend/permissions/` (flat modules: `catalog.py`, `errors.py`, `events.py`, `feature_settings.py`, `models.py`, `repositories.py`, `service.py`); the shared enforcement plumbing lives in `src/backend/shared/` (`principal.py`).
+- **No cross-feature internal imports at runtime.** The only cross-feature imports of `backend.permissions` are the **`TYPE_CHECKING`-only** `PermissionCatalog` imports in each feature's `feature_actions.py` (no runtime circular import, ADR-070). The permissions feature imports only the **public API** of `backend.usermanagement` (`UserManager`, `UserNotFoundError`, `UserRead`) — the spec's D8/REQ-012 delegation contract — never internal modules.
+- Each affected feature's enforcement wiring (trailing `principal` param + `@requires_permission` + optional `permission_service` constructor + feature-owned `feature_actions.py`) is confined to that feature's directory.
+
+**Architecture rules (model/ = domain concepts, services/ = use cases, shared/ deliberately small): PASS.**
+- `models.py` holds the domain concepts (SQLModel table models `Role` / `RolePermission` / `SystemPrincipalPermission`, read models `RoleRead` / `PermissionRead`, the `SessionLookup` seam, `BOOTSTRAP_SYSTEM_PERMISSIONS`); `service.py` holds the use cases (`PermissionService`); `catalog.py` / `errors.py` / `events.py` / `repositories.py` / `feature_settings.py` are the supporting modules. This matches the flat-module convention of the sibling features (usermanagement, mail).
+- `src/backend/shared/` is **deliberately small** (111 lines total: `__init__.py` + `principal.py`) — only the shared enforcement plumbing (`Principal`, the structural `PermissionChecker` protocol, the `requires_permission` decorator), no feature-specific business logic.
+
+**Acceptance tests not weakened or deleted: PASS.**
+- Every post-derivation test edit was inspected. All are **test-data fixes**, not assertion weakening:
+  - 2-char → 3+ char usernames (T-004/T-005/T-006: `02cb21b`, `c795b5d`, `4e2e79a`) — `UserCreate` requires 3–32 chars.
+  - Invariants test data (T-004: `d1f88ed`) — valid `feature.action` permission keys; `contextlib.suppress` around the expected last-admin-guard raise; user capture.
+  - 5 test-design flaws (T-006: `7850d94`) — 4× added a second active admin so the delegation/no-publisher/in-memory tests do not hit the last-admin guard (assertions unchanged); 1× the `test_last_admin_guard_preserved_via_service` user was created with `roles=["admin", "user"]` so the guard fires (the "roles unchanged" assertion now matches the new initial state — still asserts the demotion did not happen); 1× `test_system_set_settings_alias_sync` passed `settings_registry=registry` to the constructor so the service's best-effort sync reaches the test's registry (assertions unchanged).
+  - 118 pre-existing `UserCreate`-roles helper breaks (Phase 5: `63593f1`) — `role=` → `roles=[...]` API migration in pre-existing test helpers (not this change's derived tests).
+- No acceptance test was deleted, and no assertion was relaxed to match the implementation.
+
+**No behavior beyond the spec: PASS.**
+- The implementation's `PermissionService` exposes exactly the **15 public methods** in the spec's service API schema (Section 3): `has_permission`, `require_permission`, `list_permissions`, `create_role`, `list_roles`, `delete_role`, `grant_permission`, `revoke_permission`, `get_role_permissions`, `assign_role`, `add_role`, `remove_role`, `set_roles`, `set_system_permissions`, `get_system_permissions`. No extra public API.
+- The NFR-003 public-API contract (all contract names exported) is satisfied; the shared `Principal` / `PermissionChecker` / `requires_permission` match the spec's shared-plumbing schema.
+
+### S6.1 findings — resolution
+
+Both S6.1 findings are **RESOLVED** (commit `4a6859c`):
+
+| Finding | Severity | Resolution (commit `4a6859c`) |
+|---------|----------|-------------------------------|
+| **F-1** — the REQ-019 settings alias is not wired into the composition root | MEDIUM | `src/main.py` now calls the permissions feature's `register_settings(_settings_registry)` (registering the `permissions.system_principal` alias) and constructs the shared `PermissionService` with the shared event bus (`event_bus=get_event_bus()`), so the `SettingChanged` subscription is active (a registry write updates the system-set table). REQ-019 / D16 / AC-023 now satisfied in the production composition root. |
+| **F-2** — `PermissionService.list_permissions` is missing | LOW | `PermissionService.list_permissions(feature=None) -> list[PermissionRead]` implemented via the held catalog's `actions` read (spec Section 3, D3). The service API schema is now complete. |
+
+Post-fix verification: the 77 derived tests remain GREEN (re-run in this step, 77 passed); `ruff` + `mypy` clean on the changed paths (see Phase 5 re-run + this step).
+
+### Review report status: **CLEAN**
+
+The review report is **CLEAN** — all S6.2 checks pass:
+- ✅ Every `REQ-XXX` (29) has at least one GREEN test (77 derived tests pass; spec coverage = 100%).
+- ✅ Every acceptance test traces back to a normative requirement (the matrix maps every AC/INV/EDGE/NFR row to a test; no orphaned tests).
+- ✅ No behavior beyond the spec (the 15 public methods match the spec's service API schema; no extra public API).
+- ✅ No acceptance test weakened or deleted (all post-derivation test edits are test-data fixes).
+- ✅ Feature boundaries + architecture rules respected (no cross-feature internal imports at runtime; `shared/` deliberately small; `models.py` = domain concepts, `service.py` = use cases).
+- ✅ Both S6.1 findings (F-1, F-2) resolved (commit `4a6859c`).
+
+**The change is COMPLETE** (Phase 6 review report clean). Next: S6.4 — bump the version (CROSS-CUTTING → minor) and open the PR for human review/merge.

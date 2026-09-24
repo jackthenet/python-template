@@ -253,3 +253,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 (transient dirtiness, restored; no impact on the change)
 - **Resolution:** The change branch's S4.3 lock sync (self-version 0.4.0 → 0.4.1) fixes main's stale lock when the PR merges. Lesson recorded for the orchestrator: verify pre-existing state with `git show main:<file>` (or a worktree-local run), never with `uv run` in the primary worktree.
 - **Date:** 2026-09-21
+
+## P-27 — Phase 6 review subagent entered a loop and was aborted (no output produced); step relaunched with a fresh subagent
+- **Problem:** The Phase 6 review subagent (launched for S6.1, review vs. normative basis) entered a repeated-execution loop and was aborted by the user. It produced no review findings, no structured handoff, and no uncommitted work (worktree clean except untracked `data/`). Cause (inferred): the review was scoped to the whole 84-commit implementation diff without a bounded input surface, so the subagent re-ran a large diff/test command repeatedly instead of producing findings.
+- **Step / Phase:** S6.1 (review vs. normative basis) — Phase 6
+- **Change:** user-roles-permissions / CROSS-CUTTING
+- **Duration / iterations:** 1 aborted run + 1 fresh relaunch
+- **Resolution:** Relaunched S6.1 with a fresh subagent (completion guard, P-3/P-7) whose prompt is strictly bounded: single objective (normative-basis compliance), explicit inputs (spec + verification file + final `src/` state), an explicit instruction NOT to re-run the full test suite (Phase 5 already confirmed the gate CLEAN) and NOT to do S6.2–S6.4, and a required structured handoff.
+- **Date:** 2026-09-22
