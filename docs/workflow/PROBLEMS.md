@@ -325,3 +325,19 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 CI failure + 1 fix/record run (~2.5 min CI each)
 - **Resolution:** Item K made the file uniform at `deadline=2000` (≈2.7× the CI worst) with the CI run id recorded in the docstring; decorator-only, no assertion/strategy change. Lessons: (a) a Hypothesis deadline must be calibrated against **CI** timings, not local ones; (b) the `tests` and `coverage` jobs run the same suite with **different seeds**, so one green job is not evidence about the other — check both.
 - **Date:** 2026-10-02
+
+## After-workflow-optimization — user-roles-permissions (2026-09-22)
+- **Trigger:** the user-roles-permissions change (~48.5h subagent time, ~90 subagents) reached Phase 6; the after-workflow-optimization meta-task analyzed the friction (this file + the change worktree's PROBLEMS.md P-27 + the subagent timing data) and improved the workflow.
+- **Friction found (with timing evidence):**
+  1. Redundant S4.3 (ruff) step — ~36m + 13 launches (S4.2 already runs the ruff gate).
+  2. Invalid test data reached Phase 4 (recurring 2-char usernames, T-004/5/6) — ~1.3h + 4 launches (S3.1 generated `u1`/`u2`; S3.2 confirmed RED without separating `ValidationError` setup errors from behavioral failures).
+  3. Pre-existing test breaks deferred to Phase 5 (T-002 `role→roles` amendment, 118 breaks) — ~3.6h + 3 launches (gate not-clean on first pass).
+  4. S4.4 (refactor) mostly no-ops for repetitive-pattern tasks — ~2.7h + 14 launches.
+  5. Phase 6 review looped (aborted) — 6404.8s (unbounded "review the whole diff" scope).
+- **Workflow changes (AGENTS.md + skills):**
+  1. Removed the redundant S4.3 (ruff) step → 4-step Phase 4 protocol (S4.1 pick+RED, S4.2 implement+GREEN+ruff gate, S4.3 refactor+ruff gate+no-op fast-path, S4.4 commit).
+  2. Added test-data validity to S3.1 (fixtures construct valid model instances) + S3.2 sanity check (a `ValidationError` building test data = invalid test data, not RED) — test skill + AGENTS.md Phase 3.
+  3. Added the breaking-change rule to decompose S2.2 (a breaking API change's task MUST fix the pre-existing tests it breaks within its scope, not defer to Phase 5) — decompose skill + AGENTS.md.
+  4. Added the S4.4 (refactor) no-op fast-path (a small/clean-pattern change confirms "no structural changes" without a full-suite re-run) — AGENTS.md Phase 4.
+  5. Added the bounded-scope rule to the review skill (each S6.x step reviews bounded inputs — spec + verification + final code state — not the full diff; no test re-run) — review skill + AGENTS.md Phase 6.
+- **Date:** 2026-09-22

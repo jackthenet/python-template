@@ -53,7 +53,7 @@ The decompose phase is decomposed into two atomic steps. Each has a **single obj
 - **Objective:** Decompose the spec into a machine-readable JSON task DAG at `docs/tasks/[name].tasks.json`, then copy it to `.github/task-runner/tasks.json` to initialize the active build environment.
 - **Inputs:** the approved specification; the existing task DAG format (see `docs/tasks/`).
 - **Outputs:** a committed task DAG at `docs/tasks/[name].tasks.json`; the task DAG copied to `.github/task-runner/tasks.json`.
-- **Done-criteria:** the task DAG is machine-readable JSON; every task specifies `requirements`, `acceptance_criteria`, `tests_to_create`, `red_command`, `implementation_steps`, `green_command`, `design_constraints`, and `completion_gates`; CROSS-CUTTING tasks are grouped by affected feature; the task DAG is copied to `.github/task-runner/tasks.json`; the ADRs and the task DAG are committed.
+- **Done-criteria:** the task DAG is machine-readable JSON; every task specifies `requirements`, `acceptance_criteria`, `tests_to_create`, `red_command`, `implementation_steps`, `green_command`, `design_constraints`, and `completion_gates`; a task that introduces a breaking API change includes the pre-existing tests it breaks in its `green_command` (or a dedicated follow-up task) so the breaks are fixed within the task's scope (not deferred to Phase 5); CROSS-CUTTING tasks are grouped by affected feature; the task DAG is copied to `.github/task-runner/tasks.json`; the ADRs and the task DAG are committed.
 
 ## Process
 
@@ -66,7 +66,7 @@ The decompose phase is decomposed into two atomic steps. Each has a **single obj
    - `tests_to_create`: Test functions to write (MUST come before implementation scope).
    - `red_command`: Command to confirm RED state — **targeted** (the task's `tests_to_create` + directly affected tests), not the full suite.
    - `implementation_steps`: Explicit steps for implementation.
-   - `green_command`: Command to confirm GREEN state — **targeted** (the task's tests), not the full suite (the full suite is a Phase 5 gate).
+   - `green_command`: Command to confirm GREEN state — **targeted** (the task's tests), not the full suite (the full suite is a Phase 5 gate). **Breaking-change rule:** if the task introduces a breaking API change (e.g., a model field rename), `green_command` MUST also include the pre-existing tests that the change breaks, so they are fixed within the task's scope (not deferred to Phase 5).
    - `design_constraints`: Constraints that must be respected.
    - `completion_gates`: Gates that must pass before the task is complete.
 5. CROSS-CUTTING: group tasks by affected feature so each feature's changes are independently verifiable.
@@ -89,6 +89,7 @@ When a task's gate is narrowed (a DAG correction), record that the **un-exercise
 - Every task MUST specify `acceptance_criteria` (AC-XXX IDs).
 - Every task MUST specify `tests_to_create` (test functions, before implementation scope).
 - Every task MUST specify `red_command`, `implementation_steps`, `green_command`.
+- **Breaking-change rule:** a task that introduces a breaking API change MUST include the pre-existing tests it breaks in its `green_command` (or a dedicated follow-up task), so the breaks are fixed within the task's scope — never deferred to Phase 5 (deferring them makes the Phase 5 gate not-clean on the first pass).
 - Every task MUST specify `design_constraints` and `completion_gates`.
 - CROSS-CUTTING: tasks MUST be grouped by affected feature so each feature's changes are independently verifiable.
 - The task DAG MUST be committed to `docs/tasks/`.
