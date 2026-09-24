@@ -20,6 +20,7 @@ from backend.usermanagement import (
     InvalidRoleError,
     LastAdminError,
     SqliteUserRepository,
+    StaticRoleStore,
     User,
     UserActivated,
     UserAlreadyExistsError,
@@ -62,7 +63,7 @@ def test_ac_001_create_valid_user(manager: UserManager) -> None:
     assert created.username == data["username"]
     assert created.email == data["email"]
     assert created.display_name == data["display_name"]
-    assert created.role == data["role"]
+    assert created.roles == data["roles"]
     assert created.profile_picture_url == data["profile_picture_url"]
     assert created.is_active is True
     assert isinstance(created.id, UUID)
@@ -123,17 +124,17 @@ def test_ac_007_non_http_profile_picture_url() -> None:
 
 def test_ac_008_role_not_in_set_create(tmp_path: Path) -> None:
     repo = SqliteUserRepository(db_url(tmp_path))
-    manager = UserManager(repo, roles=("admin", "member"))
+    manager = UserManager(repo, role_store=StaticRoleStore(("admin", "user")))
     with pytest.raises(InvalidRoleError):
-        manager.create_user(UserCreate(**valid_create(role="superuser")))
+        manager.create_user(UserCreate(**valid_create(roles=["superuser"])))
 
 
 def test_ac_009_custom_role_set(tmp_path: Path) -> None:
     repo = SqliteUserRepository(db_url(tmp_path))
-    manager = UserManager(repo, roles=("owner", "worker"))
-    assert manager.create_user(UserCreate(**valid_create(role="worker"))).role == "worker"
+    manager = UserManager(repo, role_store=StaticRoleStore(("owner", "worker")))
+    assert manager.create_user(UserCreate(**valid_create(roles=["worker"]))).roles == ["worker"]
     with pytest.raises(InvalidRoleError):
-        manager.create_user(UserCreate(**valid_create(role="member")))
+        manager.create_user(UserCreate(**valid_create(roles=["user"])))
 
 
 # --- AC-010: Argon2id hashing ---
@@ -187,8 +188,8 @@ def test_ac_014_password_ops_unknown_user(manager: UserManager) -> None:
 def test_ac_015_set_role(manager: UserManager) -> None:
     created = manager.create_user(UserCreate(**valid_create()))
     result = manager.set_role(created.id, "admin")
-    assert result.role == "admin"
-    assert manager.get_user(created.id).role == "admin"
+    assert result.roles == ["admin"]
+    assert manager.get_user(created.id).roles == ["admin"]
 
 
 def test_ac_016_set_role_not_in_set(manager: UserManager) -> None:
@@ -198,22 +199,22 @@ def test_ac_016_set_role_not_in_set(manager: UserManager) -> None:
 
 
 def test_ac_017_delete_last_admin(manager: UserManager) -> None:
-    admin = manager.create_user(UserCreate(**valid_create(username="root", role="admin")))
+    admin = manager.create_user(UserCreate(**valid_create(username="root", roles=["admin", "user"])))
     with pytest.raises(LastAdminError):
         manager.delete_user(admin.id)
     assert manager.get_user(admin.id).is_active is True
 
 
 def test_ac_018_deactivate_last_admin(manager: UserManager) -> None:
-    admin = manager.create_user(UserCreate(**valid_create(username="root", role="admin")))
+    admin = manager.create_user(UserCreate(**valid_create(username="root", roles=["admin", "user"])))
     with pytest.raises(LastAdminError):
         manager.deactivate_user(admin.id)
 
 
 def test_ac_019_demote_last_admin(manager: UserManager) -> None:
-    admin = manager.create_user(UserCreate(**valid_create(username="root", role="admin")))
+    admin = manager.create_user(UserCreate(**valid_create(username="root", roles=["admin", "user"])))
     with pytest.raises(LastAdminError):
-        manager.set_role(admin.id, "member")
+        manager.set_role(admin.id, "user")
 
 
 # --- AC-020 .. AC-021: activation ---
@@ -336,7 +337,7 @@ class _FakeUserStore:
         return users if include_inactive else [u for u in users if u.is_active]
 
     def count_active_by_role(self, role: str) -> int:
-        return sum(1 for u in self._users.values() if u.role == role and u.is_active)
+        return sum(1 for u in self._users.values() if role in u.roles and u.is_active)
 
 
 def test_ac_028_service_with_fake_repository() -> None:
@@ -349,7 +350,7 @@ def test_ac_028_service_with_fake_repository() -> None:
         pass
 
     manager = UserManager(FakeRepository())
-    a = manager.create_user(UserCreate(**valid_create(username="aa1", role="admin")))
+    a = manager.create_user(UserCreate(**valid_create(username="aa1", roles=["admin"])))
     b = manager.create_user(UserCreate(**valid_create(username="bb2", email="bb2@example.com")))
     assert manager.get_user(a.id).username == "aa1"
     assert manager.get_user_by_username("bb2").id == b.id
@@ -412,7 +413,7 @@ def test_ac_030_event_user_created(manager: UserManager, collector: EventCollect
     assert events[0].user_id == created.id
     assert events[0].username == created.username
     assert events[0].email == created.email
-    assert events[0].role == created.role
+    assert events[0].roles == created.roles
 
 
 def test_ac_031_event_user_updated(manager: UserManager, collector: EventCollector) -> None:
@@ -447,8 +448,8 @@ def test_ac_034_event_role_changed(manager: UserManager, collector: EventCollect
     events = collector.of_type(UserRoleChanged)
     assert len(events) == 1
     assert events[0].user_id == user.id
-    assert events[0].old_role == "member"
-    assert events[0].new_role == "admin"
+    assert events[0].old_roles == ["user"]
+    assert events[0].new_roles == ["admin"]
 
 
 def test_ac_035_event_activated(manager: UserManager, collector: EventCollector) -> None:

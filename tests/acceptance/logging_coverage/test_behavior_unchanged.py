@@ -34,9 +34,7 @@ def test_tracing_does_not_change_behavior(log_records: list[Any], tmp_path: Any)
     by tracing."""
     # The subjects are traced classes.
     for name in ("EventBus", "SettingsRegistry", "UserManager"):
-        assert getattr(INVENTORY_CLASSES[name], "__logged_class__", False) is True, (
-            f"{name} is not traced"
-        )
+        assert getattr(INVENTORY_CLASSES[name], "__logged_class__", False) is True, f"{name} is not traced"
 
     # Public API signatures are unchanged (the trailing `principal` param is the
     # ADR-071 enforcement-wiring addition, with a system-principal default).
@@ -45,7 +43,9 @@ def test_tracing_does_not_change_behavior(log_records: list[Any], tmp_path: Any)
     assert _param_names(UserManager.create_user) == ["data", "principal"]
 
     # Observable behavior is unchanged: SettingsRegistry set/get round-trip.
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    reg = SettingsRegistry(
+        template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     reg.register(SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="default"))
     reg.set_value("x.y", "changed")
     assert reg.get_value("x.y") == "changed"
@@ -69,7 +69,7 @@ def test_tracing_does_not_change_behavior(log_records: list[Any], tmp_path: Any)
     # Observable behavior is unchanged: UserManager create + a missing read raises.
     manager = UserManager(SqliteUserRepository(f"sqlite:///{tmp_path}/behav.db"))
     user = manager.create_user(
-        UserCreate(username="alice", email="alice@example.com", password="s3cret!x", role="member")
+        UserCreate(username="alice", email="alice@example.com", password="s3cret!x", roles=["user"])
     )
     assert manager.get_user(user.id).username == "alice"
     try:

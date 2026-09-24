@@ -58,11 +58,11 @@ def _create_fields(**overrides: Any) -> dict[str, Any]:
     """A valid create field mapping for the amended schema.
 
     The amendment replaces the single ``role`` field with a ``roles`` list, so the
-    shared helper's ``role`` key is dropped here; ``roles`` is passed explicitly by
+    shared helper's ``roles`` key is dropped here; ``roles`` is passed explicitly by
     the caller.
     """
     fields = valid_create(**overrides)
-    fields.pop("role")
+    fields.pop("roles")
     return fields
 
 
