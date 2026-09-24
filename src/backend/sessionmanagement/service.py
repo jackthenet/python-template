@@ -10,6 +10,15 @@ REQ-008/REQ-017 of the authentication spec).
 The service is traced with ``@logged_class`` (``include_args=False`` so raw
 tokens never appear in log records; ``slow_threshold_ms=100``) (REQ-022,
 NFR-004).
+
+Enforcement wiring (REQ-024, ADR-071): every enforced public method takes a
+trailing ``principal: Principal = _SYSTEM_PRINCIPAL`` parameter and is decorated
+with ``@requires_permission("sessionmanagement.<method>")``; the injected
+``permission_service`` (the structural ``PermissionChecker``; the shared
+PermissionService at the composition root) enforces the permission at entry.
+A ``None`` checker is standalone mode: no check is performed (open, as
+before — AC-031). The feature depends only on ``backend.shared`` plus the
+injected checker, never on ``backend.permissions`` (ADR-070).
 """
 
 from __future__ import annotations
@@ -32,6 +41,7 @@ from backend.sessionmanagement.events import (
 )
 from backend.sessionmanagement.models import SessionEntry
 from backend.settings import SettingsRegistry, get_settings_registry
+from backend.shared import PermissionChecker, Principal, requires_permission
 from backend.usermanagement import UserDeactivated, UserDeleted, UserEvent, UserPasswordChanged
 
 # Hardcoded fallbacks for the live settings reads (REQ-019): unregistered
@@ -39,6 +49,11 @@ from backend.usermanagement import UserDeactivated, UserDeleted, UserEvent, User
 DEFAULT_MAX_LISTED_SESSIONS = 100
 DEFAULT_CLEANUP_BATCH_SIZE = 1000
 DEFAULT_MAX_SESSIONS_PER_USER = 5
+
+# ADR-071: the default trailing principal of every enforced method is the
+# system principal (user_id=None; EDGE-022). A module-level singleton keeps
+# the argument defaults lint-clean (B008) and identical across methods.
+_SYSTEM_PRINCIPAL = Principal()
 
 
 @logged_class(slow_threshold_ms=100, include_args=False)
@@ -56,10 +71,15 @@ class SessionService:
         repository: SessionRepository,
         event_bus: EventPublisher | None = None,
         settings_registry: SettingsRegistry | None = None,
+        permission_service: PermissionChecker | None = None,
     ) -> None:
         self._repository = repository
         self._event_bus = event_bus
         self._settings_registry = settings_registry
+        # D13/ADR-071: the injected checker enforces sessionmanagement.<method>
+        # at entry (REQ-024); None = standalone mode (no enforcement,
+        # today's behavior — AC-031).
+        self._permission_service = permission_service
         if event_bus is not None:
             # Cap eviction is event-driven on authentication's
             # ``LoginSucceeded`` (REQ-014, ADR-063): the handler is
@@ -144,11 +164,13 @@ class SessionService:
 
     # -- Operations -----------------------------------------------------------
 
+    @requires_permission("sessionmanagement.list_sessions")
     def list_sessions(
         self,
         token: str | None = None,
         user_id: UUID | None = None,
         limit: int | None = None,
+        principal: Principal = _SYSTEM_PRINCIPAL,
     ) -> list[SessionEntry]:
         """List the user's valid sessions (REQ-001..REQ-007).
 
@@ -208,7 +230,8 @@ class SessionService:
             raise InvalidSessionError("invalid session")
         return session
 
-    def revoke_session(self, session_id: UUID) -> None:
+    @requires_permission("sessionmanagement.revoke_session")
+    def revoke_session(self, session_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Revoke the session with that id (REQ-008).
 
         An unknown or already-revoked id is an idempotent no-op — no error,
@@ -234,7 +257,8 @@ class SessionService:
             self._publish(AllSessionsRevoked(user_id=user_id, excluded_session_id=exclude_session_id))
         return count
 
-    def logout_all_sessions(self, token: str) -> None:
+    @requires_permission("sessionmanagement.logout_all_sessions")
+    def logout_all_sessions(self, token: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Revoke all sessions for the token's user, including the caller's (REQ-009).
 
         The token is resolved via the token path; an unknown, revoked, or
@@ -247,7 +271,8 @@ class SessionService:
         session = self._resolve_token(token)
         self._revoke_user_sessions(session.user_id)
 
-    def logout_other_sessions(self, token: str) -> None:
+    @requires_permission("sessionmanagement.logout_other_sessions")
+    def logout_other_sessions(self, token: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Revoke all sessions for the token's user except the caller's (REQ-010).
 
         The token is resolved via the token path; an unknown, revoked, or
@@ -260,7 +285,10 @@ class SessionService:
         session = self._resolve_token(token)
         self._revoke_user_sessions(session.user_id, exclude_session_id=session.id)
 
-    def revoke_all_sessions(self, user_id: UUID, exclude_session_id: UUID | None = None) -> int:
+    @requires_permission("sessionmanagement.revoke_all_sessions")
+    def revoke_all_sessions(
+        self, user_id: UUID, exclude_session_id: UUID | None = None, principal: Principal = _SYSTEM_PRINCIPAL
+    ) -> int:
         """Revoke all sessions for the user except the excluded one (REQ-011).
 
         Admin; open in-process, no token. Returns the number of sessions
@@ -271,7 +299,8 @@ class SessionService:
         """
         return self._revoke_user_sessions(user_id, exclude_session_id=exclude_session_id)
 
-    def cleanup_expired(self) -> int:
+    @requires_permission("sessionmanagement.cleanup_expired")
+    def cleanup_expired(self, principal: Principal = _SYSTEM_PRINCIPAL) -> int:
         """Delete expired session rows and return the number deleted (REQ-012).
 
         Bounded by the live-read ``sessionmanagement.cleanup_batch_size``

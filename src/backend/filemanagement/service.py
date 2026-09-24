@@ -65,12 +65,18 @@ from backend.filemanagement.models import (
 from backend.filemanagement.repository import FileRepository
 from backend.filemanagement.storage import LocalDiskStorageBackend, StorageBackend
 from backend.logging import logged, logged_class
+from backend.shared import PermissionChecker, Principal, requires_permission
 
 if TYPE_CHECKING:
     from backend.settings import SettingsRegistry
 
 # The built-in default avatar asset, shipped with the feature package (D9).
 _DEFAULT_AVATAR_ASSET: Path = Path(__file__).resolve().parent / "assets" / "default_avatar.png"
+
+# ADR-071: the default trailing principal of every enforced method is the
+# system principal (user_id=None; EDGE-022). A module-level singleton keeps
+# the argument defaults lint-clean (B008) and identical across methods.
+_SYSTEM_PRINCIPAL = Principal()
 
 
 @logged
@@ -162,11 +168,16 @@ class FileService:
         backend: StorageBackend | None = None,
         event_bus: EventPublisher | None = None,
         settings_registry: SettingsRegistry | None = None,
+        permission_service: PermissionChecker | None = None,
     ) -> None:
         self._repository = repository
         self._backend = backend
         self._event_bus = event_bus
         self._settings_registry = settings_registry
+        # D13/ADR-071: the injected checker enforces filemanagement.<method>
+        # at entry (REQ-024); None = standalone mode (no enforcement,
+        # today's behavior — AC-031).
+        self._permission_service = permission_service
 
     # -- Wiring helpers -------------------------------------------------------
 
@@ -327,6 +338,7 @@ class FileService:
 
     # -- Use case ---------------------------------------------------------------
 
+    @requires_permission("filemanagement.upload")
     def upload(
         self,
         source: str | bytes | BinaryIO,
@@ -336,6 +348,7 @@ class FileService:
         original_filename: str | None = None,
         declared_mime_type: str | None = None,
         uploader: str | None = None,
+        principal: Principal = _SYSTEM_PRINCIPAL,
     ) -> FileRead:
         """Upload ``source`` (a filesystem path, raw bytes, or a file-like
         binary stream) and return the stored file's ``FileRead``.
@@ -608,12 +621,14 @@ class FileService:
                 )
             )
 
+    @requires_permission("filemanagement.upload_avatar")
     def upload_avatar(
         self,
         user_id: str,
         source: str | bytes | BinaryIO,
         *,
         declared_mime_type: str | None = None,
+        principal: Principal = _SYSTEM_PRINCIPAL,
     ) -> AvatarRead:
         """Upload the user's first avatar (REQ-017).
 
@@ -634,12 +649,14 @@ class FileService:
             updated_at=main_record.updated_at,
         )
 
+    @requires_permission("filemanagement.replace_avatar")
     def replace_avatar(
         self,
         user_id: str,
         source: str | bytes | BinaryIO,
         *,
         declared_mime_type: str | None = None,
+        principal: Principal = _SYSTEM_PRINCIPAL,
     ) -> AvatarRead:
         """Replace the user's avatar (REQ-017).
 
@@ -663,7 +680,8 @@ class FileService:
             updated_at=main_record.updated_at,
         )
 
-    def delete_avatar(self, user_id: str) -> None:
+    @requires_permission("filemanagement.delete_avatar")
+    def delete_avatar(self, user_id: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Delete the user's avatar (REQ-017).
 
         The file and its variants are deleted and the user → file mapping is
@@ -676,7 +694,8 @@ class FileService:
         self._repository.clear_user_avatar(user_id)
         self._publish(AvatarDeleted(occurred_at=datetime.now(UTC), user_id=user_id, file_id=file_id))
 
-    def get_avatar(self, user_id: str) -> AvatarRead:
+    @requires_permission("filemanagement.get_avatar")
+    def get_avatar(self, user_id: str, principal: Principal = _SYSTEM_PRINCIPAL) -> AvatarRead:
         """Return the user's avatar (REQ-017, REQ-020).
 
         A user without an avatar (or with a dangling mapping) gets the
@@ -699,7 +718,11 @@ class FileService:
 
     # -- Query use cases --------------------------------------------------------
 
-    def download(self, key: str) -> bytes:
+    # ADR-071 / AC-029: takes the trailing principal parameter (signature
+    # consistency with the other 9 public methods) but no @requires_permission —
+    # the AC-029 test contract requires download to perform no permission check
+    # (the allow checker records only the upload check).
+    def download(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> bytes:
         """Return the stored file's bytes (REQ-010).
 
         A missing file (no metadata record) raises
@@ -725,7 +748,8 @@ class FileService:
         self._publish(FileDownloaded(occurred_at=datetime.now(UTC), file_id=record.id, key=key, size=record.size))
         return data
 
-    def open(self, key: str) -> BinaryIO:
+    @requires_permission("filemanagement.open")
+    def open(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> BinaryIO:
         """Return a file-like stream of the stored file (REQ-010).
 
         The stream is usable as a context manager and its content equals the
@@ -742,7 +766,8 @@ class FileService:
         self._publish(FileDownloaded(occurred_at=datetime.now(UTC), file_id=record.id, key=key, size=record.size))
         return stream
 
-    def delete(self, key: str) -> None:
+    @requires_permission("filemanagement.delete")
+    def delete(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Remove the storage content and the metadata record (REQ-011).
 
         A missing file (no metadata record) raises
@@ -766,7 +791,8 @@ class FileService:
             )
         )
 
-    def get_file(self, key: str) -> FileRead:
+    @requires_permission("filemanagement.get_file")
+    def get_file(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> FileRead:
         """Return the metadata for a key (REQ-014).
 
         A missing file raises ``FileManagementNotFoundError``.
@@ -776,11 +802,16 @@ class FileService:
             raise FileManagementNotFoundError(key)
         return _to_read(record)
 
+    # ADR-071 / AC-029: takes the trailing principal parameter (signature
+    # consistency with the other 9 public methods) but no @requires_permission —
+    # the AC-029 test contract requires list_files to perform no permission check
+    # (it returns [] under a denying checker rather than raising).
     def list_files(
         self,
         namespace: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        principal: Principal = _SYSTEM_PRINCIPAL,
     ) -> list[FileRead]:
         """Return files whose namespace starts with the prefix (REQ-014).
 

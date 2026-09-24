@@ -68,12 +68,12 @@ def create_user(
     username: str = "alice",
     email: str = "alice@example.com",
     password: str = "correct-horse-1",
-    role: str = "member",
+    roles: list[str] | None = None,
 ) -> Any:
     """Create a user through user-management and return the ``UserRead``."""
-    return user_manager.create_user(
-        UserCreate(username=username, email=email, password=password, role=role)
-    )
+    if roles is None:
+        roles = ["user"]
+    return user_manager.create_user(UserCreate(username=username, email=email, password=password, roles=roles))
 
 
 class FakeWebAuthnProvider(WebAuthnProvider):

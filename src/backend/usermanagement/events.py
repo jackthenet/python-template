@@ -28,7 +28,7 @@ class UserCreated(UserEvent):
     user_id: UUID
     username: str
     email: str
-    role: str
+    roles: list[str]  # was: role: str
 
 
 class UserUpdated(UserEvent):
@@ -47,8 +47,8 @@ class UserPasswordChanged(UserEvent):
 
 class UserRoleChanged(UserEvent):
     user_id: UUID
-    old_role: str
-    new_role: str
+    old_roles: list[str]  # was: old_role: str
+    new_roles: list[str]  # was: new_role: str
 
 
 class UserActivated(UserEvent):

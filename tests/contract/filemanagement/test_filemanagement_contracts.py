@@ -173,7 +173,7 @@ def test_nfr_003_api_backward_compatible(tmp_path: Path) -> None:
         username="alice",
         email="alice@example.com",
         password="correct-horse-battery-1",
-        role="member",
+        roles=["user"],
         profile_picture_url=r.url,
     )
     assert user.profile_picture_url == r.url

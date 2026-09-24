@@ -27,6 +27,12 @@ from backend.mail.models import (
 from backend.mail.render import render_template
 from backend.mail.templates import EMAIL_VERIFICATION_TEMPLATE, PASSWORD_RESET_TEMPLATE, EmailTemplate
 from backend.mail.transport import SmtpTransport, SmtpTransportImpl
+from backend.shared import PermissionChecker, Principal, requires_permission
+
+# ADR-071: the default trailing principal of every enforced method is the
+# system principal (user_id=None; EDGE-022). A module-level singleton keeps
+# the argument defaults lint-clean (B008) and identical across methods.
+_SYSTEM_PRINCIPAL = Principal()
 
 
 @logged_class(slow_threshold_ms=5000, include_args=False)
@@ -37,11 +43,23 @@ class MailService:
         self,
         transport: SmtpTransport | None = None,
         event_bus: EventPublisher | None = None,
+        permission_service: PermissionChecker | None = None,
     ) -> None:
         self._transport = transport
         self._event_bus = event_bus
+        # D13/ADR-071: the injected checker enforces mail.<method> at entry
+        # (REQ-024); None = standalone mode (no enforcement, today's
+        # behavior — AC-031).
+        self._permission_service = permission_service
 
-    def send_email(self, to: str, template: EmailTemplate, context: dict[str, str]) -> EmailSendResult:
+    @requires_permission("mail.send_email")
+    def send_email(
+        self,
+        to: str,
+        template: EmailTemplate,
+        context: dict[str, str],
+        principal: Principal = _SYSTEM_PRINCIPAL,
+    ) -> EmailSendResult:
         """The core send operation (REQ-003, REQ-006)."""
         try:
             validate_recipient(to)
@@ -64,12 +82,22 @@ class MailService:
             self._publish(EmailFailed(to=to, template=template.name, reason="transport"))
             raise
 
-    def send_password_reset_email(self, request: PasswordResetEmailRequest) -> EmailSendResult:
+    @requires_permission("mail.send_password_reset_email")
+    def send_password_reset_email(
+        self,
+        request: PasswordResetEmailRequest,
+        principal: Principal = _SYSTEM_PRINCIPAL,
+    ) -> EmailSendResult:
         """Send a password-reset email using the built-in template (REQ-004)."""
         context = {"display_name": request.display_name, "reset_url": request.reset_url}
         return self.send_email(request.to, PASSWORD_RESET_TEMPLATE, context)
 
-    def send_email_verification_email(self, request: EmailVerificationEmailRequest) -> EmailSendResult:
+    @requires_permission("mail.send_email_verification_email")
+    def send_email_verification_email(
+        self,
+        request: EmailVerificationEmailRequest,
+        principal: Principal = _SYSTEM_PRINCIPAL,
+    ) -> EmailSendResult:
         """Send an email-verification email using the built-in template (REQ-005)."""
         context = {"display_name": request.display_name, "verification_url": request.verification_url}
         return self.send_email(request.to, EMAIL_VERIFICATION_TEMPLATE, context)

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from backend.logging import logged, logged_class
+from backend.shared import PermissionChecker, Principal, requires_permission
 
 if TYPE_CHECKING:
     from backend.eventbus import EventBus
@@ -36,6 +37,11 @@ from backend.settings.repository import (
     YamlValueRepository,
 )
 
+# ADR-071: the default trailing principal of every enforced method is the
+# system principal (user_id=None; EDGE-022). A module-level singleton keeps
+# the argument defaults lint-clean (B008) and identical across methods.
+_SYSTEM_PRINCIPAL = Principal()
+
 _registry: list[SettingsRegistry | None] = [None]
 
 
@@ -52,6 +58,7 @@ class SettingsRegistry:
         event_bus: EventBus | None = None,
         template_repository: TemplateRepository | None = None,
         value_repository: ValueRepository | None = None,
+        permission_service: PermissionChecker | None = None,
     ) -> None:
         # Lazy import: backend.eventbus imports backend.settings (via its
         # feature_settings module), so importing it at module level here would
@@ -69,10 +76,15 @@ class SettingsRegistry:
         # Persisted values are loaded once at construction (REQ-009 / NFR-001);
         # they take precedence over definition defaults (REQ-011).
         self._persisted: dict[str, Any] = self._value_repository.load() or {}
+        # D13/ADR-071: the injected checker enforces settings.<method> at
+        # entry (REQ-024); None = standalone mode (no enforcement,
+        # today's behavior — AC-031).
+        self._permission_service = permission_service
 
     # -- Registration --
 
-    def register(self, definition: SettingDefinition) -> None:
+    @requires_permission("settings.register")
+    def register(self, definition: SettingDefinition, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Register a setting. Duplicate keys are rejected."""
         with self._lock:
             if definition.key in self._definitions:
@@ -91,7 +103,10 @@ class SettingsRegistry:
         """The value repository backing this registry (REQ-010)."""
         return self._value_repository
 
-    def register_feature(self, feature: str, definitions: list[SettingDefinition]) -> None:
+    @requires_permission("settings.register_feature")
+    def register_feature(
+        self, feature: str, definitions: list[SettingDefinition], principal: Principal = _SYSTEM_PRINCIPAL
+    ) -> None:
         """Register a feature's settings; each key must start with ``f"{feature}."``."""
         prefix = f"{feature}."
         for d in definitions:
@@ -103,23 +118,27 @@ class SettingsRegistry:
 
     # -- Lookup --
 
-    def has(self, key: str) -> bool:
+    @requires_permission("settings.has")
+    def has(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> bool:
         """Return True iff ``key`` is registered."""
         with self._lock:
             return key in self._definitions
 
-    def get_definition(self, key: str) -> SettingDefinition:
+    @requires_permission("settings.get_definition")
+    def get_definition(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> SettingDefinition:
         """Return the definition of ``key`` (SettingsNotFoundError if unknown)."""
         with self._lock:
             return self._require_definition(key)
 
-    def get_value(self, key: str) -> Any:
+    @requires_permission("settings.get_value")
+    def get_value(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> Any:
         """Return the current value of ``key`` (SettingsNotFoundError if unknown)."""
         with self._lock:
             self._require_definition(key)
             return self._values[key]
 
-    def set_value(self, key: str, value: Any) -> Any:
+    @requires_permission("settings.set_value")
+    def set_value(self, key: str, value: Any, principal: Principal = _SYSTEM_PRINCIPAL) -> Any:
         """Validate and store ``value`` for ``key``; publish SettingChanged."""
         with self._lock:
             d = self._require_definition(key)
@@ -135,7 +154,8 @@ class SettingsRegistry:
 
     # -- Resets --
 
-    def reset(self, key: str) -> None:
+    @requires_permission("settings.reset")
+    def reset(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Restore the default of ``key``; publish SettingChanged."""
         with self._lock:
             d = self._require_definition(key)
@@ -145,7 +165,8 @@ class SettingsRegistry:
         self._persist_values()
         self._publish_setting_changed(key, d.default, previous)
 
-    def reset_all(self) -> None:
+    @requires_permission("settings.reset_all")
+    def reset_all(self, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Restore all settings to their defaults; one event per setting."""
         with self._lock:
             items = list(self._definitions.items())
@@ -159,14 +180,16 @@ class SettingsRegistry:
 
     # -- Status / views --
 
-    def get_status(self, key: str) -> SettingStatus:
+    @requires_permission("settings.get_status")
+    def get_status(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> SettingStatus:
         """Return the derived status of ``key``."""
         with self._lock:
             d = self._require_definition(key)
             current = self._values[key]
         return SettingStatus.DEFAULT if current == d.default else SettingStatus.MODIFIED
 
-    def to_view(self, key: str) -> SettingView:
+    @requires_permission("settings.to_view")
+    def to_view(self, key: str, principal: Principal = _SYSTEM_PRINCIPAL) -> SettingView:
         """Return the renderable view of ``key``."""
         with self._lock:
             d = self._require_definition(key)
@@ -191,13 +214,15 @@ class SettingsRegistry:
             )
         return view
 
-    def views(self) -> list[SettingView]:
+    @requires_permission("settings.views")
+    def views(self, principal: Principal = _SYSTEM_PRINCIPAL) -> list[SettingView]:
         """Return the views of all registered settings."""
         with self._lock:
             keys = list(self._definitions)
         return [self.to_view(k) for k in keys]
 
-    def grouped_views(self) -> dict[str, dict[str, list[SettingView]]]:
+    @requires_permission("settings.grouped_views")
+    def grouped_views(self, principal: Principal = _SYSTEM_PRINCIPAL) -> dict[str, dict[str, list[SettingView]]]:
         """Return the category -> group -> views structure."""
         with self._lock:
             items = list(self._definitions.items())
@@ -209,12 +234,14 @@ class SettingsRegistry:
 
     # -- Templates --
 
+    @requires_permission("settings.create_template")
     def create_template(
         self,
         name: str,
         category: str,
         group: str | None,
         values: dict[str, Any] | None = None,
+        principal: Principal = _SYSTEM_PRINCIPAL,
     ) -> Template:
         """Create a template scoped to (category, group)."""
         if not is_template_name_valid(name):
@@ -241,7 +268,8 @@ class SettingsRegistry:
         logger.debug("template created: name={} category={} group={}", name, category, group)
         return template
 
-    def load_template(self, name: str) -> None:
+    @requires_permission("settings.load_template")
+    def load_template(self, name: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Set each of the template's values (validated at creation); others left as-is."""
         with self._lock:
             template = self._repository.get(name)
@@ -258,7 +286,8 @@ class SettingsRegistry:
                 self._publish_setting_changed(key, value, previous)
         logger.debug("template loaded: name={} count={}", name, len(template.values))
 
-    def update_template(self, name: str, values: dict[str, Any]) -> None:
+    @requires_permission("settings.update_template")
+    def update_template(self, name: str, values: dict[str, Any], principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Replace the stored values of a template (must cover the scope)."""
         with self._lock:
             existing = self._repository.get(name)
@@ -282,7 +311,8 @@ class SettingsRegistry:
             self._repository.save(updated)
         logger.debug("template updated: name={}", name)
 
-    def delete_template(self, name: str) -> None:
+    @requires_permission("settings.delete_template")
+    def delete_template(self, name: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
         """Delete a template (TemplateNotFoundError if unknown)."""
         with self._lock:
             if self._repository.get(name) is None:
@@ -290,17 +320,20 @@ class SettingsRegistry:
             self._repository.delete(name)
         logger.debug("template deleted: name={}", name)
 
-    def get_template(self, name: str) -> Template | None:
+    @requires_permission("settings.get_template")
+    def get_template(self, name: str, principal: Principal = _SYSTEM_PRINCIPAL) -> Template | None:
         """Return the template of ``name``, or None if it does not exist."""
         with self._lock:
             return self._repository.get(name)
 
-    def has_template(self, name: str) -> bool:
+    @requires_permission("settings.has_template")
+    def has_template(self, name: str, principal: Principal = _SYSTEM_PRINCIPAL) -> bool:
         """Return True iff a template of ``name`` exists."""
         with self._lock:
             return self._repository.get(name) is not None
 
-    def list_templates(self) -> list[Template]:
+    @requires_permission("settings.list_templates")
+    def list_templates(self, principal: Principal = _SYSTEM_PRINCIPAL) -> list[Template]:
         """Return all stored templates, name-ordered."""
         with self._lock:
             return self._repository.list()

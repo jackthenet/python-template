@@ -12,6 +12,7 @@ from backend.settings.exceptions import (
     TemplateValidationError,
     ValueStorageError,
 )
+from backend.settings.feature_actions import register_actions
 from backend.settings.models import (
     ListSpec,
     SelectOption,
@@ -63,5 +64,6 @@ __all__ = [
     "YamlTemplateRepository",
     "YamlValueRepository",
     "get_settings_registry",
+    "register_actions",
     "reset_settings_registry",
 ]

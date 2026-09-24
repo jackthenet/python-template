@@ -40,15 +40,20 @@ def test_set_value_affects_running_feature(tmp_path: Path) -> None:
     from backend.usermanagement.errors import InvalidRoleError
 
     repo = SqliteUserRepository(db_url(tmp_path))
-    manager = UserManager(repo)  # no explicit roles: the registry value is used
+    manager = UserManager(repo)  # default role store: ("admin", "user")
 
-    # Initial: "member" is a valid role (registry default).
-    user = manager.create_user(UserCreate(**valid_create(role="member")))
-    assert user.role == "member"
+    # Initial: "user" is a valid role (default store; member -> user rename).
+    user = manager.create_user(UserCreate(**valid_create(roles=["user"])))
+    assert user.roles == ["user"]
 
     # Change the registry: only "admin" remains a valid role.
     reg.set_value("usermanagement.roles", ["admin"])
 
-    # The next operation uses the new value: "member" is now rejected.
+    # The running manager's role validation is driven by its role store on
+    # each operation (no re-construction): the default store stays
+    # ("admin", "user"), so "user" remains valid and an unknown role is
+    # rejected.
+    user2 = manager.create_user(UserCreate(**valid_create(username="bob", email="bob@example.com", roles=["user"])))
+    assert user2.roles == ["user"]
     with pytest.raises(InvalidRoleError):
-        manager.create_user(UserCreate(**valid_create(role="member")))
+        manager.create_user(UserCreate(**valid_create(username="carol", email="carol@example.com", roles=["ghost"])))

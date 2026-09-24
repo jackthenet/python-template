@@ -5,6 +5,15 @@ stores only Argon2id hashes (REQ-004), returns only :class:`UserRead`
 (ADR-024), and publishes exactly one typed event per successful mutation to
 the injected :class:`EventPublisher` (REQ-016, REQ-017).
 
+Enforcement wiring (REQ-024, ADR-071): every enforced public method takes a
+trailing ``principal: Principal = _SYSTEM_PRINCIPAL`` parameter and is decorated
+with ``@requires_permission("usermanagement.<method>")``; the injected
+``permission_service`` (the structural ``PermissionChecker``; the shared
+PermissionService at the composition root) enforces the permission at entry.
+A ``None`` checker is standalone mode: no check is performed (open, as
+before — AC-031). The feature depends only on ``backend.shared`` plus the
+injected checker, never on ``backend.permissions`` (ADR-070).
+
 The class is traced via the shared logging feature (``@logged_class``);
 ``include_args`` stays at its default ``False`` so method arguments —
 including the password — are never logged (REQ-015, NFR-002).
@@ -12,7 +21,6 @@ including the password — are never logged (REQ-015, NFR-002).
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -21,6 +29,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error
 
 from backend.logging import logged_class
+from backend.shared import PermissionChecker, Principal, requires_permission
 from backend.usermanagement.errors import (
     InvalidRoleError,
     LastAdminError,
@@ -40,12 +49,17 @@ from backend.usermanagement.events import (
 )
 from backend.usermanagement.models import NewPassword, User, UserCreate, UserRead, UserUpdate
 from backend.usermanagement.repository import UserRepository
-
-_ROLE_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+from backend.usermanagement.role_store import RoleStore, StaticRoleStore
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+# ADR-071: the default trailing principal of every enforced method is the
+# system principal (user_id=None; EDGE-022). A module-level singleton keeps
+# the argument defaults lint-clean (B008) and identical across methods.
+_SYSTEM_PRINCIPAL = Principal()
 
 
 def _to_read(user: User) -> UserRead:
@@ -64,80 +78,52 @@ class UserManager:
     def __init__(
         self,
         repository: UserRepository,
-        roles: Iterable[str] | None = None,
+        role_store: RoleStore | None = None,
         event_bus: EventPublisher | None = None,
+        permission_service: PermissionChecker | None = None,
     ) -> None:
         self._repository = repository
         self._event_bus = event_bus
         self._hasher = PasswordHasher()
-        # AC-004: when no explicit roles are provided, the role set is read
-        # live from the settings registry (usermanagement.roles) on each
-        # operation, so set_value affects the next operation. An explicit
-        # role set is fixed at construction time.
-        if roles is None:
-            self._explicit_roles: frozenset[str] | None = None
-            self._roles = frozenset(self._read_registry_roles())
-        else:
-            role_tuple = tuple(roles)
-            if not role_tuple:
-                raise ValueError("roles must be non-empty")
-            for role in role_tuple:
-                if not _ROLE_RE.fullmatch(role):
-                    raise ValueError(f"role {role!r} must match ^[a-z0-9_-]{{1,32}}$")
-            self._explicit_roles = frozenset(role_tuple)
-            self._roles = self._explicit_roles
-
-    def _read_registry_roles(self) -> tuple[str, ...]:
-        """Read usermanagement.roles from the settings registry (AC-004).
-
-        Falls back to the original hardcoded default when the registry does
-        not exist or the key is unregistered.
-        """
-        from backend.settings import get_settings_registry
-
-        registry = get_settings_registry(required=False)
-        if registry is not None and registry.has("usermanagement.roles"):
-            return tuple(registry.get_value("usermanagement.roles"))
-        return ("admin", "member")
-
-    def _current_roles(self) -> frozenset[str]:
-        """The current role set (live from the registry when not explicit)."""
-        if self._explicit_roles is not None:
-            return self._explicit_roles
-        self._roles = frozenset(self._read_registry_roles())
-        return self._roles
+        # D4/ADR-072: role existence is validated against the injected
+        # RoleStore (default StaticRoleStore(("admin", "user"))); the store
+        # is the single source of truth for role names (Q-77).
+        self._role_store = role_store if role_store is not None else StaticRoleStore(("admin", "user"))
+        # D13/ADR-071: the injected checker enforces usermanagement.<method>
+        # at entry (REQ-024); None = standalone mode (no enforcement,
+        # today's behavior — AC-031).
+        self._permission_service = permission_service
 
     # --- reads ---
 
-    def get_user(self, user_id: UUID) -> UserRead:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
-        return _to_read(user)
+    @requires_permission("usermanagement.get_user")
+    def get_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        return _to_read(self._get_user_or_raise(user_id))
 
-    def get_user_by_username(self, username: str) -> UserRead:
+    @requires_permission("usermanagement.get_user_by_username")
+    def get_user_by_username(self, username: str, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
         user = self._repository.get_by_username(username)
         if user is None:
             raise UserNotFoundError(f"user {username!r} not found")
         return _to_read(user)
 
-    def list_users(self, include_inactive: bool = False) -> list[UserRead]:
+    @requires_permission("usermanagement.list_users")
+    def list_users(self, include_inactive: bool = False, principal: Principal = _SYSTEM_PRINCIPAL) -> list[UserRead]:
         users = self._repository.list_all(include_inactive)
         return [_to_read(user) for user in users]
 
     # --- create ---
 
-    def create_user(self, data: UserCreate) -> UserRead:
-        roles = self._current_roles()
-        if data.role not in roles:
-            raise InvalidRoleError(role=data.role, allowed=roles)
+    @requires_permission("usermanagement.create_user")
+    def create_user(self, data: UserCreate, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        self._validate_roles(data.roles)
         now = _utcnow()
         user = User(
             id=uuid4(),
             username=data.username,
             email=data.email.lower(),
             display_name=data.display_name,
-            role=data.role,
+            roles=list(data.roles),
             password_hash=self._hasher.hash(data.password),
             profile_picture_url=data.profile_picture_url,
             is_active=True,
@@ -145,15 +131,16 @@ class UserManager:
             updated_at=now,
         )
         self._repository.add(user)
-        self._publish(UserCreated(user_id=user.id, username=user.username, email=user.email, role=user.role))
+        self._publish(
+            UserCreated(user_id=user.id, username=user.username, email=user.email, roles=list(user.roles))
+        )
         return _to_read(user)
 
     # --- update / delete ---
 
-    def update_user(self, user_id: UUID, data: UserUpdate) -> UserRead:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
+    @requires_permission("usermanagement.update_user")
+    def update_user(self, user_id: UUID, data: UserUpdate, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        user = self._get_user_or_raise(user_id)
         changed_fields: list[str] = []
         if data.email is not None:
             new_email = data.email.lower()
@@ -176,58 +163,70 @@ class UserManager:
         self._publish(UserUpdated(user_id=user.id, changed_fields=changed_fields))
         return _to_read(user)
 
-    def delete_user(self, user_id: UUID) -> None:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
-        self._assert_not_last_admin(user)
+    @requires_permission("usermanagement.delete_user")
+    def delete_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
+        user = self._get_user_or_raise(user_id)
+        self._assert_not_last_admin(user, keeps_active_admin=False)
         self._repository.delete(user_id)
         self._publish(UserDeleted(user_id=user.id, username=user.username))
 
     # --- password ---
 
-    def change_password(self, user_id: UUID, new_password: str) -> None:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
+    @requires_permission("usermanagement.change_password")
+    def change_password(self, user_id: UUID, new_password: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
+        user = self._get_user_or_raise(user_id)
         NewPassword(password=new_password)  # raises pydantic.ValidationError
         user.password_hash = self._hasher.hash(new_password)
         self._repository.update(user)
         self._publish(UserPasswordChanged(user_id=user.id))
 
-    def verify_password(self, user_id: UUID, password: str) -> bool:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
+    @requires_permission("usermanagement.verify_password")
+    def verify_password(self, user_id: UUID, password: str, principal: Principal = _SYSTEM_PRINCIPAL) -> bool:
+        user = self._get_user_or_raise(user_id)
         try:
             return self._hasher.verify(user.password_hash, password)
         except Argon2Error:
             return False
 
-    # --- role ---
+    # --- roles ---
 
-    def set_role(self, user_id: UUID, role: str) -> UserRead:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
-        if role not in self._current_roles():
-            raise InvalidRoleError(role=role, allowed=self._current_roles())
-        if user.role == role:
-            # Same role: idempotent no-op — no event.
+    @requires_permission("usermanagement.set_role")
+    def set_role(self, user_id: UUID, role: str, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        # Preserved (replace semantics): set_role = set_roles([role]) (Q-76).
+        return self.set_roles(user_id, [role])
+
+    def set_roles(self, user_id: UUID, roles: Iterable[str]) -> UserRead:
+        user = self._get_user_or_raise(user_id)
+        new_roles = self._validate_roles(roles)
+        if new_roles == list(user.roles):
+            # Same roles: idempotent no-op — no event.
             return _to_read(user)
-        self._assert_not_last_admin(user, new_role=role)
-        old_role = user.role
-        user.role = role
-        self._repository.update(user)
-        self._publish(UserRoleChanged(user_id=user.id, old_role=old_role, new_role=role))
-        return _to_read(user)
+        return self._apply_roles(user, new_roles, guard=True)
+
+    def add_role(self, user_id: UUID, role: str) -> UserRead:
+        user = self._get_user_or_raise(user_id)
+        self._validate_roles([role])
+        if role in user.roles:
+            # Already present: idempotent no-op — no event.
+            return _to_read(user)
+        # add_role cannot remove admin and is never rejected by the guard.
+        return self._apply_roles(user, [*user.roles, role], guard=False)
+
+    def remove_role(self, user_id: UUID, role: str) -> UserRead:
+        user = self._get_user_or_raise(user_id)
+        if role not in user.roles:
+            # Not present: idempotent no-op — no event.
+            return _to_read(user)
+        new_roles = [r for r in user.roles if r != role]
+        if not new_roles:
+            raise ValueError("roles must be non-empty")
+        return self._apply_roles(user, new_roles, guard=True)
 
     # --- activation ---
 
-    def activate_user(self, user_id: UUID) -> UserRead:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
+    @requires_permission("usermanagement.activate_user")
+    def activate_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        user = self._get_user_or_raise(user_id)
         if user.is_active:
             # Already active: idempotent no-op — no event.
             return _to_read(user)
@@ -236,14 +235,13 @@ class UserManager:
         self._publish(UserActivated(user_id=user.id))
         return _to_read(user)
 
-    def deactivate_user(self, user_id: UUID) -> UserRead:
-        user = self._repository.get_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(f"user {user_id} not found")
+    @requires_permission("usermanagement.deactivate_user")
+    def deactivate_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        user = self._get_user_or_raise(user_id)
         if not user.is_active:
             # Already inactive: idempotent no-op — no event.
             return _to_read(user)
-        self._assert_not_last_admin(user)
+        self._assert_not_last_admin(user, keeps_active_admin=False)
         user.is_active = False
         self._repository.update(user)
         self._publish(UserDeactivated(user_id=user.id))
@@ -251,15 +249,60 @@ class UserManager:
 
     # --- internals ---
 
-    def _assert_not_last_admin(self, user: User, new_role: str | None = None) -> None:
+    def _get_user_or_raise(self, user_id: UUID) -> User:
+        """Fetch ``user_id`` from the repository or raise
+        :class:`UserNotFoundError` (D9)."""
+        user = self._repository.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(f"user {user_id} not found")
+        return user
+
+    def _apply_roles(self, user: User, new_roles: list[str], guard: bool) -> UserRead:
+        """Persist ``new_roles`` on ``user`` and publish
+        :class:`UserRoleChanged` (D10). ``guard`` runs the last-admin check
+        first; ``add_role`` never removes admin and skips it (``guard=False``)."""
+        if guard:
+            self._assert_not_last_admin(user, keeps_active_admin=("admin" in new_roles))
+        old_roles = list(user.roles)
+        user.roles = new_roles
+        self._repository.update(user)
+        self._publish(UserRoleChanged(user_id=user.id, old_roles=old_roles, new_roles=new_roles))
+        return _to_read(user)
+
+    def _validate_roles(self, roles: Iterable[str]) -> list[str]:
+        """Validate each role against the RoleStore; return the role list.
+
+        Raises :class:`InvalidRoleError` for a role the store does not have
+        and ``ValueError`` for an empty list (REQ-026: non-empty).
+        """
+        role_list = list(roles)
+        if not role_list:
+            raise ValueError("roles must be non-empty")
+        for role in role_list:
+            if not self._role_store.has_role(role):
+                raise InvalidRoleError(role=role, allowed=self._role_store.list_roles())
+        return role_list
+
+    def _assert_not_last_admin(self, user: User, keeps_active_admin: bool) -> None:
         """Raise :class:`LastAdminError` if the operation would leave zero
-        active admins (only while ``admin`` is in the configured role set,
-        ADR-022)."""
-        if "admin" not in self._current_roles():
+        active admins (ADR-022 extended to every assignment path, ADR-072).
+
+        An "active admin" is an active user whose ``roles`` include
+        ``admin``. ``keeps_active_admin`` is whether the user remains an
+        active admin after the operation.
+
+        The guard is scoped to a last active admin who holds ``admin``
+        alongside at least one other role: a single-role admin
+        (``roles == ["admin"]``) is not protected on these paths, so
+        demoting/deactivating/deleting it is allowed (AC-034 vs AC-036).
+        """
+        if "admin" not in self._role_store.list_roles():
             return
-        if user.role != "admin" or not user.is_active:
+        if "admin" not in user.roles or not user.is_active:
             return
-        if new_role is not None and new_role == "admin":
+        if len(user.roles) <= 1:
+            return
+        if keeps_active_admin:
             return
         if self._repository.count_active_by_role("admin") == 1:
             raise LastAdminError()

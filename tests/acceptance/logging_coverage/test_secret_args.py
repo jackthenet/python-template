@@ -60,7 +60,7 @@ def test_no_raw_secrets_in_any_log_record(log_records: list[Any], tmp_path: Any)
     # A password handler (UserManager) is exercised with an identifiable password.
     manager = UserManager(SqliteUserRepository(db))
     user = manager.create_user(
-        UserCreate(username="alice", email="alice@example.com", password=password, role="member")
+        UserCreate(username="alice", email="alice@example.com", password=password, roles=["user"])
     )
     manager.verify_password(user.id, password)
 

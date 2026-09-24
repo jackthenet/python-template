@@ -77,8 +77,8 @@ def test_edge_004_deactivate_already_inactive(manager: UserManager, collector: E
 def test_edge_005_set_role_same(manager: UserManager, collector: EventCollector) -> None:
     user = manager.create_user(UserCreate(**valid_create()))
     collector.events.clear()
-    result = manager.set_role(user.id, "member")
-    assert result.role == "member"
+    result = manager.set_role(user.id, "user")
+    assert result.roles == ["user"]
     from backend.usermanagement import UserRoleChanged
 
     assert collector.of_type(UserRoleChanged) == []
@@ -109,7 +109,7 @@ def _manager_user(repo: SqliteUserRepository):
         username="edge007",
         email="edge007@example.com",
         display_name=None,
-        role="member",
+        roles=["user"],
         password_hash="$argon2id$fake",
         profile_picture_url=None,
         is_active=True,
@@ -132,7 +132,7 @@ def test_edge_008_memory_repository() -> None:
         username="edge008",
         email="edge008@example.com",
         display_name=None,
-        role="member",
+        roles=["user"],
         password_hash="$argon2id$fake",
         profile_picture_url=None,
         is_active=True,
@@ -144,16 +144,14 @@ def test_edge_008_memory_repository() -> None:
     assert repo2.get_by_id(user.id) is None
 
 
-def test_edge_009_empty_roles(tmp_path: Path) -> None:
-    repo = SqliteUserRepository(db_url(tmp_path))
+def test_edge_009_empty_roles() -> None:
     with pytest.raises(ValueError):
-        UserManager(repo, roles=())
+        UserCreate(**valid_create(roles=[]))
 
 
-def test_edge_010_uppercase_role(tmp_path: Path) -> None:
-    repo = SqliteUserRepository(db_url(tmp_path))
+def test_edge_010_uppercase_role() -> None:
     with pytest.raises(ValueError):
-        UserManager(repo, roles=("Admin",))
+        UserCreate(**valid_create(roles=["Admin"]))
 
 
 def test_edge_011_username_whitespace() -> None:
@@ -198,8 +196,8 @@ def test_edge_015_concurrent_duplicate_create(tmp_path: Path) -> None:
 
 
 def test_edge_016_delete_admin_with_two_admins(manager: UserManager) -> None:
-    a = manager.create_user(UserCreate(**valid_create(username="root1", role="admin")))
-    manager.create_user(UserCreate(**valid_create(username="root2", role="admin", email="root2@example.com")))
+    a = manager.create_user(UserCreate(**valid_create(username="root1", roles=["admin"])))
+    manager.create_user(UserCreate(**valid_create(username="root2", roles=["admin"], email="root2@example.com")))
     manager.delete_user(a.id)
     with pytest.raises(UserNotFoundError):
         manager.get_user(a.id)

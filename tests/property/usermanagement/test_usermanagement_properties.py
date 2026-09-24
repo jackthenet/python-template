@@ -72,7 +72,7 @@ def _valid_user_create(draw) -> UserCreate:
         email=draw(_email()),
         password=draw(_password()),
         display_name=draw(st.one_of(st.none(), _display_name())),
-        role=draw(st.sampled_from(["admin", "member"])),
+        roles=draw(st.sampled_from([["admin"], ["user"]])),
         profile_picture_url=draw(st.one_of(st.none(), _profile_picture_url())),
     )
 
@@ -86,7 +86,7 @@ def test_inv_001_create_read_consistency(user: UserCreate) -> None:
     assert created.email == user.email.lower()
     if user.display_name is not None:
         assert created.display_name == user.display_name
-    assert created.role == user.role
+    assert created.roles == user.roles
     if user.profile_picture_url is not None:
         assert created.profile_picture_url == user.profile_picture_url
     assert created.is_active is True
@@ -131,7 +131,7 @@ def test_inv_003_last_admin_invariant(ops: list[str]) -> None:
                         **valid_create(
                             username=next_username("a"),
                             email=f"a{counter}@example.com",
-                            role="admin",
+                            roles=["admin", "user"],
                         )
                     )
                 )
@@ -145,14 +145,14 @@ def test_inv_003_last_admin_invariant(ops: list[str]) -> None:
                     )
                 )
             elif op == "delete_admin":
-                for admin in [u for u in manager.list_users(include_inactive=True) if u.role == "admin"]:
+                for admin in [u for u in manager.list_users(include_inactive=True) if "admin" in u.roles]:
                     try:
                         manager.delete_user(admin.id)
                     except LastAdminError:
                         continue
                     break
             elif op == "deactivate_admin":
-                for admin in [u for u in manager.list_users() if u.role == "admin"]:
+                for admin in [u for u in manager.list_users() if "admin" in u.roles]:
                     try:
                         manager.deactivate_user(admin.id)
                     except LastAdminError:
@@ -160,7 +160,7 @@ def test_inv_003_last_admin_invariant(ops: list[str]) -> None:
                     break
         except UserAlreadyExistsError, LastAdminError, UserNotFoundError:
             pass
-        admin_users = [u for u in manager.list_users(include_inactive=True) if u.role == "admin"]
+        admin_users = [u for u in manager.list_users(include_inactive=True) if "admin" in u.roles]
         if admin_users:
             assert any(u.is_active for u in admin_users)
 
@@ -272,7 +272,7 @@ def test_inv_006_event_correspondence(ops: list[str]) -> None:
                 manager.change_password(user_id, f"pass{counter}-1x")
                 ev = UserPasswordChanged
             elif op == "role":
-                new_role = "admin" if manager.get_user(user_id).role == "member" else "member"
+                new_role = "admin" if manager.get_user(user_id).roles == ["user"] else "user"
                 manager.set_role(user_id, new_role)
                 ev = UserRoleChanged
             elif op == "deactivate":

@@ -34,14 +34,15 @@ def valid_create(**overrides: Any) -> dict[str, Any]:
 
     The defaults satisfy the schema rules: username pattern, valid email,
     password with >= 1 letter and >= 1 digit (8..128 chars), display name
-    1..64 chars after strip, lowercase role, and an https profile picture URL.
+    1..64 chars after strip, lowercase roles (non-empty list), and an https
+    profile picture URL.
     """
     data: dict[str, Any] = {
         "username": "alice",
         "email": "alice@example.com",
         "password": "correct-horse-1",
         "display_name": "Alice",
-        "role": "member",
+        "roles": ["user"],
         "profile_picture_url": "https://example.com/alice.png",
     }
     data.update(overrides)

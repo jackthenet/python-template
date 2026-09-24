@@ -41,7 +41,7 @@ def test_full_user_lifecycle(tmp_path: Path) -> None:
     # A guardian admin so the primary user's admin deactivation/activation/
     # deletion never leave zero active admins (REQ-008).
     guardian = manager.create_user(
-        UserCreate(**valid_create(username="guardian", email="guardian@example.com", role="admin"))
+        UserCreate(**valid_create(username="guardian", email="guardian@example.com", roles=["admin"]))
     )
 
     # Update (username stays immutable).
@@ -57,7 +57,7 @@ def test_full_user_lifecycle(tmp_path: Path) -> None:
 
     # Role.
     promoted = manager.set_role(user.id, "admin")
-    assert promoted.role == "admin"
+    assert promoted.roles == ["admin"]
 
     # Activation.
     inactive = manager.deactivate_user(user.id)

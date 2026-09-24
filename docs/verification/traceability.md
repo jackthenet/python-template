@@ -650,6 +650,104 @@ Issue `hanging-observability-test` (type ISSUE; triage: `docs/verification/hangi
 | logging | NFR-001 | — | `test_ac_045_traced_methods_no_tokens_in_logs` (setup must not block) | GREEN (Phase 5, 2026-09-20; was RED/hang) |
 | logging | NFR-002 | — | `test_ac_045_traced_methods_no_tokens_in_logs` (decorator overhead must not block) | GREEN (Phase 5, 2026-09-20; was RED/hang) |
 
+## User Roles & Permissions Matrix
+
+The user-roles-permissions change (type CROSS-CUTTING; spec `docs/specs/user-roles-permissions.md`) uses its own REQ/AC ID space (REQ-001..029, AC-001..040) that overlaps the other features' matrices, so it is kept separate. Phase 3 (S3.2) confirmed all 77 tests RED before implementation (failure modes: `ModuleNotFoundError` on the unimplemented `backend.permissions` / `backend.shared` / `feature_actions` modules; assertion failures on the un-wired service signatures; pre-amendment `usermanagement` model errors for the T-002 amendment tests).
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_granted_permission_allowed` | GREEN |
+| REQ-001 | AC-002 | `test_denied_permission_raises_with_context` | GREEN |
+| REQ-002 | AC-003 | `test_malformed_permission_denied` | GREEN |
+| REQ-003 | AC-004 | `test_feature_wildcard_grant` | GREEN |
+| REQ-004 | AC-005 | `test_unknown_permission_denied_and_grant_rejected` | GREEN |
+| REQ-005 | AC-006 | `test_initial_catalog_exactly_60_keys` | GREEN |
+| REQ-006 | AC-007 | `test_create_role_and_list` | GREEN |
+| REQ-007 | AC-008 | `test_delete_role_guards` | GREEN |
+| REQ-008 | AC-009 | `test_grant_and_revoke_role_permission` | GREEN |
+| REQ-008 | AC-010 | `test_wildcard_grant_stored_and_matches` | GREEN |
+| REQ-009 | AC-011 | `test_multi_role_union_of_permissions` | GREEN |
+| REQ-010 | AC-012 | `test_admin_wildcard_allows_all` | GREEN |
+| REQ-011 | AC-013 | `test_user_role_starts_with_zero_permissions` | GREEN |
+| REQ-012 | AC-014 | `test_assignment_delegates_to_user_manager` | GREEN |
+| REQ-013 | AC-015 | `test_last_admin_guard_preserved_via_service` | GREEN |
+| REQ-014 | AC-016 | `test_grant_change_takes_effect_immediately` | GREEN |
+| REQ-015 | AC-017 | `test_unknown_user_denied` | GREEN |
+| REQ-015 | AC-018 | `test_storage_error_denied_fail_closed` | GREEN |
+| REQ-016 | AC-019 | `test_inactive_user_denied_even_admin` | GREEN |
+| REQ-017 | AC-020 | `test_session_validation_in_check` | GREEN |
+| REQ-017 | AC-021 | `test_session_validation_skipped_when_token_none` | GREEN |
+| REQ-018 | AC-022 | `test_system_principal_check_and_set` | GREEN |
+| REQ-019 | AC-023 | `test_system_set_settings_alias_sync` | GREEN |
+| REQ-020 | AC-024 | `test_events_published_on_operations` | GREEN |
+| REQ-020 | AC-025 | `test_no_publisher_still_works` | GREEN |
+| REQ-021 | AC-026 | `test_error_context_attributes` | GREEN |
+| REQ-022 | AC-027 | `test_migration_seeds_roles_and_system_set` | GREEN |
+| REQ-023 | AC-028 | `test_in_memory_repos_and_singleton` | GREEN |
+| REQ-024 | AC-029 | `test_enforced_method_denies_without_permission` | GREEN |
+| REQ-024 | AC-030 | `test_exempt_login_no_check` | GREEN |
+| REQ-024 | AC-031 | `test_standalone_mode_no_check` | GREEN |
+| REQ-025 | AC-032 | `test_principal_defaults_and_fields`, `test_requires_permission_decorator` | GREEN |
+| REQ-026 | AC-033 | `test_create_user_with_roles_list` | GREEN |
+| REQ-026 | AC-034 | `test_add_remove_set_roles` | GREEN |
+| REQ-026 | AC-035 | `test_migration_member_to_user_and_role_list` | GREEN |
+| REQ-013, REQ-026 | AC-036 | `test_last_admin_guard_all_paths` | GREEN |
+| REQ-026 | AC-037 | `test_role_events_carry_lists` | GREEN |
+| REQ-027 | AC-038 | `test_concurrent_checks_and_changes` | GREEN |
+| REQ-028 | AC-039 | `test_denial_log_and_no_token_leak` | GREEN |
+| REQ-029 | AC-040 | `test_check_latency_under_5ms_median` | GREEN |
+| REQ-024 | — | `test_authentication_enforcement_wiring`, `test_settings_enforcement_wiring`, `test_mail_enforcement_wiring`, `test_sessionmanagement_enforcement_wiring` (per-feature wiring, no AC) | GREEN |
+| INV-001 | — | `test_check_true_iff_granted_and_active` | GREEN |
+| INV-002 | — | `test_undeterminable_never_true` | GREEN |
+| INV-003 | — | `test_last_admin_invariant` | GREEN |
+| INV-004 | — | `test_effective_set_monotone` | GREEN |
+| INV-005 | — | `test_admin_passes_any_catalog_permission` | GREEN |
+| INV-006 | — | `test_valid_grant_keys_exactly_catalog_plus_wildcards` | GREEN |
+| EDGE-001 | — | `test_malformed_key_denied` | GREEN |
+| EDGE-002 | — | `test_unknown_permission_denied` | GREEN |
+| EDGE-003 | — | `test_unknown_user_denied` | GREEN |
+| EDGE-004 | — | `test_inactive_user_denied` | GREEN |
+| EDGE-005 | — | `test_revoked_expired_token_denied` | GREEN |
+| EDGE-006 | — | `test_mismatched_token_denied` | GREEN |
+| EDGE-007 | — | `test_unavailable_session_lookup_denied` | GREEN |
+| EDGE-008 | — | `test_role_no_mapping_zero_permissions` | GREEN |
+| EDGE-009 | — | `test_user_deleted_concurrent_denied` | GREEN |
+| EDGE-010 | — | `test_concurrent_thread_safe` | GREEN |
+| EDGE-011 | — | `test_lookup_raises_denied` | GREEN |
+| EDGE-012 | — | `test_delete_builtin_role_protected` | GREEN |
+| EDGE-013 | — | `test_delete_in_use_role` | GREEN |
+| EDGE-014 | — | `test_create_duplicate_role` | GREEN |
+| EDGE-015 | — | `test_create_malformed_name` | GREEN |
+| EDGE-016 | — | `test_grant_unknown_permission` | GREEN |
+| EDGE-017 | — | `test_unknown_role_operations` | GREEN |
+| EDGE-018 | — | `test_revoke_absent_idempotent` | GREEN |
+| EDGE-019 | — | `test_grant_existing_idempotent` | GREEN |
+| EDGE-020 | — | `test_set_system_unknown_permission` | GREEN |
+| EDGE-021 | — | `test_set_system_wildcard_allowed` | GREEN |
+| EDGE-022 | — | `test_default_principal_system` | GREEN |
+| EDGE-023 | — | `test_login_before_permissions` | GREEN |
+| EDGE-024 | — | `test_token_deleted_user_denied` | GREEN |
+| EDGE-025 | — | `test_expired_session_denied` | GREEN |
+| EDGE-026 | — | `test_assignment_unknown_role` | GREEN |
+| NFR-001 | — | `test_check_latency_under_5ms_median` | GREEN |
+| NFR-002 | — | `test_undeterminable_never_true`, `test_denial_log_and_no_token_leak`, `test_error_context_attributes` | GREEN |
+| NFR-003 | — | `test_in_memory_repos_and_singleton` | GREEN |
+| NFR-004 | — | `test_concurrent_checks_and_changes` | GREEN |
+| NFR-005 | — | `test_denial_log_and_no_token_leak` | GREEN |
+
+### Affected Features (CROSS-CUTTING — per-feature enforcement wiring, REQ-024)
+
+The change wires the shared `PermissionChecker` into six features via the ADR-071 pattern (trailing `principal` param + `@requires_permission` + optional `permission_service` constructor + feature-owned `feature_actions`). Each feature's enforcement wiring is covered by a dedicated test (all GREEN):
+
+| Feature | Enforcement wiring test | Status |
+|---------|------------------------|--------|
+| usermanagement | `test_standalone_mode_no_check` (REQ-024/AC-031; 11 methods, `feature_actions` 11 actions) | GREEN |
+| authentication | `test_authentication_enforcement_wiring` (REQ-024; 11 methods, 4 enforced + 7 exempt) | GREEN |
+| settings | `test_settings_enforcement_wiring` (REQ-024; 19 methods, all enforced) | GREEN |
+| filemanagement | `test_enforced_method_denies_without_permission` (REQ-024/AC-029; 10 methods, 8 enforced) | GREEN |
+| mail | `test_mail_enforcement_wiring` (REQ-024; 3 methods, all enforced) | GREEN |
+| sessionmanagement | `test_sessionmanagement_enforcement_wiring` (REQ-024; 6 methods, all enforced) | GREEN |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:

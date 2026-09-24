@@ -15,6 +15,7 @@ from backend.mail.errors import (
     MailTransportError,
 )
 from backend.mail.events import EmailFailed, EmailSent, MailEvent
+from backend.mail.feature_actions import register_actions
 from backend.mail.feature_settings import MailConfig, register_settings, resolve_mail_config
 from backend.mail.message import build_message, validate_recipient
 from backend.mail.models import (
@@ -49,6 +50,7 @@ __all__ = [
     "SmtpTransport",
     "SmtpTransportImpl",
     "build_message",
+    "register_actions",
     "register_settings",
     "render_template",
     "resolve_mail_config",
