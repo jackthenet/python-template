@@ -135,3 +135,19 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-005 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** (this commit) `impl(usermanagement): T-005 build_user_source (AC-034, REQ-020) (GREEN)`.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-006 file-management additive `build_file_source`
+
+- **T-006 RED (S4.1):** confirmed — targeted `red_command` → **1 failed** (2026-09-25). Failure mode (on unimplemented T-006 behavior; no invalid test data):
+  - 1 × `ModuleNotFoundError` — `build_file_source` not exported from `backend.filemanagement` (`test_ac_035_file_source` — the additive search-source module, REQ-021).
+- **Implementation (S4.2):**
+  - `src/backend/filemanagement/search_source.py` (new): `build_file_source(repository: FileRepository) -> SearchSource` (REQ-021, ADR-077) — source name `filemanagement`; the field schema (key/namespace/original_filename — string, searchable/filterable/sortable/display; detected_mime_type — string, filterable/sortable/display; size — number, filterable/sortable/display; created_at/updated_at — datetime, filterable/sortable/display); the sync query function over the existing `FileRepository.list_by_namespace` (full fetch via `list_by_namespace(None, limit=<large>, offset=0)` because the repository applies the LIMIT in SQL); free text (case-fold + NFC + trim, D13), filters (string case-insensitive; number/datetime exact, D4), sort (None last, deterministic, D8), and pagination; `item_id` = the file id (a stable string identifier); default ordering `created_at` ascending (REQ-021).
+  - `src/backend/filemanagement/__init__.py`: additive re-export of `build_file_source` (the feature's public API, NFR-003).
+  - No change to `FileService`, `FileRepository`, models, events, or errors (REQ-021).
+- **Test bug fix (S4.2):** `test_ac_035_file_source` asserted `item.item_id == records[0].id` — `FileRecord.id` is a `UUID` and the spec declares `item_id` a stable string identifier (a `str` can never equal a `UUID`); fixed to `item.item_id == str(records[0].id)` — aligning the test with the spec (the intent "item_id = the file id" is preserved; not a weakening).
+- **T-006 GREEN (S4.2):** **57 passed, 1 skipped** (2026-09-25) — targeted `green_command` (`test_ac_035_file_source` + `tests/acceptance/filemanagement/` — no regression from the additive module + re-export; the 1 skipped is the pre-existing `test_ac_031_symlink_rejected` — symlinks not available on this host; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/filemanagement/search_source.py src/backend/filemanagement/__init__.py tests/acceptance/search/test_feature_sources.py` → **All checks passed**; `uv run ruff format --check` (same paths) → **3 files already formatted**.
+- **Refactor (S4.3):** no-op fast-path — the implementation is small and follows the module's established pattern (module-level private helpers with REQ-referenced docstrings); no structural changes needed. GREEN from S4.2 still holds (zero file changes in the step).
+- **Status:** T-006 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** (this commit) `impl(filemanagement): T-006 build_file_source (AC-035, REQ-021) (GREEN)`.
+- **Date:** 2026-09-25

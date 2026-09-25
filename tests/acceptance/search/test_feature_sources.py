@@ -137,7 +137,7 @@ def test_ac_035_file_source(tmp_path: Path) -> None:
     assert result.total == 1
     item = result.items[0]
     assert item.feature == "filemanagement"
-    assert item.item_id == records[0].id  # item_id = the file id
+    assert item.item_id == str(records[0].id)  # item_id = the file id (stable string identifier)
     assert item.fields["key"] == "rep-1"
     assert item.fields["size"] == size_1
     assert item.fields["detected_mime_type"] == "text/plain"
