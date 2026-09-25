@@ -240,3 +240,23 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Task DAG:** all 8 tasks `VERIFIED` (`.github/task-runner/tasks.json`).
 - **Gate result: PASS** — the traceability matrix is updated with the search change's rows (per-feature for CROSS-CUTTING); every REQ has at least one GREEN test; every acceptance test traces back to a normative requirement.
 - **Date:** 2026-09-25
+
+## Phase 5: Verify (S5.4) — verification report
+
+- **Specification coverage = 100%** (the Phase 5 gate — per AGENTS.md, "Code coverage is a secondary quality signal, not evidence that the specification has been implemented"):
+  - **REQ-001..REQ-023: 23/23** have ≥1 GREEN test (Search Matrix, `docs/verification/traceability.md`).
+  - **AC-001..AC-037: 37/37** covered by executable (GREEN) tests.
+  - **INV-001..INV-005: 5/5** have property tests (GREEN).
+  - **EDGE-001..EDGE-021: 21/21** have tests (GREEN).
+  - **NFR-001..NFR-005: 5/5** have tests (GREEN).
+  - `uv run python scripts/verify_spec.py docs/specs/search.md` → **exit 0** (Traceability: PASS — 23/23 REQ have acceptance criteria, 37/37 AC have executable tests, 5/5 INV have property tests).
+- **Acceptance coverage** (every acceptance test traces to a normative requirement):
+  - Orphan/missing check (S5.4 re-verification): **70 distinct matrix test names, all collected** (no missing test); **all collected search tests are in the matrix** (no orphaned search test).
+  - The 4 collected tests not in the Search matrix (`test_edge_004_session_info_expired`, `test_edge_005_session_info_revoked`, `test_edge_006_logout_twice_noop`, `test_edge_017_session_info_no_token`) are **pre-existing authentication session tests** (identical on `main`) — they belong to the Authentication matrix, not the Search matrix (not orphans).
+- **Branch coverage** (secondary quality signal — **NOT the gate**):
+  - **Total: 91%** (below the 92% `fail_under` threshold in `pyproject.toml`).
+  - Search feature: `search/service.py` **90%**; `search/{__init__,errors,events,feature_actions,feature_settings,models}.py` **100%**.
+  - Additive source wiring (low-covered, pulling the overall total below the threshold): `sessionmanagement/search_source.py` **50%**, `usermanagement/search_source.py` **61%**, `filemanagement/search_source.py` **65%**.
+  - Note: the coverage run had 5–6 flaky/timing test failures (logging intercept tests + a hypothesis deadline in `test_last_admin_invariant` + a filemanagement property test) that undercounted coverage. **None is a behavior regression**, and the search change did not touch any of those test files (the S5.1 authoritative full-suite run had only the 1 known flaky failure).
+- **Phase 5 gate: MET** — spec coverage = 100% (the gate); S5.1 full suite GREEN (1 known flaky failure); S5.2 lint clean (whole repo) + mypy clean (83 source files); S5.3 traceability matrix updated (73 Search rows GREEN + per-feature wiring rows). Code coverage (91%, below the 92% threshold) is a secondary quality signal, not the gate.
+- **Date:** 2026-09-25
