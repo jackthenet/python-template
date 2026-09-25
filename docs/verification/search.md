@@ -46,3 +46,19 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
   - 1 × `AttributeError: 'SqliteSessionRepository' object has no attribute 'list_all'` (T-004 additive ABC method, REQ-022 — `test_list_all_returns_all_sessions_created_at_desc`)
   - No `ValidationError`/`ValueError` during test-data construction (no invalid test data).
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-001 foundation + registration
+
+- **T-001 RED (S4.1):** confirmed — all 15 T-001 targeted tests failed with `ModuleNotFoundError: No module named 'backend.search'` (the unimplemented search feature module).
+- **Implementation (S4.2):** `src/backend/search/` package created — `models.py` (SearchSource, SourceField, FieldType, SourceItem, SourcePage, SourceQueryContext, SearchQuery, FilterCondition/FilterGroup/FilterOperator, Sort, SearchResult/SearchResultItem, SourceFailure), `errors.py` (SearchError hierarchy: UnknownSourceError, MalformedQueryError, SourceQueryFailedError), `events.py` (SourceRegistered, SourceUnregistered, SourceQueryFailed), `service.py` (SearchService thread-safe in-memory registry + InMemorySource + module singleton), `__init__.py` (public API).
+  - House patterns: `@logged_class(slow_threshold_ms=100, include_args=False)` on the service; `@requires_permission('search.search')` on the enforced method (ADR-071); live settings read for `search.default_page_size`/`search.max_page_size` (REQ-013, D14); list-holder module singleton (`_singleton[0]`, matching `settings` house pattern — no `global`).
+- **T-001 GREEN (S4.2):** **15 passed** (2026-09-25) — targeted `green_command`:
+  - `uv run pytest tests/acceptance/search/test_search.py -k "ac_001 or ac_002 or ac_003 or ac_004 or ac_005 or ac_007 or ac_008 or ac_023 or ac_032"` → **9 passed**
+  - `uv run pytest tests/unit/search/test_search_edges.py -k "edge_001 or edge_013 or edge_014 or edge_016 or edge_021"` → **5 passed**
+  - `uv run pytest tests/property/search/test_search_properties.py -k "inv_001"` → **1 passed**
+  - (The full suite is a Phase 5 gate, not a per-task run.)
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/search/` → **All checks passed**; `uv run ruff format --check src/backend/search/` → **5 files already formatted**.
+- **Refactor (S4.3):** `_apply_operator` split into `_apply_string_operator` / `_apply_exact_operator` with a `_COMPARISONS` dispatch table (PLR0911/PLR0912); `zip(..., strict=True)` (B905); list-holder singleton (PLW0603). No observable behavior change — T-001 tests remain GREEN (re-confirmed 15/15).
+- **Status:** T-001 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** `84ebf8d` `feat(search): T-001 foundation + registration (module, models, errors, events, service, singleton)`.
+- **Date:** 2026-09-25
