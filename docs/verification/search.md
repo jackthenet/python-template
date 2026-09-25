@@ -167,3 +167,21 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-007 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** (this commit) `impl(sessionmanagement): T-007 build_session_source (AC-036, REQ-022) (GREEN)`.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-008 cross-cutting final: startup wiring + backend-only contract + NFRs
+
+- **T-008 RED (S4.1):** confirmed — targeted `red_command` → **1 failed** (2026-09-25). Failure mode (on the NFR-001 performance budget; no invalid test data):
+  - 1 × `AssertionError` — `test_nfr_001_performance_budgets`: the single-source query budget (< 100 ms median) failed against a SQLite-backed source with 10k items (measured ~293 ms median — the source's query path fetches full Pydantic models via the repository ABC and processes them in Python). The `register_source` budget (< 5 ms median) passed.
+- **Spec amendment (S4.2, user decision):** the NFR-001 single-source query budget is unrealistic for the current architecture (the source's query path fetches full Pydantic models via the repository ABC; a lighter raw-row path requires a persistence-contract change, out of scope for the search feature). Per the Spec Amendment Workflow:
+  - `docs/specs/search.md` v2 (2026-09-25): NFR-001 single-source query budget increased from 100 ms to ~300 ms (10k items), scaling linearly to ~3000 ms (100k items); the `register_source` budget stays < 5 ms; a `## Changelog` entry records the amendment.
+  - Affected task: T-008 (NFR-001..NFR-005, AC-037, REQ-023) — test re-aligned to the amended budget (the test still measures 10k items; the budget constant `_QUERY_BUDGET_S` increased 0.1 → 0.3).
+- **Implementation (S4.2):**
+  - `src/backend/search/__init__.py`: additive re-export of `EventPublisher` (the structural publisher protocol, for the startup wiring).
+  - `tests/contract/search/test_search_contracts.py`: `_QUERY_BUDGET_S = 0.3` (~300 ms, spec v2); `_REGISTER_BUDGET_S` unchanged (0.005); docstrings/comments aligned to the amended budget.
+  - `tests/integration/search/test_search_integration.py`: `test_nfr_005_thread_safe_registry` source names fixed to the source-name pattern (`a0`/`a1`/`a2` instead of `a-0`/`a-1`/`a-2` — the pattern is `^[a-z][a-z0-9_]*$`); import order aligned (ruff I001).
+- **T-008 GREEN (S4.2):** **69 passed** (2026-09-25) — full T-008 `green_command` (`tests/acceptance/search/ tests/integration/search/ tests/contract/search/ tests/property/search/ tests/unit/search/` — no regression; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check tests/contract/search/test_search_contracts.py src/backend/search/__init__.py tests/integration/search/test_search_integration.py` → **All checks passed**; `uv run ruff format --check` (same paths) → **3 files already formatted**.
+- **Refactor (S4.3):** no-op fast-path — zero structural changes in this step; GREEN from S4.2 still holds.
+- **Status:** T-008 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** (this commit) `impl(search): T-008 startup wiring + NFRs (AC-037, REQ-023, NFR-001..005) (GREEN; spec v2 NFR-001 budget amendment)`.
+- **Date:** 2026-09-25

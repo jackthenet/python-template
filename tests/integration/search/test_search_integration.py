@@ -106,7 +106,7 @@ def test_nfr_005_thread_safe_registry() -> None:
         barrier.wait()
         try:
             for i in range(20):
-                svc.register_source(demo_source(f"{prefix}-{i % 3}"))
+                svc.register_source(demo_source(f"{prefix}{i % 3}"))
         except BaseException as exc:
             errors.append(exc)
 
@@ -132,7 +132,7 @@ def test_nfr_005_thread_safe_registry() -> None:
     assert not errors, f"unexpected exceptions: {errors}"
     # No partial state: the final registry is a function of the last operation
     # per name (each thread's three names end up registered).
-    assert set(svc.list_sources()) == {"a-0", "a-1", "a-2", "b-0", "b-1", "b-2"}
+    assert set(svc.list_sources()) == {"a0", "a1", "a2", "b0", "b1", "b2"}
 
     # A failed operation leaves the registry unchanged.
     svc.register_source(failing_source("failing"))
@@ -145,13 +145,12 @@ def test_startup_wiring_all_sources(tmp_path: Path) -> None:
     """REQ-023: after the startup wiring (``register_settings``,
     ``register_actions``, the three feature sources), a global search fans out
     to all three feature sources."""
-    from backend.search import register_actions, register_settings
-
     from backend.authentication import hash_token, new_token
     from backend.authentication.models import Session
     from backend.authentication.repository import SqliteSessionRepository
     from backend.filemanagement import FileRecord, SqliteFileRepository, build_file_source
     from backend.permissions.catalog import PermissionCatalog
+    from backend.search import register_actions, register_settings
     from backend.sessionmanagement import build_session_source
     from backend.usermanagement import SqliteUserRepository, User, build_user_source
 
