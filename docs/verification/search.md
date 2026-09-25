@@ -62,3 +62,19 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-001 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** `84ebf8d` `feat(search): T-001 foundation + registration (module, models, errors, events, service, singleton)`.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-002 query semantics (filter/sort/pagination/result-shape)
+
+- **T-002 RED (S4.1):** confirmed — targeted `red_command` → **8 failed, 20 passed** (2026-09-25). Failure modes (all on unimplemented T-002 behavior; no invalid test data):
+  - 5 × `DID NOT RAISE MalformedQueryError` — no query validation in the service's query path (`test_edge_003_invalid_limit_offset`, `test_edge_004_non_filterable_field`, `test_edge_005_invalid_operator_for_type`, `test_edge_006_non_sortable_field`, `test_ac_024_malformed_query_errors`).
+  - 3 × `ImportError: cannot import name 'register_settings' from 'backend.search'` — feature-owned settings registration not yet created (`test_edge_007_limit_clamped`, `test_ac_016_default_page_size`, `test_ac_017_limit_clamped_to_max`).
+- **Implementation (S4.2):**
+  - `src/backend/search/feature_settings.py` (new): `register_settings(registry)` registers `search.default_page_size` (NUMBER, 100), `search.max_page_size` (NUMBER, 1000), `search.source_timeout` (NUMBER, 5000) — category `application`, group `search` (REQ-013, D14; house pattern per mail). Exported from `__init__.py`.
+  - `src/backend/search/service.py`: query validation in the service's query path (REQ-010, AC-024) — `_validate_pagination` (`limit < 1` → `MalformedQueryError(reason='invalid_limit')`; `offset < 0` → `reason='invalid_offset'`); `_validate_query_against_source` (single-source path: filters restricted to declared-filterable fields with per-type operator restrictions from the D4 table `_VALID_OPERATORS` and value-type checks per D3 — string: str; number: int/float not bool; boolean: bool; datetime: datetime; `in_list`: a list of such values; `is_null` requires no value — plus sort on a declared-sortable field). Each error identifies the reason and the field/source.
+  - The free-text/filter/sort/pagination/result-shape semantics themselves were already applied in-memory by T-001's `InMemorySource._query` (normalization D13, per-type operator semantics D4, stable sort D8, pagination D5) — T-002 adds the service-side validation + the feature-owned settings registration the live page-size reads require.
+- **T-002 GREEN (S4.2):** **43 passed** (2026-09-25) — targeted `green_command` (T-001's 15 + T-002's 28 tests; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/search/service.py src/backend/search/feature_settings.py src/backend/search/__init__.py` → **All checks passed**; `uv run ruff format --check` (same paths) → **3 files already formatted**.
+- **Refactor (S4.3):** no-op fast-path — the implementation is small and follows the module's established pattern (module-level private helpers with REQ-referenced docstrings, declarative D4 table); no structural changes needed. GREEN from S4.2/S4.3 still holds (zero file changes in the step).
+- **Status:** T-002 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** `0542144` `impl(search): T-002 free-text + filter/sort/pagination/result-shape (GREEN)`.
+- **Date:** 2026-09-25
