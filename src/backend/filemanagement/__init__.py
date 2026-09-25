@@ -49,6 +49,7 @@ from backend.filemanagement.models import (
     UserAvatar,
 )
 from backend.filemanagement.repository import FileRepository, SqliteFileRepository
+from backend.filemanagement.search_source import build_file_source
 from backend.filemanagement.service import FileService, get_default_avatar
 from backend.filemanagement.storage import (
     InMemoryStorageBackend,
@@ -91,6 +92,7 @@ __all__ = [
     "StorageError",
     "StorageStat",
     "UserAvatar",
+    "build_file_source",
     "get_default_avatar",
     "register_settings",
 ]
