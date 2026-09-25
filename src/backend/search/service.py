@@ -15,12 +15,13 @@ import operator
 import re
 import threading
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from backend.logging import logged, logged_class
-from backend.search.errors import MalformedQueryError, UnknownSourceError
-from backend.search.events import EventPublisher, SourceRegistered, SourceUnregistered
+from backend.search.errors import MalformedQueryError, SourceQueryFailedError, UnknownSourceError
+from backend.search.events import EventPublisher, SourceQueryFailed, SourceRegistered, SourceUnregistered
 from backend.search.models import (
     FIELD_NAME_PATTERN,
     SOURCE_NAME_PATTERN,
@@ -32,6 +33,7 @@ from backend.search.models import (
     SearchResult,
     SearchResultItem,
     SearchSource,
+    SourceFailure,
     SourceField,
     SourceItem,
     SourcePage,
@@ -50,6 +52,12 @@ _SYSTEM_PRINCIPAL = Principal()
 # Settings keys + hardcoded fallback defaults (REQ-013; read live, D14).
 _DEFAULT_PAGE_SIZE = 100
 _MAX_PAGE_SIZE = 1000
+_SOURCE_TIMEOUT_MS = 5000
+
+# The bounded worker pool for per-source queries (D12, REQ-019): each source
+# query runs in a worker thread; a timed-out thread is abandoned but bounded
+# by the pool (NFR-005).
+_WORKER_POOL_SIZE = 8
 
 
 # --- Normalization + declaration helpers (module level) ---------------------
@@ -331,6 +339,9 @@ class SearchService:
         self._permission_service = permission_service
         self._lock = threading.RLock()
         self._sources: dict[str, SearchSource] = {}
+        # The bounded worker pool for per-source queries (D12, REQ-019);
+        # worker threads are created lazily on the first submit.
+        self._pool = ThreadPoolExecutor(max_workers=_WORKER_POOL_SIZE, thread_name_prefix="search-source")
 
     # -- Registration lifecycle (REQ-001, REQ-003) --------------------------
 
@@ -392,7 +403,10 @@ class SearchService:
             else:
                 sources = list(self._sources.values())
         _validate_pagination(query)
-        if query.feature is not None:
+        # Strict validation against every source in the fan-out (D7, REQ-010,
+        # EDGE-020): a field absent or non-filterable/non-sortable in any
+        # source -> MalformedQueryError identifying the source + field.
+        for source in sources:
             _validate_query_against_source(source, query)
         free_text = _normalize(query.free_text) if query.free_text is not None else None
         if free_text == "":
@@ -406,13 +420,26 @@ class SearchService:
             sort=query.sort,
         )
         items: list[SearchResultItem] = []
+        failures: list[SourceFailure] = []
         total = 0
         for source in sources:
-            page = source.query(ctx)
+            page, reason, error_kind = self._query_source(source, ctx)
+            if page is None:
+                reason = reason or "query_failed"
+                error_kind = error_kind or "unknown"
+                if query.feature is not None:
+                    # Single-source: raise (no event, no marker) (REQ-010,
+                    # AC-026, EDGE-010).
+                    raise SourceQueryFailedError(source=source.name, reason=reason, error=error_kind)
+                # Global: resilient marker + event (REQ-011, D11, AC-025,
+                # EDGE-009); the other sources' results are returned.
+                failures.append(SourceFailure(feature=source.name, reason=reason, error=error_kind))
+                self._publish(SourceQueryFailed(source=source.name, reason=reason))
+                continue
             total += page.total
             for item in page.items:
                 items.append(SearchResultItem(feature=source.name, item_id=item.item_id, fields=item.fields))
-        return SearchResult(items=items, total=total, offset=query.offset, limit=limit, failures=[])
+        return SearchResult(items=items, total=total, offset=query.offset, limit=limit, failures=failures)
 
     # -- Wiring helpers -------------------------------------------------------
 
@@ -424,14 +451,39 @@ class SearchService:
 
         return get_settings_registry(required=False)
 
+    def _read(self, key: str, fallback: Any) -> Any:
+        """Read ``key`` live from the settings registry (REQ-013, D14)."""
+        return _read_setting(self._registry(), key, fallback)
+
     def _effective_limit(self, limit: int | None) -> int:
         """The effective limit: the live ``search.default_page_size`` when
         ``limit`` is None, clamped to the live ``search.max_page_size``
         (REQ-007/D5; read live, REQ-013)."""
-        registry = self._registry()
         if limit is None:
-            limit = int(_read_setting(registry, "search.default_page_size", _DEFAULT_PAGE_SIZE))
-        return min(limit, int(_read_setting(registry, "search.max_page_size", _MAX_PAGE_SIZE)))
+            limit = int(self._read("search.default_page_size", _DEFAULT_PAGE_SIZE))
+        return min(limit, int(self._read("search.max_page_size", _MAX_PAGE_SIZE)))
+
+    def _query_source(
+        self, source: SearchSource, ctx: SourceQueryContext
+    ) -> tuple[SourcePage | None, str | None, str | None]:
+        """Query one source in a worker thread with the live
+        ``search.source_timeout`` (D12, REQ-019, AC-033, EDGE-011).
+
+        Returns ``(page, reason, error_kind)``: on success ``page`` is set and
+        the rest are None; on failure ``page`` is None and ``reason`` is
+        ``query_failed``/``timeout`` with the error kind (the exception type
+        name — no sensitive data, NFR-002). The timed-out thread is abandoned
+        (bounded by the pool; its result is discarded, NFR-005).
+        """
+        timeout_ms = int(self._read("search.source_timeout", _SOURCE_TIMEOUT_MS))
+        future = self._pool.submit(source.query, ctx)
+        try:
+            page = future.result(timeout=timeout_ms / 1000.0)
+        except TimeoutError:
+            return None, "timeout", "timeout"
+        except Exception as exc:
+            return None, "query_failed", type(exc).__name__
+        return page, None, None
 
     def _publish(self, event: object) -> None:
         """Publish ``event`` to the injected publisher (a ``None`` publisher
