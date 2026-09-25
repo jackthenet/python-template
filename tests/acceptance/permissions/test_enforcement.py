@@ -220,13 +220,6 @@ def test_exempt_login_no_check(tmp_path: Path) -> None:
     user-management/mail calls are evaluated against the bootstrap system set).
     """
     from authentication_test_helpers import FakeWebAuthnProvider, db_url
-    from backend.permissions import (
-        MemoryGrantRepository,
-        MemoryRoleRepository,
-        MemorySystemPrincipalRepository,
-        PermissionCatalog,
-        PermissionService,
-    )
 
     from backend.authentication import (
         AuthService,
@@ -234,6 +227,13 @@ def test_exempt_login_no_check(tmp_path: Path) -> None:
         SqlitePasswordResetRepository,
         SqliteSessionRepository,
         SqliteWebAuthnCredentialRepository,
+    )
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
     )
 
     # A zero-permission user (the 'user' role starts with zero permissions,
