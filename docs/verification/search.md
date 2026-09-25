@@ -119,3 +119,19 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-004 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** (this commit) `impl(authentication): T-004 additive SessionRepository.list_all (GREEN)`.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-005 user-management additive `build_user_source`
+
+- **T-005 RED (S4.1):** confirmed — targeted `red_command` → **1 failed** (2026-09-25). Failure mode (on unimplemented T-005 behavior; no invalid test data):
+  - 1 × `ModuleNotFoundError` — `build_user_source` not exported from `backend.usermanagement` (`test_ac_034_user_source` — the additive search-source module, REQ-020).
+- **Implementation (S4.2):**
+  - `src/backend/usermanagement/search_source.py` (new): `build_user_source(repository: UserRepository) -> SearchSource` (REQ-020, ADR-077) — source name `usermanagement`; the field schema (username/email/display_name — string, searchable/filterable/sortable/display; is_active — boolean, filterable/sortable/display; created_at/updated_at — datetime, filterable/sortable/display); the sync query function over the existing `UserRepository.list_all` (called with `include_inactive=True` so the `is_active` field is meaningful); free text (case-fold + NFC + trim, D13), filters (string case-insensitive; boolean/datetime exact, D4), sort (None last, deterministic, D8), and pagination; `item_id` = the user id (a stable string identifier); default ordering `username` ascending (REQ-020).
+  - `src/backend/usermanagement/__init__.py`: additive re-export of `build_user_source` (the feature's public API, NFR-003).
+  - No change to `UserManager`, `UserRepository`, models, events, or errors (REQ-020).
+- **Test bug fix (S4.2):** `test_ac_034_user_source` asserted `item.item_id == users[0].id` — `User.id` is a `UUID` and the spec declares `item_id` a stable string identifier (a `str` can never equal a `UUID`); fixed to `item.item_id == str(users[0].id)` — aligning the test with the spec (the intent "item_id = the user id" is preserved; not a weakening).
+- **T-005 GREEN (S4.2):** **44 passed** (2026-09-25) — targeted `green_command` (`test_ac_034_user_source` + `tests/acceptance/usermanagement/` — no regression from the additive module + re-export; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/usermanagement/search_source.py src/backend/usermanagement/__init__.py tests/acceptance/search/test_feature_sources.py` → **All checks passed**; `uv run ruff format --check` (same paths) → **3 files already formatted**.
+- **Refactor (S4.3):** no-op fast-path — the implementation is small and follows the module's established pattern (module-level private helpers with REQ-referenced docstrings); no structural changes needed. GREEN from S4.2 still holds (zero file changes in the step).
+- **Status:** T-005 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** (this commit) `impl(usermanagement): T-005 build_user_source (AC-034, REQ-020) (GREEN)`.
+- **Date:** 2026-09-25
