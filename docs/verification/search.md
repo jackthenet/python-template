@@ -216,3 +216,15 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
   2. `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_008_variant_consistency` — **pre-existing** (out of scope): did NOT fail in this re-run (flaky; failed in the prior S5.1 run and on `main`).
 - **Regression status:** `tests/acceptance/logging_coverage/test_new_classes_traced.py::test_new_public_classes_traced_by_default` — **PASSING** (in the full re-run; isolated re-run confirmed: 1 passed). The S5.1 regression fix (trace `InMemorySource` with `@logged_class`, commit `b9efdc9`) is effective.
 - **Date:** 2026-09-25
+
+## Phase 5: Verify (S5.2) — lint + types
+
+- **Lint (whole-repo sweep — the Phase 5 gate, matching CI):** `uv run ruff check .` → initially **3 errors** (all `I001` unsorted import blocks), then **All checks passed!** after fix.
+  - **Error classification (all 3 introduced by the search change — in scope, NOT pre-existing):** `tests/acceptance/permissions/test_check_api.py`, `tests/acceptance/permissions/test_enforcement.py`, `tests/contract/permissions/test_performance.py` — the `tests/acceptance/permissions/` and `tests/contract/permissions/` directories do NOT exist on `main` (verified via `git ls-tree main`); all 3 files are new in this change branch (verified against merge-base `df481fb`).
+  - **Fix (in-step, scoped to the 3 in-scope files):** `uv run ruff check --fix <3 files>` → 3 fixed, 0 remaining; whole-repo sweep re-run → **All checks passed!**
+- **Types:** `uv run mypy src/` → initially **1 error**, then **Success: no issues found in 83 source files** after fix.
+  - **Error classification (introduced by the search change — in scope, NOT pre-existing):** `src/backend/search/service.py:558` — `Incompatible return value type (got "SearchService | None", expected "SearchService")` in `get_search_service` (the T-001 list-holder singleton pattern; the error flagged during T-003). `src/backend/search/service.py` is a new file in this change (not on `main`), so the error is introduced by the search change.
+  - **Fix (in-step, behavior-preserving):** `get_search_service` now assigns `service = _singleton[0]` inside the lock, then `assert service is not None` + `return service` (the assert never fires — the singleton is set inside the lock). Re-run `uv run mypy src/` → **Success: no issues found in 83 source files**.
+  - **Re-check (behavior-preserving):** `uv run pytest tests/acceptance/search/ tests/unit/search/ -q` → **55 passed** (no regression from the fix).
+- **Gate result: PASS** — lint clean on the whole repo (`uv run ruff check .`); type checks pass (`uv run mypy src/`).
+- **Date:** 2026-09-25
