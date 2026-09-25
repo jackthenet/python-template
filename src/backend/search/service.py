@@ -555,7 +555,9 @@ def get_search_service(
             _singleton[0] = SearchService(
                 event_bus=event_bus, settings_registry=settings_registry, permission_service=permission_service
             )
-        return _singleton[0]
+        service = _singleton[0]
+    assert service is not None, "singleton not initialized"
+    return service
 
 
 @logged(slow_threshold_ms=5)
