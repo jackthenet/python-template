@@ -206,3 +206,13 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Ruff gate (S4.2):** `uv run ruff check src/backend/search/service.py` → **All checks passed**; `uv run ruff format --check src/backend/search/service.py` → **1 file already formatted**.
 - **Commit:** (this commit) `fix(search): S5.1 regression — trace InMemorySource with @logged_class (AC-012)`.
 - **Date:** 2026-09-25
+
+## Phase 5: Verify (S5.1, re-run) — full test suite after regression fix
+
+- **Full test suite (S5.1 re-run):** `uv run pytest tests/ -v` → **1 failed, 703 passed, 1 skipped** (203.62 s) (2026-09-25).
+- **Gate result: PASS** — the suite is GREEN (zero regressions). The only failure is the known flaky test (below); the prior S5.1 regression is now passing.
+- **Failure classification:**
+  1. `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` — **flaky** (load/timing-dependent, NOT a regression): the only failure in the re-run; identical classification to the prior S5.1 (test file identical to `main`; passed isolated re-runs 4/4; waits up to 15 s for file-sink content, sensitive to host load under the 703-test run).
+  2. `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_008_variant_consistency` — **pre-existing** (out of scope): did NOT fail in this re-run (flaky; failed in the prior S5.1 run and on `main`).
+- **Regression status:** `tests/acceptance/logging_coverage/test_new_classes_traced.py::test_new_public_classes_traced_by_default` — **PASSING** (in the full re-run; isolated re-run confirmed: 1 passed). The S5.1 regression fix (trace `InMemorySource` with `@logged_class`, commit `b9efdc9`) is effective.
+- **Date:** 2026-09-25
