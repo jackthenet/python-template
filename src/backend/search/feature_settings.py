@@ -11,10 +11,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from backend.logging import logged
+
 if TYPE_CHECKING:
     from backend.settings import SettingsRegistry
 
 
+@logged
 def register_settings(registry: SettingsRegistry) -> None:
     """Register the search feature's settings with ``registry`` (REQ-013)."""
     from backend.settings import SettingDefinition, SettingKind

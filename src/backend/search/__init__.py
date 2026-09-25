@@ -9,6 +9,8 @@ Public API:
   ``MalformedQueryError``, ``SourceQueryFailedError``).
 - Events: ``SourceRegistered``, ``SourceUnregistered``, ``SourceQueryFailed``.
 - Settings: ``register_settings`` (feature-owned settings registration).
+- Actions: ``register_actions`` (feature-owned catalog action declaration,
+  additive ``search.search``).
 - Service: ``SearchService``, ``InMemorySource`` plus the module singleton
   ``get_search_service()`` / ``reset_search_service()``.
 """
@@ -24,6 +26,7 @@ from backend.search.events import (
     SourceRegistered,
     SourceUnregistered,
 )
+from backend.search.feature_actions import register_actions
 from backend.search.feature_settings import register_settings
 from backend.search.models import (
     FieldType,
@@ -73,6 +76,7 @@ __all__ = [
     "SourceUnregistered",
     "UnknownSourceError",
     "get_search_service",
+    "register_actions",
     "register_settings",
     "reset_search_service",
 ]

@@ -78,3 +78,29 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-002 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** `0542144` `impl(search): T-002 free-text + filter/sort/pagination/result-shape (GREEN)`.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-003 fan-out + timeout + events + tracing + permissions
+
+- **T-003 RED (S4.1):** confirmed — targeted `red_command` → **8 failed, 7 passed** (2026-09-25). Failure modes (all on unimplemented T-003 behavior; no invalid test data):
+  - 3 × source raising propagates raw `RuntimeError` instead of the domain behavior (`test_ac_026_single_source_failure_error`, `test_edge_010_single_source_raises_error`, `test_edge_009_global_source_raises_partial` — no `SourceQueryFailedError` / no resilient failure marker).
+  - 2 × no per-source timeout (`test_ac_033_source_timeout`, `test_edge_011_source_timeout` — the slow source's sleep blocks the query thread instead of a `timeout` failure).
+  - 1 × no `SourceQueryFailed` event on a source failure (`test_ac_029_lifecycle_and_failure_events`).
+  - 1 × no strict fan-out validation (`test_edge_020_fanout_strict_validation` — a global filter valid for one source but not another did not raise `MalformedQueryError`).
+  - 1 × integration: no resilient global fan-out marker + event (`test_ac_025_global_fanout_source_failure_partial`).
+  - The 7 passed are already covered by T-001/T-002 (global combined pagination, `register_settings` live read, `@logged` tracing, permission enforcement, concurrent replace/register, INV-005 secret-freedom).
+- **Implementation (S4.2):**
+  - `src/backend/search/service.py`:
+    - **Resilient global fan-out (REQ-011, D11, AC-025, EDGE-009):** a source raising during a global search → partial results + a `SourceFailure` marker (feature, reason `query_failed`, error kind = the exception type name — no sensitive data) + a `SourceQueryFailed` event; no exception; the other sources' results are returned.
+    - **Single-source failure (REQ-010, AC-026, EDGE-010):** a source raising during a single-source query (`feature` set) → `SourceQueryFailedError` (source + reason + error kind); no event, no marker.
+    - **Per-source timeout (REQ-019, D12, AC-033, EDGE-011):** each source query runs in a worker thread of a bounded per-service `ThreadPoolExecutor` (`max_workers=8`, `thread_name_prefix="search-source"`; threads created lazily on first submit); exceeding the live `search.source_timeout` (ms) → reason `timeout` (marker for global; `SourceQueryFailedError` for single-source); the timed-out thread is abandoned (bounded by the pool; its result is discarded, NFR-005).
+    - **Strict fan-out validation (REQ-010, D7, EDGE-020):** the global query is validated against **every** source in the fan-out (the single-source path is the one-element case) — a field absent or non-filterable/non-sortable in any source, an invalid operator, or a wrong value type → `MalformedQueryError` identifying the source + field, before any source is queried.
+    - New helpers: `_query_source(source, ctx) -> (page, reason, error_kind)` (worker-thread query with the live timeout) and `_read(key, fallback)` (live settings read); `_effective_limit` refactored onto `_read`.
+  - `src/backend/search/feature_actions.py` (new): `register_actions(catalog)` (traced with `@logged`) declares the additive `search.search` catalog action (REQ-016, ADR-079; the `PermissionCatalog` annotation is type-checking only — no runtime import of `backend.permissions`, ADR-070). Exported from `__init__.py` (NFR-003 public API).
+  - `src/backend/search/feature_settings.py`: `register_settings` traced with `@logged` (REQ-015 — the "Create feature_settings.py" step was a no-op fast-path from T-002; only the tracing remained).
+- **T-003 GREEN (S4.2):** **58 passed** (2026-09-25) — targeted `green_command` (T-001's 15 + T-002's 28 + T-003's 15 tests; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/search/` → **All checks passed**; `uv run ruff format --check src/backend/search/` → **7 files already formatted**.
+- **Refactor (S4.3):** no-op fast-path — the implementation is small and follows the module's established pattern (module-level/class private helpers with REQ-referenced docstrings, house `feature_actions.py` pattern); no structural changes needed. GREEN from S4.2 still holds (zero file changes in the step).
+- **Pre-existing (out of T-003 scope, for Phase 5):** `uv run mypy src/` reports 1 pre-existing error in `get_search_service` (`service.py` — the T-001 list-holder singleton pattern; `Incompatible return value type (got "SearchService | None", expected "SearchService")`); confirmed present on the clean tree (stash check) — mypy is a Phase 5 gate, not a per-task gate.
+- **Status:** T-003 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** (this commit) `impl(search): T-003 fan-out + timeout + events + tracing + permissions (GREEN)`.
+- **Date:** 2026-09-25
