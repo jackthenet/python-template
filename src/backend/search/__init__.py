@@ -8,6 +8,7 @@ Public API:
 - Errors: the ``SearchError`` hierarchy (``UnknownSourceError``,
   ``MalformedQueryError``, ``SourceQueryFailedError``).
 - Events: ``SourceRegistered``, ``SourceUnregistered``, ``SourceQueryFailed``.
+- Settings: ``register_settings`` (feature-owned settings registration).
 - Service: ``SearchService``, ``InMemorySource`` plus the module singleton
   ``get_search_service()`` / ``reset_search_service()``.
 """
@@ -23,6 +24,7 @@ from backend.search.events import (
     SourceRegistered,
     SourceUnregistered,
 )
+from backend.search.feature_settings import register_settings
 from backend.search.models import (
     FieldType,
     FilterCondition,
@@ -71,5 +73,6 @@ __all__ = [
     "SourceUnregistered",
     "UnknownSourceError",
     "get_search_service",
+    "register_settings",
     "reset_search_service",
 ]
