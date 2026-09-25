@@ -15,10 +15,11 @@ import operator
 import re
 import threading
 import unicodedata
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from backend.logging import logged, logged_class
-from backend.search.errors import UnknownSourceError
+from backend.search.errors import MalformedQueryError, UnknownSourceError
 from backend.search.events import EventPublisher, SourceRegistered, SourceUnregistered
 from backend.search.models import (
     FIELD_NAME_PATTERN,
@@ -93,6 +94,120 @@ def _is_identical_source(existing: SearchSource, source: SearchSource) -> bool:
     if len(existing.fields) != len(source.fields):
         return False
     return all(a == b for a, b in zip(existing.fields, source.fields, strict=True))
+
+
+# --- Query validation (REQ-010, AC-024) --------------------------------------
+
+# Per-type operator restrictions (D4): the operators valid for each field type.
+_VALID_OPERATORS: dict[FieldType, frozenset[FilterOperator]] = {
+    FieldType.STRING: frozenset(
+        {
+            FilterOperator.EQUALS,
+            FilterOperator.CONTAINS,
+            FilterOperator.STARTS_WITH,
+            FilterOperator.IN_LIST,
+            FilterOperator.IS_NULL,
+        }
+    ),
+    FieldType.NUMBER: frozenset(
+        {
+            FilterOperator.EQUALS,
+            FilterOperator.GT,
+            FilterOperator.GTE,
+            FilterOperator.LT,
+            FilterOperator.LTE,
+            FilterOperator.IN_LIST,
+            FilterOperator.IS_NULL,
+        }
+    ),
+    FieldType.BOOLEAN: frozenset({FilterOperator.EQUALS, FilterOperator.IN_LIST, FilterOperator.IS_NULL}),
+    FieldType.DATETIME: frozenset(
+        {
+            FilterOperator.EQUALS,
+            FilterOperator.GT,
+            FilterOperator.GTE,
+            FilterOperator.LT,
+            FilterOperator.LTE,
+            FilterOperator.IN_LIST,
+            FilterOperator.IS_NULL,
+        }
+    ),
+}
+
+
+def _find_field(source: SearchSource, name: str) -> SourceField | None:
+    """The declared field named ``name`` in ``source``'s schema (or None)."""
+    for field in source.fields:
+        if field.name == name:
+            return field
+    return None
+
+
+def _value_matches_type(value: Any, ftype: FieldType) -> bool:
+    """Whether ``value`` matches the declared field type (D3): string: str;
+    number: int/float (not bool); boolean: bool; datetime: datetime."""
+    if ftype is FieldType.STRING:
+        return isinstance(value, str)
+    if ftype is FieldType.NUMBER:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if ftype is FieldType.BOOLEAN:
+        return isinstance(value, bool)
+    if ftype is FieldType.DATETIME:
+        return isinstance(value, datetime)
+    return False
+
+
+def _validate_pagination(query: SearchQuery) -> None:
+    """Validate the query's pagination (REQ-010): ``limit < 1`` or
+    ``offset < 0`` raises ``MalformedQueryError`` (identifying the reason)."""
+    if query.limit is not None and query.limit < 1:
+        raise MalformedQueryError(reason="invalid_limit")
+    if query.offset < 0:
+        raise MalformedQueryError(reason="invalid_offset")
+
+
+def _validate_query_against_source(source: SearchSource, query: SearchQuery) -> None:
+    """Validate the query against a source's declared schema (REQ-010, AC-024):
+    filters restricted to declared-filterable fields with per-type operator
+    restrictions and value types (D4, D3); a sort on a declared-sortable field
+    (REQ-008)."""
+    if query.filters is not None:
+        _validate_filter_group(source, query.filters)
+    if query.sort is not None:
+        field = _find_field(source, query.sort.field)
+        if field is None or not field.sortable:
+            raise MalformedQueryError(reason="non_sortable_field", field=query.sort.field, source=source.name)
+
+
+def _validate_filter_group(source: SearchSource, group: FilterGroup) -> None:
+    """Validate a (nestable) AND/OR filter group against the source schema."""
+    for cond in group.conditions:
+        if isinstance(cond, FilterGroup):
+            _validate_filter_group(source, cond)
+        else:
+            _validate_filter_condition(source, cond)
+
+
+def _validate_filter_condition(source: SearchSource, cond: FilterCondition) -> None:
+    """Validate a single filter condition (REQ-010, D4, D3): the field is
+    declared filterable, the operator is valid for the field's type, and the
+    value matches the field's type (``is_null`` requires no value)."""
+    field = _find_field(source, cond.field)
+    if field is None or not field.filterable:
+        raise MalformedQueryError(reason="non_filterable_field", field=cond.field, source=source.name)
+    if cond.operator not in _VALID_OPERATORS[field.type]:
+        raise MalformedQueryError(reason="invalid_operator", field=cond.field, source=source.name)
+    if cond.operator is FilterOperator.IS_NULL:
+        return  # no value required
+    value = cond.value
+    if value is None:
+        raise MalformedQueryError(reason="invalid_value_type", field=cond.field, source=source.name)
+    if cond.operator is FilterOperator.IN_LIST:
+        ok = isinstance(value, (list, tuple)) and all(_value_matches_type(x, field.type) for x in value)
+    else:
+        ok = _value_matches_type(value, field.type)
+    if not ok:
+        raise MalformedQueryError(reason="invalid_value_type", field=cond.field, source=source.name)
 
 
 # --- In-memory filter evaluation (the source's query semantics, D4, D13) ----
@@ -276,6 +391,9 @@ class SearchService:
                 sources = [source]
             else:
                 sources = list(self._sources.values())
+        _validate_pagination(query)
+        if query.feature is not None:
+            _validate_query_against_source(source, query)
         free_text = _normalize(query.free_text) if query.free_text is not None else None
         if free_text == "":
             free_text = None
