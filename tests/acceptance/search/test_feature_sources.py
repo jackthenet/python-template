@@ -196,7 +196,7 @@ def test_ac_036_session_source(tmp_path: Path) -> None:
     assert result.total == len(rows)
     for item in result.items:
         assert item.feature == "sessionmanagement"
-        assert item.item_id in {rows[0].id, rows[1].id}  # item_id = the session id
+        assert item.item_id in {str(rows[0].id), str(rows[1].id)}  # item_id = the session id (stable string identifier)
 
     # Filter on revoked.
     revoked = svc.search(
