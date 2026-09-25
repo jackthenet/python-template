@@ -748,6 +748,86 @@ The change wires the shared `PermissionChecker` into six features via the ADR-07
 | mail | `test_mail_enforcement_wiring` (REQ-024; 3 methods, all enforced) | GREEN |
 | sessionmanagement | `test_sessionmanagement_enforcement_wiring` (REQ-024; 6 methods, all enforced) | GREEN |
 
+## Search Matrix
+
+The search change (type CROSS-CUTTING; spec `docs/specs/search.md`) uses its own REQ/AC ID space (REQ-001..023, AC-001..037, INV-001..005, EDGE-001..021, NFR-001..005) that overlaps the other features' matrices, so it is kept separate. Phase 3 (S3.2) confirmed all 70 newly derived tests RED (failure modes: `ModuleNotFoundError` on the unimplemented `backend.search` module; `ImportError` on the additive `build_user_source` / `build_file_source` / `build_session_source` modules; `AttributeError` on the additive `SessionRepository.list_all`). Status `PENDING` until Phase 4/5 turns the tests GREEN.
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_ac_001_register_source` | PENDING |
+| REQ-002 | AC-001 | `test_ac_001_register_source` | PENDING |
+| REQ-003 | AC-002 | `test_ac_002_replace_same_name` | PENDING |
+| REQ-003 | AC-003 | `test_ac_003_identical_reregistration_noop` | PENDING |
+| REQ-003 | AC-004 | `test_ac_004_unregister_source` | PENDING |
+| REQ-004 | AC-005 | `test_ac_005_search_free_text_returns_items` | PENDING |
+| REQ-004 | AC-006 | `test_ac_006_global_fanout_combined_pagination` | PENDING |
+| REQ-005 | AC-007 | `test_ac_007_no_constraints_match_all` | PENDING |
+| REQ-005 | AC-008 | `test_ac_008_empty_free_text_no_constraint` | PENDING |
+| REQ-006 | AC-009 | `test_ac_009_filter_equals` | PENDING |
+| REQ-006 | AC-010 | `test_ac_010_filter_contains_case_insensitive` | PENDING |
+| REQ-006 | AC-011 | `test_ac_011_filter_and_group` | PENDING |
+| REQ-006 | AC-012 | `test_ac_012_filter_or_group` | PENDING |
+| REQ-006 | AC-013 | `test_ac_013_filter_number_comparisons` | PENDING |
+| REQ-006 | AC-014 | `test_ac_014_filter_in_list` | PENDING |
+| REQ-006 | AC-015 | `test_ac_015_filter_is_null` | PENDING |
+| REQ-007 | AC-016 | `test_ac_016_default_page_size` | PENDING |
+| REQ-007 | AC-017 | `test_ac_017_limit_clamped_to_max` | PENDING |
+| REQ-007 | AC-018 | `test_ac_018_offset_pagination` | PENDING |
+| REQ-007 | AC-019 | `test_ac_019_offset_beyond_end_empty` | PENDING |
+| REQ-008 | AC-020 | `test_ac_020_sort_overrides_default_order` | PENDING |
+| REQ-008 | AC-021 | `test_ac_021_sort_stable_tie_break` | PENDING |
+| REQ-009 | AC-005 | `test_ac_005_search_free_text_returns_items` | PENDING |
+| REQ-009 | AC-022 | `test_ac_022_result_item_shape` | PENDING |
+| REQ-010 | AC-023 | `test_ac_023_unknown_feature_error` | PENDING |
+| REQ-010 | AC-024 | `test_ac_024_malformed_query_errors` | PENDING |
+| REQ-010 | AC-026 | `test_ac_026_single_source_failure_error` | PENDING |
+| REQ-011 | AC-025 | `test_ac_025_global_fanout_source_failure_partial` (integration) | PENDING |
+| REQ-012 | AC-027 | `test_ac_027_normalization_invariance` | PENDING |
+| REQ-013 | AC-028 | `test_ac_028_register_settings_live_read` | PENDING |
+| REQ-014 | AC-029 | `test_ac_029_lifecycle_and_failure_events` | PENDING |
+| REQ-015 | AC-030 | `test_ac_030_traced_no_query_in_logs` | PENDING |
+| REQ-016 | AC-031 | `test_ac_031_permission_enforcement` | PENDING |
+| REQ-017 | AC-032 | `test_ac_032_singleton_and_reset` | PENDING |
+| REQ-018 | — | `test_edge_019_concurrent_register_search` (integration), `test_nfr_005_thread_safe_registry` (integration) | PENDING |
+| REQ-019 | AC-033 | `test_ac_033_source_timeout` | PENDING |
+| REQ-020 | AC-034 | `test_ac_034_user_source` | PENDING |
+| REQ-021 | AC-035 | `test_ac_035_file_source` | PENDING |
+| REQ-022 | AC-036 | `test_ac_036_session_source` | PENDING |
+| REQ-022 | AC-036 | `test_list_all_returns_all_sessions_created_at_desc` (authentication, T-004 additive `SessionRepository.list_all`) | PENDING |
+| REQ-023 | AC-037 | `test_ac_037_backend_only_api` | PENDING |
+| INV-001 | — | `test_inv_001_registration_idempotent_atomic` | PENDING |
+| INV-002 | — | `test_inv_002_query_deterministic` | PENDING |
+| INV-003 | — | `test_inv_003_pagination_consistency` | PENDING |
+| INV-004 | — | `test_inv_004_normalization_invariance` | PENDING |
+| INV-005 | — | `test_inv_005_no_secrets_in_outputs` | PENDING |
+| EDGE-001 | — | `test_edge_001_unknown_feature` | PENDING |
+| EDGE-002 | — | `test_edge_002_global_no_sources_empty` | PENDING |
+| EDGE-003 | — | `test_edge_003_invalid_limit_offset` | PENDING |
+| EDGE-004 | — | `test_edge_004_non_filterable_field` | PENDING |
+| EDGE-005 | — | `test_edge_005_invalid_operator_for_type` | PENDING |
+| EDGE-006 | — | `test_edge_006_non_sortable_field` | PENDING |
+| EDGE-007 | — | `test_edge_007_limit_clamped` | PENDING |
+| EDGE-008 | — | `test_edge_008_offset_beyond_end` | PENDING |
+| EDGE-009 | — | `test_edge_009_global_source_raises_partial` | PENDING |
+| EDGE-010 | — | `test_edge_010_single_source_raises_error` | PENDING |
+| EDGE-011 | — | `test_edge_011_source_timeout` | PENDING |
+| EDGE-012 | — | `test_edge_012_no_searchable_fields_zero_matches` | PENDING |
+| EDGE-013 | — | `test_edge_013_unregister_unknown_noop` | PENDING |
+| EDGE-014 | — | `test_edge_014_identical_reregistration_noop` | PENDING |
+| EDGE-015 | — | `test_edge_015_replace_concurrent_consistent` | PENDING |
+| EDGE-016 | — | `test_edge_016_reset_clears_no_events` | PENDING |
+| EDGE-017 | — | `test_edge_017_is_null_matches_none` | PENDING |
+| EDGE-018 | — | `test_edge_018_in_list_empty_matches_nothing` | PENDING |
+| EDGE-019 | — | `test_edge_019_concurrent_register_search` (integration) | PENDING |
+| EDGE-020 | — | `test_edge_020_fanout_strict_validation` | PENDING |
+| EDGE-021 | — | `test_edge_021_invalid_source_declaration` | PENDING |
+| NFR-001 | — | `test_nfr_001_performance_budgets` | PENDING |
+| NFR-002 | — | `test_nfr_002_no_query_or_results_in_logs_events` | PENDING |
+| NFR-003 | — | `test_nfr_003_public_api_contract` | PENDING |
+| NFR-004 | — | `test_nfr_004_traced_service_events` | PENDING |
+| NFR-005 | — | `test_nfr_005_thread_safe_registry` (integration) | PENDING |
+| — | — | `test_startup_wiring_all_sources` (integration — all three feature sources wired at startup, no single AC) | PENDING |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:
