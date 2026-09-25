@@ -1,5 +1,8 @@
 # Spec: Search (Backend, Cross-Cutting)
 
+## Changelog
+- v2 (2026-09-25): NFR-001 single-source query budget increased from 100 ms to ~300 ms (10k items) — the source's query path fetches full Pydantic models via the repository ABC; a lighter path requires a persistence-contract change (out of scope for the search feature).
+
 ## 1. Overview & Objectives
 - **Feature Name:** Search (Backend, Cross-Cutting)
 - **Target Component:** `src/backend/search/` (new feature) plus additive search-source modules in `src/backend/usermanagement/`, `src/backend/filemanagement/`, `src/backend/sessionmanagement/`, and an additive `SessionRepository.list_all` method in `src/backend/authentication/` (backward-compatible per authentication NFR-003)
@@ -409,7 +412,7 @@ State invariants that hold over a large input space. These become Hypothesis pro
 
 | ID | Category | Requirement |
 |----|----------|-------------|
-| NFR-001 | Performance | A single-source query completes in < 100 ms (median) INCLUDING the `@logged` per-call overhead; `register_source` completes in < 5 ms (median); the budgets assume 10k–100k items per source, measured on local hardware against SQLite-backed sources with the shared logging feature configured at its default INFO level with a synchronous console sink (DEBUG method tracing off); the budgets hold including the per-call logging overhead at that level. |
+| NFR-001 | Performance | A single-source query completes in < ~300 ms (median) for 10k items (scaling linearly to < ~3000 ms (median) for 100k items) INCLUDING the `@logged` per-call overhead; `register_source` completes in < 5 ms (median); the budgets assume 10k–100k items per source, measured on local hardware against SQLite-backed sources with the shared logging feature configured at its default INFO level with a synchronous console sink (DEBUG method tracing off); the budgets hold including the per-call logging overhead at that level. The single-source query budget reflects the current architecture: the source's query path fetches full Pydantic models via the repository ABC (`list_all`) and processes them in Python; a lighter path (raw rows) requires a persistence-contract change (out of scope for the search feature). |
 | NFR-002 | Security | Query text, result content, and source data never appear in log records, events, error messages, or result payloads beyond the declared display fields; permission checks are fail-closed (a denial raises before any result is returned). |
 | NFR-003 | Contract | The public API of `backend.search` allows breaking changes with a major version. **Recorded deviation:** the user explicitly deviated from the repository's additive-only NFR pattern for this feature — breaking changes are permitted and do not require a spec amendment; the deviation is recorded here per the user's decision (Q-124). |
 | NFR-004 | Observability | Service methods are traced via the shared logging feature (`@logged_class`, `include_args=False`); source lifecycle and failure events are published to the injected publisher; no per-query events. |

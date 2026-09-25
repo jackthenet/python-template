@@ -22,6 +22,7 @@ from backend.search.errors import (
     UnknownSourceError,
 )
 from backend.search.events import (
+    EventPublisher,
     SourceQueryFailed,
     SourceRegistered,
     SourceUnregistered,
@@ -52,6 +53,7 @@ from backend.search.service import (
 )
 
 __all__ = [
+    "EventPublisher",
     "FieldType",
     "FilterCondition",
     "FilterGroup",

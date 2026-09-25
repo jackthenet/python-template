@@ -325,3 +325,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 CI failure + 1 fix/record run (~2.5 min CI each)
 - **Resolution:** Item K made the file uniform at `deadline=2000` (≈2.7× the CI worst) with the CI run id recorded in the docstring; decorator-only, no assertion/strategy change. Lessons: (a) a Hypothesis deadline must be calibrated against **CI** timings, not local ones; (b) the `tests` and `coverage` jobs run the same suite with **different seeds**, so one green job is not evidence about the other — check both.
 - **Date:** 2026-10-02
+
+## P-36 — NFR-001 performance budget (100 ms) unrealistic given the source's query path (fetches full Pydantic models via the repository ABC); T-008 subagents stuck
+- **Problem:** The NFR-001 budget is "a single-source query < 100 ms median; 10k–100k items per source on local hardware against SQLite-backed sources". The test (`test_nfr_001_performance_budgets`) uses 10k items. The source's query function (`build_user_source`'s `_query`) fetches ALL items via the repository ABC's `list_all` (which returns full Pydantic `User` models) and processes them in Python — measured ~293 ms (median) for 10k items (fetch ~216 ms + processing ~77 ms). A lighter path (raw-row fetch + `SourceItem` build + sort) would be ~41 ms (under budget), but the source only sees the `UserRepository` ABC (whose `list_all` returns full models); using a lighter path requires changing the persistence contract (adding a lighter method to the repository), which is out of scope for the search feature (additive only — no new behavior in the feature's operations).
+- **Step / Phase:** S4.2 (T-008) — Phase 4
+- **Change:** search / CROSS-CUTTING
+- **Duration / iterations:** 2 subagent runs (both returned without a structured handoff, stuck on the optimization)
+- **Resolution:** User decision (2026-09-25): increase the budget via spec amendment (option 2) — `docs/specs/search.md` v2: NFR-001 single-source query budget increased from 100 ms to ~300 ms (10k items, scaling linearly to ~3000 ms for 100k items); the test's `_QUERY_BUDGET_S` re-aligned to 0.3 (10k items kept); T-008 GREEN (69 passed).
+- **Date:** 2026-09-25
