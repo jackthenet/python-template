@@ -495,12 +495,17 @@ class SearchService:
 # --- Public in-memory source (REQ-017, InMemoryStorageBackend precedent) ----
 
 
+@logged_class(slow_threshold_ms=10, include_args=False)
 class InMemorySource:
     """Public in-memory source for tests/DI (REQ-017).
 
     The default ordering = the items' insertion order; the query function
     applies free text, filters, sort, and pagination in memory with the spec's
     normalization and per-type semantics (D13, D4).
+
+    The class is traced via the shared logging feature (``@logged_class``)
+    with ``include_args=False`` so query text and result content never appear
+    in log records (NFR-002).
     """
 
     def __init__(self, name: str, fields: list[SourceField], items: list[SourceItem]) -> None:
