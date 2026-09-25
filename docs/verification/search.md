@@ -196,3 +196,13 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
   3. `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` — **flaky** (load/timing-dependent, NOT a regression): failed once during the full-suite run (under load from 701 tests); passed on the branch in isolated re-runs **4/4** (0.20–0.78 s each) and passes on `main`; the test waits up to 15 s for file-sink content, so it is sensitive to host load. The test file is identical to `main`.
 - **Required fix (re-enter Phase 4):** trace `InMemorySource` with `@logged_class` (per the logging tracing policy: public service/registry/repository/provider classes MUST be traced by default), then re-run the logging-coverage test and the full suite.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.2, re-entry) — S5.1 regression fix: trace `InMemorySource`
+
+- **Regression (from S5.1):** `tests/acceptance/logging_coverage/test_new_classes_traced.py::test_new_public_classes_traced_by_default` (logging-coverage AC-012) — the new public class `InMemorySource` (`src/backend/search/service.py`) is not traced with `@logged_class`; passes on `main`, fails on the branch.
+- **Implementation (S4.2):**
+  - `src/backend/search/service.py`: `InMemorySource` traced with `@logged_class(slow_threshold_ms=10, include_args=False)` — `include_args=False` so query text and result content never appear in log records (NFR-002; the class handles query text/results via its `_query` function); `slow_threshold_ms=10` per the in-memory test/DI class precedent (`InMemoryAttemptTracker`); docstring updated to record the tracing.
+- **GREEN (S4.2):** `uv run pytest tests/acceptance/logging_coverage/test_new_classes_traced.py -q` → **1 passed** (the regression test is GREEN); `uv run pytest tests/acceptance/search/ tests/acceptance/logging_coverage/ -q` → **51 passed** (no regression; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/search/service.py` → **All checks passed**; `uv run ruff format --check src/backend/search/service.py` → **1 file already formatted**.
+- **Commit:** (this commit) `fix(search): S5.1 regression — trace InMemorySource with @logged_class (AC-012)`.
+- **Date:** 2026-09-25
