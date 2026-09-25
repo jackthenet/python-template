@@ -185,3 +185,14 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-008 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** (this commit) `impl(search): T-008 startup wiring + NFRs (AC-037, REQ-023, NFR-001..005) (GREEN; spec v2 NFR-001 budget amendment)`.
 - **Date:** 2026-09-25
+
+## Phase 5: Verify (S5.1) — full test suite
+
+- **Full test suite (S5.1):** `uv run pytest tests/ -v` → **3 failed, 701 passed, 1 skipped** (201.71 s) (2026-09-25).
+- **Gate result: FAIL** — 1 regression (below). A regression is a gate failure for this change; the suite must be GREEN (or only pre-existing failures) before the change is verified.
+- **Failure classification** (each failing test re-run against the change's base, `main` @ `0d2720f`, in a temporary detached worktree):
+  1. `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_008_variant_consistency` — **pre-existing** (out of scope): fails on `main` too; the test file is identical to `main` (no diff `main...HEAD`).
+  2. `tests/acceptance/logging_coverage/test_new_classes_traced.py::test_new_public_classes_traced_by_default` — **regression** (fix before verifying): passes on `main`; fails deterministically on the branch (re-run confirmed the failure). Cause: the new public class `InMemorySource` (`src/backend/search/service.py:498`, added by this change) is not traced with `@logged_class`, violating the logging-coverage AC-012 (every public class traced by default). The branch's only edit to this test file (a `TypeDecorator` exclusion) is unrelated to the failure.
+  3. `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` — **flaky** (load/timing-dependent, NOT a regression): failed once during the full-suite run (under load from 701 tests); passed on the branch in isolated re-runs **4/4** (0.20–0.78 s each) and passes on `main`; the test waits up to 15 s for file-sink content, so it is sensitive to host load. The test file is identical to `main`.
+- **Required fix (re-enter Phase 4):** trace `InMemorySource` with `@logged_class` (per the logging tracing policy: public service/registry/repository/provider classes MUST be traced by default), then re-run the logging-coverage test and the full suite.
+- **Date:** 2026-09-25
