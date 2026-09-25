@@ -151,3 +151,19 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-006 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** (this commit) `impl(filemanagement): T-006 build_file_source (AC-035, REQ-021) (GREEN)`.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-007 session-management additive `build_session_source`
+
+- **T-007 RED (S4.1):** confirmed — targeted `red_command` → **1 failed** (2026-09-25). Failure mode (on unimplemented T-007 behavior; no invalid test data):
+  - 1 × `ImportError` — `build_session_source` not exported from `backend.sessionmanagement` (`test_ac_036_session_source` — the additive search-source module, REQ-022).
+- **Implementation (S4.2):**
+  - `src/backend/sessionmanagement/search_source.py` (new): `build_session_source(repository: SessionRepository) -> SearchSource` (REQ-022, ADR-077) — source name `sessionmanagement`; the field schema (session_id — string, searchable/filterable/sortable/display; user_id — string, filterable/sortable/display; created_at/expires_at — datetime, filterable/sortable/display; revoked — boolean, filterable/sortable/display; login_method — string, filterable/sortable/display); the sync query function over the existing `SessionRepository.list_all` (the additive method from T-004, authentication — all sessions, any revocation state, no user filter); free text (case-fold + NFC + trim, D13), filters (string case-insensitive; boolean/datetime exact, D4), sort (None last, deterministic, D8), and pagination; `item_id` = the session id (a stable string identifier); default ordering `created_at` descending (REQ-022).
+  - `src/backend/sessionmanagement/__init__.py`: additive re-export of `build_session_source` (the feature's public API, NFR-003).
+  - No change to `SessionService`, events, or errors (REQ-022).
+- **Test bug fix (S4.2):** `test_ac_036_session_source` asserted `item.item_id in {rows[0].id, rows[1].id}` — `Session.id` is a `UUID` and the spec declares `item_id` a stable string identifier (a `str` can never equal a `UUID`); fixed to `item.item_id in {str(rows[0].id), str(rows[1].id)}` — aligning the test with the spec (the intent "item_id = the session id" is preserved; not a weakening).
+- **T-007 GREEN (S4.2):** **49 passed** (2026-09-25) — targeted `green_command` (`test_ac_036_session_source` + `tests/acceptance/sessionmanagement/` — no regression from the additive module + re-export; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/sessionmanagement/search_source.py src/backend/sessionmanagement/__init__.py tests/acceptance/search/test_feature_sources.py` → **All checks passed**; `uv run ruff format --check` (same paths) → **3 files already formatted**.
+- **Refactor (S4.3):** no-op fast-path — the implementation is small and follows the module's established pattern (module-level private helpers with REQ-referenced docstrings); no structural changes needed. GREEN from S4.2 still holds (zero file changes in the step).
+- **Status:** T-007 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** (this commit) `impl(sessionmanagement): T-007 build_session_source (AC-036, REQ-022) (GREEN)`.
+- **Date:** 2026-09-25
