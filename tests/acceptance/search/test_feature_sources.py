@@ -73,7 +73,7 @@ def test_ac_034_user_source(tmp_path: Path) -> None:
     assert result.total == 1
     item = result.items[0]
     assert item.feature == "usermanagement"
-    assert item.item_id == users[0].id  # item_id = the user id
+    assert item.item_id == str(users[0].id)  # item_id = the user id (stable string identifier)
     assert item.fields["username"] == "alice"
     assert item.fields["email"] == "alice@example.com"
     assert item.fields["display_name"] == "Alice"
