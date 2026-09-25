@@ -1130,3 +1130,300 @@ Each question is a section with the following fields:
 - **Date:** 2026-07-10
 - **Status:** ANSWERED
 - **Incorporated:** yes
+
+## Q-100 — Registration model: what is a "searchable item" and how does a feature register it?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The idea says "Features can register searchable content," but the registration model is the single most blocking design decision: (a) static declaration (the feature registers a *source descriptor* — name, field schema, and a query function — and search calls it), (b) push-based (the feature pushes items into search's index), or (c) both. It also defines what a "searchable item" is: an opaque dict of declared fields? A typed model? A reference (feature + item id) plus display fields?
+- **Context:** Repo pattern: features expose explicit public interfaces and depend on ABCs/protocols, not on each other's internals (user-management's `UserRepository` ABC, settings' `TemplateRepository` ABC, the structural `EventPublisher` protocol). A registration API is a cross-feature interface, so its shape must be pinned before the spec.
+- **Question:** Which registration model? (a) Static source declaration — the feature registers a named source with a field schema (field name, type, searchable/filterable/sortable flags) and a query function that search invokes; (b) push-based — the feature pushes items into an index maintained by search; (c) hybrid (declare fields, push items). And what is a "searchable item" in the result: an opaque field map, a typed model, or a reference (feature name + item id) plus declared display fields?
+- **Answer:** Static source declaration — the feature registers a named source at startup: feature name + field schema (field name, type, searchable/filterable/sortable flags) + sync query function. A "searchable item" in the result = a reference (feature name + item_id) plus declared display field values (rendered directly, no round-trip).
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-101 — Indexing vs. live query (does search maintain state?)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** If search queries registered sources live on every search, it is stateless (no persistence, always fresh, but every source is hit per query). If search maintains an index, it needs update semantics (push on change, event-driven refresh, or periodic re-index), persistence, and staleness guarantees. This determines whether the feature needs SQLite/SQLModel, event subscriptions, and what "fresh" means for results.
+- **Context:** Existing features: settings uses in-memory + YAML persistence; user-management/file-management/session-management use SQLite behind repository ABCs; session-management shows the event-driven pattern (subscribes to `LoginSucceeded`, `UserPasswordChanged`, ...). No feature maintains a derived index today.
+- **Question:** Does search maintain an index (stateful: items pushed or refreshed, staleness bounded, possibly persisted), or does it query the registered sources live on every search (stateless: always fresh, sources hit per query)? If stateful: how is the index updated (push API, event subscriptions to feature events, periodic re-index), and what is the staleness guarantee?
+- **Answer:** Stateless live query — no index; each search fans out to the source query functions; no staleness, no persistence.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-102 — Query syntax: free-text string vs. structured query
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** "Central search abstraction" with "filtering and pagination" could mean a single free-text string (tokenized, all tokens matched) plus filters, or a fully structured query (per-field conditions + optional free text). This defines the public API's core parameter and the matching semantics (substring? token? word boundary? case?).
+- **Context:** No search capability exists in the repo (grep for "search" in `docs/specs/` → no matches). file-management's `list_files(namespace, limit, offset)` is the closest existing query (prefix match + pagination). The idea mentions "filtering and pagination" but no query syntax.
+- **Question:** What is the query parameter's shape? (a) A free-text string (tokenized; matching semantics to be pinned) plus a separate filter structure; (b) a structured query object only (per-field conditions, no free text); (c) a structured query object with an optional free-text field. And what are the free-text matching semantics: case-insensitive substring per field? whole tokens? word boundaries?
+- **Answer:** Free-text + structured filters — optional free-text string + structured field filters; free-text = case-insensitive (case-folded) + Unicode NFC + trimmed token/substring match.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-103 — Global multi-source search vs. per-feature queries
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** "Central search entry point" could mean one query fans out to ALL registered features (global search, results tagged by feature, interleaved/paginated across sources) or per-feature queries (`search(feature="usermanagement", ...)`). Global fan-out raises: how are results from different features combined (interleaved by score? grouped?), how does pagination work across sources (one global page? per-source pages?), and what happens when one source fails (partial results? error?).
+- **Context:** The idea says "Central search entry point" (singular) with "filtering and pagination." Existing features each have their own list operations; none is a fan-out aggregator.
+- **Question:** Does the central entry point support (a) global queries that fan out to all registered features (results tagged by feature; one combined pagination), (b) per-feature queries only, or (c) both (a `feature` parameter that is optional — omitted = all features)? For global queries: how are results combined (interleaved by score, grouped by feature), and how is pagination applied (one global page across all sources)?
+- **Answer:** Both (optional feature param) — query targets one feature or, when omitted, fans out to all registered sources with combined pagination.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-104 — Filtering semantics: operators and composition
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** "Filtering" is in the idea but unspecified: which operators (equals, contains, starts-with, gt/gte/lt/lte, in-list, range, is-null?), on which field types (string, number, boolean, datetime?), and how are multiple filters composed (all AND? AND/OR groups? nesting?). Field-specific filters (filter only on fields the source declared filterable) are a likely constraint.
+- **Context:** No filter semantics exist in the repo. file-management's namespace prefix match is the only precedent (single operator, single field).
+- **Question:** Which filter operators are normative (proposed: equals, contains, starts-with, gt/gte/lt/lte, in-list, is-null), on which field types, and how are multiple filters composed — all AND, or AND/OR groups (nestable)? Are filters restricted to fields the source declared filterable at registration?
+- **Answer:** Declared filterable fields, AND/OR groups — operators equals/contains/starts-with/gt/gte/lt/lte/in-list/is-null on declared filterable fields; filters can be grouped with AND/OR.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-105 — Pagination semantics
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** "Pagination" is in the idea but the model is unspecified: offset/limit (file-management precedent) vs. cursor-based; default page size; max page size (cap); behavior for empty pages (offset beyond end → empty result? error?); whether the response carries a total count; and how pagination interacts with multi-source queries (global page vs. per-source pages).
+- **Context:** file-management: `list_files(namespace=None, limit=100, offset=0)` with `limit < 1` or `offset < 0` → `ValueError`; no total count returned. No cursor pagination anywhere in the repo.
+- **Question:** Which pagination model? (a) offset/limit (consistent with file-management), (b) cursor-based, or (c) both. Defaults: default page size (e.g., 20 or 100?), max page size cap? Behavior for empty pages (offset beyond end → empty page, no error)? Does the response include a total match count? For multi-source queries, is pagination one global page or per-source?
+- **Answer:** offset/limit + total — offset/limit (file-management precedent); default page size; max cap; total count in response; empty page = empty list.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-106 — Ranking / relevance
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** "Search" implies relevance, but the idea does not say whether results are scored. Options: no score (deterministic ordering only — e.g., source-defined order or declared sort field), a simple score (e.g., number of matched fields / substring position), or a configurable per-source scoring function. Tie-breaking and stable ordering must be pinned either way.
+- **Context:** No ranking exists in the repo. The logging feature has `slow_threshold` concepts but no scoring; settings has no relevance.
+- **Question:** Are results scored (relevance) or only ordered? If scored: what scoring model (proposed: simple deterministic score — matched-field count, with optional per-source score override), and is the score exposed in the result? If not scored: what is the default ordering (source-defined? declared sort field? registration order?), and what are the tie-breaking rules (stable, documented)?
+- **Answer:** Deterministic ordering only — no relevance score; each source returns a deterministic default ordering.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-107 — Result item shape
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The result representation is the public contract: what does each result item carry — feature name, item id, the declared fields (all? a subset?), score, and a reference the caller can use to fetch the full item (feature + id)? If items carry only references, the caller round-trips to the owning feature; if they carry field values, search must keep them fresh.
+- **Context:** Repo pattern: services return read-only representations (user-management's `UserRead`, file-management's `FileRead`) — never raw table objects. A `SearchResult`/`SearchHit` model would follow that pattern.
+- **Question:** What does a result item contain? Proposed: `feature` (source name), `item_id`, the source-declared display fields (field map), `score` (if scored), and pagination metadata on the page. Should results carry the declared field values (so the caller can render without a round-trip), or only a reference (feature + item_id) for the caller to fetch?
+- **Answer:** Field values (render directly) — each result: feature + item_id + declared display field values + page metadata; caller renders directly.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-108 — Overlap: do existing features register their content in THIS change?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Overlap check finding: no existing feature provides a central search abstraction (grep "search" in `docs/specs/` → no matches). Existing list/query operations that search may subsume: user-management `list_users(include_inactive)` / `get_user_by_username` (flat list, exact lookup — no filter/search), file-management `list_files(namespace, limit, offset)` (prefix match + pagination), session-management `list_sessions` (self/admin listing). The question is scope: does THIS change also wire user-management/file-management/session-management to register their content with search (making it CROSS-CUTTING or at least touching three features' code), or is search a standalone abstraction and registration by existing features is a later, separate change (or the caller's responsibility)?
+- **Context:** AGENTS.md: features are the primary architectural boundary; a change spanning two or more features is CROSS-CUTTING. If this change modifies user-management/file-management/session-management to register with search, it spans four features and should be reclassified CROSS-CUTTING (per-feature impact analysis required). If search is standalone, it stays FEATURE.
+- **Question:** Is this change (a) standalone — search is a new abstraction only, and registering existing features' content (users, files, sessions) is a later change or the application's responsibility (stays FEATURE), or (b) inclusive — this change also wires user-management, file-management, and/or session-management to register their content (reclassify CROSS-CUTTING with per-feature impact analysis)?
+- **Answer:** Also wire existing features (CROSS-CUTTING) — this change also registers user-management/file-management/session-management content; reclassify to CROSS-CUTTING.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-109 — Scope boundaries (explicit out-of-scope list)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The idea is three sentences; common search capabilities are not mentioned and must be explicitly bounded so the spec does not accidentally cover them. Candidates: full-text search engines (Elasticsearch/Postgres FTS — external infrastructure), faceting (aggregate counts per filter value), synonyms, typo tolerance / fuzzy matching, highlighting (marking matched substrings in results), suggestions/autocompletion, multi-language/Unicode stemming, persistent search history, and HTTP/frontend layers.
+- **Context:** Repo constraints: in-process Python services, no external infrastructure dependencies in existing features (SQLite/YAML only), no web framework. Adding an external search engine would be a major new dependency and operational concern.
+- **Question:** Confirm out of scope for this change: external full-text search engines (Elasticsearch etc.), faceting, synonyms, typo tolerance/fuzzy matching, highlighting, suggestions/autocompletion, stemming/multi-language text analysis, search history, and any HTTP/frontend layer. Is anything in that list actually in scope?
+- **Answer:** Confirm out-of-scope — external search engines, faceting, synonyms, fuzzy/typo tolerance, highlighting, suggestions, stemming, search history, HTTP/frontend are all out of scope.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-110 — Error handling: unknown feature, malformed query, source failure, registration conflicts
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The spec needs a structured error policy (repo pattern: exception hierarchy rooted at a feature error, with context attributes). Cases: (1) a query names an unknown/unregistered feature — error or empty? (2) a malformed query (invalid operator, filter on a non-filterable field, bad pagination values) — `ValueError` or domain error? (3) a registered source fails during a search (raises) — propagate, or partial results with a per-source error marker? (4) registration conflicts (same feature name registered twice, duplicate field names) — reject at registration?
+- **Context:** Repo pattern: user-management `UserManagerError` hierarchy; file-management `FileManagementError` hierarchy with context attributes; settings `SettingsError` hierarchy; session-management reuses authentication errors + `ValueError` for argument errors.
+- **Question:** Confirm the error policy: (1) unknown feature in a query → domain error (e.g., `SearchSourceNotFoundError`) or empty result? (2) malformed query (bad operator, filter on non-filterable field, `limit < 1` / `offset < 0`) → `ValueError` or domain error? (3) a source raises during a global search → propagate, or return partial results with per-source error markers? (4) registration conflicts (duplicate feature name, duplicate field) → rejected at registration with a domain error?
+- **Answer:** Domain errors + partial results — malformed query → SearchError hierarchy (not ValueError); unknown feature → error; a source failing during global search → partial results with per-source failure markers.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-111 — Persistence: stateless in-memory vs. SQLite
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** If search is stateless (live query, Q-101) it needs no persistence — the registry is in-memory (like the settings registry core). If it maintains an index, the index needs a storage decision: in-memory (lost on restart, re-indexed from sources) or SQLite/SQLModel behind a repository ABC (repo pattern). This determines the feature's dependency set and test isolation needs.
+- **Context:** Repo pattern: settings = in-memory core + optional YAML persistence; user-management/file-management/session-management = SQLite behind repository ABCs. A stateless search feature would be the first backend feature with no persistence at all.
+- **Question:** Does search need any persistence? If stateless (live query): confirm no persistence — the registry is in-memory only, and a restart simply re-registers sources. If stateful (index): in-memory index (re-built from sources at startup) or SQLite/SQLModel behind a repository ABC?
+- **Answer:** No persistence (stateless) — in-memory registry of sources; no index; nothing persisted.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-112 — Performance budgets and dataset sizes
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Testable performance budgets are needed (repo pattern: median budgets in NFRs, measured including the mandated `@logged` tracing overhead). The budgets depend on assumed dataset sizes (items per source) and the query model (live fan-out hits every source per query). Also: is there a per-source timeout so one slow source cannot hang a global search?
+- **Context:** Repo NFRs: user-management reads < 5 ms (median); file-management 10 MB upload < 2 s; settings per-op budgets. The logging policy mandates `@logged_class`/`@logged` tracing on all public methods, so budgets must include that overhead.
+- **Question:** What are the assumed dataset sizes (e.g., up to 10k items per source? 100k?) and the performance budgets? Proposed (stateless live query, 10k items per source): single-source search < 100 ms (median); global search across N sources < 100 ms × (slowest source dominates) — or a stated per-source budget; registration < 5 ms (median); all including `@logged` tracing overhead. Is a per-source timeout needed (and default value)?
+- **Answer:** Confirm budgets — single-source query < 100ms median (including @logged overhead); registration < 5ms; assume 10k–100k items per source.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-113 — Settings registry integration
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Configurable parameters should use the shared settings registry (repo pattern: feature-owned `register_settings(registry)` + live reads, like mail-service/file-management/session-management). Candidate keys: default page size, max page size cap, per-source timeout, max results per source for global queries. Which are settings vs. constructor args vs. fixed constants must be pinned.
+- **Context:** mail-service registers `mail.*` keys; file-management registers `filemanagement.*` keys (note: settings key format forbids hyphens — the registration name would be `search`); session-management registers `sessionmanagement.*` keys. All read live on each operation; unregistered keys fall back to hardcoded defaults.
+- **Question:** Which search parameters are settings-registry keys (read live, e.g., `search.default_page_size`, `search.max_page_size`, `search.source_timeout`), which are constructor args, and which are fixed constants? Confirm the feature-owned `register_settings(registry)` pattern with hardcoded fallbacks for unregistered keys.
+- **Answer:** Live-read keys + register_settings — search.default_page_size, search.max_page_size, search.source_timeout as live-read settings; feature-owned register_settings(registry).
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-114 — Events published to the event bus
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Per the repo pattern, features publish typed lifecycle events to the shared event bus (structural `EventPublisher` protocol; `None` publisher = no events; non-sensitive data only). For search, candidates: `SearchExecuted` (query summary, result count, elapsed), `SourceRegistered`/`SourceUnregistered`, `SourceQueryFailed` (per-source error during a global search). A `SearchExecuted` event on every query could be noisy — the level/noise tradeoff is a user decision.
+- **Context:** user-management publishes 7 event types; file-management 6; settings publishes `SettingChanged`; session-management publishes `SessionRevoked`/`AllSessionsRevoked`. All events carry non-sensitive data only.
+- **Question:** Which typed events should search publish? Proposed: `SourceRegistered`, `SourceUnregistered`, `SourceQueryFailed` (per-source error during a global search). Should `SearchExecuted` (per-query: source names, result count, elapsed — no query text, no result content) be published, or is it too noisy? Confirm non-sensitive data only (no query text, no result content, no secrets).
+- **Answer:** Lifecycle + failure events — SourceRegistered/SourceUnregistered/SourceQueryFailed; no per-query SearchExecuted; non-sensitive data only.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-115 — Logging / tracing policy
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The AGENTS.md tracing policy mandates public service classes traced with `@logged_class` (with a sensible `slow_threshold_ms`) and module-level functions with `@logged`. Search has a specific concern: query text and result content may contain sensitive data (usernames, emails, file names) — the `include_args` policy and what appears in log records must be pinned.
+- **Context:** AGENTS.md "Using the Logging Feature" — tracing policy (default): `@logged_class` on public service/registry/repository/provider classes, `@logged` on public module functions, `include_args=False` for methods handling passwords/tokens/credentials. file-management's `FileService` uses `include_args=False` (file content never in logs).
+- **Question:** Confirm: the public service class (e.g., `SearchService`) traced with `@logged_class` (with a sensible `slow_threshold_ms`), module-level functions with `@logged`. What is the `include_args` policy for the search method — `False` (query text and results never in log records) or `True` (debuggability)? What context IS logged (source names, result count, elapsed — no query text, no result content)?
+- **Answer:** @logged_class + include_args=False — @logged_class on service, @logged on module functions; include_args=False for search method (query text/results never in logs).
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-116 — Security: secrets in content and access control
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Two security questions: (1) Access control — existing features are open in-process (any in-process caller; file-management Q-22 precedent: "open in-process access"), but the user-roles-permissions feature (spec `docs/specs/user-roles-permissions.md`, `src/backend/shared/principal.py`) provides `Principal`/`PermissionChecker`/`requires_permission` enforcement plumbing. Should search's query entry point be permission-enforced (like the six features' enforced methods) or open? (2) Secrets in content — registered content may include sensitive fields (emails, tokens); the spec must state whether sources must exclude sensitive fields, and whether search ever logs/stores query text or result content.
+- **Context:** user-roles-permissions: `Principal` (system principal default), structural `PermissionChecker` protocol, `@requires_permission` decorator on enforced service methods — the shared enforcement plumbing. file-management Q-22: open in-process access confirmed for downloads.
+- **Question:** (1) Is the search query entry point open in-process (any caller, consistent with existing features) or permission-enforced via the shared `Principal`/`PermissionChecker` plumbing (like the six features' enforced methods)? (2) Confirm the content policy: sources MUST NOT register sensitive fields (passwords, tokens, hashes) as searchable; search never stores/logs query text or result content. Should the spec make "no sensitive fields" a normative registration constraint (validated how — declaration only, or enforced)?
+- **Answer:** Permission-enforced — enforce access via shared Principal/PermissionChecker (user-roles-permissions) before returning results.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-117 — Case sensitivity and text normalization
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Text matching semantics need normalization rules: case-insensitive matching (fold case)? Unicode normalization (NFC/NFKC)? Trimming whitespace? These are invariants (property-testable) and affect every string field. Number/boolean/datetime fields are exact (no normalization).
+- **Context:** Repo precedent: user-management stores email lowercased (case-insensitive); username is case-sensitive. file-management keys are case-sensitive patterns.
+- **Question:** Confirm the text normalization invariants: free-text and string-field matching is case-insensitive (case-folded) and Unicode-normalized (NFC); leading/trailing whitespace trimmed; number/boolean/datetime fields match exactly. Are there any fields where case sensitivity matters (like user-management's username)?
+- **Answer:** case-fold + NFC + trim — text matching is case-insensitive (case-folded) + Unicode NFC + trimmed; number/boolean/datetime are exact.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-118 — Empty query behavior
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** What does an empty free-text query (empty string / whitespace-only) do: return all items (subject to filters + pagination), or is it an error? And what does an empty query with only filters do? This is a common edge case that must be pinned (EDGE entry).
+- **Context:** No precedent in the repo (file-management's `list_files` has no free text — namespace is optional and empty namespace = all).
+- **Question:** What does an empty free-text query do — (a) match all items (subject to filters + pagination, like a "list all"), (b) rejected as a `ValueError`/domain error, or (c) empty string = no free-text constraint (same as omitting the query), whitespace-only = error? What about a query that is filters-only (no free text)?
+- **Answer:** Empty = no constraint — empty free-text = no free-text constraint; no free-text + no filters = match all (list all).
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-119 — Sorting support
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** "Filtering and pagination" does not mention sorting, but paginated search usually needs a stable, user-controllable order (especially when results are not relevance-scored). Options: no sorting (source-defined order only), sorting by declared-sortable fields (field + direction), or both relevance and explicit sort (explicit sort overrides relevance).
+- **Context:** No sorting API in the repo (file-management's `list_files` orders by `created_at` fixed; session-management orders by creation).
+- **Question:** Is sorting in scope? (a) No — results ordered by relevance (if scored) or source-defined order only; (b) yes — sort by source-declared-sortable fields (field + ascending/descending), explicit sort overrides relevance; (c) yes — plus a default sort when none given (e.g., source-defined). If in scope: which fields are sortable (declared at registration), and what are the tie-breaking rules?
+- **Answer:** Sort by declared sortable fields — allow sorting by declared sortable fields (overrides default ordering).
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-120 — Registration lifecycle: unregister, re-registration, idempotency
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The registration API needs lifecycle semantics: can a feature unregister (and what happens to in-flight queries)? Is re-registering the same feature name an update (replace) or a conflict? Is registration idempotent (same descriptor registered twice = no-op)? These are EDGE entries and affect the public contract.
+- **Context:** Repo pattern: settings registry `register` rejects duplicate keys (`SettingsRegistrationError`); event bus `subscribe` allows multiple handlers; module singletons have `reset_*` for tests.
+- **Question:** Confirm the registration lifecycle: (1) can a source be unregistered (and do in-flight queries see a consistent state)? (2) re-registering an existing feature name — replace (update) or rejected as a conflict? (3) is registering an identical descriptor idempotent (no-op)? (4) is there a `reset` for test isolation (like `reset_settings_registry()`)?
+- **Answer:** unregister + replace + reset — support unregister (in-flight query consistent); re-register = replace; idempotent identical registration; reset() for test isolation.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-121 — Source contract: what must a registered source provide?
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The source contract is the cross-feature interface a feature implements to be searchable: a query function with a pinned signature (inputs: query text, filters, pagination, sort; outputs: matching items + total count?), a field schema, and possibly a count. Sync vs. async matters (existing features are sync; the event bus has a background worker but feature services are sync). Also: does the source return a total count (needed for pagination metadata) or only a page?
+- **Context:** Existing feature services are synchronous (user-management, file-management, session-management). The event bus is the only async element (background worker). A sync source contract keeps the feature consistent with the repo.
+- **Question:** What must a registered source provide? Proposed: a sync query function (inputs: free text, filters, offset, limit, sort; outputs: a page of items + total match count), a field schema (name, type, searchable/filterable/sortable flags), and a source name. Confirm sync (not async). Does the source return a total count (for pagination metadata), or only a page (no total)?
+- **Answer:** Sync query function — source = name + field schema + sync query function (inputs: text/filters/offset/limit/sort; outputs: page + total count); sync, not async.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-122 — Testability: fakes/fixtures for tests
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The spec's test strategy needs test seams: a fake/in-memory source for tests (register a source backed by a fixed item list), a fresh registry per test (module singleton + reset, like `reset_settings_registry()` / `reset_event_bus()`), and the shared test tooling (polyfactory `model_factory`, `travel`, `mock_http` — per AGENTS.md "Using the Test Tooling"). The public API must be designed so tests never need real features.
+- **Context:** AGENTS.md "Using the Test Tooling": `model_factory(MyModel)`, `travel(destination)`, `mock_http()` from `tests/tooling_test_helpers.py`. Repo pattern: module singletons with `reset_*` for test isolation (settings, event bus, session-management).
+- **Question:** Confirm the test seams: (1) a public fake/in-memory source (or a documented way to register a source backed by a fixed item list) for tests; (2) a module singleton (e.g., `get_search_service()`) + `reset` for test isolation; (3) tests use the shared test tooling (polyfactory factories for the search models). Anything else the test strategy needs from the public API?
+- **Answer:** Public fake source + reset — public in-memory/fake source for tests; module singleton + reset(); shared test tooling.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-123 — Thread safety
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Queries may run from multiple threads (the repo's SQLite repositories are thread-safe; the settings registry and event bus are thread-safe). The registry (read during queries, written during register/unregister) and any internal state must be safe for concurrent use. This is an NFR consistent with the repo pattern.
+- **Context:** Repo pattern: user-management NFR-004 (thread-safe, no partial state on concurrent reads/writes); settings registry thread-safe; event bus thread-safe.
+- **Question:** Confirm: the registry and the query path are safe for concurrent use from multiple threads (a concurrent register/unregister and query leaves no partial state; queries observe a consistent registry snapshot)?
+- **Answer:** Thread-safe — registry + query path safe for concurrent use; no partial state on concurrent register/query.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-124 — Backward compatibility of the public API
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The repo pattern includes a public-API backward-compatibility NFR (authentication NFR-003: "response schema must remain backward-compatible"; session-management extended the `SessionRepository` ABC additively under that contract). For a new shared feature, the public API (registration contract, query API, result models, error hierarchy) should be pinned as a backward-compatible contract from day one.
+- **Context:** authentication NFR-003 (public API backward-compatibility contract); session-management's additive ABC extension (REQ-017) under that contract.
+- **Question:** Confirm the NFR: the public API (source registration contract, query API, result models, error hierarchy) is a backward-compatible contract — future changes are additive only (new optional parameters, new event types, new error subclasses), never breaking (no removed/renamed parameters, no changed semantics of existing ones)?
+- **Answer:** Breaking allowed — breaking changes allowed with major version (deviates from the repo's additive-only NFR pattern per user decision).
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-125 — Backend-only scope (no HTTP layer, no frontend)
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** Every existing backend feature is an in-process Python service with no HTTP/REST layer, but "central search entry point" could imply a web API or a user-facing search UI. The answer fixes the entire API surface (in-process service vs. web endpoints).
+- **Context:** All features in `src/backend/` (authentication, usermanagement, settings, mail, filemanagement, eventbus, logging, sessionmanagement, permissions) are in-process services; no web framework in `pyproject.toml`; every prior feature's spec lists HTTP/frontend as out of scope (file-management Q-1, session-management Q-35).
+- **Question:** Confirm: search is a backend-only in-process service (no HTTP/REST layer, no frontend), consistent with all existing features? If an HTTP layer is needed, is it part of this change or a separate change?
+- **Answer:** Backend-only — in-process service; no HTTP/REST layer; no frontend.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
+
+## Q-126 — Field types supported at registration
+- **Step:** S1.1 Interrogate — Phase 1
+- **Change:** search, FEATURE
+- **Why needed:** The field schema (Q-100) needs a pinned set of field types with per-type matching/filtering semantics: string (case-insensitive text matching, contains/equals/starts-with filters), number (exact + gt/gte/lt/lte), boolean (equals), datetime (exact + range), and possibly enum/list. The type set determines the filter operator matrix and the property-test invariants.
+- **Context:** No field-type system in the repo. Settings has seven kinds (TEXT, NUMBER, BOOLEAN, EMAIL, SLIDER, SELECT, LIST) with per-kind validation — a precedent for a small, closed type set with per-kind semantics.
+- **Question:** Which field types are normative in the source field schema? Proposed: `string`, `number`, `boolean`, `datetime` (closed set; per-type matching/filtering semantics pinned in the spec). Is an `enum`/`list` type needed, or are those covered by `string`/`number`? Confirm the closed type set (new types = additive contract change later).
+- **Answer:** Closed set of 4 — field types: string/number/boolean/datetime; no enum/list for v1.
+- **Date:** 2026-09-25
+- **Status:** ANSWERED
+- **Incorporated:** yes
