@@ -228,3 +228,15 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
   - **Re-check (behavior-preserving):** `uv run pytest tests/acceptance/search/ tests/unit/search/ -q` → **55 passed** (no regression from the fix).
 - **Gate result: PASS** — lint clean on the whole repo (`uv run ruff check .`); type checks pass (`uv run mypy src/`).
 - **Date:** 2026-09-25
+
+## Phase 5: Verify (S5.3) — traceability matrix update
+
+- **Traceability matrix:** `docs/verification/traceability.md` — Search Matrix updated:
+  - All 73 rows flipped `PENDING` → `GREEN` (every REQ-001..REQ-023 has at least one GREEN test; every AC-001..AC-037 has at least one executable (GREEN) test; every INV-001..INV-005 has a property test (GREEN); every EDGE-001..EDGE-021 has a test (GREEN); every NFR-001..NFR-005 has a test (GREEN)).
+  - Header note updated to the GREEN convention (File Management Matrix style) with the S5.3 targeted re-check evidence.
+  - **CROSS-CUTTING per-feature rows:** new "Affected Features (CROSS-CUTTING — per-feature source wiring)" subsection — one row per affected feature (user-management, file-management, session-management, authentication, user-roles-permissions, startup entrypoint), each mapped to its dedicated wiring test (all GREEN). No existing REQ/AC of any affected feature is touched (all additive); the existing feature matrices (User Management, File Management, Session Management, Authentication) remain valid and GREEN.
+- **GREEN evidence (S5.3 targeted re-check):** `uv run pytest -q tests/acceptance/search/ tests/contract/search/ tests/integration/search/ tests/property/search/ tests/unit/search/ tests/unit/authentication/test_sessions.py` → **74 passed in 12.16 s** (2026-09-25) — the 70 newly derived search tests + the 4 pre-existing authentication session tests in that file.
+- **Orphan/missing check:** collected test names (74) match the matrix rows exactly — no orphaned test (every search test traces to a REQ/AC/INV/EDGE/NFR row), no missing test (every matrix row is an existing test function).
+- **Task DAG:** all 8 tasks `VERIFIED` (`.github/task-runner/tasks.json`).
+- **Gate result: PASS** — the traceability matrix is updated with the search change's rows (per-feature for CROSS-CUTTING); every REQ has at least one GREEN test; every acceptance test traces back to a normative requirement.
+- **Date:** 2026-09-25
