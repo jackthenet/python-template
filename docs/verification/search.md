@@ -104,3 +104,18 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Status:** T-003 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
 - **Commit:** (this commit) `impl(search): T-003 fan-out + timeout + events + tracing + permissions (GREEN)`.
 - **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.1–S4.4) — T-004 authentication additive `SessionRepository.list_all()`
+
+- **T-004 RED (S4.1):** confirmed — targeted `red_command` → **1 failed** (2026-09-25). Failure mode (on unimplemented T-004 behavior; no invalid test data):
+  - 1 × `AttributeError: 'SqliteSessionRepository' object has no attribute 'list_all'` (`test_list_all_returns_all_sessions_created_at_desc` — the additive ABC method, REQ-022).
+- **Implementation (S4.2):**
+  - `src/backend/authentication/repositories.py`: additive abstract method `SessionRepository.list_all() -> Sequence[Session]` (all sessions, any revocation state, no user filter, `created_at` descending — REQ-022, ADR-080); module docstring documents the additive evolution (custom repository implementations gain a new method; backward-compatible per authentication NFR-003; precedent: session-management REQ-017).
+  - `src/backend/authentication/repository.py`: `SqliteSessionRepository.list_all()` — returns the existing rows in `created_at` descending order (tie-break `id` descending), consistent with `list_for_user` (no user filter, any revocation state; `_attach_utc` reconciles storage representation with the tz-aware UTC contract).
+  - No change to `AuthService` or any existing operation (REQ-022).
+- **T-004 GREEN (S4.2):** **5 passed** (2026-09-25) — targeted `green_command` (`tests/unit/authentication/test_sessions.py`: T-004's test + the 4 existing session edge tests — no regression from the additive ABC method; the full suite is a Phase 5 gate).
+- **Ruff gate (S4.2):** `uv run ruff check src/backend/authentication/repositories.py src/backend/authentication/repository.py` → **All checks passed**; `uv run ruff format --check` (same paths) → **2 files already formatted**.
+- **Refactor (S4.3):** no-op fast-path — the implementation is small and follows the module's established additive-extension pattern (REQ/ADR-referenced docstring; `list_all` mirrors `list_for_user`); no structural changes needed. GREEN from S4.2 still holds (zero file changes in the step).
+- **Status:** T-004 → **VERIFIED** (`.github/task-runner/tasks.json` + `docs/tasks/search.tasks.json`).
+- **Commit:** (this commit) `impl(authentication): T-004 additive SessionRepository.list_all (GREEN)`.
+- **Date:** 2026-09-25
