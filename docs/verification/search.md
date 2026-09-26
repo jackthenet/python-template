@@ -411,3 +411,27 @@ The search feature is a reusable shared capability (cross-feature source registr
 - **The change is complete** (per AGENTS.md: "The change is only considered complete when the review report is clean").
 - **Gate result: PASS** — review report clean; the change may proceed to S6.4 (bump version + open PR).
 - **Date:** 2026-09-26
+
+## Phase 6: Review (S6.4) — Bump version + open PR
+
+- **Objective:** Bump the version per the change type and open a PR for the change branch to `main` (present for human merge, then STOP).
+- **Inputs:** the clean review report (S6.3).
+
+### Version bump
+
+- **Change type:** CROSS-CUTTING → bump level `minor` (not `major`).
+- **Rationale:** The search public API is **new/additive to the project** — this change introduces the search feature (`src/backend/search/`) for the first time, plus additive `search_source.py` modules and the additive `SessionRepository.list_all` ABC method (backward-compatible per authentication NFR-003). The NFR-003 recorded deviation (Q-124) permits breaking changes to the search API **in the future** with a major version, but this change is not breaking — it is additive. Per the decision framework ("If the search public API is new (additive to the project), `minor` is appropriate"), the bump is `minor`.
+- **Command:** `bump-my-version bump minor` (dry-run first: `bump-my-version bump minor --dry-run` → exit 0).
+- **Result:** `0.5.0` → `0.6.0` (commit `841454c` "Bump version: 0.5.0 → 0.6.0" — part of the PR).
+
+### Open PR
+
+- **Command:** `gh pr create --head crosscut/search --base main`.
+- **Result:** PR **#54** — https://github.com/jackthenet/python-template/pull/54 (state: **OPEN**, mergeable: **MERGEABLE**).
+- **Governance:** Presented for human review/merge — the agent does **NOT** merge (human governance).
+
+### Gate result: **PASS**
+
+- Version bumped per the change type (`minor` — the bump commit is part of the PR).
+- A PR is open for the change branch to `main` (presented for human review/merge, NOT merged — human governance).
+- **Date:** 2026-09-26
