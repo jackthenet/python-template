@@ -825,6 +825,31 @@ content = service.download(record.key)
 
 ---
 
+## Using the Search Feature
+
+New backend features that need to expose their content to cross-feature search MUST register a search source with the shared search feature at `src/backend/search/` (spec: `docs/specs/search.md`) instead of implementing their own search.
+
+- **Service entry point.** Use `get_search_service()` (the module singleton) or `SearchService(event_bus=..., settings_registry=..., permission_service=...)` for tests/DI. Call `reset_search_service()` between tests. `InMemorySource` is the test/DI source helper (a list of items wrapped as a source).
+- **Register a source.** Call `register_source(SearchSource(name, fields, query))`: `name` is the source name (pattern `^[a-z][a-z0-9_]*$`); `fields` is the field schema (`SourceField` — `name`, `type` from the closed `FieldType` set, and the `searchable`/`filterable`/`sortable`/`display` flags); `query` is the **sync** query function `SourceQueryContext -> SourcePage` (apply free text, filters, sort, and pagination in memory; stateless live query — no index, no cache, no persistence). The source's default ordering is the order `query` returns items in when `sort` is `None`.
+- **Query.** `search(SearchQuery(free_text, filters, feature, offset, limit, sort), principal=...)` — omitting `feature` fans out to **all** registered sources (combined pagination); `limit` `None` = the live `search.default_page_size`. A source failure is resilient: global fan-out returns partial results + a `SourceFailure` marker + a `SourceQueryFailed` event (no exception); a single-source query (`feature` set) raises `SourceQueryFailedError`. Each source query runs under the live `search.source_timeout` (ms) — exceeding it is a `timeout` failure.
+- **Feature-owned registration.** The search feature exposes `register_settings(registry)` (settings: `search.default_page_size`, `search.max_page_size`, `search.source_timeout`) and `register_actions(catalog)` (the additive `search.search` catalog action) in `feature_settings.py` / `feature_actions.py` — call them at startup, like the other features' feature-owned registrations.
+- **Permissions.** The enforced query path requires the `search.search` action (the shared `Principal`/`PermissionChecker` enforcement plumbing, ADR-079); callers may pass an explicit `principal` (default: the system principal).
+- **Events.** Registration/unregistration/failure publish `SourceRegistered`/`SourceUnregistered`/`SourceQueryFailed` (best-effort; non-sensitive data only — never query text or result content).
+- **Errors.** Exceptions are the `SearchError` hierarchy (from `backend.search`): `UnknownSourceError`, `MalformedQueryError` (invalid pagination, non-filterable/non-sortable field, invalid operator, wrong value type — identifies the reason and the field/source), `SourceQueryFailedError` (source + reason + error kind).
+- **Existing sources.** user-management, file-management, and session-management expose `build_user_source(repository)` / `build_file_source(repository)` / `build_session_source(repository)` — the startup wiring in `src/main.py` registers all three.
+
+```python
+from backend.search import SearchQuery, get_search_service
+from backend.usermanagement import build_user_source
+
+service = get_search_service()
+service.register_source(build_user_source(user_repository))  # each feature exposes build_*_source
+
+result = service.search(SearchQuery(free_text="ali"))  # global fan-out, combined pagination
+```
+
+---
+
 ## Using the Test Tooling (polyfactory, respx, time-machine)
 
 Feature tests MUST use the shared test tooling instead of hand-crafted test data, real time, or ad-hoc fake transports. The shared helpers live at `tests/tooling_test_helpers.py` (import top-level, like the other `*_test_helpers` modules).
