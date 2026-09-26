@@ -260,3 +260,41 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
   - Note: the coverage run had 5–6 flaky/timing test failures (logging intercept tests + a hypothesis deadline in `test_last_admin_invariant` + a filemanagement property test) that undercounted coverage. **None is a behavior regression**, and the search change did not touch any of those test files (the S5.1 authoritative full-suite run had only the 1 known flaky failure).
 - **Phase 5 gate: MET** — spec coverage = 100% (the gate); S5.1 full suite GREEN (1 known flaky failure); S5.2 lint clean (whole repo) + mypy clean (83 source files); S5.3 traceability matrix updated (73 Search rows GREEN + per-feature wiring rows). Code coverage (91%, below the 92% threshold) is a secondary quality signal, not the gate.
 - **Date:** 2026-09-25
+
+## Phase 6: Review (S6.1) — Review vs. normative basis
+
+- **Objective:** Review all code changes against the change's normative basis: the approved spec (CROSS-CUTTING).
+- **Scope:** Bounded — reviewed the final state of the code against the spec's REQ/AC/INV/EDGE/NFR and the per-feature Impact Analysis. Did NOT re-run the full test suite (Phase 5 already confirmed the gate CLEAN).
+- **Review criteria:**
+  1. Every REQ-001..REQ-023 is implemented (the code matches the spec).
+  2. Every AC-001..AC-037 is satisfied (the acceptance tests pass + the code matches).
+  3. No behavior was introduced that is not represented in the specification.
+  4. The per-feature Impact Analysis is respected (additive only — no new behavior in the affected features' operations).
+  5. The spec amendment (NFR-001 budget 100ms → ~300ms) is recorded and respected.
+- **Findings:**
+  - **F-1 (MEDIUM):** Spec §12.8 startup wiring missing from `src/main.py`. The spec's §12.8 impact analysis states "the application startup path gains the additive wiring per §3 (startup wiring) and D19 (feature settings, feature actions, then the three `register_source` calls after the repositories exist)." The spec's §3 "Startup wiring (application entrypoint, once)" block shows the wiring. However, `src/main.py` (the application entry point / composition root) was not modified by this change — it has zero references to the search feature. The startup wiring is only verified by a test that performs it inline (`test_startup_wiring_all_sources`), not by the actual entry point. **Impact:** The search feature won't be wired into the application's entry point, so it won't work in the actual application until the user manually adds the wiring. **Resolution:** Add the search startup wiring to `src/main.py` (register_settings, register_actions, get_search_service, three register_source calls), following the same pattern as the existing feature-owned `register_settings`/`register_actions` startup calls.
+- **Criteria results:**
+  1. ✅ All REQ-001..REQ-023 are implemented (code matches spec)
+  2. ✅ All AC-001..AC-037 are satisfied (acceptance tests pass + code matches)
+  3. ✅ No behavior was introduced that is not represented in the spec
+  4. ❌ The per-feature Impact Analysis is **not** fully respected (§12.8 startup wiring missing from `src/main.py`)
+  5. ✅ The spec amendment (NFR-001 budget 100ms → ~300ms) is recorded and respected
+- **Gate result:** **FAILED** — 1 finding (F-1, MEDIUM). The change does not fully implement what the normative basis says (the §12.8 startup wiring is missing from the application entry point).
+- **Date:** 2026-09-25
+
+## Phase 4: Implement (S4.2, F-1 fix) — search startup wiring added to `src/main.py`
+
+- **Objective:** Resolve the S6.1 finding F-1 (MEDIUM): add the search startup wiring to `src/main.py` (the application entry point / composition root), per spec §3 (startup wiring) and §12.8 (impact analysis).
+- **Change:** Additive wiring in `src/main.py`, following the existing feature-owned `register_settings`/`register_actions`/service pattern:
+  - `register_search_settings(_settings_registry)` (search feature settings).
+  - `register_search_actions(_catalog)` (search feature action — additive `search.search`).
+  - `_search_service = get_search_service(event_bus=get_event_bus(), settings_registry=_settings_registry, permission_service=_permission_service)`.
+  - `_search_service.register_source(build_user_source(_user_repository))`.
+  - `_search_service.register_source(build_file_source(_file_repository))`.
+  - `_search_service.register_source(build_session_source(_session_repository))`.
+  - The file/session repositories are lifted into named variables (`_file_repository`, `_session_repository`) — behavior-preserving (the repositories are stateless DB-connection wrappers; the same instances are passed to the same constructors as before).
+- **GREEN:** `uv run pytest tests/acceptance/search/ tests/integration/search/ -q` → **39 passed** (including `test_startup_wiring_all_sources`).
+- **Entry-point verification:** importing `src/main.py` (the composition root) in a temp dir registers all three sources: `['usermanagement', 'filemanagement', 'sessionmanagement']` — the actual entry point now performs the startup wiring.
+- **Lint:** `uv run ruff check src/main.py` → **All checks passed!** (the `ruff format` complaint on the pre-existing `set_system_permissions` line is out of scope — present on `main`/HEAD, not introduced by this change).
+- **Gate result:** **GREEN** — F-1 resolved; the search feature is wired into the application entry point.
+- **Date:** 2026-09-26
