@@ -298,3 +298,81 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 - **Lint:** `uv run ruff check src/main.py` → **All checks passed!** (the `ruff format` complaint on the pre-existing `set_system_permissions` line is out of scope — present on `main`/HEAD, not introduced by this change).
 - **Gate result:** **GREEN** — F-1 resolved; the search feature is wired into the application entry point.
 - **Date:** 2026-09-26
+
+## Phase 6: Review (S6.1, re-run) — Review vs. normative basis (F-1 resolution confirmation)
+
+- **Objective:** Re-run the review vs. normative basis and confirm the finding (F-1) is resolved (the search startup wiring was added to `src/main.py`).
+- **Scope:** Bounded — reviewed the final state of the code against the spec's REQ/AC/INV/EDGE/NFR and the per-feature Impact Analysis. Did NOT re-run the full test suite (Phase 5 already confirmed the gate CLEAN).
+- **F-1 resolution: CONFIRMED.** Commit `5779065` adds the search startup wiring to `src/main.py` (the application entry point / composition root), matching the spec's §3 "Startup wiring (application entrypoint, once)" block and §12.8 (impact analysis):
+  - `register_search_actions(_catalog)` (the additive `search.search` catalog action — same pattern as the existing six features' `register_actions` calls).
+  - `register_search_settings(_settings_registry)` (search feature settings — same pattern as the existing feature-owned `register_settings` calls).
+  - `_search_service = get_search_service(event_bus=get_event_bus(), settings_registry=_settings_registry, permission_service=_permission_service)`.
+  - `_search_service.register_source(build_user_source(_user_repository))`, `build_file_source(_file_repository)`, `build_session_source(_session_repository)` — registration order user → file → session (matches the spec's block and REQ-020/021/022).
+  - The file/session repositories were lifted into named variables (`_file_repository`, `_session_repository`) — behavior-preserving (stateless DB-connection wrappers; the same instances are passed to the same constructors as before; `AuthService`/`SessionService` now share one `SqliteSessionRepository` instance over the same database). Documented in the commit message.
+  - The commit touches only `src/main.py` + `docs/verification/search.md` — no search-feature code or affected-feature code changed since the prior S6.1 run.
+  - GREEN (recorded): `uv run pytest tests/acceptance/search/ tests/integration/search/ -q` → 39 passed (incl. `test_startup_wiring_all_sources`); entry-point verification: importing `src/main.py` registers all three sources (`['usermanagement', 'filemanagement', 'sessionmanagement']`).
+- **Criteria results (re-run):**
+  1. ✅ All REQ-001..REQ-023 are implemented (code matches spec — unchanged since the prior S6.1 run).
+  2. ✅ All AC-001..AC-037 are satisfied (acceptance tests pass + code matches — unchanged since the prior S6.1 run; the startup-wiring test re-confirmed GREEN by the F-1 fix).
+  3. ✅ No behavior was introduced that is not represented in the specification (the only new code since the prior S6.1 run is the `src/main.py` wiring, which is exactly what spec §3/§12.8 prescribe; the repository lifting is behavior-preserving and documented).
+  4. ✅ The per-feature Impact Analysis is respected (additive only — no new behavior in the affected features' operations; §12.8 startup wiring now in `src/main.py`).
+  5. ✅ The spec amendment (NFR-001 budget 100ms → ~300ms) is recorded (the `## Changelog` v2 entry in `docs/specs/search.md`; the NFR-001 spec-table row updated to ~300 ms) and respected (test budget `_QUERY_BUDGET_S = 0.3`).
+- **New findings:** none.
+- **Gate result:** **PASS** — normative-basis compliance confirmed; F-1 resolved; no new findings.
+- **Date:** 2026-09-26
+
+## Phase 6: Review (S6.2) — Traceability + boundaries
+
+- **Objective:** Check traceability (every REQ → AC → executable test) and feature boundaries/architecture rules.
+- **Scope:** Bounded — the traceability matrix, the spec, the verification artifact, and the FINAL code state (`src/backend/search/`, the additive `search_source.py` modules, the additive authentication `SessionRepository.list_all`, `src/main.py`). Did NOT re-run the full test suite (Phase 5 already confirmed the gate CLEAN).
+- **Inputs:**
+  - Spec: `docs/specs/search.md` (REQ-001..REQ-023, AC-001..AC-037, INV-001..005, EDGE-001..021, NFR-001..005).
+  - Traceability matrix: `docs/verification/traceability.md` (Search Matrix — 73 rows, all GREEN).
+  - Verification artifact: `docs/verification/search.md` (spec coverage = 100%).
+  - Final code state: `src/backend/search/`, `src/backend/usermanagement/search_source.py`, `src/backend/filemanagement/search_source.py`, `src/backend/sessionmanagement/search_source.py`, `src/backend/authentication/repository.py` (+ `repositories.py`), `src/main.py`.
+
+- **1. Traceability: PASS**
+  - Every REQ-001..REQ-023 (23/23) has ≥1 GREEN test (Search Matrix).
+  - Every AC-001..AC-037 (37/37) has ≥1 executable (GREEN) test.
+  - Every INV-001..INV-005 (5/5) has a property test (GREEN).
+  - Every EDGE-001..EDGE-021 (21/21) has a test (GREEN).
+  - Every NFR-001..NFR-005 (5/5) has a test (GREEN).
+  - All 73 Search Matrix rows GREEN.
+  - **No orphaned tests:** every search test traces to a REQ/AC/INV/EDGE/NFR row (re-verified: every test function referenced in the matrix exists in the codebase — `tests/acceptance/search/`, `tests/contract/search/`, `tests/integration/search/`, `tests/property/search/`, `tests/unit/search/`, `tests/unit/authentication/test_sessions.py`).
+  - **No missing traceability links:** every matrix row is an existing test function.
+  - **CROSS-CUTTING per-feature rows:** the "Affected Features (CROSS-CUTTING — per-feature source wiring)" subsection has one row per affected feature (user-management, file-management, session-management, authentication, user-roles-permissions, startup entrypoint), each mapped to its dedicated wiring test (all GREEN). No existing REQ/AC of any affected feature is touched (all additive).
+
+- **2. Feature boundaries: PASS**
+  - Search code lives in `src/backend/search/` (the correct feature directory).
+  - The additive `search_source.py` is in each affected feature's directory (`usermanagement`, `filemanagement`, `sessionmanagement`) — additive, no change to the features' existing operations.
+  - **No cross-feature internal imports:**
+    - The search feature (`src/backend/search/`) imports **no feature submodules at all** (verified: no `from backend.<feature>.<module>` imports). It imports only: its own modules (`errors`, `events`, `models`, `service`, `feature_settings`, `feature_actions`), the shared logging feature (`backend.logging` — public API), and the shared `Principal`/`requires_permission` plumbing (`backend.shared` — public API).
+    - Each `search_source.py` imports `backend.search`'s **public API** (all names exported in `backend/search/__init__.py`: `FieldType`, `FilterCondition`, `FilterGroup`, `FilterOperator`, `SearchSource`, `SourceField`, `SourceItem`, `SourcePage`, `SourceQueryContext`) + **its own feature's** models/repository (same feature — not cross-feature).
+    - `sessionmanagement/search_source.py` imports `backend.authentication.models` (`Session`) + `backend.authentication.repositories` (`SessionRepository`) — cross-feature, but a **PRE-EXISTING pattern** (`src/backend/sessionmanagement/service.py` already imports the same: `from backend.authentication.models import Session` and `from backend.authentication.repositories import SessionRepository`). Not newly introduced by this change.
+  - The additive authentication change (`SessionRepository.list_all`) is in the correct feature directory (`src/backend/authentication/repositories.py` + `repository.py`) — additive ABC method + concrete impl, backward-compatible per authentication NFR-003.
+  - `src/main.py` (the composition root) wires everything — the three `register_source` calls + `register_settings` + `register_actions` (added by the F-1 fix, commit `5779065`).
+
+- **3. Architecture rules: PASS**
+  - `models.py` contains **domain concepts** (`SearchSource`, `SourceField`, `FieldType`, `SourceItem`, `SourcePage`, `SourceQueryContext`, `SearchQuery`, `FilterCondition`/`FilterGroup`/`FilterOperator`, `Sort`, `SearchResult`/`SearchResultItem`, `SourceFailure`) — no infrastructure concerns.
+  - `service.py` contains **use cases** (`SearchService` — the in-memory registry + query orchestration; `InMemorySource` for tests/DI; module singleton `get_search_service`/`reset_search_service`).
+  - `shared/` is **deliberately small:** the search change adds **nothing** to `src/backend/shared/` (verified: `git diff f3501ca..HEAD -- src/backend/shared/` is empty). It uses the existing shared `Principal`/`requires_permission` plumbing via the public API.
+  - Flat module structure (`models.py`, `service.py`) rather than `model/` + `services/` directories — per AGENTS.md ("Do not create layers or directories prematurely... Small features may use simple modules"), appropriate for this feature.
+
+- **4. Acceptance tests not weakened: PASS**
+  - **No acceptance test was weakened or deleted.**
+  - All search test files are **NEW** (additive) — no search test file was modified (verified: `git diff f3501ca..HEAD --diff-filter=M --name-only -- tests/ | grep search` is empty).
+  - The only test-file modifications in the search change are:
+    - Trivial import reorderings (I001 lint fixes, commit `a24d772`) in 3 permissions test files (`tests/acceptance/permissions/test_check_api.py`, `test_enforcement.py`, `tests/contract/permissions/test_performance.py`) — **no behavior change, no test weakened** (these files are from the user-roles-permissions change on the same branch; the import reordering is a trivial lint fix required for the whole-repo ruff gate).
+    - 1 new test in `tests/unit/authentication/test_sessions.py` (`test_list_all_returns_all_sessions_created_at_desc` — T-004 / AC-036) — additive.
+  - The 3 "test bug fixes" recorded in Phase 4 (T-005/T-006/T-007) aligned the `item_id` assertions with the spec (`UUID` → `str`) — aligning tests with the spec, **not** weakening (the intent "item_id = the user/file/session id" is preserved).
+
+- **Findings:** none blocking. (Minor observation: the S5.2 lint fix reordered imports in 3 permissions test files from the user-roles-permissions change — trivial I001 fixes, no behavior change, no test weakened; already documented in the S5.2 section.)
+
+- **Criteria results:**
+  1. ✅ Traceability: every REQ has ≥1 GREEN test; every acceptance test traces to a normative requirement (no orphans, no missing).
+  2. ✅ Feature boundaries: code lives in the correct feature directory; no cross-feature internal imports.
+  3. ✅ Architecture rules: `model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small.
+  4. ✅ Acceptance tests not weakened: no acceptance test was weakened or deleted.
+
+- **Gate result:** **PASS** — traceability + boundaries confirmed.
+- **Date:** 2026-09-26
