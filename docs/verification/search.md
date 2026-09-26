@@ -376,3 +376,38 @@ Five ADRs created — each clears the threshold (new pattern/architecture elemen
 
 - **Gate result:** **PASS** — traceability + boundaries confirmed.
 - **Date:** 2026-09-26
+
+## Phase 6: Review (S6.3) — Review report (clean)
+
+- **Objective:** Produce the review report and confirm it is clean (no unresolved findings).
+- **Inputs (bounded):** S6.1 (re-run) findings + S6.2 results — the verification artifact, the traceability matrix, the spec, and the final code state. No full-suite re-run (Phase 5 already confirmed the gate CLEAN); no code re-review (S6.1/S6.2 covered it) — this step consolidates the findings and their resolutions into the final review report.
+- **Scope:** Bounded — the review record only.
+
+### Findings and resolutions
+
+| ID | Severity | Finding | Status | Resolution |
+|----|----------|---------|--------|------------|
+| F-1 | MEDIUM | Spec §12.8 startup wiring missing from `src/main.py` — the search feature was not wired into the application entry point (S6.1, initial run). | **Resolved** | Commit `5779065` added the additive startup wiring to `src/main.py` (the composition root): `register_search_actions(_catalog)`, `register_search_settings(_settings_registry)`, `_search_service = get_search_service(event_bus=..., settings_registry=..., permission_service=...)`, and the three `register_source` calls (user → file → session, per REQ-020/021/022) — matching spec §3 "Startup wiring (application entrypoint, once)" and §12.8. Confirmed by the S6.1 re-run (PASS, no new findings). GREEN (recorded): `uv run pytest tests/acceptance/search/ tests/integration/search/ -q` → 39 passed (incl. `test_startup_wiring_all_sources`); entry-point verification: importing `src/main.py` registers `['usermanagement', 'filemanagement', 'sessionmanagement']`. |
+
+### Review criteria confirmation
+
+1. ✅ **S6.1 (normative-basis compliance):** F-1 resolved; no new findings (S6.1 re-run: **PASS**).
+2. ✅ **S6.2 (traceability + boundaries):** **confirmed** (PASS) — every REQ-001..REQ-023 / AC-001..AC-037 / INV-001..005 / EDGE-001..021 / NFR-001..005 has ≥1 GREEN test (all 73 Search Matrix rows GREEN); no orphaned tests, no missing traceability links; CROSS-CUTTING per-feature rows updated (one row per affected feature, all GREEN); feature boundaries and architecture rules respected.
+3. ✅ **No acceptance test was weakened or deleted to achieve GREEN:** all search test files are NEW (additive — `git diff f3501ca..HEAD --diff-filter=M -- tests/` shows no modified search test file). The only test-file modifications in the change: trivial I001 import reorderings in 3 permissions test files (no behavior change, no test weakened) + 1 additive test in `tests/unit/authentication/test_sessions.py` (T-004). The 3 Phase 4 "test bug fixes" (T-005/T-006/T-007) aligned the `item_id` assertions with the spec (`UUID` → `str`) — aligning with the spec, not weakening (the intent "item_id = the user/file/session id" is preserved).
+4. ✅ **Feature boundaries and architecture rules respected:** search code in `src/backend/search/` (correct feature directory); the search feature imports no feature submodules (only its own modules + the shared logging public API + the shared `Principal`/`requires_permission` public plumbing); each additive `search_source.py` imports `backend.search`'s public API + its own feature's models/repository; the additive authentication `SessionRepository.list_all` is in the correct feature directory (backward-compatible per authentication NFR-003); `src/backend/shared/` untouched (empty diff); flat module structure per AGENTS.md.
+5. ✅ **No behavior was introduced that is not represented in the specification:** the only code added since the initial S6.1 run is the `src/main.py` startup wiring (exactly what spec §3/§12.8 prescribe) + the behavior-preserving repository lifting (stateless DB-connection wrappers; documented in commit `5779065`).
+
+### Open findings
+
+None.
+
+### Reusable shared capability (AGENTS.md note)
+
+The search feature is a reusable shared capability (cross-feature source registration contract + singleton search service). A **"Using the Search Feature"** note was added to `AGENTS.md` (how to register a source, how to query, feature-owned settings/actions, permissions, events, errors, testing) so future changes use it correctly.
+
+### Review report status: **CLEAN**
+
+- All findings (F-1) resolved — **no open findings**.
+- **The change is complete** (per AGENTS.md: "The change is only considered complete when the review report is clean").
+- **Gate result: PASS** — review report clean; the change may proceed to S6.4 (bump version + open PR).
+- **Date:** 2026-09-26
