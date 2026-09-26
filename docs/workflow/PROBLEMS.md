@@ -261,3 +261,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 aborted run + 1 fresh relaunch
 - **Resolution:** Relaunched S6.1 with a fresh subagent (completion guard, P-3/P-7) whose prompt is strictly bounded: single objective (normative-basis compliance), explicit inputs (spec + verification file + final `src/` state), an explicit instruction NOT to re-run the full test suite (Phase 5 already confirmed the gate CLEAN) and NOT to do S6.2–S6.4, and a required structured handoff.
 - **Date:** 2026-09-22
+
+## P-28 — NFR-001 performance budget (100 ms) unrealistic given the source's query path (fetches full Pydantic models via the repository ABC); T-008 subagents stuck
+- **Problem:** The NFR-001 budget is "a single-source query < 100 ms median; 10k–100k items per source on local hardware against SQLite-backed sources". The test (`test_nfr_001_performance_budgets`) uses 10k items. The source's query function (`build_user_source`'s `_query`) fetches ALL items via the repository ABC's `list_all` (which returns full Pydantic `User` models) and processes them in Python — measured ~293 ms (median) for 10k items (fetch ~216 ms + processing ~77 ms). A lighter path (raw-row fetch + `SourceItem` build + sort) would be ~41 ms (under budget), but the source only sees the `UserRepository` ABC (whose `list_all` returns full models); using a lighter path requires changing the persistence contract (adding a lighter method to the repository), which is out of scope for the search feature (additive only — no new behavior in the feature's operations).
+- **Step / Phase:** S4.2 (T-008) — Phase 4
+- **Change:** search / CROSS-CUTTING
+- **Duration / iterations:** 2 subagent runs (both returned without a structured handoff, stuck on the optimization)
+- **Resolution:** User decision (2026-09-25): increase the budget via spec amendment (option 2) — `docs/specs/search.md` v2: NFR-001 single-source query budget increased from 100 ms to ~300 ms (10k items, scaling linearly to ~3000 ms for 100k items); the test's `_QUERY_BUDGET_S` re-aligned to 0.3 (10k items kept); T-008 GREEN (69 passed).
+- **Date:** 2026-09-25

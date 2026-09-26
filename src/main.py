@@ -35,6 +35,7 @@ from backend.filemanagement import (
     FileService,
     LocalDiskStorageBackend,
     SqliteFileRepository,
+    build_file_source,
 )
 from backend.filemanagement.feature_actions import register_actions as register_filemanagement_actions
 from backend.logging import register_settings as register_logging_settings
@@ -50,7 +51,16 @@ from backend.permissions import (
     SqliteSystemPrincipalRepository,
 )
 from backend.permissions import register_settings as register_permissions_settings
-from backend.sessionmanagement import SessionService
+from backend.search import (
+    get_search_service,
+)
+from backend.search import (
+    register_actions as register_search_actions,
+)
+from backend.search import (
+    register_settings as register_search_settings,
+)
+from backend.sessionmanagement import SessionService, build_session_source
 from backend.sessionmanagement.feature_actions import register_actions as register_sessionmanagement_actions
 from backend.settings import SettingsRegistry
 from backend.settings.feature_actions import register_actions as register_settings_actions
@@ -58,6 +68,7 @@ from backend.settings.registry import _registry as _settings_registry_singleton
 from backend.usermanagement import (
     SqliteUserRepository,
     UserManager,
+    build_user_source,
 )
 from backend.usermanagement import (
     register_settings as register_usermanagement_settings,
@@ -74,6 +85,7 @@ register_settings_actions(_catalog)
 register_filemanagement_actions(_catalog)
 register_mail_actions(_catalog)
 register_sessionmanagement_actions(_catalog)
+register_search_actions(_catalog)  # search feature (additive search.search)
 
 
 # --- Lazy proxies (break the composition-root cycles) ---
@@ -156,6 +168,7 @@ register_authentication_settings(_settings_registry)
 register_usermanagement_settings(_settings_registry)
 register_eventbus_settings(_settings_registry)
 register_permissions_settings(_settings_registry)  # REQ-019: the permissions.system_principal alias
+register_search_settings(_settings_registry)  # search feature
 
 # --- The shared UserManager (one of the six services) ---
 _user_repository = SqliteUserRepository("sqlite:///./data/usermanagement/users.db")
@@ -164,25 +177,40 @@ _user_manager_proxy.set_manager(_user_manager)
 
 # --- The remaining five services (wired with the shared PermissionService) ---
 _AUTH_DB = "sqlite:///./data/authentication.db"
+_session_repository = SqliteSessionRepository(_AUTH_DB)
 _auth_service = AuthService(
     _user_manager,
     _user_repository,
-    SqliteSessionRepository(_AUTH_DB),
+    _session_repository,
     SqlitePasswordResetRepository(_AUTH_DB),
     SqliteWebAuthnCredentialRepository(_AUTH_DB),
     permission_service=_permission_service,
 )
+_file_repository = SqliteFileRepository("sqlite:///./data/filemanagement.db")
 _file_service = FileService(
-    SqliteFileRepository("sqlite:///./data/filemanagement.db"),
+    _file_repository,
     LocalDiskStorageBackend("./data/files"),
     settings_registry=_settings_registry,
     permission_service=_permission_service,
 )
 _mail_service = MailService(permission_service=_permission_service)
 _session_service = SessionService(
-    SqliteSessionRepository(_AUTH_DB),
+    _session_repository,
     settings_registry=_settings_registry,
     permission_service=_permission_service,
 )
+
+# --- The shared SearchService (search feature startup wiring, spec §3) ---
+# Wired with the shared event bus, settings registry, and PermissionService;
+# the three feature sources are registered (registration order: user, file,
+# session). Additive; no existing startup behavior changes.
+_search_service = get_search_service(
+    event_bus=get_event_bus(),
+    settings_registry=_settings_registry,
+    permission_service=_permission_service,
+)
+_search_service.register_source(build_user_source(_user_repository))
+_search_service.register_source(build_file_source(_file_repository))
+_search_service.register_source(build_session_source(_session_repository))
 
 setup_logger()

@@ -42,3 +42,22 @@ def test_edge_017_session_info_no_token(auth) -> None:
     info = auth.service.session_info(result.token)
     fields = set(info.model_dump().keys())
     assert "token" not in fields
+
+
+def test_list_all_returns_all_sessions_created_at_desc(tmp_path: Path) -> None:
+    """T-004 / AC-036: the additive ``SessionRepository.list_all()`` returns all
+    sessions (including revoked, no user filter), ``created_at`` descending."""
+    fixture = build_auth_service(tmp_path)
+    create_user(fixture.user_manager)
+    tokens = []
+    for _ in range(3):
+        result = fixture.service.login(LoginRequest(**valid_login("alice")))
+        tokens.append(result.token)
+    # Revoke one session (so a revoked session is present).
+    fixture.service.logout(tokens[0])
+    sessions = fixture.session_repository.list_all()
+    # All sessions are returned (no user filter, including the revoked one).
+    assert len(sessions) == len(tokens)
+    # created_at descending.
+    created = [s.created_at for s in sessions]
+    assert created == sorted(created, reverse=True)

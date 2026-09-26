@@ -748,6 +748,99 @@ The change wires the shared `PermissionChecker` into six features via the ADR-07
 | mail | `test_mail_enforcement_wiring` (REQ-024; 3 methods, all enforced) | GREEN |
 | sessionmanagement | `test_sessionmanagement_enforcement_wiring` (REQ-024; 6 methods, all enforced) | GREEN |
 
+## Search Matrix
+
+The search change (type CROSS-CUTTING; spec `docs/specs/search.md`) uses its own REQ/AC ID space (REQ-001..023, AC-001..037, INV-001..005, EDGE-001..021, NFR-001..005) that overlaps the other features' matrices, so it is kept separate. Phase 3 (S3.2) confirmed all 70 newly derived tests RED (failure modes: `ModuleNotFoundError` on the unimplemented `backend.search` module; `ImportError` on the additive `build_user_source` / `build_file_source` / `build_session_source` modules; `AttributeError` on the additive `SessionRepository.list_all`). Status `GREEN`: all 73 rows pass (Phase 5, S5.1 re-run + S5.3 targeted re-check, 2026-09-25) — every REQ has at least one GREEN test, every AC has at least one executable (GREEN) test, every INV has a property test (GREEN), every EDGE has a test (GREEN), every NFR has a test (GREEN). Targeted re-check (S5.3): `uv run pytest -q tests/acceptance/search/ tests/contract/search/ tests/integration/search/ tests/property/search/ tests/unit/search/ tests/unit/authentication/test_sessions.py` → **74 passed** (the 70 newly derived search tests + the 4 pre-existing authentication session tests in that file); all 8 task DAG tasks are `VERIFIED` (`.github/task-runner/tasks.json`).
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_ac_001_register_source` | GREEN |
+| REQ-002 | AC-001 | `test_ac_001_register_source` | GREEN |
+| REQ-003 | AC-002 | `test_ac_002_replace_same_name` | GREEN |
+| REQ-003 | AC-003 | `test_ac_003_identical_reregistration_noop` | GREEN |
+| REQ-003 | AC-004 | `test_ac_004_unregister_source` | GREEN |
+| REQ-004 | AC-005 | `test_ac_005_search_free_text_returns_items` | GREEN |
+| REQ-004 | AC-006 | `test_ac_006_global_fanout_combined_pagination` | GREEN |
+| REQ-005 | AC-007 | `test_ac_007_no_constraints_match_all` | GREEN |
+| REQ-005 | AC-008 | `test_ac_008_empty_free_text_no_constraint` | GREEN |
+| REQ-006 | AC-009 | `test_ac_009_filter_equals` | GREEN |
+| REQ-006 | AC-010 | `test_ac_010_filter_contains_case_insensitive` | GREEN |
+| REQ-006 | AC-011 | `test_ac_011_filter_and_group` | GREEN |
+| REQ-006 | AC-012 | `test_ac_012_filter_or_group` | GREEN |
+| REQ-006 | AC-013 | `test_ac_013_filter_number_comparisons` | GREEN |
+| REQ-006 | AC-014 | `test_ac_014_filter_in_list` | GREEN |
+| REQ-006 | AC-015 | `test_ac_015_filter_is_null` | GREEN |
+| REQ-007 | AC-016 | `test_ac_016_default_page_size` | GREEN |
+| REQ-007 | AC-017 | `test_ac_017_limit_clamped_to_max` | GREEN |
+| REQ-007 | AC-018 | `test_ac_018_offset_pagination` | GREEN |
+| REQ-007 | AC-019 | `test_ac_019_offset_beyond_end_empty` | GREEN |
+| REQ-008 | AC-020 | `test_ac_020_sort_overrides_default_order` | GREEN |
+| REQ-008 | AC-021 | `test_ac_021_sort_stable_tie_break` | GREEN |
+| REQ-009 | AC-005 | `test_ac_005_search_free_text_returns_items` | GREEN |
+| REQ-009 | AC-022 | `test_ac_022_result_item_shape` | GREEN |
+| REQ-010 | AC-023 | `test_ac_023_unknown_feature_error` | GREEN |
+| REQ-010 | AC-024 | `test_ac_024_malformed_query_errors` | GREEN |
+| REQ-010 | AC-026 | `test_ac_026_single_source_failure_error` | GREEN |
+| REQ-011 | AC-025 | `test_ac_025_global_fanout_source_failure_partial` (integration) | GREEN |
+| REQ-012 | AC-027 | `test_ac_027_normalization_invariance` | GREEN |
+| REQ-013 | AC-028 | `test_ac_028_register_settings_live_read` | GREEN |
+| REQ-014 | AC-029 | `test_ac_029_lifecycle_and_failure_events` | GREEN |
+| REQ-015 | AC-030 | `test_ac_030_traced_no_query_in_logs` | GREEN |
+| REQ-016 | AC-031 | `test_ac_031_permission_enforcement` | GREEN |
+| REQ-017 | AC-032 | `test_ac_032_singleton_and_reset` | GREEN |
+| REQ-018 | — | `test_edge_019_concurrent_register_search` (integration), `test_nfr_005_thread_safe_registry` (integration) | GREEN |
+| REQ-019 | AC-033 | `test_ac_033_source_timeout` | GREEN |
+| REQ-020 | AC-034 | `test_ac_034_user_source` | GREEN |
+| REQ-021 | AC-035 | `test_ac_035_file_source` | GREEN |
+| REQ-022 | AC-036 | `test_ac_036_session_source` | GREEN |
+| REQ-022 | AC-036 | `test_list_all_returns_all_sessions_created_at_desc` (authentication, T-004 additive `SessionRepository.list_all`) | GREEN |
+| REQ-023 | AC-037 | `test_ac_037_backend_only_api` | GREEN |
+| INV-001 | — | `test_inv_001_registration_idempotent_atomic` | GREEN |
+| INV-002 | — | `test_inv_002_query_deterministic` | GREEN |
+| INV-003 | — | `test_inv_003_pagination_consistency` | GREEN |
+| INV-004 | — | `test_inv_004_normalization_invariance` | GREEN |
+| INV-005 | — | `test_inv_005_no_secrets_in_outputs` | GREEN |
+| EDGE-001 | — | `test_edge_001_unknown_feature` | GREEN |
+| EDGE-002 | — | `test_edge_002_global_no_sources_empty` | GREEN |
+| EDGE-003 | — | `test_edge_003_invalid_limit_offset` | GREEN |
+| EDGE-004 | — | `test_edge_004_non_filterable_field` | GREEN |
+| EDGE-005 | — | `test_edge_005_invalid_operator_for_type` | GREEN |
+| EDGE-006 | — | `test_edge_006_non_sortable_field` | GREEN |
+| EDGE-007 | — | `test_edge_007_limit_clamped` | GREEN |
+| EDGE-008 | — | `test_edge_008_offset_beyond_end` | GREEN |
+| EDGE-009 | — | `test_edge_009_global_source_raises_partial` | GREEN |
+| EDGE-010 | — | `test_edge_010_single_source_raises_error` | GREEN |
+| EDGE-011 | — | `test_edge_011_source_timeout` | GREEN |
+| EDGE-012 | — | `test_edge_012_no_searchable_fields_zero_matches` | GREEN |
+| EDGE-013 | — | `test_edge_013_unregister_unknown_noop` | GREEN |
+| EDGE-014 | — | `test_edge_014_identical_reregistration_noop` | GREEN |
+| EDGE-015 | — | `test_edge_015_replace_concurrent_consistent` | GREEN |
+| EDGE-016 | — | `test_edge_016_reset_clears_no_events` | GREEN |
+| EDGE-017 | — | `test_edge_017_is_null_matches_none` | GREEN |
+| EDGE-018 | — | `test_edge_018_in_list_empty_matches_nothing` | GREEN |
+| EDGE-019 | — | `test_edge_019_concurrent_register_search` (integration) | GREEN |
+| EDGE-020 | — | `test_edge_020_fanout_strict_validation` | GREEN |
+| EDGE-021 | — | `test_edge_021_invalid_source_declaration` | GREEN |
+| NFR-001 | — | `test_nfr_001_performance_budgets` | GREEN |
+| NFR-002 | — | `test_nfr_002_no_query_or_results_in_logs_events` | GREEN |
+| NFR-003 | — | `test_nfr_003_public_api_contract` | GREEN |
+| NFR-004 | — | `test_nfr_004_traced_service_events` | GREEN |
+| NFR-005 | — | `test_nfr_005_thread_safe_registry` (integration) | GREEN |
+| — | — | `test_startup_wiring_all_sources` (integration — all three feature sources wired at startup, no single AC) | GREEN |
+
+### Affected Features (CROSS-CUTTING — per-feature source wiring)
+
+The change wires existing features' content as search sources via additive `search_source.py` modules (ADR-077) and one additive repository method (ADR-080). **No existing REQ or AC of any affected feature is touched** — every change is additive, and each affected feature's test suite stays GREEN (Phase 5, S5.1 re-run). Each affected feature's wiring is covered by a dedicated test (all GREEN):
+
+| Feature | Wiring | Wiring test | Status |
+|---------|--------|-------------|--------|
+| user-management | `build_user_source` (additive `search_source.py`, source name `usermanagement`, REQ-020) | `test_ac_034_user_source` (AC-034) | GREEN |
+| file-management | `build_file_source` (additive `search_source.py`, source name `filemanagement`, REQ-021) | `test_ac_035_file_source` (AC-035) | GREEN |
+| session-management | `build_session_source` (additive `search_source.py`, source name `sessionmanagement`, REQ-022) | `test_ac_036_session_source` (AC-036) | GREEN |
+| authentication | `SessionRepository.list_all()` (additive ABC method, backward-compatible per authentication NFR-003, REQ-022) | `test_list_all_returns_all_sessions_created_at_desc` (T-004) | GREEN |
+| user-roles-permissions | `search.search` action declaration (additive catalog action via the feature-owned `register_actions`, REQ-016) | `test_ac_031_permission_enforcement` (AC-031) | GREEN |
+| startup (application entrypoint) | all three feature sources wired at startup (additive wiring, REQ-023) | `test_startup_wiring_all_sources` (integration) | GREEN |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:

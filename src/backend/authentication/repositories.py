@@ -2,6 +2,13 @@
 
 Each ABC is implemented by a ``Sqlite*`` class (T-002) and could be swapped for
 another backend. The service depends only on these ABCs.
+
+The ABCs evolve additively (backward-compatible per authentication NFR-003):
+custom repository implementations gain new methods without changes to existing
+ones (precedent: the session-management ``get``/``list_for_user``/
+``revoke_user_sessions`` extensions, REQ-017; now ``SessionRepository.list_all``
+for the search feature, REQ-022, ADR-080 — the one break for out-of-tree
+implementors).
 """
 
 from __future__ import annotations
@@ -66,6 +73,13 @@ class SessionRepository(ABC):
 
         Backward-compatible signature extension for the session-management feature
         (REQ-017, ADR-061).
+        """
+
+    @abstractmethod
+    def list_all(self) -> Sequence[Session]:
+        """Return ALL sessions (any revocation state, no user filter), ``created_at`` descending.
+
+        Additive extension for the search feature (REQ-022, ADR-080).
         """
 
 
