@@ -56,14 +56,35 @@ def install_isolated_registry() -> SettingsRegistry:
     persisted to the shared default ``settings/`` directory and nothing written
     by one test leaks into another (test isolation). Returns the installed
     registry.
+
+    Preserves the current ``logging.log_file`` value (if registered in the
+    previous registry) so the logging feature's file sink keeps pointing at the
+    session log file — the isolated registry is for testing settings isolation,
+    not for changing where logging writes. Without this, a test that installs a
+    fresh isolated registry (where ``logging.log_file`` is not registered) would
+    trigger a sink re-configure that re-points the file sink to the default file,
+    leaking state into later tests that assert on the session log file.
     """
     import tempfile
 
     from backend.settings import YamlValueRepository
     from backend.settings import registry as _registry_module
 
+    # Save the current logging.log_file definition + value (if registered) so
+    # the file sink keeps pointing at the session log file.
+    previous = _registry_module.get_settings_registry(required=False)
+    log_file_def = None
+    log_file_val = None
+    if previous is not None and previous.has("logging.log_file"):
+        log_file_def = previous.get_definition("logging.log_file")
+        log_file_val = previous.get_value("logging.log_file")
+
     _registry_module.reset_settings_registry()
     isolated = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    # Restore the logging.log_file value so the file sink keeps its target.
+    if log_file_def is not None:
+        isolated.register(log_file_def)
+        isolated.set_value("logging.log_file", log_file_val)
     _registry_module._registry[0] = isolated
     return isolated
 

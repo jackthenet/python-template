@@ -15,6 +15,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from loguru import logger
+
 
 @contextmanager
 def captured_stderr() -> Iterator[Path]:
@@ -38,7 +40,14 @@ def captured_stderr() -> Iterator[Path]:
 
 
 def wait_for_file_content(path: Path, predicate: Callable[[str], bool], timeout: float = 15.0) -> bool:
-    """Poll a file written by an enqueued sink until predicate(content) is true."""
+    """Wait for a file written by an enqueued sink to satisfy predicate(content).
+
+    First drains loguru's enqueued-sink queue via ``logger.complete()`` so the
+    pending write is flushed before polling. This makes the wait deterministic
+    under load instead of relying on the background writer's scheduling (which
+    can be starved on a busy CI runner and time out).
+    """
+    logger.complete()
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if path.exists():
