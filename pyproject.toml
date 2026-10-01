@@ -37,7 +37,7 @@ dev = [
     # Dependency checker (unused/missing/transitive deps).
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
-    "hypothesis>=6.168.0",
+    "hypothesis>=6.168.1",
     # MkDocs static site build system.
     "mkdocs>=1.6",
     # MkDocs Material theme for the published documentation site.
