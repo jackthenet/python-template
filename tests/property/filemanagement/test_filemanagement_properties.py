@@ -2,11 +2,18 @@
 
 Hypothesis-based tests for the invariants INV-001 .. INV-008.
 
-Every test sets ``deadline=500``: each example builds a SQLite engine (and the
+Every test sets ``deadline=2000``: each example builds a SQLite engine (and the
 avatar tests resize with Pillow), so the first cold example regularly exceeds
 Hypothesis' 200 ms default on a loaded runner and surfaces as a ``FlakyFailure``
 (failed on the first call, passed on the retry). The deadline stays a real
 bound — it is only widened to the timing the I/O actually needs.
+
+Measurement basis for 2000 ms: locally every example in this file stays well
+under 500 ms, but CI measured 739.77 ms for the worst example
+(``test_inv_001_no_partial_state_on_failure``, concurrent same-key writes
+against a real SQLite repository and storage backend, run 37040033246), so the
+previous 500 ms was tighter than CI's slowest example. 2000 ms is ~2.7x that CI
+worst case: still a real bound, with headroom for a loaded runner.
 """
 
 from __future__ import annotations
@@ -57,7 +64,7 @@ def _content() -> SearchStrategy[bytes]:
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(content=_content(), fault=st.sampled_from(["none", "storage", "metadata"]))
@@ -85,7 +92,7 @@ def test_inv_001_no_partial_state_on_failure(tmp_path: Path, content: bytes, fau
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(contents=st.lists(_content(), min_size=2, max_size=4))
@@ -117,7 +124,7 @@ def test_inv_002_concurrent_same_key_last_write_wins(tmp_path: Path, contents: l
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(content=_content())
@@ -136,7 +143,7 @@ def test_inv_003_metadata_matches_content(tmp_path: Path, content: bytes) -> Non
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(ops=st.lists(st.sampled_from(["upload", "replace", "delete"]), min_size=1, max_size=8))
@@ -162,7 +169,7 @@ def test_inv_004_at_most_one_avatar_per_user(tmp_path: Path, ops: list[str]) -> 
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(size=st.integers(min_value=8, max_value=256))
@@ -179,7 +186,7 @@ def test_inv_005_avatar_url_format(tmp_path: Path, size: int) -> None:
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(n=st.integers(min_value=1, max_value=4))
@@ -205,7 +212,7 @@ def test_inv_006_event_correspondence(tmp_path: Path, n: int) -> None:
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(key=st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,20}", fullmatch=True))
@@ -221,7 +228,7 @@ def test_inv_007_key_containment(tmp_path: Path, key: str) -> None:
 
 @settings(
     max_examples=_MAX_EXAMPLES,
-    deadline=500,
+    deadline=2000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 @given(size=st.sampled_from([32, 64, 128, 256]))
