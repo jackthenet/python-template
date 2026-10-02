@@ -886,3 +886,112 @@ Two lint findings were introduced and fixed inside this step: `I001` (import blo
 
 No new behavior: the fix makes the existing YAML persistence satisfy settings INV-009 / REQ-022 / AC-030 / AC-031 and settings-coverage INV-002 / REQ-009 / REQ-010 / REQ-011. Safe-YAML semantics, the file layout (one `<name>.yaml` per template, a single `values.yaml`) and the atomic write are unchanged.
 
+
+---
+
+## Phase 4 (S4.2, item B) — fix applied, GREEN (2026-10-02)
+
+Branch `issue/main-ci-green` @ `f21900c`. Item B only: **`tests/property/usermanagement/test_multi_role_invariants.py`** is the single file changed (one `@settings` decorator + a comment). `src/`, every other test file, `pyproject.toml`/`uv.lock` and `.github/workflows/` were not touched.
+
+### The fix (decided policy, Q-128 option 1)
+
+`test_last_admin_invariant` — the decorator line becomes a block with an explicit, measured `deadline`, and the strategy/assertion are byte-identical:
+
+```python
+# deadline=1000 is measured, not guessed: the slowest CI examples ran 246-356 ms against the
+# 200 ms default (seeds 7/101/2024). The cost is argon2id password hashing (~50-100 ms per
+# create_user, ADR-019) with up to ~11 creates per max_size=10 sequence. A hypothesis deadline
+# is a harness tolerance on per-example runtime, not a product performance budget (NFR budgets
+# are asserted by explicit budget tests), so the strategy and max_size stay untouched.
+@settings(
+    max_examples=_MAX_EXAMPLES,
+    deadline=1000,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+```
+
+`max_examples=20` (`_MAX_EXAMPLES`), `suppress_health_check=[HealthCheck.too_slow]`, `min_size=1`/`max_size=10`, the `sampled_from` op alphabet and the `assert any(u.is_active for u in admin_users)` invariant are **unchanged** — per Q-128 (answered 2026-10-02), shrinking `max_size` was rejected as a real weakening of INV-003 coverage, and `deadline=None` was rejected because it removes the per-example signal entirely.
+
+### Measured vs chosen deadline (the 1000 ms is a margin, not a guess)
+
+Per-example cost was measured **outside the repo** (scratch script in `%TEMP%`, importing the repo test's own `inner_test` and its own strategy object — no repo file modified). 20 examples per seed, timing the example body:
+
+```text
+seed default: n=20 min=  30.0 median=  84.2 p90= 120.8 max= 146.7 ms | examples > 200 ms: 0
+seed       7: n=20 min=  28.2 median=  69.0 p90= 102.8 max= 123.6 ms | examples > 200 ms: 0
+seed     101: n=20 min=  34.2 median=  72.3 p90= 109.9 max= 201.8 ms | examples > 200 ms: 1
+seed    2024: n=20 min=  35.1 median= 104.8 p90= 203.2 max= 207.8 ms | examples > 200 ms: 3
+pooled: n=80 min=28.2 median=75.8 max=207.8 ms; margin at deadline=1000 -> worst example is 4.8x faster than the chosen deadline
+```
+
+- **The 200 ms default genuinely has no headroom on this host**: 4 of 80 locally generated examples exceeded it (201.8 ms, 203.2 ms, 207.8 ms, and one more at seed 101) — which is exactly why the failure is load-dependent rather than seed-deterministic (§3, §Phase 3 note).
+- Cause confirmed by direct measurement: `UserManager.create_user` = **31.2–32.7 ms** per call on this host (argon2id hashing, ADR-019); an example performs 1 seed admin + up to 10 creates, so 30–350 ms per example is the expected range. CI (slower runners) measured 246.47 / 355.59 / 251.62 ms for the failing examples.
+- `deadline=1000` is therefore ~4.8× the local worst example and ~2.8× the worst CI observation — a deliberate margin above a measured distribution, not an unbounded exemption.
+- Hypothesis's own probe (same script, `deadline=1` to force its measurement) reported 65.26 / 66.55 / 65.89 ms for the first example at seeds 7 / 101 / 2024, consistent with the independent timing above.
+
+### GREEN gate (targeted — the full suite stays a Phase 5 gate)
+
+```bash
+uv run pytest tests/property/usermanagement/test_multi_role_invariants.py -q
+```
+```text
+.                                                                        [100%]
+1 passed in 2.62s
+```
+
+The three seeds pinned by the CI evidence, verbatim:
+
+```bash
+uv run pytest tests/property/usermanagement/test_multi_role_invariants.py -q -p no:randomly --hypothesis-seed=7
+# .                                                                        [100%]
+# 1 passed in 2.53s
+uv run pytest tests/property/usermanagement/test_multi_role_invariants.py -q -p no:randomly --hypothesis-seed=101
+# .                                                                        [100%]
+# 1 passed in 2.21s
+uv run pytest tests/property/usermanagement/test_multi_role_invariants.py -q -p no:randomly --hypothesis-seed=2024
+# .                                                                        [100%]
+# 1 passed in 2.82s
+```
+
+Three additional seeds (flake confidence, same command): seed 1 `1 passed in 1.86s`, seed 42 `1 passed in 1.58s`, seed 2026 `1 passed in 2.12s`.
+
+**Honest statement on B's RED:** the RED for B is **CI-only** (§3: `DeadlineExceeded` 246.47 / 355.59 / 251.62 ms on `75ca243`). The pinned seeds did **not** reproduce the failure on this host before the fix (Phase 3 note), and the timing table above shows why — locally most examples sit under 200 ms, so the default deadline is only occasionally exceeded here. The runs above are therefore "the CI-failing seeds are GREEN with the explicit deadline", not a local RED→GREEN transition.
+
+### Non-vacuity — the invariant test can still fail
+
+The `deadline` change did not weaken the test; the probe below shows the assertion is reachable. Scratch experiment **outside the repo** (no repo file modified; the guard is restored at the end of the script): run the repo test's own body on the sequence `["create_admin", "remove_admin", "deactivate_admin"]`, with the INV-003 guard intact and with `UserManager._assert_not_last_admin` sabotaged to a no-op in memory:
+
+```text
+guard INTACT   : no assertion (the LastAdminError guard prevents the violating state)
+guard removed  : INV-003 VIOLATION DETECTED -> AssertionError:
+guard restored: True
+```
+
+So the falsifying state (admins exist, none active) is reached the moment the guard stops enforcing, and the test's assertion fires — the test is not vacuous.
+
+- The guard's own enforcement is additionally pinned by existing acceptance/contract tests (no new test added): `tests/acceptance/usermanagement/test_multi_role.py:221-236` (five `pytest.raises(LastAdminError)` paths), `tests/acceptance/usermanagement/test_usermanagement.py:203-216`, `tests/acceptance/permissions/test_check_api.py:827-863`, `tests/contract/usermanagement/test_usermanagement_contracts.py:171`.
+- **Observation (not fixed here, out of item B's scope):** with the guard sabotaged, the property's *random* search over 20 examples at seeds 7/101/2024 did **not** itself reach the falsifying interleaving (it needs a specific order: demote one admin, then deactivate the remaining one). The property asserts "if any admin exists, one is active" and detects that state when the search finds it; the guard's positive enforcement lives in the acceptance tests above. Flagged for the Phase 6 review, no change made.
+
+### Regression (targeted, not the full suite) — verbatim
+
+```bash
+uv run pytest tests/property/usermanagement tests/acceptance/usermanagement tests/unit/usermanagement -q
+```
+```text
+71 passed, 11 warnings in 15.35s
+```
+
+(The 11 warnings are the pre-existing SQLAlchemy `DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12` from `sqlalchemy/engine/default.py:952`, unrelated to item B.)
+
+### Ruff (changed path)
+
+```bash
+uv run ruff check tests/property/usermanagement/test_multi_role_invariants.py
+# All checks passed!
+uv run ruff format --check tests/property/usermanagement/test_multi_role_invariants.py
+# 1 file already formatted
+```
+
+### Spec compliance (reference: §3 — no Spec Amendment)
+
+No behavior change: INV-003 / REQ-013 / REQ-008 and the strategy are untouched; only the harness's per-example tolerance is made explicit and machine-independent, per Q-128.
