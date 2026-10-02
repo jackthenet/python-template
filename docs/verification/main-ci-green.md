@@ -1878,3 +1878,12 @@ is open, and the ISSUE clean-review criteria hold (checklist below).
 
 ISSUE → `patch` per AGENTS.md. Current `pyproject.toml:4` `version = "0.5.0"` → target **`0.5.1`**
 (`bump-my-version bump patch --dry-run` first; clean working tree; `tag = false`).
+
+## Phase 6 (S6.4) — bump + PR (2026-10-02)
+
+- Pre-merge regression gate (full suite, one run): `639 passed, 1 skipped, 33 warnings in 176.10s` — GREEN.
+- Version bump: `bump-my-version bump patch` → `0.5.0` → `0.5.1` (commit `c6fd876`, only `pyproject.toml`: `version` + `current_version`; `tag = false`, no tag created).
+- `uv lock` synced the lock self-version only (`python-template v0.5.0 -> v0.5.1`); committed as `e783cdc` `chore(deps): sync uv.lock self-version to 0.5.1`.
+- Branch pushed: `issue/main-ci-green` → `origin` (new upstream).
+- PR opened for human review/merge: https://github.com/jackthenet/python-template/pull/58 (base `main`). NOT merged (human governance).
+- ruff: n/a (no source/test changes in this step).
