@@ -126,3 +126,24 @@ No change to any `src/` behavior, test logic/assertion, spec content, ADR decisi
 | Q-131 | **Yes**, add `uv run ruff format --check .` as a hard-failing step in the `lint` job | 2c confirmed: one added step in `.github/workflows/lint.yml`, no `continue-on-error` |
 
 No open question remains; the scope is closed and Phase 4 may run items 1–8 in full.
+
+## Phase 4 (S4.1) — pre-change baseline (2026-10-02)
+
+Measured on `chore/repo-hygiene` @ `f0af215` before any change is applied. Phase 5 MUST
+show an identical suite result (DOCS/CHORE: no behavior delta).
+
+| Measurement | Command | Baseline |
+|---|---|---|
+| Full suite | `uv run pytest tests/ -q --tb=line --color=no` | **727 passed, 1 skipped**, 0 failed — `211.87s (0:03:31)` |
+| Skip (expected) | — | `tests/acceptance/filemanagement/test_filemanagement.py:364` — symlinks not available on this host |
+| Lint | `uv run ruff check .` | `All checks passed!` (0 errors) |
+| Format (repo-wide) | `uv run ruff format --check .` | 75 files would be reformatted, 396 already formatted |
+| Format (md excluded) | `uv run ruff format --check --extend-exclude='**/*.md' .` | **54 files would be reformatted**, 268 already formatted |
+| Types | `uv run mypy src/` | `Success: no issues found in 83 source files` |
+| Spec-validation entry point | `uv run python scripts/verify_spec.py docs/specs/search.md` | `exit=0` |
+
+Notes:
+- The 21-file gap between the repo-wide and md-excluded format counts is the markdown
+  drift item 2 removes by adding `[tool.ruff] extend-exclude = ["**/*.md"]`.
+- `--extend-exclude` requires the `=` form; the space form swallows the path argument.
+- One full-suite run only; no source, test, workflow, `pyproject.toml` or `.gitignore` change made in this step.
