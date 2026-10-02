@@ -786,3 +786,29 @@ No Blocking finding; no open finding.
 - Repo-wide `ruff format` drift on files outside this change (the whole-repo `ruff check .` sweep is clean; reformatting unrelated files is a separate DOCS/CHORE).
 - The non-search traceability rows flipped in F-13 can be split into their own DOCS/CHORE PR if scoped diffs are preferred.
 - `tests/architecture/` does not exist in this repository, so the architecture-rule suite is not applicable (recorded pre-rebase).
+
+## Phase 6 S6.4 — PR #54 CI on the rebased head (2026-10-02)
+
+- Version bump: already done (`0.5.1 → 0.6.0`, minor, commit `3c90e6f`) — not re-bumped.
+- Push: `origin/crosscut/search` `2a507bc → eeeba17` (fast-forward, no force). Pushed commits:
+  `7bbc05a 55a9f73 f262021 057b84f a24e1d2 f047a6f eeeba17` (docs-only: `docs/verification/search.md`,
+  `docs/verification/traceability.md`).
+- PR #54: state OPEN, base `main`, headRefOid `eeeba17`, **mergeable: CONFLICTING**.
+- Base drift: `origin/main` advanced `e8dd2bc → a0c0897` (PR #59, `chore/workflow-optimization`).
+  Only conflicting file: `docs/workflow/PROBLEMS.md` (append-only friction log; both sides append entries).
+- CI on head `eeeba17`: **no runs triggered** — `actions/runs?head_sha=eeeba17` → `total_count 0`,
+  `commits/eeeba17/check-runs` → `total_count 0`; 18 × 60 s polls all reported
+  "no checks reported on the 'crosscut/search' branch". GitHub does not build the `pull_request`
+  merge ref for a conflicting PR, so no job runs at all. Actions itself is enabled
+  (`allowed_actions: all`); `main` push runs at 18:32 succeeded, so the runner/permissions path is healthy.
+- Per-job CI conclusion on head `eeeba17` (all 10 checks): lint — NOT RUN, type-check — NOT RUN,
+  tests — NOT RUN, coverage — NOT RUN, dependencies — NOT RUN, dependency-review — NOT RUN,
+  security — NOT RUN, docs — NOT RUN, migrations — NOT RUN, spec-validation — NOT RUN.
+- Reference (previous head `2a507bc`, same code minus the 7 docs commits): all 10 checks `success`
+  (runs 37043732324 Lint, 37043732383 Quality, 37043732358 Spec Validation, 2026-10-02T17:53Z).
+- Local Phase 5 gate remains PASS (full suite 727 passed / 1 skipped ×4, spec coverage 91/91,
+  coverage 93.50%, ruff/mypy/deptry/bandit/pip-audit clean); Phase 6 review CLEAN.
+
+**CI: NOT RUN — PR #54 CONFLICTING with main (`docs/workflow/PROBLEMS.md`); 0 runs for head `eeeba17`**
+Blocker: resolve the conflict (merge `origin/main` into `crosscut/search`, or rebase — rebase needs a
+force-push, which is prohibited) so GitHub can build the merge ref and run the 10 checks.
