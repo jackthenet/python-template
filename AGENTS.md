@@ -335,6 +335,8 @@ The agent MUST track every in-flight change with the `todo` tool. The todo list 
 
 **Creating the todo set (Phase 0).** When starting a change, create one todo item per workflow step the change type executes, in phase order. Give each a short imperative subject naming the phase and its key output. A step the type skips (per the Phase Matrix) gets **no** todo item.
 
+**Task ordering (easiest first).** When a todo set contains tasks that are not dependency-locked, work them **easiest first**: the task you already have a solution for, or reach one with least effort. Early easy wins establish the scaffolding, conventions, and gate mechanics the harder tasks then reuse. Where `blockedBy` or the phase order fixes the sequence, the dependency wins — the ease ordering applies only among tasks that are ready at the same time (e.g. which DAG task to pick in Phase 4).
+
 **Linking dependencies.** Link each step to its predecessor with `blockedBy` so the list encodes the phase order: Phase 2 blocked by Phase 1, Phase 3 blocked by Phase 2, and so on. The final **Post-merge cleanup** item is blocked by Phase 6.
 
 **Status orders (at the right steps).**
