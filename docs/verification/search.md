@@ -682,3 +682,38 @@ No lint, type, dependency, or security violation was introduced by this change o
 base, so no fix was made and no file outside this report was touched.
 
 **S5.2 gate: MET**
+
+## Phase 5 verification report — rebased base (2026-10-02)
+
+Rebased state: base `origin/main` = `e8dd2bc`, HEAD `f262021`, version `0.6.0`. Inputs: S5.1 (`7bbc05a`), S5.2 (`55a9f73`), S5.3 (`f262021`), plus this step's coverage run.
+
+### Specification coverage (the gate)
+- Unique spec IDs in `docs/specs/search.md` (REQ/AC/INV/EDGE/NFR): **91**.
+- IDs with GREEN evidence in `docs/verification/traceability.md`: **91/91** — `comm -23 <spec> <trace>` → **0 missing**.
+- `uv run python scripts/verify_spec.py docs/specs/search.md` → **exit 0** ("Traceability: PASS": every REQ has an AC, every AC an executable test, INV property tests present, no orphaned tests).
+- **Spec coverage = 100% — gate PASS.**
+
+### Acceptance coverage
+- `tests/acceptance/search/`: **35 acceptance tests**, all GREEN (S5.1 full suite ×3 randomized runs and this step's coverage run: 727 passed, 1 skipped, zero failures).
+- Search family (acceptance + unit + contract + integration + property): 87 tests GREEN; Search Matrix: **73 rows GREEN** (S5.3), per-feature rows updated.
+
+### Code coverage (secondary signal)
+- `uv run pytest tests/ --cov --cov-report=term` (the CI `coverage` job command): **TOTAL 93.50%** vs `fail_under = 92` → `Required test coverage of 92.0% reached. Total coverage: 93.50%`.
+- That run was fully green: `727 passed, 1 skipped, 1092 warnings in 206.23s` (skip: `tests/acceptance/filemanagement/test_filemanagement.py:364` — symlinks unavailable on this host).
+- Code coverage is a quality signal only; the Phase 5 gate is spec coverage above.
+
+### Quality gates (S5.2)
+- `uv run ruff check .` → clean (whole-repo sweep, matches CI `lint.yml`).
+- `uv run mypy src/` → clean (83 files).
+- `uv run deptry .` → clean.
+- `uv run bandit -r src/` → 0 issues.
+- `uv run pip-audit` → clean.
+
+### Rebase delta (vs the pre-rebase report)
+- New base `e8dd2bc`; the branch was rebased and 6 redundant commits dropped.
+- PR #58's upstream fixes removed the 9-node full-suite flakiness recorded pre-rebase — the suite is now deterministically GREEN (3 randomized full runs + this coverage run).
+- Version re-bumped on the new base: `0.5.1` → `0.6.0` (CROSS-CUTTING minor).
+- `tests/architecture/` remains absent in this repository (recorded pre-rebase; the check is not applicable).
+
+### Verdict
+**PHASE 5: PASS** — spec coverage 91/91 (100%), acceptance tests GREEN, code coverage 93.50% ≥ 92%, all quality gates clean.
