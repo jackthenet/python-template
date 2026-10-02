@@ -1797,3 +1797,32 @@ Only two `src/` files changed, and each changes exactly the one thing the defect
 ### Q6 — does the change achieve its objective (a green `tests` job on `main`)?
 
 Yes, and every red job is addressed. Independently re-verified in this step for `main` @ `75ca243`: `lint` failed (lint.yml run `36894698193`), `security` and `dependency-review` failed (quality.yml run `36894698244`), `tests` failed (spec-validation.yml run `36894698181`), while `coverage`, `spec-validation`, `type-check`, `dependencies`, `docs`, `migrations` succeeded — exactly the four jobs §6.7 names. Mapping: `tests` → E (+G/H/I), `security` → D, `dependency-review` → F, `lint` → C. `coverage` and `spec-validation` run the same suite (`quality.yml:59`, `spec-validation.yml:70`) and were green on that run only because the pollution family is order-dependent (`pytest-randomly`); E/G/H/I close that family for them too, so no job's redness is left unaddressed. Phase 5 evidence covers each gate: 6 consecutive clean full-suite runs (2 at the S5.1 re-run + 4 for item I, `639 passed, 1 skipped`), `ruff check .` clean (the `lint` gate), `pip-audit` clean (the `security` gate), and the trigger fix (the `dependency-review` gate). The only outstanding evidence is F's post-PR / post-merge observation (F-3), which S6.4 produces.
+
+## Phase 6 (S6.2) — traceability + boundaries (2026-10-02)
+
+Inputs: `git diff --name-only origin/main...HEAD` (23 files; 2 in `src/`), the S5.3 matrix section (`docs/verification/traceability.md:751-770`), the S6.1 findings table, final code state. No full-suite run (Phase 5 gate already clean).
+
+### Findings
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| F-7 | `wait_for` is defined twice (`tests/settings_test_helpers.py:20`, `tests/eventbus_test_helpers.py:35`) and the new `tests/conftest.py::_drain_event_bus` imports it from the **settings** helper while draining the **event bus** | Info | **Accepted, pre-existing.** Both defs exist on `origin/main` (`git show origin/main:...`); this change added a third consumer, not the duplication. Follow-up chore: one def in `eventbus_test_helpers`, re-exported. |
+| F-8 | Two bus-settlement helpers with overlapping intent: `conftest._drain_event_bus` (whole shared queue empty + 50 ms grace) vs `settings_test_helpers.set_value_settled` (ordered drain of one write's dispatch) | Info | **Accepted — different contracts, both documented.** The conftest one is fixture-local (protects the `log_records` sink from a stale `SettingChanged` → `_configure()` → `logger.remove()`); `set_value_settled` is the item-G fix for REQ-015/AC-020 ordering. No duplicated wait loop (conftest reuses `wait_for`). |
+| F-9 | `set_value_settled` reads `registry._event_bus` (private attribute) — the registry exposes no public bus accessor | Info | **Accepted.** Test-only reach-through, no product API change and no new public interface (out of ISSUE scope). Noted as a follow-up for a future settings change. |
+
+No High/Medium findings. Boundaries and docs placement: clean.
+
+### Q1 — traceability completeness
+All nine items have matrix rows (`traceability.md:756-765`) with spec ID + test + status + commit; every affected ID also has its own updated row in the owning feature matrix (e.g. `:16` REQ-001/AC-001, `:58` REQ-005/AC-008, `:100` REQ-010/AC-014, `:117` REQ-022/AC-030, `:135`/`:398` INV-009/INV-002, `:221`/`:702` INV-003, `:409` EDGE-008, `:529` INV-002). Verified by collection, not reading: `pytest --collect-only tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py -q` → **5 collected**, and the five node ids match the matrix names verbatim (`test_yaml_value_roundtrip_nel`, `test_yaml_template_roundtrip_nel`, `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_keeps_foreign_sink`, `test_reconfigure_after_external_removal_of_a_managed_sink`) — no row points at a node that no longer exists (F-6 closed).
+
+### Q2 — orphaned tests
+The two new test files are referenced in the matrix (4 hits). The three chore-touched test files (`test_check_api.py`, `test_enforcement.py`, `test_performance.py`) have no spec ID in the item-C row by design (chore, no behavior delta) but are **not orphans** — they are pre-existing tests already covered by the User Roles & Permissions matrix rows. Items D/F have no test by nature (lockfile, CI trigger) and are recorded as `n/a`.
+
+### Q3 — feature boundaries
+`src/backend/settings/repository.py:28` imports `from backend.logging import logged_class` — the logging feature's **public** interface (`backend/logging/__init__.py:10`), not `_setup`/`_decorator`. `src/backend/logging/_setup.py` imports only intra-feature internals (`backend.logging._decorator`, `._settings`) plus `from backend.settings import SettingChanged` (`:121`, public package interface, function-local). No feature imports another feature's `_`-prefixed module. Touched test files live in the matching area (`tests/unit/settings/`, `tests/unit/logging/`, `tests/property/<feature>/`, `tests/{acceptance,contract}/permissions/`).
+
+### Q4 — no premature abstraction / no new layer
+`git diff --name-status` adds exactly two files, both tests, in directories that already exist on `main` (`tests/unit/settings`, `tests/unit/logging`). `src/` has two modified files, no new package, no new ABC, no new pattern — item E's state (`_sink_state`) is a module-level structure inside `backend/logging/_setup.py`, item I's is an autouse conftest fixture (process-global stdlib root logger ⇒ correctly conftest-owned, not feature-owned).
+
+### Q5 — docs placement
+Non-`.py`/`uv.lock`/`quality.yml` diff: `AI_Questions.md` (repo root, per the AI-Questions mechanism), `docs/verification/main-ci-green.md`, `docs/verification/traceability.md`, `docs/workflow/PROBLEMS.md`. Nothing written to `docs/` root; no `userdocs/` change is required (no user-facing behavior delta — see the §"no-behavior-delta statement").
