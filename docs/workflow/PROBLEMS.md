@@ -301,3 +301,19 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 (discovery + N/A record)
 - **Resolution:** Recorded as a follow-up reconciliation item (either add the architecture tests or correct AGENTS.md/the skill). Not fixed in this change (out of scope).
 - **Date:** 2026-10-02
+
+## P-33 — `bump-my-version` under `uvx` produced no output and `show` crashed; the bump had to be verified from git instead (S6.4)
+- **Problem:** `uvx bump-my-version bump patch` (and `--dry-run`) exited 0 with **no stdout** (rich logging swallowed on this host), and `uvx bump-my-version show` raised a rich-click traceback, so the tool gave no evidence that it bumped anything.
+- **Step / Phase:** S6.4 (version bump + open PR) — Phase 6
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 extra verification round
+- **Resolution:** Verified the bump with `git show --stat HEAD` + `git diff HEAD~1` (`pyproject.toml` `version` and `[tool.bumpversion] current_version`, 0.5.0 → 0.5.1, no tag). Lesson: after a tool run that reports nothing, verify the effect from the VCS state, not from the tool's report.
+- **Date:** 2026-10-02
+
+## P-34 — fixing `pip-audit` unmasked a never-executed `bandit` failure; Phase 6 re-entered Phase 4 with a new item (J)
+- **Problem:** PR #58's `security` job failed in 12s on `bandit -r src/` with 6 low-severity findings, although the Phase 5 gate had run `pip-audit` and `deptry` locally. Cause: the job runs `pip-audit` (`.github/workflows/quality.yml:41`) **before** `bandit -r src/` (:43), and pip-audit had been failing on `main` for weeks — so bandit had never actually executed in CI and its findings were invisible. The Phase 5 gate set did not include bandit, so the change's verification was incomplete.
+- **Step / Phase:** S6.4 (Phase 6) → re-entry to S4.2 (item J) → S5.2-equivalent security gate
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 CI failure + 1 new item (fix + record), 2 extra subagent runs
+- **Resolution:** Item J applied the repo's existing inline `# nosec BXXX` pattern (5× B105 on permission **description** strings in the `feature_actions.py` files, 1× B110 in `permissions/service.py`), comment-only, `+6/−6`, `bandit -r src/` now reports 0 issues and exits 0; CI `security` is green. Lessons: (a) when a CI job has multiple sequential steps, a green local run of the *first* one is not evidence about the later ones — enumerate every step of each red job; (b) the verify skill's gate list should include `uv run bandit -r src/` for any change that touches the security job.
+- **Date:** 2026-10-02
