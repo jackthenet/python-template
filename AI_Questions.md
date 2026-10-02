@@ -1427,3 +1427,25 @@ Each question is a section with the following fields:
 - **Date:** 2026-09-25
 - **Status:** ANSWERED
 - **Incorporated:** yes
+
+## Q-127 — main-ci-green scope: fix the tests that actually fail CI, or stay with A+B+C+D?
+- **Step:** S1.1 ISSUE triage — Phase 1
+- **Change:** main-ci-green, ISSUE
+- **Why needed:** The change's objective is "make main's CI green", but the user-approved scope (A settings YAML round-trip, B hypothesis deadline, C ruff, D pip-audit) does **not** cover the jobs that are actually red in CI. With A+B+C+D only, main stays red after this change merges — a scope boundary only the user can settle (it decides whether the change is 4 items or 6, and whether it stays a single ISSUE or grows).
+- **Context:** Triage evidence (`docs/verification/main-ci-green.md` §6). In run `36894698181` (`Spec Validation` → `tests`, `uv run pytest tests/ -v`) both `test_inv_009_yaml_roundtrip` and `test_last_admin_invariant` are logged **PASSED** — A and B are local-only defects. The CI test-job failures are a logging-interception family whose count varies run to run (2/4/4/4/6): `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline`, `tests/unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level`, `tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records`, `test_ac_005_intercept_handler_skips_bootstrap` — red on main since at least run `35750031753`/`36061497823` (2026-09-22/24), i.e. before the dependabot merges. Root cause (evidence): `set_value("logging.log_level", …)` in `tests/contract/filemanagement/test_filemanagement_contracts.py:93` and `tests/contract/permissions/test_performance.py:56` triggers the settings-coverage REQ-015 reconfiguration → `_configure()` → `logger.remove()` drops every loguru sink, including the per-test `log_records` capture sink (`tests/conftest.py:77-95`); order-dependent under `pytest-randomly`. Separately, the `dependency-review` job fails by construction on a push (`actions/dependency-review-action@v5`: "Both a base ref and head ref must be provided … or by running a `pull_request`/`pull_request_target`/`merge_group` workflow", run `36894698244`).
+- **Question:** Are **E** (the logging-interception test-isolation family — the actual `tests`-job failure, spec IDs logging REQ-001/002/003, AC-004/005, EDGE-005 + settings-coverage REQ-014/015) and **F** (the `dependency-review` job running on `push`, CI-config chore) in scope for `main-ci-green`? If **no**: is a follow-up change opened immediately (main stays red meanwhile), and should PR #54 (crosscut/search) still be held until E is fixed?
+- **Answer:** **PENDING**
+- **Date:** 2026-10-02
+- **Status:** PENDING (OPEN)
+- **Incorporated:** no
+
+## Q-128 — item B: is an explicit measured hypothesis `deadline` acceptable?
+- **Step:** S1.1 ISSUE triage — Phase 1
+- **Change:** main-ci-green, ISSUE
+- **Why needed:** The AGENTS prohibitions forbid weakening a test to reach GREEN. `test_last_admin_invariant` currently runs under hypothesis's default 200 ms per-example deadline and fails 3/5 pinned seeds on this machine (246–356 ms). The fix is a test-harness change, and the review gate will ask whether it weakens the invariant — the user should confirm the policy before Phase 4.
+- **Context:** `tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant` implements user-roles-permissions **INV-003** (last-admin invariant); no spec ID sets a per-example time budget. Reproduced: `--hypothesis-seed=7` → 246.47 ms, `101` → 355.59 ms, `2024` → 251.62 ms, all `DeadlineExceeded: … > 200.00 ms`; the invariant assertion itself never fails. Options in the triage record §3: (1) explicit `@settings(deadline=1000)` (measured, recorded), (2) `deadline=None` with justification, (3) reduce per-example work.
+- **Question:** Is option 1 (an explicit measured `deadline=…` on the test's `@settings`, with the invariant, the strategy and `max_examples` untouched) acceptable as the fix for B — or does the user require option 3 (reduce the per-example work so the default 200 ms deadline holds), or accept option 2 (`deadline=None`)?
+- **Answer:** **PENDING**
+- **Date:** 2026-10-02
+- **Status:** PENDING (OPEN)
+- **Incorporated:** no
