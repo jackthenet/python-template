@@ -10,9 +10,10 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from backend.eventbus import EventBus
-from backend.settings import SettingsRegistry
+from backend.settings import SettingDefinition, SettingsRegistry
 
 
 def wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> bool:
@@ -57,11 +58,14 @@ def install_isolated_registry() -> SettingsRegistry:
     by one test leaks into another (test isolation). Returns the installed
     registry.
 
-    Preserves the current ``logging.log_file`` value (if registered in the
-    previous registry) so the logging feature's file sink keeps pointing at the
-    session log file — the isolated registry is for testing settings isolation,
-    not for changing where logging writes. Without this, a test that installs a
-    fresh isolated registry (where ``logging.log_file`` is not registered) would
+    Preserves the current ``logging.*`` settings (definitions + values) so the
+    logging feature's file sink keeps pointing at the session log file and the
+    installed registry is in a consistent state (all ``logging.*`` settings
+    registered, or none). Restoring only ``logging.log_file`` (the previous
+    behavior) left a partial state: a test that then re-registered the logging
+    settings (because ``logging.log_level`` was absent) hit a duplicate-key error
+    on the already-restored ``logging.log_file``. Without preserving the
+    ``logging.*`` settings, a test that installs a fresh isolated registry would
     trigger a sink re-configure that re-points the file sink to the default file,
     leaking state into later tests that assert on the session log file.
     """
@@ -70,21 +74,23 @@ def install_isolated_registry() -> SettingsRegistry:
     from backend.settings import YamlValueRepository
     from backend.settings import registry as _registry_module
 
-    # Save the current logging.log_file definition + value (if registered) so
-    # the file sink keeps pointing at the session log file.
+    # Save the current logging.* definitions + values (if registered) so the
+    # file sink keeps pointing at the session log file and the state stays
+    # consistent (all logging.* registered, or none).
     previous = _registry_module.get_settings_registry(required=False)
-    log_file_def = None
-    log_file_val = None
-    if previous is not None and previous.has("logging.log_file"):
-        log_file_def = previous.get_definition("logging.log_file")
-        log_file_val = previous.get_value("logging.log_file")
+    logging_settings: list[tuple[SettingDefinition, Any]] = []
+    if previous is not None:
+        for view in previous.views():
+            if view.key.startswith("logging."):
+                logging_settings.append((previous.get_definition(view.key), previous.get_value(view.key)))
 
     _registry_module.reset_settings_registry()
     isolated = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-    # Restore the logging.log_file value so the file sink keeps its target.
-    if log_file_def is not None:
-        isolated.register(log_file_def)
-        isolated.set_value("logging.log_file", log_file_val)
+    # Restore the logging.* settings so the file sink keeps its target and the
+    # state is consistent (all logging.* registered, or none).
+    for definition, value in logging_settings:
+        isolated.register(definition)
+        isolated.set_value(definition.key, value)
     _registry_module._registry[0] = isolated
     return isolated
 
@@ -113,9 +119,7 @@ def isolated_registry(install: bool = True) -> Iterator[None]:
     saved = get_settings_registry(required=False)
     reset_settings_registry()
     if install:
-        _registry_module._registry[0] = SettingsRegistry(
-            value_repository=YamlValueRepository(tempfile.mkdtemp())
-        )
+        _registry_module._registry[0] = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
     try:
         yield
     finally:
