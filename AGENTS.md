@@ -592,6 +592,8 @@ An agent MUST:
 - Every acceptance test MUST trace back to a normative requirement.
 - The traceability matrix in `docs/verification/traceability.md` MUST be maintained.
 - CI MUST detect: missing tests, orphaned tests, missing evidence, and changed behavior without spec updates.
+- **The matrix Status column is a historical gate record** (decision Q-129, convention B). A row records the state *as observed by the change that wrote it* — the change name and date live inside the cell (e.g. `GREEN (full suite: 727 passed … search S5.1 …, commit 7bbc05a)`). A later change adds or updates rows only for the REQs/ACs it actually touches; it never refreshes rows it did not change, and a dated `RED`/`PENDING` row is a legal record of a past gate, not a defect.
+- **CI enforces referential integrity, not status freshness.** `uv run python scripts/check_traceability.py` (the `traceability` job in `.github/workflows/spec-validation.yml`) fails when a `REQ-XXX`/`AC-XXX` defined in `docs/specs/` has no matrix row, when a row references an ID no spec defines, when a row cites a test function that no longer exists under `tests/`, or when a Status cell uses an undeclared value (`PENDING`, `RED`, `GREEN`, `REFACTORED`, `VERIFIED`, `N/A`). It never fails because a row's status is stale.
 - **Tests are the contract.** Once acceptance tests are re-derived from an approved spec, the executable tests are the authoritative contract. If a spec *wording* or an implementation detail conflicts with a re-derived test, the test wins. The conflict MUST be flagged as a finding and resolved via the Spec Amendment Workflow — never by weakening, removing, or "fixing" the test to match the implementation.
 
 ---

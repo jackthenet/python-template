@@ -52,6 +52,20 @@ jobs:
           done
       - name: Validate task DAG
         run: uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json || true
+  traceability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Sync tooling
+        run: uv sync --only-group dev
+      - name: Check traceability matrix referential integrity
+        run: uv run python scripts/check_traceability.py
   tests:
     runs-on: ubuntu-latest
     steps:
