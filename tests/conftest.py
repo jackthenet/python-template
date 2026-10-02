@@ -79,14 +79,47 @@ def log_records() -> Iterator[list[Any]]:
 
     Each record supports ``str(m)`` (the message text) and ``m["level"]`` /
     ``m["record"]`` (record fields), matching the suite's assertions.
+
+    The shared event bus is drained before the sink is added: the bus
+    dispatches events asynchronously on a background worker, so stale events
+    from previous tests (e.g. ``SettingChanged`` events from ``set_value``
+    calls) can otherwise be dispatched during this test, triggering the
+    logging feature's ``_configure()`` (which calls ``logger.remove()``) and
+    removing the sink added here. Draining first ensures the stale events are
+    dispatched before the sink exists, so the sink is safe for the test.
     """
     records: list[Any] = []
 
     def _sink(message: Any) -> None:
         records.append(_Captured(message.record))
 
+    _drain_event_bus()
     handler_id = logger.add(_sink, level="DEBUG", catch=False)
     try:
         yield records
     finally:
         logger.remove(handler_id)
+
+
+def _drain_event_bus() -> None:
+    """Wait for the shared event bus to dispatch all queued events.
+
+    The event bus dispatches events asynchronously on a background worker
+    thread. Waiting for the queue to be empty (plus a short grace period for
+    the worker to finish the in-flight dispatch) ensures no stale event is
+    dispatched after this point. Used by the ``log_records`` fixture so a
+    stale ``SettingChanged`` event does not trigger ``_configure()`` (which
+    calls ``logger.remove()``) and remove the fixture's sink mid-test.
+    """
+    import time
+
+    from backend.eventbus import get_event_bus
+
+    bus = get_event_bus()
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if bus.pending_count == 0:
+            # Grace period for the worker to finish the in-flight dispatch.
+            time.sleep(0.05)
+            break
+        time.sleep(0.005)
