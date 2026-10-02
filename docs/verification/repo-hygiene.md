@@ -272,3 +272,24 @@ intended item-3/record edits (`AGENTS.md`, `AI_Questions.md`, `docs/verification
 0 real diffs.** Note: ruff format rewrote `except (A, B, C):` → `except A, B, C:`
 (`src/backend/mail/transport.py:89`) — legal under PEP 758 (Python 3.14) and AST-identical
 (both parse to a `Tuple` handler type); it only looks wrong to a pre-3.14 interpreter.
+
+## Phase 5 (S5.4) — verification report (2026-10-02)
+
+**Change type / tier:** DOCS/CHORE — Phase 5 light tier (lint/types where applicable + a no-behavior-delta proof; no spec-coverage gate per the Phase Matrix).
+
+**Scope conformance — all three scoped items implemented:**
+- Item 1: `.gitignore` (`/data/`, `/logs/`).
+- Item 2: 54 `.py` reformatted (12 `src/`, 40 `tests/`, 2 `migrations/`) + `pyproject.toml` (`extend-exclude = ["**/*.md"]`) + `.github/workflows/lint.yml` (added `uv run ruff format --check .` step).
+- Item 3: `scripts/check_traceability.py` (new) + `.github/workflows/spec-validation.yml` (new `traceability` job) + `docs/verification/traceability.md` (§Invariants paragraph) + `AGENTS.md` (§"Traceability & Spec Drift" paragraph). Phase 1 record: `AI_Questions.md`.
+
+`git diff --name-only ebbb233..HEAD` → 63 paths: 55 `.py` (54 reformatted + the new script), 4 `.md`, `.gitignore`, `pyproject.toml`, 2 workflow files. **Exactly one path is outside the §"Exact file list"**: `docs/verification/repo-hygiene.md` — this change's own evidence artifact, written by every phase record (not a behavior, test, or config file). No other extra path; no scoped file missing.
+
+**No-behavior-delta evidence.** Full suite **727 passed / 1 skipped / 0 failed** — identical to the S4.1 baseline (not re-run here; S5.1 is the gate). **53/54** reformatted files AST-identical, **1** docstring-whitespace-only (`src/backend/settings/repository.py`), **0** real AST diffs; the sweep touched **0** Markdown files. Gates clean at S5.1: `ruff check .`, `ruff format --check .` (323 files, 0 pending vs 75 at baseline), `mypy src/` (83 files), `deptry .`, `bandit -r src/`, `pip-audit`, `alembic upgrade head`, `mkdocs build --strict`, `verify_spec.py` — all exit 0.
+
+**Spec coverage: n/a for DOCS/CHORE** — no new normative requirement, and no approved spec normatively covers `.gitignore`, code formatting, or the matrix format (§"Spec-coverage check"), so no Spec Amendment was required. The durable guarantee for the matrix is the new CI-enforced referential-integrity check (`scripts/check_traceability.py`: exit 0 over 746 rows / 129 spec IDs / 713 test functions, with four negative controls proving each assertion fires).
+
+**Accepted notes (recorded plainly, not hidden).**
+1. `ruff format` rewrote `except (A, B, C):` → `except A, B, C:` at `src/backend/mail/transport.py:89` — legal under PEP 758 on the project's `requires-python >=3.14` and AST-identical, but it lowers compatibility for any pre-3.14 tool that parses that file. Accepted: the project is 3.14-only.
+2. The S4.2 evidence plan's `git diff --ignore-all-space` proof was **wrong** (a whitespace-insensitive diff cannot prove AST equality); it was replaced by the `ast.dump` equality method used in S5.1. Carry to the after-workflow-optimization (fix the verify skill's formatting-sweep proof recipe).
+
+**Verdict: PHASE 5: PASS** — every scoped item is implemented, the only out-of-scope path is this change's own evidence file, and the DOCS/CHORE contract holds: identical suite result, AST-identical sources, fully clean gate set.
