@@ -96,7 +96,7 @@ C:/workspace/active-projects/
 Exact commands, procedures, and edge cases for each operation live in the git skill (`.agents/skills/git/SKILL.md`).
 
 - **Phase P (prepare)** — **P.1** writes `docs/todo/<name>.md` and `docs/questions/<name>.md` **on `main`** (planning records, see "Phase P: PREPARE"). The change branch **and its worktree** are created at **P.4** from `main` (git skill: "Create change worktree"), so the branch carries the TODO file and the answered questions.
-- **Phase 1 (approve)** — S1.4 only: commit the prepared spec in the change worktree and open the approval PR. All work from Phase 1 through Phase 6 is performed inside the change worktree.
+- **Phase 1 (approve)** — S1.4 only: commit the prepared spec in the change worktree and open the approval PR. All work from **P.4** through Phase 6 is performed inside the change worktree (P.1–P.3 write the planning artifacts on `main`).
 - **Phases 2–5** — decompose, test, implement, verify: all commands (`uv run ...`) run inside the change worktree. The primary worktree (`main`) is used for:
   - the Phase P planning-artifact commits (`docs/todo/`, `docs/questions/`),
   - spec-approval verification (`git log main -- docs/specs/[name].md`, FEATURE/CROSS-CUTTING only),
@@ -293,7 +293,7 @@ POST-MERGE [S] CLEANUP (git skill)
 | Phase | Skill | Applies to | Purpose |
 |-------|-------|------------|---------|
 | Phase P: PREPARE | `specify` | all | Turns an idea into a prepared change: TODO file, interrogation, answered questions, draft spec / triage / baseline / scope. |
-| Phase 1: APPROVE | `specify` | FEATURE, CROSS-CUTTING | S1.4 only: commit the prepared spec and open the approval PR (other types' Phase 1 output is produced in Phase P). |
+| Phase 1: SPECIFY (approve only) | `specify` | FEATURE, CROSS-CUTTING | S1.4 only: commit the prepared spec and open the approval PR (other types' Phase 1 output is produced in Phase P). |
 | Phase 2: DECOMPOSE | `decompose` | FEATURE, CROSS-CUTTING | Creates ADRs and decomposes the spec into a machine-readable JSON task DAG (per-feature grouping for CROSS-CUTTING). |
 | Phase 3: TEST & RED | `test` | FEATURE, CROSS-CUTTING, ISSUE | Derives tests from the spec (FEATURE/CROSS-CUTTING) or writes the reproduction test (ISSUE), and confirms RED state. |
 | Phase 4: IMPLEMENT | `implement` | all | Turns RED into GREEN (or performs behavior-preserving steps / makes the chore change), then refactors without changing specified behavior. |

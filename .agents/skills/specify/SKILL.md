@@ -85,9 +85,9 @@ The FEATURE/CROSS-CUTTING path is decomposed into atomic steps. Each has a **sin
 ### P.5 Verify self-consistency
 
 - **Objective:** Run the self-consistency checklist against the written specification and fix every inconsistency in the spec itself (never defer to implementation or review).
-- **Inputs:** the written specification; the Self-Consistency Checklist (below).
+- **Inputs:** the written specification; the Self-Consistency Checklist (below) + the Dependency Smoke-Test (below).
 - **Outputs:** a consistent specification (no internal inconsistencies).
-- **Done-criteria:** the specification passes the self-consistency checklist (configurability, parameter coverage, REQ↔AC wording, terminology drift, test strategy coverage, ID references, scope consistency, performance budget vs. observability).
+- **Done-criteria:** the specification passes the self-consistency checklist (configurability, parameter coverage, REQ↔AC wording, terminology drift, test strategy coverage, ID references, scope consistency, performance budget vs. observability) **and** every newly named dependency has been smoke-tested on the host.
 
 ### S1.4 Present for approval
 

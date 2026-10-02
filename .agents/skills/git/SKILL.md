@@ -20,7 +20,7 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 
 Per "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`:
 - **Commit Phase P planning artifacts (P.1–P.3)** — orchestrator, in the primary worktree, committed directly to `main`.
-- **Create change worktree (P.4)** — orchestrator, not a subagent; runs at **P.4 Draft**, after the questions are answered.
+- **Create change worktree (P.4)** — performed by the **P.4 Draft step subagent** as its first action (this skill owns the how); the orchestrator does NOT create it. It runs at P.4, after the questions are answered.
 - **Detect a cleared gate** — orchestrator, between steps, when scheduling which change to run next.
 - **Create PR** — runs inside the Phase 6 (review) subagent (atomic step **S6.4**).
 - **Post-merge cleanup** — runs in a **new, synchronous subagent** (atomic step **S7.1**, launched by the orchestrator after the human merges the PR).
@@ -74,7 +74,7 @@ git commit -m "chore(<name>): prepare"
 
 ### Create change worktree (P.4)
 
-Run from the primary worktree, at **P.4 Draft** (after the questions are answered):
+Run from the primary worktree; the **P.4 Draft step subagent** performs it as its first action, at **P.4 Draft** (after the questions are answered):
 
 ```bash
 git worktree add ../<repo-name>-worktrees/<type>/<name> -b <type>/<name> main
@@ -84,7 +84,7 @@ git worktree add ../<repo-name>-worktrees/<type>/<name> -b <type>/<name> main
 - The parent directory is created automatically if it doesn't exist.
 - If the branch already exists (re-entering the change), omit `-b`:
   `git worktree add ../<repo-name>-worktrees/<type>/<name> <type>/<name>`
-- All subsequent work for the change (Phases 1–6) happens inside the change worktree.
+- All subsequent work for the change (**P.4** through Phase 6) happens inside the change worktree.
 - Because the worktree branches from `main` at P.4, it carries the TODO file and the answered question file committed there at P.1–P.3.
 
 ### Detect a cleared gate (resume a WAITING change)

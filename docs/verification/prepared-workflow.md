@@ -272,3 +272,26 @@ Locations read: (a) AGENTS.md Workflow Diagram, (b) AGENTS.md Atomic Steps table
 ### Phase 5 conclusion
 
 All DOCS/CHORE Phase 5 gates (1–8) **PASS** with the evidence above: the change touches only `.md` files; lint and types are clean and identical to `main`; the full suite is GREEN (727 passed, 1 pre-existing platform skip); CI parity holds for the `lint`, `traceability`, `spec-validation` and `docs` jobs; and no live guidance still references the retired mechanics. The cross-reference audit (9) produced four documentation-only findings (F-1…F-4) alongside the pre-existing S4 numbering finding — none is a gate failure, and none was fixed in this change (no file other than this verification record was modified). **Verified.**
+
+### Findings F-1..F-4 — resolved (S5.5, 2026-10-03)
+
+- **F-1 — P.4 worktree creation owner.** Resolved: the **P.4 Draft step subagent** creates the branch and worktree as its **first action**; the git skill owns the *how*, the orchestrator does NOT create it (matches the diagram's `P.4 [S]` marker, the Phase P owner column and specify SKILL.md's "First action"). → `.agents/skills/git/SKILL.md:23` (Execution Context owner line rewritten) and `.agents/skills/git/SKILL.md:77` (Operations intro now: "Run from the primary worktree; the **P.4 Draft step subagent** performs it as its first action, at **P.4 Draft** (after the questions are answered)"). The "Create change worktree (P.4)" heading is unchanged; AGENTS.md needed no change (it already assigns P.4 to the subagent).
+- **F-2 — Phase 1 label drift.** Resolved: the phase name stays **"1 Specify"** in the Phase Matrix (`AGENTS.md:191`), the Workflow Diagram (`AGENTS.md:221`) and the Atomic Steps table (`AGENTS.md:323`); only the Skill-to-Phase Mapping row label changed `Phase 1: APPROVE` → `Phase 1: SPECIFY (approve only)`, its description untouched. → `AGENTS.md:296`.
+- **F-3 — P.5 must bind the Dependency Smoke-Test.** Resolved: the P.5 step's Inputs now read "the Self-Consistency Checklist (below) **+ the Dependency Smoke-Test (below)**" and its done-criteria adds "**and** every newly named dependency has been smoke-tested on the host"; the Dependency Smoke-Test section itself is not duplicated. → `.agents/skills/specify/SKILL.md:88` (Inputs) and `.agents/skills/specify/SKILL.md:90` (Done-criteria).
+- **F-4 — worktree scope wording.** Resolved: both "Phase 1 onward" sentences now start at **P.4** — `AGENTS.md:99` ("All work from **P.4** through Phase 6 is performed inside the change worktree (P.1–P.3 write the planning artifacts on `main`)") and `.agents/skills/git/SKILL.md:87` ("All subsequent work for the change (**P.4** through Phase 6) happens inside the change worktree").
+
+Consistency sweep after the fixes (S5.5):
+
+```text
+$ grep -n "Phase 1: APPROVE" AGENTS.md
+(no hit)
+$ grep -n "orchestrator, not a subagent" .agents/skills/git/SKILL.md
+(no hit)
+$ grep -n "Phase 1 through Phase 6" AGENTS.md .agents/skills/git/SKILL.md
+(no hit)
+$ grep -n "Dependency Smoke-Test" .agents/skills/specify/SKILL.md
+88:- **Inputs:** the written specification; the Self-Consistency Checklist (below) + the Dependency Smoke-Test (below).
+157:## Dependency Smoke-Test
+```
+
+`uv run ruff check .` → `All checks passed!` (unchanged from the S5.4 gate). Files touched by S5.5: `AGENTS.md`, `.agents/skills/git/SKILL.md`, `.agents/skills/specify/SKILL.md`, this record, `docs/workflow/PROBLEMS.md` (P-38) — still strictly the Scope-C list.
