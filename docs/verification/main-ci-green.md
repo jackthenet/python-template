@@ -10,7 +10,7 @@
 - **Worktree:** `C:/workspace/active-projects/python-template_kopie-worktrees/issue/main-ci-green`
 - **Why this change exists:** `main`'s CI is red after three merged dependabot PRs (#55 lint-and-types, #56 test-tooling, #57 runtime-core). The user decided to fix `main` in one dedicated change before PR #54 (crosscut/search) merges into it.
 
-### Scope composition (seven items — extended by Q-127, answered 2026-10-02, and by item G, found in Phase 4)
+### Scope composition (eight items — extended by Q-127, answered 2026-10-02, and by items G and H, found in Phase 4)
 
 | Item | Nature | Type | Affected spec IDs | Expected files |
 |---|---|---|---|---|
@@ -21,8 +21,9 @@
 | **E** | the logging feature's runtime reconfigure deletes loguru sinks it does not own (the actual CI `tests`-job failure) | **defect** (feature lifecycle / test isolation) | `logging.md` REQ-001/002/003, AC-001/002/004/005, INV-001, EDGE-005; `settings-coverage.md` REQ-014/015, AC-019/020 | `src/backend/logging/_setup.py`, `tests/conftest.py`, `tests/logging_test_helpers.py`, `tests/settings_test_helpers.py` |
 | **F** | `dependency-review` job runs on `push` and fails by construction | **chore** (CI config, non-behavior) | none | `.github/workflows/quality.yml` |
 | **G** | the residual order-dependent flake in the §6.4 corroboration recipe: `test_sink_reconfigured_rotation` publishes a `logging.*` write whose `SettingChanged` dispatch is never awaited, so the logging feature's reconfigure lands inside a later test and transiently drops the process-global loguru handler count | **defect** (test isolation; found in Phase 4 by the item-E step, recorded as the "residual flake" finding under item E) | `logging.md` AC-003/REQ-002 (the victim's assertion, unchanged); `settings-coverage.md` EDGE-008, REQ-015/AC-020 (the polluter's write) | `tests/settings_test_helpers.py`, `tests/unit/test_settings_coverage.py` |
+| **H** | full-suite pollution: `isolated_event_bus()` called `reset_event_bus()`, which shuts down the instance it resets, and `EventBus.publish()` returns early on a shut-down bus — so after any test using that helper the settings registry's `SettingChanged` publishes were silently dropped and the logging feature's AC-020 reconfigure never ran (later logging sink tests lost their console sink or timed out) | **defect** (test isolation; found in Phase 4 at the full-suite gate, opened from the item-G residue) | `settings-coverage.md` REQ-015/AC-020 (the dropped publish); `logging.md` AC-003/REQ-002 (the victims' assertions, unchanged); `user-management.md` REQ-008/INV-003 (item-B extension: the second last-admin property test's measured deadline) | `tests/eventbus_test_helpers.py`, `tests/property/usermanagement/test_usermanagement_properties.py` |
 
-Items C, D and F alter no externally observable behavior; they ride along by user decision. A is the ISSUE core. B is a test-harness defect (the specified invariant itself still holds). E is a real product-side defect in the logging feature's reconfiguration path (it mutates global loguru state it does not own) and is the only item that currently reddens CI's `tests` job. G is a test-side isolation defect (no `src/` change): it was opened from the item-E step's "residual flake" finding, which the E section explicitly recommended as a separate item rather than a widening of E.
+Items C, D and F alter no externally observable behavior; they ride along by user decision. A is the ISSUE core. B is a test-harness defect (the specified invariant itself still holds). E is a real product-side defect in the logging feature's reconfiguration path (it mutates global loguru state it does not own) and is the only item that currently reddens CI's `tests` job. G is a test-side isolation defect (no `src/` change): it was opened from the item-E step's "residual flake" finding, which the E section explicitly recommended as a separate item rather than a widening of E. H is likewise a test-side isolation defect (no `src/` change): the shared event bus was being shut down under the tests, so cross-feature publishes were silently dropped for every later test in the session; it also carries the item-B extension (the same measured-deadline policy applied to the second last-admin property test).
 
 **Scope extension (no reclassification).** Q-127 (answered) moved E and F from "recorded scope gap" to in-scope. The change type stays **ISSUE**: E fixes a deviation from specified observability without introducing new behavior (see §6.3, spec-compliance verdict COMPLIANT — no Spec Amendment needed), and C/D/F remain non-behavior chore items inside the same change. No todo-set or phase-matrix change results (the ISSUE path already runs Phases 1, 3, 4, 5, 6).
 
@@ -1452,3 +1453,50 @@ uv run pytest tests/unit/logging tests/acceptance/logging tests/integration/logg
 ```
 
 i.e. the `logging_coverage` family leaves sink state the new ownership tests assert on. CI runs the full suite, so this needs its own S4.2 item before Phase 5 can pass; fixing it is new behavior, not restructuring, so it is out of scope for a refactor pass.
+
+## Phase 4 (S4.2, item H) — full-suite pollution: the shared event bus was being shut down (2026-10-02)
+
+**Root cause.** `isolated_event_bus()` called `reset_event_bus()`, which **shuts down the instance it
+resets**. `EventBus.publish()` returns early once `self._shutdown` is set, so a shut-down bus drops
+every publish **silently** — no error, no event. After any test that used the old helper, the
+settings registry's `SettingChanged` publishes never reached the logging feature's AC-020
+subscription, so the logging reconfigure never ran: later logging sink tests lost their console sink
+(process-global handler-count assertions failed) or hung waiting for a dispatch that could never
+arrive. The defect is in the test helper, not in `src/`.
+
+**Fix.** `isolated_event_bus()` now **parks** the real shared instance instead of resetting it: it
+runs the block on a scratch `EventBus`, shuts the scratch bus down, and restores the parked shared
+instance. The shared bus is never shut down, so cross-feature publishes keep flowing for the whole
+session.
+
+**Commits.** `6c40147` (park the shared event bus) · `983fe2a` (measured `deadline=1000` on
+`tests/property/usermanagement/test_usermanagement_properties.py::test_inv_003_last_admin_invariant`).
+
+**Item-B extension.** `983fe2a` extends item B's Q-128 measured-deadline policy (already applied to
+`test_multi_role_invariants.py`) to the second last-admin property test, which surfaced the same
+`DeadlineExceeded` only once the suite stopped aborting early.
+
+**Family reproduction (logging + logging_coverage), before → after.**
+- before the fix: `1 failed, 50 passed, 2 errors`
+- after the fix, 3 consecutive runs: `53 passed in 11.20s` / `53 passed in 11.26s` / `53 passed in 10.91s`
+- order-dependence check (sessionmanagement groups before the logging groups): `106 passed in 18.65s`
+- eventbus groups: `31 passed in 4.28s` · `tests/property/usermanagement`: `7 passed in 10.87s`
+
+**Full-suite gate (`uv run pytest tests/ -q`), observed in this step.**
+- run 1: `639 passed, 1 skipped, 33 warnings in 173.38s`
+- run 2: `2 failed, 637 passed, 1 skipped, 33 warnings in 176.67s`
+- run 3: `639 passed, 1 skipped, 33 warnings in 191.23s`
+
+**Run-2 residue.** `tests/unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level`
+and `tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format`
+— both pass in isolation (`2 passed in 1.66s`) and neither file appears in
+`git diff --name-only origin/main...HEAD`, so this is a pre-existing order-dependent flake outside
+item H, not a regression introduced by it.
+
+**Before-state baseline (from the S4.3 pass, for comparison).** `7 failed, 631 passed, 1 skipped,
+1 error` on this branch (`9 failed, 630 passed` with the refactor stashed); `1 failed, 556 passed,
+1 skipped` on `origin/main`.
+
+**Ruff.** clean on both changed files (`uv run ruff check tests/eventbus_test_helpers.py tests/property/usermanagement/test_usermanagement_properties.py`).
+
+**No assertion was weakened, no test was deleted or skipped, and no `src/` file was touched by item H.**
