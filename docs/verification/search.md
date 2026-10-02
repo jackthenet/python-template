@@ -615,3 +615,17 @@ The two failures are the hypothesis-replayed pair above; no acceptance, contract
 - Two nodes fail deterministically **only** because this worktree's `.hypothesis` example DB replays them; with a fresh example DB they pass. Neither is a search-change regression (`test_inv_009_yaml_roundtrip` → pre-existing PyYAML round-trip defect in untouched code; `test_last_admin_invariant` → hypothesis deadline flake in a test added by `user-roles-permissions`).
 - No test or implementation file was modified in this step; nothing was fixed, weakened, deleted, or xfailed.
 - **Date:** 2026-10-02
+
+## Rebase onto main after PR #58 (2026-10-02)
+
+- New base: `e8dd2bc` (Merge pull request #58, issue/main-ci-green). The branch was rebuilt by cherry-picking the 30 search commits onto it; pre-rebase head kept as `backup/crosscut-search-prebase` (`8aa4c7d`).
+- Dropped commits (6) — content already on main or superseded:
+  - `1c729cf` — `uv.lock` sync byproduct of the old 0.5.0→0.6.0 bump.
+  - `841454c` — 0.5.0→0.6.0 version bump (main is at 0.5.1; re-bumped below).
+  - `8b3064c` — bandit `# nosec` sweep: 4 of its 5 files landed on main in `6ce0531`; only the `src/backend/search/service.py` part is re-added below.
+  - `b1e61ea`, `f25e2ec`, `e973821` — logging/settings test isolation (landed on main via PR #58).
+- Re-added: `fix(search): suppress bandit B101 false positive in get_search_service` (1 file, +1/-1).
+- Re-bump: `0.5.1 → 0.6.0` (commit `Bump version: 0.5.1 → 0.6.0`) + `chore: sync uv.lock with pyproject version`.
+- Conflicts: 2, both docs, resolved as a union of both sides (no test deleted or weakened) — `docs/verification/traceability.md` (main-ci-green rows + Search Matrix rows both kept) and `docs/workflow/PROBLEMS.md` (main's P-28..P-35 kept; the search entry renumbered **P-36** to avoid the duplicate P-28 id).
+- Gates after the rebase: `uv run ruff check .` → `All checks passed!`; `uv run bandit -r src/` → 0 issues (Low/Medium/High all 0); search-family smoke (`tests/{acceptance,unit,contract,integration,property}/search`) → `87 passed in 14.05s`.
+- Full suite / mypy / mkdocs not re-run here — they stay the Phase 5/6 gate.
