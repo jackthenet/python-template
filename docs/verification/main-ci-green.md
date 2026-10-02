@@ -995,3 +995,235 @@ uv run ruff format --check tests/property/usermanagement/test_multi_role_invaria
 ### Spec compliance (reference: §3 — no Spec Amendment)
 
 No behavior change: INV-003 / REQ-013 / REQ-008 and the strategy are untouched; only the harness's per-example tolerance is made explicit and machine-independent, per Q-128.
+
+## Phase 4 (S4.2, items C+D+F) — chore items (2026-10-02)
+
+Branch `issue/main-ci-green` @ `e3b6d1c`. Three non-behavior chore items, one commit each (`b52d032`, `772d9dc`, `dd27702`). Per Q-127 these are in scope as chore items inside the ISSUE; **no `src/` file, no test assertion, no `pyproject.toml` version, and no other workflow file was touched.** All three are non-behavior by the Phase Matrix DOCS/CHORE definition: C is import ordering + whitespace, D is a lockfile-only dependency bump, F is a CI job trigger.
+
+### Item C — three `I001` ruff errors (function-local import blocks)
+
+Before (whole repo — the CI lint command, `.github/workflows/lint.yml` runs exactly `uv run ruff check .`):
+
+```bash
+uv run ruff check . --output-format=concise
+```
+```text
+tests\acceptance\permissions\test_check_api.py:1008:5: I001 [*] Import block is un-sorted or un-formatted
+tests\acceptance\permissions\test_enforcement.py:222:5: I001 [*] Import block is un-sorted or un-formatted
+tests\contract\permissions\test_performance.py:37:5: I001 [*] Import block is un-sorted or un-formatted
+Found 3 errors.
+[*] 3 fixable with the `--fix` option.
+```
+
+Fix — scoped to exactly those three files (never repo-wide `--fix`, per P-6):
+
+```bash
+uv run ruff check --fix tests/acceptance/permissions/test_check_api.py tests/acceptance/permissions/test_enforcement.py tests/contract/permissions/test_performance.py
+# Found 3 errors (3 fixed, 0 remaining).
+uv run ruff format tests/acceptance/permissions/test_check_api.py tests/acceptance/permissions/test_enforcement.py tests/contract/permissions/test_performance.py
+# 1 file reformatted, 2 files left unchanged
+```
+
+After:
+
+```bash
+uv run ruff check .
+# All checks passed!
+```
+
+Files changed (`git diff --stat`):
+
+```text
+ tests/acceptance/permissions/test_check_api.py   |  3 +-
+ tests/acceptance/permissions/test_enforcement.py | 38 +++++++++++++-----------
+ tests/contract/permissions/test_performance.py   |  1 +
+ 3 files changed, 22 insertions(+), 20 deletions(-)
+```
+
+Diff eyeballed line by line — **only import ordering / blank lines / indentation**:
+
+- `test_check_api.py:1008` — `from backend.permissions import PermissionCatalog  # deferred: RED` moved from after the six `feature_actions` imports to its sorted position between `mail` and `sessionmanagement`; the surrounding blank line moved with it. Same seven imports, same `# deferred: RED` markers, same call order below (`usermanagement_actions(catalog)` first, etc.). Function-local imports are executed in place at call time, so re-ordering them inside the same block cannot change observable behavior — none of these modules register global side effects on import (they expose `register_actions(catalog)` callables that the test body calls explicitly).
+- `test_enforcement.py:222` — the `backend.permissions` block moved after `authentication_test_helpers` and before `backend.authentication` (isort order); the `backend.authentication` block is byte-identical.
+- `test_performance.py:37` — one blank line inserted between the `alembic` and `backend.permissions` import blocks (isort first-party/third-party separation).
+- The 38-line count in `test_enforcement.py` is **not** extra logic: 19 of those lines are the scoped `ruff format` re-wrapping the existing `BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset({...})` literal (the brace block is indented one level deeper). The nine permission strings, the `frozenset[str]` annotation and the assignment are unchanged — a whitespace-only reformat produced by the authorized scoped `ruff format` command, not a content edit.
+
+Gate (targeted — the full suite stays a Phase 5 gate):
+
+```bash
+uv run pytest tests/acceptance/permissions tests/contract/permissions -q
+# ................................                                         [100%]
+# 32 passed, 11 warnings in 2.13s
+```
+
+Commit: `b52d032 chore(lint): sort function-local import blocks flagged by ruff I001`.
+
+### Item D — pip-audit findings (urllib3, virtualenv)
+
+Before:
+
+```bash
+uv run pip-audit
+```
+```text
+Found 11 known vulnerabilities in 2 packages
+Name       Version ID              Fix Versions
+---------- ------- --------------- ------------
+urllib3    2.7.0   PYSEC-2026-4177 2.8.0
+urllib3    2.7.0   PYSEC-2026-4176 2.8.0
+urllib3    2.7.0   PYSEC-2026-4175 2.8.0
+virtualenv 21.3.3  PYSEC-2026-4011 21.7.12
+virtualenv 21.3.3  PYSEC-2026-4012 21.7.11
+virtualenv 21.3.3  PYSEC-2026-4014 21.7.12
+virtualenv 21.3.3  PYSEC-2026-4013 21.7.13
+virtualenv 21.3.3  PYSEC-2026-4011 21.7.12
+virtualenv 21.3.3  PYSEC-2026-4012 21.7.11
+virtualenv 21.3.3  PYSEC-2026-4013 21.7.13
+virtualenv 21.3.3  PYSEC-2026-4014 21.7.12
+
+Name            Skip Reason
+--------------- ------------------------------------------------------------------------------
+python-template Dependency not found on PyPI and could not be audited: python-template (0.5.0)
+```
+
+Fix (lockfile only — `pyproject.toml` untouched, so no dependency *spec* changed):
+
+```bash
+uv lock --upgrade-package urllib3 --upgrade-package virtualenv
+```
+```text
+Resolved 114 packages in 392ms
+Updated python-discovery v1.3.1 -> v1.6.1
+Updated urllib3 v2.7.0 -> v2.8.0
+Updated virtualenv v21.3.3 -> v21.14.3
+```
+
+Lockfile diff is version-only — `git diff --stat uv.lock` → `uv.lock | 20 ++++++++++----------` (10 insertions, 10 deletions), and the added-package query returns **nothing** (no package added or removed):
+
+```bash
+git diff uv.lock | grep -E '^\+name = '
+# (no output)
+git diff uv.lock | grep -E '^[-+](name|version) = '
+```
+```text
+-version = "1.3.1"
++version = "1.6.1"
+-version = "2.7.0"
++version = "2.8.0"
+-version = "21.3.3"
++version = "21.14.3"
+```
+
+**Three packages moved, not two — reported as required.** `python-discovery 1.3.1 → 1.6.1` is a *transitive* consequence of the virtualenv bump: `uv.lock` lists it as a dependency of `virtualenv` (`name = "virtualenv"` → `{ name = "distlib" }, { name = "filelock" }, { name = "packaging" }, { name = "platformdirs" }, { name = "python-discovery" }`), and virtualenv 21.14.3 requires a newer `python-discovery`. It is not an independently chosen upgrade, and nothing else in the 114-package graph moved.
+
+```bash
+uv sync --frozen
+```
+```text
+Uninstalled 3 packages in 98ms
+Installed 3 packages in 69ms
+ - python-discovery==1.3.1
+ + python-discovery==1.6.1
+ - urllib3==2.7.0
+ + urllib3==2.8.0
+ - virtualenv==21.3.3
+ + virtualenv==21.14.3
+```
+
+After — pip-audit is clean (the `python-template` skip line is pre-existing: the local project is not on PyPI, unchanged by this item):
+
+```bash
+uv run pip-audit
+```
+```text
+No known vulnerabilities found
+Name            Skip Reason
+--------------- ------------------------------------------------------------------------------
+python-template Dependency not found on PyPI and could not be audited: python-template (0.5.0)
+```
+
+No findings remain, so there is nothing left in or out of scope for D.
+
+```bash
+uv run deptry .
+# Scanning 78 files...
+# Success! No dependency issues found.
+```
+
+Targeted smoke of the affected areas (httpx/urllib3/SQLAlchemy/alembic and the pre-commit/virtualenv tooling path) — the full suite stays a Phase 5 gate:
+
+```bash
+uv run pytest tests/contract tests/integration -q
+# 67 passed, 22 warnings in 78.54s (0:01:18)
+```
+
+(The 22 warnings are the pre-existing SQLAlchemy `DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12` from `sqlalchemy/engine/default.py:952`, present before the bump.)
+
+No-behavior-delta argument: only patch/minor upgrades of two transitive libraries (plus one transitive of the second), no version constraint changed in `pyproject.toml`, no dependency added or removed, no API surface touched in `src/`. urllib3 2.8.0 and virtualenv 21.14.3 are drop-in within the existing constraints; the 67 contract/integration tests that exercise the HTTP and DB paths are GREEN, and deptry confirms the dependency declarations still match actual usage.
+
+Commit: `772d9dc chore(deps): upgrade urllib3 to 2.8.0 and virtualenv to 21.14.3 (pip-audit)`.
+
+### Item F — the `dependency-review` job can never pass on `push`
+
+Before: `.github/workflows/quality.yml` triggers on both `pull_request` and `push` to `main`, and the `dependency-review` job was unconditional — so every push to `main` ran `actions/dependency-review-action@v5` with no base/head ref pair. CI evidence (run `36894698244`, job `dependency-review`): *"Both a base ref and head ref must be provided … or by running a `pull_request`/`pull_request_target`/`merge_group` workflow"*. `gh api repos/jackthenet/python-template/branches/main/protection` → 404, i.e. **no branch protection on `main` requires this job**, so skipping it on `push` cannot block a merge.
+
+Fix — a **job-level** `if:` (sibling of `runs-on`, not a step-level condition), rest of the workflow untouched:
+
+```diff
+   dependency-review:
++    # dependency-review-action needs a base/head ref pair, which only exists for
++    # pull_request / pull_request_target / merge_group events. The workflow also
++    # triggers on push to main, where the action always fails, so the job is
++    # skipped on push (no branch protection on main depends on it).
++    if: github.event_name != 'push'
+     runs-on: ubuntu-latest
+     steps:
+```
+
+Validation:
+
+```bash
+uv run python -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/quality.yml')); print('YAML OK'); print('dependency-review job-level if:', d['jobs']['dependency-review'].get('if')); print('steps:', len(d['jobs']['dependency-review']['steps']))"
+```
+```text
+YAML OK
+dependency-review job-level if: github.event_name != 'push'
+steps: 5
+```
+
+The parsed `if:` sits on the job object (`jobs['dependency-review']['if']`), which confirms it is job-level rather than a step condition, and the job still has its 5 steps. `actionlint` is **not installed locally** (`command -v actionlint` → not found), so validation is the YAML parse plus the parsed-structure check above and a manual read of the placement; no other job in the file was modified (`git diff` shows a single 5-line hunk).
+
+Which CI runs change: **push-to-`main` runs of `Quality` no longer execute `dependency-review`** (they previously always failed it); `pull_request` runs are byte-identical in behavior, and every other job in `quality.yml` (`type-check`, `security`, `coverage`, `dependencies`, `docs`, `migrations`) is unaffected. The dependency gate remains enforced where it can work — on PRs.
+
+Commit: `dd27702 chore(ci): run dependency-review only on pull_request events`.
+
+### Cross-cutting gate after C+D+F
+
+```bash
+uv run ruff check .
+# All checks passed!
+```
+
+That is the CI lint command (`lint.yml` → `run: uv run ruff check .`), so the lint job's three pre-existing errors are gone.
+
+Item C's targeted group re-run **after** the item D environment change (the dependency bump came after C's gate, so the ordering is checked, not assumed):
+
+```bash
+uv run pytest tests/acceptance/permissions tests/contract/permissions -q
+# 32 passed, 11 warnings in 2.10s
+```
+
+Identical to the pre-bump run — the import-order change and the dependency bump are independent and both GREEN together.
+
+**Observation (not acted on, out of scope):** `uv run ruff format --check .` reports `72 files would be reformatted, 370 files already formatted` — pre-existing repo-wide formatting drift from the dependabot ruff bump. It is **not** a CI gate (`lint.yml` runs `ruff check` only; `quality.yml` has no format check), and none of the three files touched by item C appear in that list. The only place it surfaces locally is the `ruff-format` pre-commit hook (`.pre-commit-config.yaml`), which runs on staged files only — so touching any of those 72 files in a future change will silently reformat it. A repo-wide `ruff format` sweep would touch 72 files and is a separate, explicit change (AGENTS.md: repo-wide fix/format is not a task step). Flagged for the Phase 6 review.
+
+### Files changed by C+D+F (complete list)
+
+```text
+ tests/acceptance/permissions/test_check_api.py     (import order)
+ tests/acceptance/permissions/test_enforcement.py   (import order + whitespace reformat of one frozenset literal)
+ tests/contract/permissions/test_performance.py     (one blank line between import blocks)
+ uv.lock                                            (3 version lines: urllib3, virtualenv, python-discovery)
+ .github/workflows/quality.yml                      (job-level if: on dependency-review)
+```
+
+`src/`, `pyproject.toml`, all other test files, and all other workflows are untouched. No test was weakened, deleted or altered in assertion content.
