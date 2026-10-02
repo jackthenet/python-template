@@ -295,3 +295,98 @@ $ grep -n "Dependency Smoke-Test" .agents/skills/specify/SKILL.md
 ```
 
 `uv run ruff check .` → `All checks passed!` (unchanged from the S5.4 gate). Files touched by S5.5: `AGENTS.md`, `.agents/skills/git/SKILL.md`, `.agents/skills/specify/SKILL.md`, this record, `docs/workflow/PROBLEMS.md` (P-38) — still strictly the Scope-C list.
+
+## Review (Phase 6)
+
+- **Date:** 2026-10-03
+- **Steps:** S6.1 (review vs. normative basis) + S6.2 (traceability + boundaries) + S6.3 (review report)
+- **Change type:** DOCS/CHORE — the normative basis is the **Scope record above** (Scope A–D + Follow-ups). No spec, no `REQ-XXX`/`AC-XXX`, so traceability is the referential-integrity gate (Phase 5 gate 3), not a per-REQ matrix update.
+- **Reviewed state (bounded):** the FINAL content of the 14 paths in `git diff main --name-status -M` at `331edcc..d374418`. Phase 5 evidence was **read, not re-run**; no test suite re-run (P-27).
+
+### Review checks
+
+| # | Check | Result |
+|---|---|---|
+| R1 | No behavior delta | **PASS** |
+| R2 | Scope conformance | **PASS** (one recorded addition) |
+| R3 | Internal consistency of the new material | **PASS with findings** (F-5, F-6, F-7) |
+| R4 | Contradiction hunt (old behaviour) | **PASS** (F-9 is a framing nit, not a contradiction) |
+| R5 | Templates usable as written | **PASS** (F-6) |
+| R6 | Deferred items honest | **PASS** (F-10 noted) |
+| R7 | Acceptance tests not weakened/deleted | **PASS** (n/a — none exist for this type, none changed) |
+
+**R1 — no behavior delta: PASS.** `git diff main --name-status -M` lists 14 paths, every one a `.md`; `AI_Questions.md → docs/questions/archive-AI_Questions.md` is `R100` (pure rename, content unchanged). No `src/`, `tests/`, `scripts/`, `.github/`, `migrations/`, `userdocs/`, `pyproject.toml` or `uv.lock` path. Matches the Phase 5 gate-1 evidence, and the unchanged lint / mypy / mkdocs / suite results (gates 2, 5, 6, 7) are the behavioral proof.
+
+**R2 — scope conformance: PASS.** Every Scope D item is present: 1 `docs/todo/template.md`, 2 `docs/questions/template.md`, 3 the `R100` rename, 4 `AGENTS.md`, 5 `specify`, 6 `git`, 7 the five other skills (decompose / test / implement / verify / review), 8 `docs/workflow/EXAMPLE.md`, 9 this record. Nothing in the scope is missing, and no scope item was dropped or silently narrowed. The one path outside the Scope D list is `docs/workflow/PROBLEMS.md` (the P-38 entry), recorded in "Findings F-1..F-4 — resolved (S5.5)" ("Files touched by S5.5: … `docs/workflow/PROBLEMS.md` (P-38)"); the findings-resolution subsection itself is recorded in the same file. Accepted — see F-8.
+
+**R3 — internal consistency of the new material: PASS with findings.** Consistent across all nine locations (Workflow Diagram `AGENTS.md:204-222`, Atomic Steps table `:322-323`, Phase Matrix `:190-191`, Skill-to-Phase `:295-296`, the Phase P section `:122-162`, Todo Tracking `:400-412`, State Machine `:618-622`, Prohibitions/Obligations `:651-660` / `:667-684`, `specify/SKILL.md`, `git/SKILL.md`):
+
+- **Step numbering and names** — `P.1 Frame → P.2 Interrogate → P.3 Answer → P.4 Draft → P.5 Verify self-consistency ◆ READY → S1.4` everywhere; the `S1.1/S1.2/S1.3 → P.2/P.4/P.5` rename is stated once in each of the two places that need it (`AGENTS.md:158`, `specify:14`) and no step is still numbered `S1.1`–`S1.3`.
+- **Ownership** — P.1 and P.3 = orchestrator, P.2/P.4/P.5/S1.4 = one synchronous subagent each: diagram `[O]`/`[S]` markers (`:206-218`), the Phase P owner column (`:141-145`), `:286`, `:318`, `:346`, `specify:46`. F-1's fix (the P.4 worktree is created by the **P.4 step subagent**) now agrees with `git/SKILL.md:23` and `:77`.
+- **Where each artifact is written and committed** — `:128-135` (artifacts table) = `:98` = `specify:66` = `git/SKILL.md:63-71`; the spec / verification record land on the change branch at P.4 (`:133-134`, `:144`). Exception: the post-P.4 TODO status advances — F-5.
+- **READY gate definition** — identical in all four places: `:147` (TODO `Status: READY` + every question `ANSWERED` + the P.4 artifact exists) = `:411` = `:622` (`PREPARED`) = `specify:170`; the per-type entry points match the Phase Matrix (`:151-156` vs `:191`) and the todo status order (`:412`).
+- **Worktree creation point** — P.4 in every mention (`:98`, `:144`, `:448`, `git/SKILL.md:13`/`:75-88`, `specify:81`/`:113`/`:167`); `git/SKILL.md:13` explicitly denies creation at Phase 0/Phase 1.
+- **"At most one `in_progress` per change"** — `:394`, `:400`, `:409`, `git/SKILL.md` Todo section; the old global "exactly one" wording survives nowhere.
+
+**R4 — contradiction hunt: PASS.** No live sentence still says the workflow stops at a human gate, that Phase 1 interrogates and waits for the user, that a worktree exists before P.4, or that questions go in a central file. Re-run on the final state:
+
+```text
+$ grep -rnE "stops the workflow|workflow stops|single entry point|central question file|AI_Questions" \
+    AGENTS.md .agents/skills/*/SKILL.md docs/todo/template.md docs/questions/template.md docs/workflow/EXAMPLE.md
+AGENTS.md:168: … **Phase P (PREPARE) is the single entry point for all types** …
+AGENTS.md:370: - **Central file retired.** … archived at `docs/questions/archive-AI_Questions.md` …
+AGENTS.md:658: - Record questions in a central question file — questions go in `docs/questions/<name>.md` …
+docs/questions/template.md:3: … It replaces the retired central `AI_Questions.md` (archived at …)
+```
+
+Every hit is the NEW semantics: `:168` names Phase P as the entry point, `:658` is the prohibition against the central file, `:370`/`template:3` are archive pointers. The ⏸ legend is now per-change (`:202` "the **change** stops until answered"), the only "stops" left is the scheduler's own stop condition (`:391` "It stops only when every in-flight change is WAITING **and** no prepared change is READY"), and `:369` says explicitly "the **workflow** does not stop".
+
+**R5 — templates usable as written: PASS.** Status vocabularies match the places that reference them: TODO `PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED` (`docs/todo/template.md:7`) = `specify:169`; question-file `OPEN | ALL ANSWERED` (`docs/questions/template.md:9`) = `specify:67` and `EXAMPLE.md:125`/`:187`; entry `PENDING | ANSWERED` (`template:22`/`:24`) = `AGENTS.md:147`/`:411`/`:622` and the cleared-gate test in `git/SKILL.md:100`. Entry fields (Step / Why needed / Context / Question / Answer / Date / Status / Incorporated, `template:18-25`) = `AGENTS.md:363` and Obligation 14 (`:680`). Headings `## Preparation questions (P.2)` / `## Late questions (Phases 2–6)` (`template:28`/`:32`) = the wording the five phase skills now point at. The Prep-log table (`docs/todo/template.md:37-44`) has exactly the P.1–P.5 rows the Phase P table defines. Gap: the three post-READY statuses are never assigned to a step — F-6.
+
+**R6 — deferred items honest: PASS.** The Follow-ups list (`:78-80`) names exactly three deferrals, and none is required for the seven acceptance points: the archived-Q&A split is a historical-record nicety the workflow never reads; the CI path trigger is unnecessary because `scripts/check_traceability.py` scans `docs/specs/` + `docs/verification/traceability.md` + `tests/` (Phase 5 gate 3 PASSes with the new folders present) and `mkdocs` serves `userdocs/` (gate 5 PASS); `.pi/workflows/spec-tdd.workflow.ts` is an optional driver, not the normative protocol — `AGENTS.md` and the skills carry Phase P end to end, which is what the seven points depend on. Noted (not a finding): that script is now stale against the new protocol — F-10.
+
+**R7 — acceptance tests: PASS (n/a).** No `tests/` path appears in the diff; nothing was added, weakened, converted or deleted. The suite result is identical to `main` (727 passed, 1 pre-existing platform skip).
+
+### Acceptance signal (the user's stated goal)
+
+| # | Point | Where it is delivered | Citation |
+|---|---|---|---|
+| 1 | A TODO template exists | `docs/todo/template.md` (new, 44 lines): status enum, type, dependencies, scope, acceptance signal, Prep log | `docs/todo/template.md:1`, `:7`, `:13`, `:34`, `:37` |
+| 2 | Multiple TODO files are created from it and stored in a `todo` folder | P.1 creates `docs/todo/<name>.md` from the template on `main`; any number of changes may be prepared | `AGENTS.md:130`, `:141`, `:160-162`; `specify/SKILL.md:66`, `:109`; `git/SKILL.md:63-71`; example file `docs/workflow/EXAMPLE.md:65` |
+| 3 | Each TODO file has its own separate set of questions | The TODO file names its question file; one question file per change | `docs/todo/template.md:10`; `AGENTS.md:131`, `:363`; `docs/questions/template.md:1` |
+| 4 | Questions are answered per TODO file; question files live in a `questions` folder, one per TODO/spec, replacing the central file | P.2 records, P.3 answers in `docs/questions/<name>.md`; the central file is retired (archived by `git mv`, `R100`) and recording questions centrally is prohibited | `AGENTS.md:142-143`, `:361-370`, `:658`, `:680`; `docs/questions/template.md:1`, `:9`, `:28`, `:32`; `docs/questions/archive-AI_Questions.md` |
+| 5 | The normal workflow starts only after all TODOs/specs are prepared and their questions answered | The ◆ READY prep gate + the `PREPARED` state + the prohibition + the Phase P todo completion rule + the phase skills' "Prepared first" precondition | `AGENTS.md:147`, `:411`, `:622`, `:655`; `specify/SKILL.md:170`, `:211`; `test/SKILL.md:33`; `implement/SKILL.md:34` |
+| 6 | While a change waits for PR approval or other human interaction, work continues on other TODOs that need none | The non-blocking legend + the "Multi-change scheduling (never idle)" section + the per-skill WAITING rule + the scheduling example | `AGENTS.md:202`, `:288`, `:368`, `:388-394`, `:656`; `git/SKILL.md:102`; `review/SKILL.md:44`; `docs/workflow/EXAMPLE.md:201-214` |
+| 7 | Once a blocked TODO can proceed, its normal workflow continues | The Resume rule + the git skill's cleared-gate detection (`git fetch` + `git merge-base --is-ancestor`) + the fresh-subagent relaunch | `AGENTS.md:393`, `:288`; `git/SKILL.md:90-102`; `specify/SKILL.md:50` |
+| — | Overall goal: front-load ALL human interaction so the workflow runs autonomously, with multiple TODOs in parallel | The Phase P section's purpose statement + the unbounded-in-flight rule + the per-change todo sets | `AGENTS.md:122-124`, `:160-162`, `:390`, `:400`; `specify/SKILL.md:12`; `docs/workflow/EXAMPLE.md:61` |
+
+### Findings
+
+**F-5 — the READY status advance has no owner and no commit target (OPEN, must resolve before S6.4).** The gate signal is defined as a TODO-file state on `main`, but no step is assigned to write it there:
+
+- `specify/SKILL.md:211` (Phase P Definition of Done): "The TODO file exists **on `main`** with `Status: READY`"; `specify/SKILL.md:196` (Outputs): "committed to `main`, its `Status:` advanced to **READY**".
+- `specify/SKILL.md:46` puts **P.5** (the step the Rules at `:169` assign the READY advance to — "READY (P.5 gate)") **inside the change worktree**, whose HEAD is the change branch — and P.5's own Inputs/Outputs/Done-criteria (`:88-90`) never mention the TODO status at all.
+- `git/SKILL.md:63` scopes the direct-to-`main` planning-artifact commit to "**(P.1–P.3)**" ("P.1 creates them, P.3 records the answers"), so no documented operation commits a post-P.3 status change.
+- Consequence: if P.5 edits the TODO file in the worktree, `Status: READY` reaches `main` only when the change PR merges — i.e. after the workflow already ran — so the gate at `AGENTS.md:147` is unobservable in the backlog on `main` that `AGENTS.md:135` says must be browsable there; if instead the orchestrator commits it to `main`, that write is undocumented.
+
+Minimal fix (documentation only, one or two sentences): state who advances the TODO `Status:` after P.3 (READY at the P.5 gate, then IN-WORKFLOW / WAITING / MERGED) and where it is committed — e.g. "the orchestrator advances the TODO `Status:` in the **primary worktree** and commits it to `main` as a planning-artifact commit (the `git` skill's planning-artifact operation extends to P.5 and to the workflow status changes); the change branch's copy is never updated" — then extend `git/SKILL.md:63`'s heading from "(P.1–P.3)" accordingly and add the status advance to `specify` P.5's Outputs. This is the same class as F-1/F-4, which this change resolved in-place.
+
+**F-6 — the post-READY TODO statuses have no producer (accepted, fix with F-5).** `IN-WORKFLOW`, `WAITING` and `MERGED` are declared in `docs/todo/template.md:7` and `specify/SKILL.md:169`, but `AGENTS.md` never assigns them: the scheduling section (`:388-394`) treats WAITING as a scheduler state and a todo `activeForm`, not as a TODO-file write. Accepted as a completeness gap that F-5's fix closes in the same sentence; nothing in the seven acceptance points depends on the backlog showing those three states.
+
+**F-7 — three unqualified wording residuals (accepted, minor).** (a) `AGENTS.md:99` "**Phase 1 (approve)**" and the todo example at `:425` "#2 Phase 1: Approve" still use the F-2 label the fix retired in the tables (canonical name "1 Specify", `:191`/`:221`/`:323`, Skill-to-Phase "SPECIFY (approve only)" `:296`) — the phase number and the single step (S1.4) are unambiguous, so no step can be misread. (b) `AGENTS.md:338` "the **change worktree path** (all commands run there)" is unqualified for P.1–P.3, which run in the primary worktree (`specify:46`, and `EXAMPLE.md:173-176` states "WORKTREE: none yet"). (c) `AGENTS.md:145` P.5 "Done when: the spec passes the checklist" omits the Dependency Smoke-Test its own Objective requires (the F-3 fix bound it in `specify:88`/`:90`), and its spec wording says nothing about what P.5 checks for ISSUE/REFACTOR/DOCS-CHORE (the skill routes those at P.4 only — `specify:121` ISSUE, `:133` REFACTOR, `:139` DOCS/CHORE).
+
+**F-8 — the Scope D list under-reports one path (accepted).** Scope D is headed "Files this change touches (and ONLY these)" and lists 9 items; the final diff has a 10th path, `docs/workflow/PROBLEMS.md` (P-38). The addition is recorded in the same file (the S5.5 paragraph), the Problem Log write is mandated by AGENTS.md Obligation 16, and `docs/workflow/` is a process record with no behavioral surface — accepted as recorded, no re-scope needed.
+
+**F-9 — "no human input left" is stronger than the mechanism (accepted).** `AGENTS.md:124` ("the only human actions left are merging the spec PR (S1.4) and the change PR (S6.4)") and `specify/SKILL.md:12` ("runs **without human input**") sit next to the documented late-question path (`docs/questions/template.md:32`, the `BLOCKED-USER` trigger in all five phase skills, `AGENTS.md:367`/`:369`). Operationally consistent — a late question makes the change WAITING and the workflow keeps moving — so the sentence reads as the goal, not a prohibition; a qualifier ("no *scheduled* human input; late questions stay non-blocking") would make it exact.
+
+**F-10 — `.pi/workflows/spec-tdd.workflow.ts` is now stale (accepted, already a follow-up).** The script still describes the old Phase 1 ("creating the feature branch from main, adversarially interrogating … writing the specification", `.pi/workflows/spec-tdd.workflow.ts:65`) and has no prep node. It is an optional driver, not the normative protocol, and the deferral is recorded at `:80`.
+
+### Pre-existing (out of scope, unchanged)
+
+The Workflow Diagram's S4.1–S4.5 numbering vs. the Atomic Steps table's S4.1–S4.4 (and the same drift in `implement/SKILL.md:31`) predates this change and is recorded under "Findings (out of scope)" above. Likewise the Phase Execution intro's unqualified "Every workflow step is executed by a new subagent … never executes a step itself" (`AGENTS.md:305`) vs. the orchestrator-owned P.1/P.3 — the same tension existed with the old Phase 0/S0.1, and the exceptions are stated at `:286`, `:318`, `:346`.
+
+### Verdict
+
+The change delivers its normative basis exactly: Scope A–D are all present in the final state, nothing outside the recorded scope changed behavior, the seven acceptance points are each delivered and cited, and the deferred items are honestly deferred. One documentation defect (F-5) leaves the READY gate's key signal without an owner or commit target — the same class as F-1/F-4, which this change fixed in place.
+
+REVIEW REPORT: NOT CLEAN (findings: F-5 open; F-6..F-10 accepted)
