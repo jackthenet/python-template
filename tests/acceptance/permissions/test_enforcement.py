@@ -157,17 +157,19 @@ def test_enforced_method_denies_without_permission(tmp_path: Path) -> None:
 # The bootstrap system set (spec Section 3, D10): the default system principal
 # permission set. It covers the internal login flow (password verification +
 # user read) so login stays reachable for zero-permission users.
-BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset({
-    "usermanagement.get_user",
-    "usermanagement.verify_password",
-    "usermanagement.change_password",
-    "settings.register",
-    "settings.register_feature",
-    "mail.send_email",
-    "mail.send_password_reset_email",
-    "mail.send_email_verification_email",
-    "sessionmanagement.cleanup_expired",
-})
+BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset(
+    {
+        "usermanagement.get_user",
+        "usermanagement.verify_password",
+        "usermanagement.change_password",
+        "settings.register",
+        "settings.register_feature",
+        "mail.send_email",
+        "mail.send_password_reset_email",
+        "mail.send_email_verification_email",
+        "sessionmanagement.cleanup_expired",
+    }
+)
 
 
 class _SpyPermissionChecker:
@@ -220,13 +222,6 @@ def test_exempt_login_no_check(tmp_path: Path) -> None:
     user-management/mail calls are evaluated against the bootstrap system set).
     """
     from authentication_test_helpers import FakeWebAuthnProvider, db_url
-    from backend.permissions import (
-        MemoryGrantRepository,
-        MemoryRoleRepository,
-        MemorySystemPrincipalRepository,
-        PermissionCatalog,
-        PermissionService,
-    )
 
     from backend.authentication import (
         AuthService,
@@ -234,6 +229,13 @@ def test_exempt_login_no_check(tmp_path: Path) -> None:
         SqlitePasswordResetRepository,
         SqliteSessionRepository,
         SqliteWebAuthnCredentialRepository,
+    )
+    from backend.permissions import (
+        MemoryGrantRepository,
+        MemoryRoleRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        PermissionService,
     )
 
     # A zero-permission user (the 'user' role starts with zero permissions,
