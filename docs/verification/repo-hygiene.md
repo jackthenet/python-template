@@ -309,3 +309,41 @@ Normative basis = this scope record (§Scope summary, §Exact file list, Q-129/Q
 - **F-9** Boundaries: 63 changed files = the 54 Python files + the 9 scoped files (nothing else); `git diff --ignore-all-space --stat src tests migrations` is empty (formatting-only); `pyproject.toml` diff is 3 lines (`extend-exclude` in `[tool.ruff]`, no shadowed/duplicated ruff key, no lint rule weakened); no `src/` behavior, no new dependency, no new layer; both workflows parse as YAML, jobs `lint` / `spec-validation,traceability,tests` (no name collision), `uv sync --only-group dev` present in every job, no `continue-on-error` on the new step/job | Info | Resolved — no finding.
 
 **Gate:** no Blocking finding; 4 Non-blocking (F-1..F-4, three accepted with reason, F-3 open for S6.3) + 4 Info. Normative-basis compliance confirmed: the change implements exactly the scoped items 1–8, no more, no less; no test or `src/` behavior changed.
+
+## Phase 6 (S6.3) — review report (2026-10-02)
+
+S6.2 (traceability + boundaries) is folded into this step under the DOCS/CHORE light tier: the change adds no code and no requirement, so the S6.2 check is a three-item confirmation over the final state, not a separate subagent (Phase 5 already proved the gate CLEAN; S6.1 already reviewed the normative basis).
+
+**Findings F-1..F-9 — final statuses** (details in §Phase 6 (S6.1)):
+
+| F | Severity | Final status |
+|---|---|---|
+| F-1 `lint.yml` `paths` omits `migrations/**`, `scripts/**` | Non-blocking | Accepted (follow-up) |
+| F-2 `spec-validation.yml` `paths` omits the drift check itself | Non-blocking | Accepted (follow-up) |
+| F-3 Status vocabulary: §Invariants declared 5 values vs 6 accepted | Non-blocking | **Resolved** — one-line edit adding `N/A` to §Invariants; the three sources (matrix §Invariants, AGENTS.md line 596, `DECLARED_STATUSES`) now agree |
+| F-4 Assertion (3) checks bare `test_*` tokens only (19 path-form refs unchecked) | Non-blocking | Accepted (follow-up) |
+| F-5 REQ/AC ID spaces overlap across specs (71/84 IDs) | Non-blocking | Accepted (follow-up) |
+| F-6 Convention paragraph placement (blockquote above §Invariants) | Info | Accepted |
+| F-7 Single `RED` row lacks change name/date | Info | Accepted (follow-up) |
+| F-8 `.gitignore` root-anchored entries make older `data/db/` entries redundant | Info | Accepted |
+| F-9 Boundaries / workflows / `pyproject.toml` conformance | Info | Resolved (no finding) |
+
+**F-3 resolution evidence:** `uv run python scripts/check_traceability.py` → `Traceability: PASS (746 matrix rows, 129 spec IDs, 713 test functions)`, `exit=0`; `uv run ruff format --check .` → `323 files already formatted` (0 pending); `uv run ruff check .` → `All checks passed!`. Diff is 1 line (`git diff --stat` → `1 insertion(+), 1 deletion(-)`); no matrix row, no rewrap, no reformat.
+
+**S6.2 — traceability + boundaries:**
+- (a) **No new normative requirement** is introduced (Phase 5 §"Spec coverage: n/a for DOCS/CHORE"; no approved spec covers `.gitignore`, formatting, or the matrix format), so **no new traceability rows are required**. The matrix stays at 746 rows / 129 spec IDs / 713 test functions, and the new CI check keeps it referentially intact.
+- (b) **Boundaries intact:** `scripts/check_traceability.py` is repo tooling (not a feature, no `src/` import, not imported by any feature); `git diff ebbb233..HEAD -- src/` adds **zero** import lines, so no cross-feature dependency was added; no new layer or dependency; non-`.py` paths changed are only the 8 scoped/record files.
+- (c) **No acceptance test weakened, deleted, or softened:** `git diff ebbb233..HEAD -- tests/ | grep -E '^-' | grep -cE 'assert|def test_'` → **50** removed lines (21 files, max 10 in `tests/acceptance/sessionmanagement/test_revocation.py`), with **50** matching added lines — every one a formatting re-wrap. Proof beyond the spot-check: all **40** changed test files are **AST-identical** to base `ebbb233` (`ast.dump` equality, 0 diffs), so no assertion, test function, or marker changed.
+
+**REVIEW: CLEAN** — no Blocking finding; F-3 resolved in this step; F-1/F-2/F-4/F-5/F-7 accepted with reason; F-6/F-8/F-9 info.
+
+**Change complete: yes** — DOCS/CHORE Review Gate criteria hold: no behavior, test, or source-behavior change beyond the scoped non-behavior changes (Phase 5: 727 passed / 1 skipped / 0 failed, identical to baseline; 53/54 sources AST-identical, 1 docstring-whitespace-only); no acceptance test weakened or deleted; feature boundaries and architecture rules respected; every finding resolved or accepted.
+
+**Deliberate follow-ups (left open, out of scope):**
+- F-5 — REQ/AC ID spaces overlap across features (71 of 84 IDs), so coverage/dangling checks are cross-feature; per-section scoping is a future change.
+- F-1 / F-2 — the two workflow `paths` filters do not cover `migrations/**`, `scripts/**`, or the drift check itself.
+- F-7 — the single `RED` row (line 400) lacks the change name/date the convention describes; rewriting existing rows was out of scope.
+
+**Notes for the after-workflow-optimization (accepted by Phase 5, carried here):**
+1. `ruff format` rewrote `except (A, B, C):` → `except A, B, C:` at `src/backend/mail/transport.py:89` — legal under PEP 758 on `requires-python >=3.14` and AST-identical, but it breaks any pre-3.14 parser over that file. Accepted (project is 3.14-only).
+2. The S4.2 evidence plan's `git diff --ignore-all-space` proof was wrong for a no-behavior claim; it was replaced by `ast.dump` equality (used in S5.1 and again in this step). Fix the verify skill's formatting-sweep proof recipe.
