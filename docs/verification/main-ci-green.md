@@ -10,16 +10,20 @@
 - **Worktree:** `C:/workspace/active-projects/python-template_kopie-worktrees/issue/main-ci-green`
 - **Why this change exists:** `main`'s CI is red after three merged dependabot PRs (#55 lint-and-types, #56 test-tooling, #57 runtime-core). The user decided to fix `main` in one dedicated change before PR #54 (crosscut/search) merges into it.
 
-### Scope composition (user-approved four items)
+### Scope composition (six items — extended by Q-127, answered 2026-10-02)
 
-| Item | Nature | Classification inside this change |
-|---|---|---|
-| **A** | settings YAML round-trip loses `'\x85'` (NEL) | **the defect that makes this an ISSUE** (deviation from `docs/specs/settings.md` INV-009) |
-| **B** | hypothesis `DeadlineExceeded` in `test_last_admin_invariant` | test-infrastructure defect (no product-behavior deviation — see "Defect confirmation B / Classification note") |
-| **C** | 3 ruff `I001` errors on `main` | non-behavior **chore** riding along (user decision) |
-| **D** | pip-audit CVEs in two transitive dev dependencies | non-behavior **chore** riding along (user decision) |
+| Item | Nature | Type | Affected spec IDs | Expected files |
+|---|---|---|---|---|
+| **A** | settings YAML round-trip loses `'\x85'` (NEL) | **defect** — the ISSUE core | `settings.md` INV-009, REQ-022, AC-030; `settings-coverage.md` REQ-009/010/011, INV-002 | `src/backend/settings/repository.py` |
+| **B** | hypothesis `DeadlineExceeded` in `test_last_admin_invariant` | **defect** (test-harness; no product-behavior deviation) | `user-roles-permissions.md` INV-003, REQ-013, AC-015/036; `user-management.md` REQ-008, AC-017..019 | `tests/property/usermanagement/test_multi_role_invariants.py` |
+| **C** | 3 ruff `I001` errors on `main` | **chore** (non-behavior) | none | `tests/acceptance/permissions/test_check_api.py`, `tests/acceptance/permissions/test_enforcement.py`, `tests/contract/permissions/test_performance.py` |
+| **D** | pip-audit CVEs in two transitive dev dependencies | **chore** (non-behavior) | none | `uv.lock` |
+| **E** | the logging feature's runtime reconfigure deletes loguru sinks it does not own (the actual CI `tests`-job failure) | **defect** (feature lifecycle / test isolation) | `logging.md` REQ-001/002/003, AC-001/002/004/005, INV-001, EDGE-005; `settings-coverage.md` REQ-014/015, AC-019/020 | `src/backend/logging/_setup.py`, `tests/conftest.py`, `tests/logging_test_helpers.py`, `tests/settings_test_helpers.py` |
+| **F** | `dependency-review` job runs on `push` and fails by construction | **chore** (CI config, non-behavior) | none | `.github/workflows/quality.yml` |
 
-Items C and D alter no externally observable behavior; they ride along by user decision. A is the ISSUE core. B is a test-harness defect (the specified invariant itself still holds).
+Items C, D and F alter no externally observable behavior; they ride along by user decision. A is the ISSUE core. B is a test-harness defect (the specified invariant itself still holds). E is a real product-side defect in the logging feature's reconfiguration path (it mutates global loguru state it does not own) and is the only item that currently reddens CI's `tests` job.
+
+**Scope extension (no reclassification).** Q-127 (answered) moved E and F from "recorded scope gap" to in-scope. The change type stays **ISSUE**: E fixes a deviation from specified observability without introducing new behavior (see §6.3, spec-compliance verdict COMPLIANT — no Spec Amendment needed), and C/D/F remain non-behavior chore items inside the same change. No todo-set or phase-matrix change results (the ISSUE path already runs Phases 1, 3, 4, 5, 6).
 
 ---
 
@@ -44,7 +48,7 @@ uv run pytest tests/property/usermanagement/test_multi_role_invariants.py::test_
                                                # seed=101 → 355.59 ms, seed=2024 → 251.62 ms
 ```
 
-Both nodes **pass** in CI (see §5, item E) — they are local-side defects; the CI test-job failures are a different family (logging interception).
+Both nodes **pass** in CI (see §6) — they are local-side defects; the CI test-job failures are a different family (logging sink pollution, item E).
 
 ---
 
@@ -81,9 +85,30 @@ Both nodes **pass** in CI (see §5, item E) — they are local-side defects; the
 
 > Note: the orchestrator's node path `tests/acceptance/usermanagement/test_multi_role_invariants.py` is actually **`tests/property/usermanagement/test_multi_role_invariants.py`** (property category). `docs/specs/user-roles-permissions.md:725` binds `INV-003` to `tests/property/permissions/test_invariants.py::test_last_admin_invariant`; the implemented copies live in `tests/property/usermanagement/test_multi_role_invariants.py` and `tests/property/usermanagement/test_usermanagement_properties.py::test_inv_003_last_admin_invariant` — a traceability-path drift to fix in Phase 5 (S5.3), not a behavior issue.
 
-### Items C and D
+### Item E — from `docs/specs/logging.md`
 
-No REQ/AC is affected: C is a lint-only import-ordering change in three test files, D is a dependency-manifest change. Both are non-behavior (chore) scope.
+Quoted verbatim (`docs/specs/logging.md`):
+
+- **REQ-001** (line 66): *"The logging feature provides a `setup_logger()` function that configures loguru with a console sink (stderr, colorized, backtrace enabled) and a rotating file sink (UTF-8, enqueued, backtrace enabled, `diagnose=False`)."*
+- **REQ-002** (67): *"`setup_logger()` is idempotent: subsequent calls are no-ops. Thread-safe via a `threading.Event`."*
+- **REQ-003** (68): *"The logging feature provides an `_InterceptHandler` that routes stdlib `logging` records into loguru sinks, skipping frozen importlib bootstrap frames."*
+- **AC-001** (82): *"**Given** a fresh Python environment, **When** `setup_logger()` is called, **Then** loguru has a console sink on stderr with colorize and backtrace enabled, **And** a rotating file sink with UTF-8 encoding, enqueue, backtrace, and `diagnose=False`."*
+- **AC-002** (83): *"**Given** `setup_logger()` has been called once, **When** it is called again, **Then** the second call is a no-op and no new sinks are added."*
+- **AC-004** (85): *"**Given** a stdlib `logging` record emitted by a third-party library, **When** the record passes through `_InterceptHandler`, **Then** the record is routed into loguru sinks with the correct level and message."*
+- **AC-005** (86): *"**Given** a stdlib `logging` record originating from a frozen importlib bootstrap frame, **When** the record passes through `_InterceptHandler`, **Then** the bootstrap frame is skipped in depth calculation."*
+- **INV-001** (104): *"For any number of concurrent `setup_logger()` calls, the number of loguru sinks **added** is exactly one console sink and one file sink."* (emphasis added — the quantifier is over sinks *added by the feature*, not over the process-global handler set)
+- **EDGE-005** (116): *"Stdlib `logging` record with a level not recognized by loguru | Record is routed using the numeric level number instead of the name."*
+
+### Item E — from `docs/specs/settings-coverage.md`
+
+- **REQ-014** (line 141): *"`setup_logger()` takes no arguments and reads `logging.*` from the shared registry (falling back to the logging defaults with a warning if unregistered). It is idempotent (a second call is a no-op)."*
+- **REQ-015** (142): *"The logging feature subscribes to `SettingChanged` and reconfigures **the sink** at runtime when any `logging.*` setting changes, re-applying all current `logging.*` values."* — the mechanism the pollution runs through; note the singular "the sink" (the feature's own sink), which is at least as faithful a reading as removing every sink in the process.
+- **AC-019** (175): *"**Given** the shared registry, **When** `setup_logger()` is called, **Then** `logging.*` is read from the registry."*
+- **AC-020** (176): *"**Given** a configured logging sink, **When** `set_value("logging.log_level", "DEBUG")` is called, **Then** the sink is reconfigured to `DEBUG`."* — the observable half of REQ-015 (the feature's own sink must follow the new value; nothing is said about other sinks).
+
+### Items C, D and F
+
+No REQ/AC is affected: C is a lint-only import-ordering change in three test files, D is a dependency-manifest change, F is a GitHub-Actions trigger-condition change. All three are non-behavior (chore) scope.
 
 ---
 
@@ -174,9 +199,13 @@ Reproduced from a clean example database, `-p no:randomly`, one run per seed:
 
 The **product behavior does not deviate** from INV-003/REQ-013: no example ever violated the invariant; the failure is hypothesis's harness deadline being tighter than this machine's per-example runtime. Strictly, B is a **test-infrastructure defect** (the test cannot reliably exercise INV-003), not a deviation from approved spec behavior — it is carried in this ISSUE as a test-only fix, and it must not weaken the invariant.
 
-### Fix options (Phase 4 decides; recommendation stated, not implemented)
+### Fix policy — DECIDED (Q-128, answered 2026-10-02)
 
-1. **Recommended — explicit, measured `deadline` on the test's `@settings`** (e.g. `deadline=1000`), justified by the measured distribution (246–356 ms observed for the slowest examples on this machine, i.e. the 200 ms default has no headroom) and recorded in the verification artifact. The invariant, the strategy, and the assertion stay byte-identical — nothing is weakened; only the harness tolerance is made explicit and machine-independent.
+**Option 1 is the fix: an explicit measured `@settings(deadline=1000)` with an explanatory comment** on `test_last_admin_invariant`. The user first asked whether the per-example cost could be reduced instead; the analysis is that the cost is **argon2id hashing** (~50–100 ms per `create_user`, ADR-019) — up to ~11 creates in a `max_size=10` operation sequence ≈ 300 ms — so shrinking `max_size` to 4 would still land at ~150–200 ms (borderline, keeps flaking) **and** would shrink the operation-interleaving space that INV-003 coverage depends on, i.e. a **real weakening** of the invariant's coverage. `max_size=10`, `max_examples=20`, the strategy and the invariant assertion stay byte-identical. Hypothesis's `deadline` is a harness health check on per-example runtime, not a product performance budget (those live in explicit NFR budget tests), so raising it to a measured 1000 ms weakens nothing.
+
+### Fix options considered (recorded for the review gate)
+
+1. **CHOSEN — explicit, measured `deadline` on the test's `@settings`** (e.g. `deadline=1000`), justified by the measured distribution (246–356 ms observed for the slowest examples on this machine, i.e. the 200 ms default has no headroom) and recorded in the verification artifact. The invariant, the strategy, and the assertion stay byte-identical — nothing is weakened; only the harness tolerance is made explicit and machine-independent.
 2. `deadline=None` — legitimate per hypothesis for slow suites, but it removes the (weak) per-example performance signal entirely; acceptable only with a recorded justification. Prefer option 1.
 3. Reduce per-example work (reuse one repository/manager per example via a lighter fixture, shorten the operation list) — changes the test's coverage profile; only worth it if the measured runtime cannot be made stable. Not recommended as the primary fix.
 
@@ -238,7 +267,9 @@ Then re-run `uv run pip-audit` (the `security` job's command) to confirm zero fi
 
 ---
 
-## 6. Scope gap found during triage (E, F) — the CI test job is red for a different reason
+## 6. Items E and F — IN SCOPE (Q-127 answered 2026-10-02)
+
+### 6.0 Items A and B do not fail in CI (the reason E exists)
 
 The triage MUST record this: **items A and B do not fail in CI.** In run `36894698181` (`Spec Validation` → `tests`, `uv run pytest tests/ -v`) both are logged PASSED:
 
@@ -247,7 +278,7 @@ tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip
 tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant PASSED [ 51%]
 ```
 
-### E — logging-interception test family (the actual CI test-job failure)
+### 6.1 E — the defect: mechanism and observed behavior (confirmed, no longer a hypothesis)
 
 ```text
 run 36894698181: 2 failed, 633 passed
@@ -258,28 +289,166 @@ run 36894622789 (#55): 4 failed (same family)     run 36061497823 (#52, 2026-09-
 run 36175233161 (#53, 2026-09-25): 6 failed       (also test_ac_001_setup_logger_adds_sinks)
 ```
 
-Affected spec IDs — `docs/specs/logging.md`: **REQ-003** (*"The logging feature provides an `_InterceptHandler` that routes stdlib `logging` records into loguru sinks, skipping frozen importlib bootstrap frames."*), **AC-004**, **AC-005**, **EDGE-005** (*"Stdlib `logging` record with a level not recognized by loguru | Record is routed using the numeric level number instead of the name."*), **REQ-001** (the mandated sink set), **REQ-002** (*"`setup_logger()` is idempotent: subsequent calls are no-ops."*); and `docs/specs/settings-coverage.md`: **REQ-014** (*"`setup_logger()` takes no arguments and reads `logging.*` from the shared registry … It is idempotent (a second call is a no-op)."*), **REQ-015** (*"The logging feature subscribes to `SettingChanged` and reconfigures the sink at runtime when any `logging.*` setting changes, re-applying all current `logging.*` values."*) — REQ-015 is the mechanism the interference runs through.
+Current CI state on the base commit (re-verified with `gh run view 36894698181 --log-failed`, `Spec Validation` → `tests`, `uv run pytest tests/ -v`, head `75ca243`): **2 failed, 633 passed** — exactly the two nodes listed above.
 
-Traceability drift noted (for S5.3/S6.2, not a behavior issue): `src/backend/logging/_setup.py` cites "AC-019"/"AC-020" for the registry read and the runtime reconfiguration, but no such IDs exist in `docs/specs/logging.md` or `docs/specs/logging-coverage.md`; the normative source is `docs/specs/settings-coverage.md` REQ-014/REQ-015. Likewise `docs/specs/logging.md:136-155` binds AC-004/AC-005/EDGE-005 to `tests/unit/test_logging.py`, while the implemented tests live in `tests/unit/logging/test_logging.py` and `tests/unit/logging/test_logging_edges.py`.
+Mechanism, confirmed by direct observation in this worktree:
 
-Evidence-backed root-cause hypothesis (for Phase 3/4 to confirm, not established here): `tests/conftest.py:20-44` performs one session-scoped `setup_logger()`; `setup_logger()` subscribes to `SettingChanged` and re-runs `_configure()` on any `logging.*` change (`src/backend/logging/_setup.py:112-124`, AC-020), and `_configure()` calls `logger.remove()` — which drops **all** loguru sinks, including the per-test capture sink added by the `log_records` fixture (`tests/conftest.py:77-95`). Tests that mutate a `logging.*` value (`tests/contract/filemanagement/test_filemanagement_contracts.py:93`, `tests/contract/permissions/test_performance.py:56`) therefore remove other tests' sinks — asynchronously (event-bus worker) and only when the order is unlucky, which is exactly the run-to-run variance observed. All four nodes pass locally in isolation and in a logging-only run (verified: `uv run pytest tests/unit/logging tests/integration/logging -q` → 18 passed, 3/3 repeats).
+1. `tests/conftest.py:21-44` performs the one session-scoped `setup_logger()`; the first setup ends with `_subscribe_to_setting_changes()` (`src/backend/logging/_setup.py:116-127`), which registers `_on_setting_changed` on the **shared** event bus.
+2. `_configure()` (`src/backend/logging/_setup.py:128-152`) opens with a **blanket `logger.remove()`** — no handler id — which removes **every** loguru handler in the process, including sinks the logging feature never created.
+3. Any write to a `logging.*` key on a registry whose events reach the shared bus re-enters `_configure()` **asynchronously on the bus worker thread** (settings-coverage REQ-015 / AC-020).
+4. The per-test capture sink installed by the `log_records` fixture (`tests/conftest.py:77-92`) is exactly such a foreign sink (28 test files use the fixture). When the reconfigure lands while one of those tests is running, its sink is gone and the test's capture list stays empty — the CI signature `assert []` / `AssertionError: assert False`.
 
-### F — `dependency-review` can never pass on a push to main
+Deterministic in-process reproduction (run from this worktree against `75ca243`; a standalone script, since Phase 1 must not add test files):
 
-```text
-run 36894698244, job dependency-review:
-##[error]Both a base ref and head ref must be provided, either via the `base_ref`/`head_ref` config
-options, `base-ref`/`head-ref` workflow action options, or by running a
-`pull_request`/`pull_request_target`/`merge_group` workflow.
+```bash
+PYTHONPATH="src;tests" uv run python <repro-script>
+# sink added, id=3, handlers_before=[1, 2, 3]        # 1=console, 2=file (added by _configure), 3=log_records capture sink
+# registry.set_value("logging.log_level", "INFO")    # the offender's call
+# capture sink removed by reconfigure: True
+# handlers_after=[4, 5]                              # new console + file; the capture sink is gone
+# records captured: [… only records emitted BEFORE the removal …]   # "probe-after-reconfigure" never arrives
+# REPRODUCED: the logging feature's reconfigure dropped a sink it does not own
 ```
 
-`actions/dependency-review-action@v5` is wired into the `Quality` workflow, which also runs on `push` to `main`. On a push there is no base/head pair, so the job fails by construction — `main` can never be green while that job runs on push. Remedy is a CI-config change (run it only on `pull_request`/`merge_group`, e.g. split it into a PR-only workflow or add an `if:` guard). Non-behavior (chore).
+3/3 runs reproduce on the current code; 3/3 runs do **not** reproduce against the re-homed fix (§6.5). The same script also shows the file/console sinks being re-added (`[1,2]` → `[4,5]`), i.e. the feature churns its own sinks while silently destroying someone else's.
 
-**Consequence:** with the user-approved scope A+B+C+D only, `main`'s CI stays red (the `tests` job and the `dependency-review` job still fail). E and F are recorded here as a scope gap and raised as **Q-127**.
+**Offender inventory** — in-process publishers of a `logging.*` key on the shared bus, after the logging subscription exists (the brief listed two; there are **three**):
+
+| Publisher | Key | Note |
+|---|---|---|
+| `tests/contract/filemanagement/test_filemanagement_contracts.py:93` (restore at `:120`) | `logging.log_level` | inside `test_nfr_001_performance_budgets` |
+| `tests/contract/permissions/test_performance.py:56` (restore at `:106`) | `logging.log_level` | inside `test_check_latency_under_5ms_median` |
+| `tests/unit/test_settings_coverage.py:338` (`test_sink_reconfigured_rotation`) | `logging.log_max_bytes` | **third offender, omitted by the brief** — it is the trigger of the local 4/5 reproduction in §6.4 |
+
+Explicitly **not** offenders: `tests/integration/settings/test_settings_integration.py:53` builds its `SettingsRegistry` with a **local** `EventBus`, so the logging feature's subscription on the shared bus never sees the event; the `set_value('logging.*', …)` occurrences in `tests/acceptance/settings_coverage/test_setup_logger.py`, `tests/contract/logging/test_logging_contracts.py`, `tests/property/logging/test_logging_properties.py` and `tests/unit/logging/test_logging_edges.py:34-35` are **subprocess** code strings (`run_python`) — different process, no shared bus; `tests/conftest.py:42-43` publishes **before** `setup_logger()` has subscribed (the subscription is installed at the end of the first setup), so it cannot re-enter `_configure()`.
+
+Mapping of the CI failure family to the parts of the fix:
+
+| CI node | mechanism | fix part |
+|---|---|---|
+| `test_edge_005_intercept_unknown_level`, `test_ac_004_intercept_handler_routes_records`, `test_ac_005_intercept_handler_skips_bootstrap` | the `log_records` capture sink is deleted mid-test | `f25e2ec` (`_SinkState`: remove only managed ids) + its `tests/conftest.py` bus drain |
+| `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` | the enqueued file sink's pending write is not flushed before the 15 s poll; the file sink can also be re-added mid-test | `b1e61ea` (`logger.complete()` in `wait_for_file_content`) + `f25e2ec` |
+| `tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks` | global handler-count assertion + `captured_stderr()` bound to the wrong fd after a worker-thread reconfigure | `f25e2ec` (`_console_sink_fd()` takes the fd from the console sink's own stream) |
+| `contract/filemanagement::test_nfr_001_performance_budgets`, `contract/permissions::test_check_latency_under_5ms_median` (`SettingsRegistrationError: duplicate key logging.log_file`) | `install_isolated_registry` restored only `logging.log_file`, leaving a partial `logging.*` state | `e973821` — **not currently red on `main`** (both nodes pass in run `36894698181`); it is the family observed on the `crosscut/search` runs, carried along because the re-homed helper fix is the same file |
+
+### 6.2 E — required behavior per the cited IDs
+
+- **logging REQ-001 / AC-001**: after setup, loguru **has** a console sink on stderr and a rotating file sink with the stated options (presence, with the option contract).
+- **logging REQ-002 / AC-002**: a second `setup_logger()` adds no sinks.
+- **logging INV-001**: the number of sinks **added** by `setup_logger()` calls is exactly one console + one file.
+- **logging REQ-003 / AC-004 / AC-005 / EDGE-005**: a stdlib record is routed into loguru sinks with the correct level/message/origin — observable at the sink the caller installed.
+- **settings-coverage REQ-014 / AC-019**: `setup_logger()` is no-arg and reads `logging.*` from the shared registry.
+- **settings-coverage REQ-015 / AC-020**: a `logging.*` change **reconfigures the sink** (the feature's own), re-applying all current `logging.*` values.
+
+**Observed deviation:** a `logging.*` write made by an unrelated feature's test deletes the sink another component installed, so the routed record required by AC-004/AC-005/EDGE-005 is no longer observable at that sink, and the feature's own sink set churns (`[1,2]` → `[4,5]`) under a caller that only asked for a level change. The feature mutates global loguru state it does not own.
+
+### 6.3 E — spec-compliance verdict: **COMPLIANT** (no Spec Amendment, no reclassification)
+
+Question: does the logging spec require "the handler set is exactly the two configured sinks" in a way that the fix (remove only the sinks `_configure()` added) violates?
+
+**No — the blanket `logger.remove()` is an implementation detail.** Verified against the spec text, not assumed:
+
+- `grep -rn "handler set|logger.remove|remove()" docs/specs/*.md` → **zero matches**. The sentence "the handler set is exactly the two configured sinks" exists **only in the implementation comment** (`src/backend/logging/_setup.py:130-132`); it is the implementer's gloss on REQ-001/INV-001, not spec text.
+- The only normative statement about sink counts is **INV-001**, and it quantifies over "the number of loguru sinks **added**" by `setup_logger()` calls — not over the process-global handler set. Removing only the feature's own sinks keeps exactly one console + one file added per configure/reconfigure.
+- **REQ-001 / AC-001** require the **presence** of the two configured sinks with the stated options; neither forbids another component from registering its own loguru sink, and neither requires its removal.
+- **REQ-015** (settings-coverage) says the feature "reconfigures **the sink**" (singular — its own) and "re-appl[ies] all current `logging.*` values"; the fix does exactly that, and is at least as faithful a reading as removing every sink in the process.
+- `grep -n "exactly" docs/specs/logging.md docs/specs/logging-coverage.md docs/specs/settings-coverage.md` returns only AC-003 (one thread wins), INV-001 (sinks added), logging-coverage REQ-011/D5 (`setup_logger` called once at startup) and INV-001 of logging-coverage (one entry + one exit record) — none of them mandates a two-sink global set.
+
+The fix therefore preserves every specified property: the first `_configure()` call still removes loguru's **default** sink (its only spec-anchored purpose), later calls remove only the ids `_configure()` added (`ValueError` suppressed for sinks already removed externally) and re-add exactly one console + one file sink. Nothing specified is removed and nothing unspecified is added → the AGENTS prohibition "introduce behavior not represented in the specification" is not triggered, and the change stays **ISSUE** (a defect fix), not a spec amendment.
+
+**Note for S6.2 (traceability/test-coupling, not a test change):** two tests assert the **process-global** handler count — `tests/unit/logging/test_logging.py:22,46` (`_EXPECTED_HANDLER_COUNT = 2`) and `tests/acceptance/logging/test_logging.py:26` — which is stricter than INV-001's wording ("sinks added"). They pass under the fix as long as no foreign sink is registered at that moment and no reconfigure races mid-test. They MUST NOT be weakened; if a future change registers a process-wide sink, those assertions become order-coupled and belong in a separate change.
+
+**Note for S5.3/S6.2 (traceability drift, not a behavior issue):** `src/backend/logging/_setup.py` cites "AC-019"/"AC-020" in its comments for the registry read and the runtime reconfiguration; those IDs exist in `docs/specs/settings-coverage.md` (AC-019/AC-020), **not** in `docs/specs/logging.md` or `docs/specs/logging-coverage.md` — the citations are ambiguous as written and should name the spec file. Likewise `docs/specs/logging.md:133-155` binds AC-001/AC-004/AC-005/EDGE-005 to `tests/acceptance/test_logging.py` / `tests/unit/test_logging.py`, while the implemented tests live in `tests/acceptance/logging/test_logging.py`, `tests/unit/logging/test_logging.py` and `tests/unit/logging/test_logging_edges.py`. Fix the matrix rows in S5.3; do not move tests.
+
+### 6.4 E — deterministic reproduction (and why an ordering recipe is not one)
+
+Ordering recipe (fixed collection order, `-p no:randomly`) — **reproduces 4/5, i.e. NOT deterministic**:
+
+```bash
+uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation \
+  tests/unit/logging/test_logging.py tests/unit/logging/test_logging_edges.py -p no:randomly -q
+# run 1: 1 failed, 17 passed   FAILED tests/unit/logging/test_logging.py::test_ac_003_setup_logger_thread_safe
+# run 2: 1 failed, 17 passed   FAILED (same node)
+# run 3: 18 passed
+# run 4: 1 failed, 17 passed   FAILED (same node)
+# run 5: 1 failed, 17 passed   FAILED (same node)
+```
+
+`-p no:randomly` pins the collection order but not the moment the bus worker dispatches the queued `SettingChanged`, so the failure stays a race; a fixed `pytest-randomly` seed cannot pin it either. (The node this recipe reddens, `test_ac_003_setup_logger_thread_safe`, is the same root cause seen from the other side: the reconfigure races the 8 concurrent `setup_logger()` threads and the global handler-count assertion. It is a **different node from CI's four**, which is why the brief's "run the offending contract test, then the logging nodes" recipe is recorded here as corroboration, not as the contract.)
+
+**The deterministic reproduction is in-process and order-free** (§6.1): install a capture sink → write a `logging.*` value → wait for the reconfigure to be dispatched → assert the capture sink still receives a record emitted afterwards. 3/3 RED on `75ca243`, 3/3 GREEN with the re-homed fix. Phase 3 writes exactly this as a test (§7, item E).
+
+### 6.5 E — fix scope and the re-home plan (cherry-pick)
+
+Files: `src/backend/logging/_setup.py` (1 source file) + `tests/conftest.py`, `tests/logging_test_helpers.py`, `tests/settings_test_helpers.py` (3 test helpers).
+
+Phase 4 re-home: **`git cherry-pick b1e61ea f25e2ec e973821`** onto `issue/main-ci-green`.
+
+**Correction to the brief (important).** The brief names only `f25e2ec` and `e973821`. That two-commit sequence does **not** apply:
+
+```bash
+git show f25e2ec | git apply --check   # error: tests/logging_test_helpers.py: patch does not apply
+git show e973821 | git apply --check   # error: tests/settings_test_helpers.py: patch does not apply
+```
+
+Both helper files were themselves changed on `crosscut/search` by **`b1e61ea`** ("test(logging): make enqueued-sink waits and registry isolation deterministic", 2026-09-28), which is **not on `main`** and is a **prerequisite**: `e973821` rewrites the `install_isolated_registry` behavior `b1e61ea` introduced, and `b1e61ea`'s `logger.complete()` drain in `wait_for_file_content` is the fix for the `test_stdlib_loguru_decorator_pipeline` CI failure. The re-home is therefore **three** commits, not two.
+
+Conflict analysis — the brief's premise is half right. Main's 7 commits since the merge-base touch **none** of the four files:
+
+```bash
+git log --oneline be838ef..75ca243 -- tests/conftest.py tests/settings_test_helpers.py \
+  tests/logging_test_helpers.py src/backend/logging/_setup.py
+# (empty — be838ef = git merge-base origin/main crosscut/search)
+```
+
+so there is no main-side conflict; the divergence is entirely on the **search side** (`b1e61ea`), which is exactly why the third commit is required.
+
+Verified conflict-free in a throwaway `git clone --shared` in a temp directory (the change branch, the search branch and every worktree were left untouched; the clone was deleted afterwards):
+
+```bash
+git checkout -b sim 75ca243
+git cherry-pick b1e61ea f25e2ec e973821     # 3 commits applied, zero conflicts
+# and, for each of the four files:
+#   git rev-parse HEAD:<f> == git rev-parse origin/crosscut/search:<f>   → IDENTICAL
+```
+
+i.e. the re-homed result is **byte-identical** to the search branch's version of all four files, and the fix was re-verified against the deterministic reproduction (§6.1: 3/3 NOT REPRODUCED).
+
+`crosscut/search` is **not modified** by this change (read-only per the step's constraints). When it later rebases onto the fixed `main`, these three commits become duplicates and drop out; PR #54 becomes search-only (user decision recorded in Q-127).
+
+### 6.6 F — the `dependency-review` job cannot pass on `push`
+
+Evidence (re-verified with `gh`):
+
+```bash
+gh run view 36894698244 --json name,headSha,jobs
+# Quality @ headSha 75ca243: dependency-review=failure, security=failure; migrations/type-check/docs/dependencies/coverage=success
+gh run view 36894698244 --log-failed | grep error
+# ##[error]Both a base ref and head ref must be provided, either via the `base_ref`/`head_ref` config
+# options, `base-ref`/`head-ref` workflow action options, or by running a
+# `pull_request`/`pull_request_target`/`merge_group` workflow.
+```
+
+Exact wiring (`.github/workflows/quality.yml`): `on:` at line 3 with `pull_request: branches: [ main ]` (lines 4–5) and `push: branches: [ main ]` (lines 6–7); the `dependency-review` job is declared at line 61 and uses `actions/dependency-review-action@v5` at line 74. `grep -rn "dependency-review" .github/` matches only those two lines — it is the only job in the repository that needs a PR context. On a push there is no base/head pair, so the job fails **by construction**: `main` can never be green while that job runs on push. (`lint.yml` and `spec-validation.yml` also run on `push`, but contain no such job.)
+
+Remedy (CI chore, one file, `.github/workflows/quality.yml`):
+
+1. **Recommended — gate the job:** add `if: github.event_name != 'push'` to the `dependency-review` job (one added line; the job stays next to the other dependency jobs and still runs on every PR).
+2. Alternative — move the job to a new `.github/workflows/dependency-review.yml` with `on: pull_request` (larger diff, no functional gain; the repository has no merge queue, so `merge_group` is not needed).
+
+Risk check: a skipped job cannot block a merge — `gh api repos/jackthenet/python-template/branches/main/protection` → **404 (no branch protection configured)**, so there is no required-check list that a skipped context could stall.
+
+Classification: **chore** (CI configuration; no externally observable product behavior changes; no REQ/AC affected). No test is possible — verification is CI evidence: the PR run must show `dependency-review` executed, and the post-merge push run on `main` must show it skipped. The second half is observable only after merge and MUST be recorded in the review report (S6.3/S6.4).
+
+### 6.7 Consequence for the change objective
+
+With A–F, every red job on `main` is addressed: `tests` (E), `security` (D), `dependency-review` (F), `lint` (C). A and B are local-side defects that the same change fixes so the suite is deterministic off CI as well.
 
 ---
 
-## 7. Reproduction plan (Phase 3)
+## 7. Reproduction plan (Phase 3) — items A–F
+
+Phase 3 writes new tests for **A** and **E** (the two defects with a deterministic, order-free reproduction). **B**'s RED is the pinned-seed `DeadlineExceeded` on an existing test (no new test). **C**, **D** and **F** are chores: no RED, no new test — their evidence is the command output recorded in this file.
 
 ### Item A — reproduction test (deterministic, no `.hypothesis` dependency)
 
@@ -298,7 +467,7 @@ Fix scope / files expected to change: **`src/backend/settings/repository.py`** (
 
 Reproduction: `uv run pytest tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant -p no:randomly --hypothesis-seed=101` → `DeadlineExceeded` (355.59 ms).
 
-Phase 3 records the RED as the deadline failure at a pinned seed; Phase 4 applies fix option 1 (explicit measured `deadline` in `@settings`) and re-runs the **same pinned seeds** (7, 101, 2024) plus the default profile — the invariant assertion, the strategy, and `max_examples` stay unchanged (no weakening). Files expected to change: **`tests/property/usermanagement/test_multi_role_invariants.py`** only.
+Phase 3 records the RED as the deadline failure at a pinned seed; Phase 4 applies the **decided** fix (Q-128) — `@settings(deadline=1000)` plus an explanatory comment recording the measured distribution (246–356 ms) and the argon2id per-example cost (ADR-019) — and re-runs the **same pinned seeds** (7, 101, 2024) plus the default profile. The invariant assertion, the strategy, `max_size=10` and `max_examples=20` stay unchanged (shrinking `max_size` was rejected as a real weakening of INV-003 coverage). Files expected to change: **`tests/property/usermanagement/test_multi_role_invariants.py`** only.
 
 ### Item C — chore
 
@@ -308,9 +477,25 @@ Phase 3 records the RED as the deadline failure at a pinned seed; Phase 4 applie
 
 `uv lock --upgrade-package urllib3 --upgrade-package virtualenv`; verify with `uv run pip-audit` (zero findings) and `uv run deptry .` (clean). Files expected to change: **`uv.lock`** (no `pyproject.toml` change unless the resolver needs a constraint).
 
-### Items E / F — pending the scope decision (Q-127)
+### Item E — reproduction test (deterministic, order-free)
 
-If in scope: E's reproduction test is a deterministic ordering reproduction (run the triggering test and the affected logging tests in the failing order, e.g. `uv run pytest tests/contract/permissions/test_performance.py tests/unit/logging -p no:randomly`, or a dedicated isolation test asserting the `log_records` sink survives a `logging.*` change); fix candidates are test-side (isolate/re-register the capture sink, or stop mutating shared `logging.*` values in contract tests) or feature-side (make `_configure` re-entrant without dropping third-party sinks — needs care with logging REQ-001/AC-001's mandated sink set). F's fix is `.github/workflows/quality.yml` (job trigger guard) — no test.
+New file `tests/unit/logging/test_logging_sink_ownership.py` (the §6.1 mechanism as executable tests):
+
+1. `test_reconfigure_keeps_foreign_sinks` — **Given** the session's real logging setup and a capture sink added the way `tests/conftest.py::log_records` adds one, **When** a `logging.*` value is written on the shared registry and the reconfiguration has been dispatched (awaited with `settings_test_helpers.wait_for`, never a sleep), **Then** a record emitted afterwards still reaches that capture sink. RED on `75ca243`: the sink is deleted by `_configure()`'s blanket `logger.remove()` and the capture list stays empty (3/3 in the §6.1 script).
+2. `test_reconfigure_keeps_one_console_and_one_file_sink` — guards INV-001 / REQ-001 / AC-001 **under** the fix: after a `logging.*` change the logging feature's own sink set is still exactly one console + one file sink (so the fix cannot regress into "re-add without removing").
+3. `test_first_configure_removes_loguru_default_sink` — pins the spec-anchored half of the behavior the fix **keeps** (loguru's default sink is gone after the first configure), so the fix is provably not "never remove".
+
+RED command (targeted, run **before** the cherry-pick): `uv run pytest tests/unit/logging/test_logging_sink_ownership.py -v` → must fail on behavior (empty capture / missing sink), not on an import or fixture error.
+
+Must stay GREEN under the fix (existing spec evidence, do not touch): `tests/acceptance/settings_coverage/test_setup_logger.py::test_sink_reconfigured_on_change` — the spec-mandated AC-019/AC-020 evidence, which asserts that the handler level set follows a `logging.*` change (subprocess-isolated, so it is unaffected by the pollution but it is the behavior the fix must preserve).
+
+Corroboration only (NOT the contract, see §6.4): `uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/logging/test_logging.py tests/unit/logging/test_logging_edges.py -p no:randomly -q` → `test_ac_003_setup_logger_thread_safe` failed 4/5 locally.
+
+Phase 4 (GREEN): `git cherry-pick b1e61ea f25e2ec e973821` (§6.5), then re-run the new file, the whole logging family (`uv run pytest tests/unit/logging tests/integration/logging tests/acceptance/logging tests/contract/logging -v`), and the §6.4 recipe (expected 5/5 clean). Files expected to change: `src/backend/logging/_setup.py`, `tests/conftest.py`, `tests/logging_test_helpers.py`, `tests/settings_test_helpers.py` (all via the cherry-pick) + the new test file.
+
+### Item F — chore (no test, no RED)
+
+Change `.github/workflows/quality.yml`: add `if: github.event_name != 'push'` to the `dependency-review` job (§6.6). Verification is CI evidence, not a test: the PR run must show the job executed, the post-merge push run on `main` must show it skipped. Record both in the verification/review artifacts; the second is observable only after merge.
 
 ---
 
@@ -318,23 +503,49 @@ If in scope: E's reproduction test is a deterministic ordering reproduction (run
 
 Qualification requires **all** of: single feature; fix touches ≤ 3 files excluding tests; no new dependency, no new public interface, no cross-feature change.
 
-- Single feature: **no.** A is `backend/settings`; B is `backend/usermanagement` (test-only); C is `tests/{acceptance,contract}/permissions`; D is the dependency manifests; E (if in scope) is `backend/logging` + `tests/conftest.py`; F is CI config.
-- ≤ 3 files excluding tests: **no** (A: 1 source file; D: `uv.lock`; F: workflow file; E: source + conftest).
-- No new dependency / public interface / cross-feature change: **no** (D changes dependency versions; E would touch shared logging behavior).
+- Single feature: **no.** A is `backend/settings`; B is `backend/usermanagement` (test-only); C is `tests/{acceptance,contract}/permissions`; D is the dependency manifests; **E is `backend/logging` + three shared test helpers**; **F is CI configuration** (`.github/workflows/`).
+- ≤ 3 files excluding tests: **no** (A: 1 source file; D: `uv.lock`; F: 1 workflow file; E: 1 source file + 3 test helpers).
+- No new dependency / public interface / cross-feature change: **no** (D changes dependency versions; E changes the shared logging feature's reconfiguration behavior and the shared test helpers used by 28 test files).
 
-**Conclusion: this change does NOT qualify for the Light ISSUE tier.** Phase 5 must run the full gate set for the ISSUE path — reproduction tests GREEN, **full regression suite** with no new failures, `uv run ruff check .`, `uv run mypy src/` — and the traceability matrix updated with the issue's evidence rows. (The full regression suite is required anyway because the CI `tests` job is the thing being fixed.)
+**Conclusion: this change does NOT qualify for the Light ISSUE tier** (it did not qualify even at four items; the six-item scope makes it unambiguous). Phase 5 therefore runs the **full ISSUE gate set**:
+
+```bash
+uv run pytest tests/ -v            # reproduction tests GREEN + full regression, no new failures
+uv run pytest tests/unit/logging tests/integration/logging tests/acceptance/logging tests/contract/logging -v   # E's family
+uv run ruff check .                # whole-repo sweep (matches CI lint.yml)
+uv run mypy src/                   # type gate
+uv run pip-audit                   # D's job command (security)
+uv run deptry .                    # dependency check after the lock change
+```
+
+plus the traceability matrix updated with the issue's evidence rows (A: settings INV-002/INV-009; E: logging REQ-001/003, AC-001/004/005, EDGE-005, settings-coverage REQ-015/AC-020). F's evidence is CI-side (post-merge push run) and is recorded in the review report.
 
 ---
 
 ## 9. State machine
 
-Entry state: **`TESTS_WRITTEN`** (ISSUE entry, after triage). Next step: **S3.1** (write the reproduction tests from §7 and confirm RED).
+Entry state: **`TESTS_WRITTEN`** (ISSUE entry, after triage). Next step: **S3.1** (write the reproduction tests for A and E from §7, record B's pinned-seed RED, and confirm RED).
 
 ---
 
-## 10. Open questions
+## 10. Questions (both ANSWERED — recorded in `AI_Questions.md`, incorporated)
 
-- **Q-127** — scope: must `main-ci-green` also fix E (the logging-interception test family that actually fails CI's `tests` job) and F (`dependency-review` failing by construction on push), or is the change deliberately limited to A+B+C+D (leaving main red)?
-- **Q-128** — item B fix policy: is an explicit measured `@settings(deadline=…)` on `test_last_admin_invariant` acceptable (harness tolerance only; invariant, strategy and example count unchanged), or does the user require the per-example work to be reduced instead?
+- **Q-127 — ANSWERED (2026-10-02): E and F are IN scope.** E is **re-homed** from `crosscut/search` into this change (`b1e61ea` + `f25e2ec` + `e973821`, see §6.5 — the brief listed two commits; the third is a prerequisite), and `crosscut/search` drops those commits when it rebases onto the fixed `main`, making PR #54 search-only. PR #54 stays open and is held until `main-ci-green` is merged and the rebase is done. Consequence: main's `tests` job goes green with this change.
+- **Q-128 — ANSWERED (2026-10-02): option 1, an explicit measured `@settings(deadline=1000)` with an explanatory comment.** Shrinking `max_size` was rejected (argon2id per-example cost, ADR-019: a `max_size=4` sequence would still land at ~150–200 ms and would shrink the operation-interleaving space INV-003 coverage depends on — a real weakening). `max_size=10`, `max_examples=20`, the strategy and the invariant assertion are untouched.
 
-Both recorded in `AI_Questions.md` (repo root), status OPEN/PENDING.
+Both entries carry the full answer text, the generating step, the context and the "incorporated: yes" flag in `AI_Questions.md` (repo root). No new question arose in the S1.1 re-run: the two open decisions were the scope boundary and the B fix policy, and both are now settled; E's spec-compliance question was answerable from the spec text alone (§6.3), so it needed no user input.
+
+---
+
+## 11. Corrections to the S1.1 re-run brief (verified, not restated)
+
+The re-run brief was checked command-by-command. Four corrections:
+
+1. **The cherry-pick is three commits, not two.** The brief listed `f25e2ec` + `e973821`; that sequence does not apply (`git apply --check` fails on `tests/logging_test_helpers.py` and `tests/settings_test_helpers.py`). `b1e61ea` (search branch, 2026-09-28) is the prerequisite for both — it introduced the `install_isolated_registry` behavior `e973821` rewrites, and its `logger.complete()` drain in `wait_for_file_content` is the fix for the `test_stdlib_loguru_decorator_pipeline` CI failure. `git cherry-pick b1e61ea f25e2ec e973821` onto `75ca243` applies with zero conflicts and yields byte-identical blobs to `crosscut/search` for all four files (§6.5).
+2. **The brief's conflict premise is half right.** "The search branch's `tests/conftest.py` / helpers are otherwise untouched by main's 7 new commits" is true (`git log --oneline be838ef..75ca243 -- <the four files>` is empty), but it is the *search-side* divergence (`b1e61ea`) that breaks the two-commit pick — so "no expected conflict" was the wrong conclusion.
+3. **The ordering-based reproduction is not deterministic.** The brief proposed a fixed `pytest-randomly` seed or a two-file invocation. Measured: the two-file invocation with `-p no:randomly` reddens `test_ac_003_setup_logger_thread_safe` in **4 of 5** runs (§6.4) — the failure depends on when the bus worker dispatches the queued event, so no seed pins it. The deterministic reproduction is the in-process, order-free one in §6.1 (3/3 RED on `75ca243`, 3/3 clean with the fix), and that is what Phase 3 turns into a test.
+4. **There are three in-process offenders, not two.** The brief named `tests/contract/filemanagement/test_filemanagement_contracts.py:93` and `tests/contract/permissions/test_performance.py:56`; `tests/unit/test_settings_coverage.py:338` (`test_sink_reconfigured_rotation`, `logging.log_max_bytes`) is a third, and it is the one that reproduces locally. Conversely `tests/integration/settings/test_settings_integration.py:53` is **not** an offender (local `EventBus`), and the `logging.*` writes in the acceptance/contract/property/unit-logging files are subprocess code (§6.1).
+
+Confirmed as stated by the brief: the E/F scope decision (Q-127), the B fix policy (Q-128), the `dependency-review` error text and the failing job (`gh run view 36894698244`), the current CI `tests`-job failure set (2 failed on `75ca243`), the spec IDs for E (logging REQ-001/002/003, AC-001/002/004/005, INV-001, EDGE-005; settings-coverage REQ-014/015, AC-019/020), and the COMPLIANT verdict for E (re-derived independently in §6.3).
+
+Base note: this branch's base is `origin/main` @ `75ca243`. Local `main` has since moved to `0d2720f` ("chore(workflow-optimization)…", skills/AGENTS/PROBLEMS only — no `src/`, no `tests/`, no workflow files), which does not affect any item's scope or the cherry-pick.
