@@ -758,3 +758,131 @@ uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotat
 - Mechanism: `tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation` (line 327) writes `logging.log_max_bytes` and never awaits the resulting `SettingChanged`; the bus worker dispatches it during the next test, and `_configure()`'s remove-then-add window is observed by `test_ac_003_setup_logger_thread_safe`'s **process-global** handler-count assertion (`_EXPECTED_HANDLER_COUNT = 2`, `tests/unit/logging/test_logging.py:22,46`) as a transient `1`.
 - Why the fix cannot close it: that assertion inspects `len(logger._core.handlers)` for the whole process, which any concurrent reconfigure transiently changes. §6.3 already flagged these two assertions as stricter than INV-001 and ruled that they **MUST NOT be weakened**; the only closings are test-side (drain/await the bus in the polluter, or assert on a settled state), which is outside item E's fix scope (§6.5: `_setup.py` + the three helpers) and outside this step's three cherry-picked commits.
 - Consequence for the change objective: the four CI-red nodes item E was opened for are addressed; this residual is a separate test-isolation concern. **Flagged for the orchestrator** — recommend a new item (e.g. "G — drain/await the shared event bus in the settings-coverage polluter tests") rather than widening item E.
+
+---
+
+## Phase 4 (S4.2, item A) — fix applied, GREEN (2026-10-02)
+
+Branch `issue/main-ci-green` @ `14382a2` (item E already landed). Item A only: `src/backend/settings/repository.py` + the settings property strategy. `src/backend/logging/`, the item-B hypothesis test, the item-C test files, `pyproject.toml`/`uv.lock` and `.github/workflows/` were not touched.
+
+### Root cause
+
+`_dump_yaml` used a plain `YAML(typ="safe")`. ruamel's **emitter** writes U+0085 (NEL) literally inside a single-quoted scalar (`app.a: '<NEL>  '`), while its YAML-1.1 **reader** treats U+0085 as a line break and folds it — so the written document is valid YAML that denotes a **different string** (`'\x85'` → `' '`). Both repositories share this serializer, so the value path (settings-coverage INV-002/REQ-009/REQ-011) and the template path (settings INV-009/REQ-022/AC-030) were both affected, and a corrupted value then overrides the registered default at construction (settings-coverage REQ-011).
+
+### The fix (one implementation file)
+
+`src/backend/settings/repository.py`:
+
+- `_YAML_LINE_BREAKS = "\x85\u2028\u2029"` — the characters the YAML-1.1 reader folds. U+0085 is the only one the pre-fix serializer actually corrupted (full-BMP scan below); U+2028/U+2029 are listed so the rule follows the reader rather than the emitter's incidental behaviour.
+- `_str_representer(dumper, data)` — returns a `ScalarNode("tag:yaml.org,2002:str", data, style='"')` **only** when the string contains one of those characters, otherwise `style=None` (ruamel's own choice). The affected scalar is therefore emitted escaped (`app.a: "\N"`) and loads back byte-exactly.
+- `_SafeRepresenter(SafeRepresenter)` with `yaml_representers = _YAML_REPRESENTERS` (a **copy** of ruamel's table with the `str` entry replaced). Subclassing, not `add_representer`: `add_representer` is a classmethod that mutates the shared `SafeRepresenter` class and would change the output of every other ruamel user in the process (four settings tests construct `YAML(typ="safe")` themselves).
+- `_dump_yaml` sets `yaml.Representer = _SafeRepresenter` on the per-call instance. `_load_yaml` is **unchanged** (`typ="safe"`, unsafe tags still rejected), the on-disk schema is unchanged, and the atomic temp-file + `os.replace` write (ADR-015/ADR-039) is untouched.
+
+Written documents after the fix (verbatim):
+
+```text
+template file: 'category: app\ngroup: null\nname: prof\nvalues:\n  app.a: "\\N"\n  app.b: plain\n'
+values file  : 'app.list:\n- "\\N"\n- ok\napp.text: "\\N"\n'
+values load  : {'app.list': ['\x85', 'ok'], 'app.text': '\x85'}
+```
+
+### Completeness of the fix (full-BMP scan, two separate processes)
+
+For every BMP code point except surrogates (63 488), five document shapes each (`{"k": s}`, `{"k": "a"+s+"b"}`, `{"k": [s]}`, `{s: "v"}`, `{"k": {"n": s}}`), dump → load → compare:
+
+```text
+variant: old      failing code points: ['0x85']    (5/5 shapes)
+variant: patched  failing code points: []
+```
+
+Format-identity check (patched vs pre-fix dump, random strings over U+0020–U+2FFF excluding the three line breaks, 3 851 samples + nested/non-str documents): **0 differences** — keys, `null`, numbers, booleans and unaffected strings are emitted byte-identically, so the on-disk format changes only where the fix requires it.
+
+### Backward compatibility (old files must still load) — PASS
+
+Files were written to a temp dir **outside the repo** with the pre-fix serializer (`YAML(typ="safe")`, no representer) and then read back through the patched repositories:
+
+```text
+old values.yaml: 'app.b: true\napp.email: a@b.co\napp.empty: \'\'\napp.list:\n- a\n- b\n- \'\u2028  \'\n- \'\u2029  \'\n- \xa0\n- "line1\nline2"\napp.n: 7\napp.name: My App\napp.nested:\n  k: v\n  n: 1.25\napp.none: null\n'
+old prof.yaml  : "category: app\ngroup: null\nname: prof\nvalues:\n  app.a: plain\n  app.list:\n  - x\n  - '\u2029    '\n  app.n: 3\n"
+loaded values: {'app.b': True, 'app.email': 'a@b.co', 'app.empty': '', 'app.list': ['a', 'b', '\u2028', '\u2029', '\xa0', 'line1\nline2'], 'app.n': 7, 'app.name': 'My App', 'app.nested': {'k': 'v', 'n': 1.25}, 'app.none': None}
+loaded template: name='prof' category='app' group=None values={'app.a': 'plain', 'app.list': ['x', '\u2029'], 'app.n': 3}
+BACKWARD COMPAT OK — old-format files load unchanged (no error, values identical)
+```
+
+- No load error, no type change, values identical (`YamlValueRepository.load()` and `YamlTemplateRepository.get()`/`.list()` both verified). The loader was not modified, so old documents are parsed exactly as before.
+- **Data already corrupted before the fix is not repaired** (as expected — the information is gone from the file): a file the old serializer wrote for `{"app.text": "\x85"}` still parses to `{'app.text': ' '}`. It loads without error; the fix prevents the corruption on the next write, it cannot recover a value that was never stored.
+
+### GREEN gate (targeted — the full suite stays a Phase 5 gate)
+
+Before (RED, re-confirmed at the start of this step, `14382a2`):
+
+```bash
+uv run pytest tests/unit/settings/test_repository_roundtrip.py -q -p no:randomly
+```
+```text
+E       AssertionError: assert {'app.a': ' '} == {'app.a': '\x85'}
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_value_roundtrip_nel
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_template_roundtrip_nel
+2 failed in 0.35s
+```
+
+After (the reproduction tests were **not** modified):
+
+```bash
+uv run pytest tests/unit/settings/test_repository_roundtrip.py -q -p no:randomly
+```
+```text
+..                                                                       [100%]
+2 passed in 0.28s
+```
+
+### Property-strategy hardening (§7 item A.3) — widening only
+
+`tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip` generated `value=st.text(min_size=0, max_size=10)` — NEL is in hypothesis's default alphabet but is drawn only by chance, which is why the defect surfaced intermittently. The alphabet is now `st.characters(blacklist_categories=("Cs",)) | st.just(_NEL)` (module constant `_YAML_SENSITIVE_TEXT`), i.e. the previous default alphabet **plus** an explicit weighted NEL entry — widened, never narrowed; `max_examples`, `min_size`/`max_size`, the name strategy and the assertion are unchanged.
+
+Non-vacuity of the hardening (pre-fix serializer restored by an out-of-repo pytest plugin, pinned seed):
+
+```bash
+PYTHONPATH=/tmp/scratch_a uv run pytest tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip -q -p oldser_plugin --hypothesis-seed=0
+# E   AssertionError: assert Template(name...'app.a': ' '}) == Template(name...p.a': '\x85'})
+# 1 failed in 3.72s
+```
+
+→ the hardened property now fails **deterministically** on the defective serializer and passes on the fixed one, so the defect cannot silently return.
+
+```bash
+uv run pytest tests/property/settings/test_settings_properties.py -q
+```
+```text
+..........                                                               [100%]
+10 passed in 4.16s
+```
+
+### Regression (targeted, not the full suite) — verbatim
+
+```bash
+uv run pytest tests/unit/settings tests/property/settings tests/acceptance/settings tests/integration/settings tests/unit/test_settings_coverage.py -q
+```
+```text
+........................................................................ [ 63%]
+.........................................                                [100%]
+113 passed in 6.00s
+```
+
+### Ruff (changed paths) + types
+
+```bash
+uv run ruff check src/backend/settings/repository.py tests/property/settings/test_settings_properties.py tests/unit/settings/test_repository_roundtrip.py
+# All checks passed!
+uv run mypy src/
+# Success: no issues found in 73 source files
+```
+
+Two lint findings were introduced and fixed inside this step: `I001` (import block ordering after adding `ruamel.yaml.nodes`/`ruamel.yaml.representer`) and `RUF012` (mutable class attribute) — the latter resolved by moving the table to a module-level `_YAML_REPRESENTERS` constant, which also keeps `mypy` happy (a `ClassVar` would conflict with `BaseRepresenter.yaml_representers`, which mypy sees as an instance-variable annotation).
+
+**Pre-existing format drift (not item A, not resolved here):** `uv run ruff format --check src/backend/settings/repository.py` reports one hunk — the `YamlValueRepository` docstring indentation (lines 117-122). It is present on `HEAD` (`git show HEAD:src/backend/settings/repository.py` fails `ruff format --check` identically), it is not a `ruff check` error, and CI's lint job runs `ruff check .` only. Flagged for the Phase 5 whole-repo sweep.
+
+### Spec compliance (reference: §1, §2 — no Spec Amendment)
+
+No new behavior: the fix makes the existing YAML persistence satisfy settings INV-009 / REQ-022 / AC-030 / AC-031 and settings-coverage INV-002 / REQ-009 / REQ-010 / REQ-011. Safe-YAML semantics, the file layout (one `<name>.yaml` per template, a single `values.yaml`) and the atomic write are unchanged.
+
