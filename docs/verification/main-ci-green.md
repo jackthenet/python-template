@@ -10,7 +10,7 @@
 - **Worktree:** `C:/workspace/active-projects/python-template_kopie-worktrees/issue/main-ci-green`
 - **Why this change exists:** `main`'s CI is red after three merged dependabot PRs (#55 lint-and-types, #56 test-tooling, #57 runtime-core). The user decided to fix `main` in one dedicated change before PR #54 (crosscut/search) merges into it.
 
-### Scope composition (six items — extended by Q-127, answered 2026-10-02)
+### Scope composition (seven items — extended by Q-127, answered 2026-10-02, and by item G, found in Phase 4)
 
 | Item | Nature | Type | Affected spec IDs | Expected files |
 |---|---|---|---|---|
@@ -20,8 +20,9 @@
 | **D** | pip-audit CVEs in two transitive dev dependencies | **chore** (non-behavior) | none | `uv.lock` |
 | **E** | the logging feature's runtime reconfigure deletes loguru sinks it does not own (the actual CI `tests`-job failure) | **defect** (feature lifecycle / test isolation) | `logging.md` REQ-001/002/003, AC-001/002/004/005, INV-001, EDGE-005; `settings-coverage.md` REQ-014/015, AC-019/020 | `src/backend/logging/_setup.py`, `tests/conftest.py`, `tests/logging_test_helpers.py`, `tests/settings_test_helpers.py` |
 | **F** | `dependency-review` job runs on `push` and fails by construction | **chore** (CI config, non-behavior) | none | `.github/workflows/quality.yml` |
+| **G** | the residual order-dependent flake in the §6.4 corroboration recipe: `test_sink_reconfigured_rotation` publishes a `logging.*` write whose `SettingChanged` dispatch is never awaited, so the logging feature's reconfigure lands inside a later test and transiently drops the process-global loguru handler count | **defect** (test isolation; found in Phase 4 by the item-E step, recorded as the "residual flake" finding under item E) | `logging.md` AC-003/REQ-002 (the victim's assertion, unchanged); `settings-coverage.md` EDGE-008, REQ-015/AC-020 (the polluter's write) | `tests/settings_test_helpers.py`, `tests/unit/test_settings_coverage.py` |
 
-Items C, D and F alter no externally observable behavior; they ride along by user decision. A is the ISSUE core. B is a test-harness defect (the specified invariant itself still holds). E is a real product-side defect in the logging feature's reconfiguration path (it mutates global loguru state it does not own) and is the only item that currently reddens CI's `tests` job.
+Items C, D and F alter no externally observable behavior; they ride along by user decision. A is the ISSUE core. B is a test-harness defect (the specified invariant itself still holds). E is a real product-side defect in the logging feature's reconfiguration path (it mutates global loguru state it does not own) and is the only item that currently reddens CI's `tests` job. G is a test-side isolation defect (no `src/` change): it was opened from the item-E step's "residual flake" finding, which the E section explicitly recommended as a separate item rather than a widening of E.
 
 **Scope extension (no reclassification).** Q-127 (answered) moved E and F from "recorded scope gap" to in-scope. The change type stays **ISSUE**: E fixes a deviation from specified observability without introducing new behavior (see §6.3, spec-compliance verdict COMPLIANT — no Spec Amendment needed), and C/D/F remain non-behavior chore items inside the same change. No todo-set or phase-matrix change results (the ISSUE path already runs Phases 1, 3, 4, 5, 6).
 
@@ -1227,3 +1228,116 @@ Identical to the pre-bump run — the import-order change and the dependency bum
 ```
 
 `src/`, `pyproject.toml`, all other test files, and all other workflows are untouched. No test was weakened, deleted or altered in assertion content.
+
+---
+
+## Phase 4 (S4.2, item G) — residual logging flake fixed (2026-10-02)
+
+Branch `issue/main-ci-green` @ `be1adc5` (items E, A, B, C, D, F already landed). Item G only: two test files, no `src/` file touched. G was opened from the "Finding — residual flake in the §6.4 corroboration recipe" section of the item-E record, which recommended exactly this ("drain/await the bus in the settings-coverage polluter tests") as a separate item rather than a widening of E.
+
+### Reproduction (RED for G) — measured at `be1adc5`, 10 runs per recipe
+
+```bash
+# recipe 1 — the §6.4 corroboration recipe, fixed collection order (the reliable one)
+uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/logging/test_logging.py tests/unit/logging/test_logging_edges.py -q --color=no -p no:randomly
+run 1:  1 failed, 17 passed in 1.57s
+run 2:  18 passed in 1.47s
+run 3:  18 passed in 1.48s
+run 4:  1 failed, 17 passed in 1.55s
+run 5:  18 passed in 1.48s
+run 6:  1 failed, 17 passed in 1.55s
+run 7:  18 passed in 1.47s
+run 8:  1 failed, 17 passed in 1.55s
+run 9:  1 failed, 17 passed in 1.56s
+run 10: 1 failed, 17 passed in 1.55s
+→ 6/10 RED
+
+# recipe 2 — the brief's recipe, default (randomized) collection order
+uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/logging/test_logging.py -q --color=no
+run 1..9:  13 passed in 0.91-0.94s
+run 10:    1 failed, 12 passed in 1.02s
+→ 1/10 RED
+```
+
+Failure node in both: `tests/unit/logging/test_logging.py:46  AssertionError: assert 1 == 2` in `test_ac_003_setup_logger_thread_safe`. The §6.4 rate (4/5) is reproduced; the brief's recipe reproduces more rarely because `pytest-randomly` sometimes collects the polluter behind the victim.
+
+### Mechanism — one race, two pollution channels
+
+**Channel 1 — the handler-count window (the reported failure).** `test_sink_reconfigured_rotation` writes `logging.log_max_bytes` on the shared registry; `SettingsRegistry.set_value` publishes `SettingChanged` to the shared bus and returns without awaiting delivery. The logging feature's subscription (`_setup.py`, `_subscribe_to_setting_changes`) then runs `_configure()` on the bus worker — inside whatever test happens to be executing — and `_configure()`'s remove-then-add window transiently leaves the process-global handler set at `1`. `test_ac_003_setup_logger_thread_safe` asserts exactly that global count.
+
+**Channel 2 — sink-target drift (found while closing channel 1).** The settings-coverage autouse fixture (`_reset_registry`, `isolated_registry(install=False)`) leaves the settings singleton reset for the whole test, so `install_isolated_registry()` preserves **nothing** and the installed registry holds only `logging.log_max_bytes`. `_settings_from_registry()` then falls back to the hardcoded defaults (`logs/app.log`, `INFO`) and re-points the process's file sink away from the session log file. Measured at `be1adc5`: `rm -rf logs && uv run pytest tests/unit/test_settings_coverage.py -q -p no:randomly` created `logs/app.log` in the worktree root on **3/3** runs. Whether the drift happens depends on whether the reconfigure lands before or after the fixture restores the session registry — the same race seen from the sink side. It is what reddens `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` (it polls `session_settings.log_file` with a 15 s timeout — hence the ~26 s failing group runs). Baseline group measurement at `be1adc5`, default order, 6 runs: `FAILED tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` → `1 failed, 64 passed in 25.76s` ×1, `65 passed` ×5.
+
+A settle-only first attempt made the group **worse** (4/6 RED): pinning the dispatch inside the polluter makes it always read the incomplete isolated registry, i.e. it makes channel 2 deterministic. Both channels therefore had to be closed together.
+
+### The fix (test-side only)
+
+`tests/settings_test_helpers.py` — new `set_value_settled(registry, key, value, timeout=5.0)`: performs `registry.set_value(key, value)` and waits for **that write's** dispatch to finish. The wait is **ordered, not timed**: the bus dispatches one event to its handlers in subscription order on a single worker thread and drains its queue FIFO, so a sentinel handler subscribed by the helper — after every handler that can react to the write — is invoked for that event only once those handlers have returned. The sentinel matches the write's key **and** value, so a stale `SettingChanged` for another key (or an earlier value of this one) cannot satisfy it, and FIFO order means every event queued before it has been dispatched too. The sentinel is unsubscribed in `finally`. `timeout=5.0` is the same bound as the existing `wait_for` and only bounds a hang (it raises `AssertionError`); no timeout was raised to paper over the race.
+
+`tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation` (the polluter):
+
+- registers the logging feature's own settings on its isolated registry and restores the session's `logging.log_file` / `logging.log_level` before the rotation write → channel 2 closed: the reconfigure it triggers changes only the rotation parameter and keeps the file sink on the session log file;
+- routes every `logging.*` write through `set_value_settled` → channel 1 closed: no queued reconfigure can escape into a later test.
+
+**No assertion was added, changed, weakened or deleted.** The victim, `test_ac_003_setup_logger_thread_safe`, is untouched: it still spawns 8 concurrent `setup_logger()` threads and still asserts `not errors` and `len(logger._core.handlers) == _EXPECTED_HANDLER_COUNT (2)` — which is what AC-003 (`docs/specs/logging.md`: "two threads calling `setup_logger()` concurrently … exactly one thread performs the setup and the other is a no-op") requires together with REQ-001/INV-001's exactly-one-console-plus-one-file set. The fix removes the *foreign* reconfigure that used to intrude on that window; it does not change what the test observes, and no settling fixture was added to it.
+
+### GREEN (after) — verbatim
+
+```bash
+# recipe 1 (fixed order) — 10 runs
+uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/logging/test_logging.py tests/unit/logging/test_logging_edges.py -q --color=no -p no:randomly
+run 1..10: 18 passed in 1.50-1.52s      → 10/10 GREEN (0 RED)
+
+# recipe 2 (randomized order) — 10 runs
+uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/logging/test_logging.py -q --color=no
+run 1..10: 13 passed in 0.94-0.96s      → 10/10 GREEN (0 RED)
+
+# channel-2 drift check — 3 runs, worktree root
+rm -rf logs && uv run pytest tests/unit/test_settings_coverage.py -q --color=no -p no:randomly
+run 1..3: 30 passed in 1.93-1.97s ; no logs/ directory created (baseline: 3/3 created logs/app.log)
+```
+
+Group runs (the logging family + the settings-coverage family), default randomized order ×10 and fixed order ×1:
+
+```bash
+uv run pytest tests/unit/logging tests/integration/logging tests/acceptance/logging tests/property/logging tests/unit/test_settings_coverage.py tests/acceptance/settings_coverage -q
+run 1:  65 passed in 11.63s
+run 2:  65 passed in 11.80s
+run 3:  65 passed in 12.51s
+run 4:  65 passed in 12.40s
+run 5:  65 passed in 12.69s
+run 6:  65 passed in 12.02s
+run 7:  65 passed in 10.91s
+run 8:  65 passed in 11.89s
+run 9:  65 passed in 11.52s
+run 10: 65 passed in 11.57s
+→ 10/10 GREEN (same recipe at be1adc5: 1/6 RED)
+
+uv run pytest tests/unit/logging tests/integration/logging tests/acceptance/logging tests/property/logging tests/unit/test_settings_coverage.py tests/acceptance/settings_coverage -q -p no:randomly
+65 passed in 11.82s      → GREEN
+```
+
+Settings-family sanity for the shared-helper change (the helper is additive, but the whole settings suite imports the module): `uv run pytest tests/unit/settings tests/acceptance/settings tests/integration/settings tests/property/settings tests/contract/settings tests/unit/test_settings_test_isolation.py -q` → `88 passed in 36.26s`.
+
+### Ruff (changed paths)
+
+```bash
+uv run ruff check tests/settings_test_helpers.py tests/unit/test_settings_coverage.py
+All checks passed!
+```
+
+`uv run ruff format --check` on the same paths: `tests/settings_test_helpers.py` already formatted; `tests/unit/test_settings_coverage.py` would be reformatted — **pre-existing**, verified with the identical command at `be1adc5` (same file-wide diff over ~40 untouched lines: blank-line-before-def and compact multi-arg literals). Running `ruff format` on that file would rewrite out-of-scope code, which AGENTS.md forbids in a task step; the step's own lines are format-neutral (one compact call removed, three single-line calls added, all under the 120-char limit). The whole-repo sweep stays the Phase 5 gate.
+
+### Files changed by G (complete list)
+
+```text
+tests/settings_test_helpers.py        (+ set_value_settled; + threading / SettingChanged imports)
+tests/unit/test_settings_coverage.py  (test_sink_reconfigured_rotation: session-consistent registry + settled writes; + _ROTATED_MAX_BYTES; + typing.Any import)
+```
+
+`src/` is untouched (constraint). `tests/conftest.py`, `tests/logging_test_helpers.py`, `tests/unit/logging/test_logging.py` and `tests/unit/logging/test_logging_edges.py` are untouched.
+
+### Remaining exposure (flagged, not fixed here)
+
+Two in-process publishers from the §6.1 offender inventory still publish `logging.*` on the shared bus without awaiting the dispatch: `tests/contract/filemanagement/test_filemanagement_contracts.py:93` (restored at `:120`) and `tests/contract/permissions/test_performance.py:57` (restored at `:120`). They write `logging.log_level` on the complete session registry, so they cannot cause channel-2 drift, and item E's `_SinkState` fix keeps them from deleting foreign sinks; what remains is the same transient handler-count window for whichever global-count assertion runs next. `set_value_settled` is the ready-made closing mechanism should a future run show them biting — widening to them here would have pulled two latency-budget contract tests into scope without evidence.
+
+Also noted, no action (not part of the flake): `tests/acceptance/settings_coverage/test_wiring.py` runs `src/main.py` in a subprocess with `cwd=_REPO_ROOT`, which creates `logs/app.log` in the worktree root. That is a subprocess artifact, not in-process sink drift; `logs/` at the repo root is not in `.gitignore` (only `data/logs/` and `src/data/logs/`) — a `.gitignore` gap for a separate chore item.
