@@ -223,5 +223,12 @@ src/data/configuration/
 # feature's own `src/backend/settings/` (and `tests/**/settings/`) directories
 # are not excluded from gitignore-aware tooling (deptry).
 /settings/
+
+# Runtime artifact directories created at the worktree root by test/coverage runs:
+# data/ = filemanagement DEFAULT_STORAGE_ROOT (./data/files); logs/ = logging log_file
+# (logs/app.log plus rotated/adjacent files that the *.log pattern does not match).
+/data/
+/logs/
+
 # pi subagent snapshot state.
 .pi/subagents.json
