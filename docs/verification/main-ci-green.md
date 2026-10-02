@@ -1826,3 +1826,55 @@ The two new test files are referenced in the matrix (4 hits). The three chore-to
 
 ### Q5 — docs placement
 Non-`.py`/`uv.lock`/`quality.yml` diff: `AI_Questions.md` (repo root, per the AI-Questions mechanism), `docs/verification/main-ci-green.md`, `docs/verification/traceability.md`, `docs/workflow/PROBLEMS.md`. Nothing written to `docs/` root; no `userdocs/` change is required (no user-facing behavior delta — see the §"no-behavior-delta statement").
+
+## Phase 6 — review report (2026-10-02)
+
+S6.3 consolidates the S6.1 (F-1…F-6) and S6.2 (F-7…F-9) findings into one report and closes the
+Phase 6 gate. Docs-only: no new review pass, no test run, no re-review of recorded evidence.
+
+### Verdict
+
+**REVIEW: CLEAN** — every finding is Resolved or Accepted-with-reason; F-3 is carried to S6.4
+because its CI proof can only exist once the PR is open / the merge lands. No High/Medium finding
+is open, and the ISSUE clean-review criteria hold (checklist below).
+
+### Findings
+
+| # | finding | severity | status |
+|---|---|---|---|
+| F-1 | item C also re-wraps the `BOOTSTRAP_SYSTEM_PERMISSIONS` literal (indentation only) | Low | Resolved — non-behavior, inside item C's predicted file set |
+| F-2 | item D's lock diff adds an edge `virtualenv → packaging` | Info | Resolved — `packaging` already locked; no new dependency |
+| F-3 | item F's CI evidence is half-pending (post-PR / post-merge observation) | Info | Carried to S6.4 — no branch protection, so nothing blocks |
+| F-4 | the `deadline=` widenings reduce slow-example detection | Low | Accepted-with-reason — harness tolerance, not a product budget |
+| F-5 | `_sink_state` is module-global and mutated without a lock | Info | Accepted-with-reason — same exposure pre-fix; `Event` guard intact |
+| F-6 | test-name drift vs the §7 plan | Info | Resolved — S5.3 rows use the final names; all node ids collect |
+| F-7 | `wait_for` is defined twice; conftest imports it from the settings helper | Info | Accepted-with-reason — pre-existing duplication; follow-up chore |
+| F-8 | two bus-settlement helpers with overlapping intent | Info | Accepted-with-reason — different contracts, both documented |
+| F-9 | `set_value_settled` reads `registry._event_bus` (private attribute) | Info | Accepted-with-reason — test-only reach-through, no product API change |
+
+### Criteria checklist (ISSUE clean review)
+
+- [x] Reproduction tests GREEN — `5 passed in 0.24s` (S5.4 re-run at `f0b6d84`; S6.1 re-run `5 passed in 0.27s`).
+- [x] Full regression clean — `639 passed, 1 skipped` on 6 consecutive runs (2 at the S5.1 re-run, 4 for item I); the single skip is pre-existing (symlinks unavailable on this host).
+- [x] lint / types / deptry / pip-audit / alembic / mkdocs — `All checks passed!` / `Success: no issues found in 73 source files` / `Success! No dependency issues found.` / `No known vulnerabilities found` / `Running upgrade eace2f772150 -> d94b7f2e6a31` / `Documentation built in 1.50 seconds`.
+- [x] Traceability updated, no orphans — nine item rows (`traceability.md:756-765`) plus per-feature rows; both new test files referenced; the chore-touched test files are pre-existing covered tests.
+- [x] Feature boundaries respected — only public cross-feature imports (`backend.logging`, `backend.settings`); no `_`-prefixed cross-feature import; tests live in the matching areas.
+- [x] No test weakened / deleted / skipped / xfail'd — `git diff origin/main...HEAD -- tests/ | grep '^-.*assert '` is empty; two test files added, none deleted. The only widenings are `deadline=1000` (B, H) and `deadline=500` (I): hypothesis per-example time bounds (harness tolerances; measured bases 246–356 ms), with the invariant assertions, strategies, `max_size` and `max_examples` byte-unchanged, and `HealthCheck.too_slow` already suppressed on `main`. The widened hypothesis alphabet (A) is strictly widening.
+- [x] No behavior beyond the affected spec IDs — only two `src/` files: settings YAML emission style (A) and loguru sink ownership on reconfigure (E); both re-verified COMPLIANT in S6.1 Q3.
+- [x] No spec amendment needed — the change stays ISSUE (S6.1 Q3).
+- [x] Docs placement correct — `AI_Questions.md`, `docs/verification/*`, `docs/workflow/PROBLEMS.md`; nothing written to `docs/` root; no `userdocs/` change (no user-facing behavior delta).
+
+### Follow-ups carried out of this change (not fixed here)
+
+- `ruff format --check .` repo drift: 72 files would be reformatted (pre-existing; CI gates `ruff check`, not format).
+- `tests/architecture/` does not exist although AGENTS.md and the verify skill reference it (repo/docs reconciliation).
+- Untracked `data/` and `logs/` test artifacts — a `.gitignore` gap.
+- Stale `RED` rows in the logging and settings-coverage matrices (superseded by the S5.3 rows).
+- `migrations/env.py` `fileConfig` alternative fix — needs a spec check before changing.
+- Duplicated `wait_for` helpers (F-7) — one definition in `eventbus_test_helpers`, re-exported.
+- `set_value_settled` reads `registry._event_bus` (F-9) — needs a public settings accessor.
+
+### Version bump decision (S6.4)
+
+ISSUE → `patch` per AGENTS.md. Current `pyproject.toml:4` `version = "0.5.0"` → target **`0.5.1`**
+(`bump-my-version bump patch --dry-run` first; clean working tree; `tag = false`).
