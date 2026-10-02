@@ -138,12 +138,12 @@ class _SinkState:
     ids: list[int] = field(default_factory=list)
 
 
-_state = _SinkState()
+_sink_state = _SinkState()
 
 
 def _configure(settings: Settings) -> None:
-    if _state.configured:
-        for sink_id in list(_state.ids):
+    if _sink_state.configured:
+        for sink_id in list(_sink_state.ids):
             # A sink removed externally (e.g. a test that resets loguru) is
             # already gone; removing it again must not break the reconfigure.
             with contextlib.suppress(ValueError):
@@ -152,16 +152,16 @@ def _configure(settings: Settings) -> None:
         # Drop loguru's default sink so the handler set is exactly the two
         # configured sinks (REQ-001 / INV-001).
         logger.remove()
-        _state.configured = True
-    _state.ids.clear()
+        _sink_state.configured = True
+    _sink_state.ids.clear()
     # Console sink on the standard error stream (fd 2) so standard-stream
     # capture helpers observe it.
-    _state.ids.append(logger.add(sys.stderr, **_console_sink_options(settings.log_level)))
+    _sink_state.ids.append(logger.add(sys.stderr, **_console_sink_options(settings.log_level)))
     # Create the log-file parent directory if it does not exist (EDGE-001).
     log_file = Path(settings.log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)
     # Rotating file sink.
-    _state.ids.append(logger.add(str(log_file), **_file_sink_options(settings)))
+    _sink_state.ids.append(logger.add(str(log_file), **_file_sink_options(settings)))
     # Match the stdlib root logger's level to the configured level so records
     # (e.g. INFO) are not dropped by the inherited WARNING default before
     # reaching the intercept handler (REQ-003 / AC-004).
