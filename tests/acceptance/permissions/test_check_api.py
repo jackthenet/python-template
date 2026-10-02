@@ -1008,11 +1008,10 @@ def test_initial_catalog_exactly_60_keys() -> None:
     from backend.authentication.feature_actions import register_actions as authentication_actions  # deferred: RED
     from backend.filemanagement.feature_actions import register_actions as filemanagement_actions  # deferred: RED
     from backend.mail.feature_actions import register_actions as mail_actions  # deferred: RED
+    from backend.permissions import PermissionCatalog  # deferred: RED
     from backend.sessionmanagement.feature_actions import register_actions as sessionmanagement_actions  # deferred: RED
     from backend.settings.feature_actions import register_actions as settings_actions  # deferred: RED
     from backend.usermanagement.feature_actions import register_actions as usermanagement_actions  # deferred: RED
-
-    from backend.permissions import PermissionCatalog  # deferred: RED
 
     catalog = PermissionCatalog()
     usermanagement_actions(catalog)

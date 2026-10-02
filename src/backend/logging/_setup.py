@@ -8,10 +8,12 @@ leaks local variable values (``diagnose=False``).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 import threading
 import types
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -125,28 +127,45 @@ def _subscribe_to_setting_changes() -> None:
     get_event_bus().subscribe(SettingChanged, _on_setting_changed)
 
 
+# The state of the sinks managed by _configure (console + file). On the first
+# call, logger.remove() removes all sinks (including loguru's default). On
+# subsequent calls, only the managed sinks are removed (by ID), leaving any
+# other sinks (e.g. test fixtures' sinks) intact — so a stale SettingChanged
+# event dispatching _configure() mid-test does not remove a test's capture sink.
+@dataclass
+class _SinkState:
+    configured: bool = False
+    ids: list[int] = field(default_factory=list)
+
+
+_sink_state = _SinkState()
+
+
 def _configure(settings: Settings) -> None:
-
-    # Remove loguru's default sink so the handler set is exactly the two
-    # configured sinks (REQ-001 / INV-001).
-    logger.remove()
-
+    if _sink_state.configured:
+        for sink_id in list(_sink_state.ids):
+            # A sink removed externally (e.g. a test that resets loguru) is
+            # already gone; removing it again must not break the reconfigure.
+            with contextlib.suppress(ValueError):
+                logger.remove(sink_id)
+    else:
+        # Drop loguru's default sink so the handler set is exactly the two
+        # configured sinks (REQ-001 / INV-001).
+        logger.remove()
+        _sink_state.configured = True
+    _sink_state.ids.clear()
     # Console sink on the standard error stream (fd 2) so standard-stream
     # capture helpers observe it.
-    logger.add(sys.stderr, **_console_sink_options(settings.log_level))
-
+    _sink_state.ids.append(logger.add(sys.stderr, **_console_sink_options(settings.log_level)))
     # Create the log-file parent directory if it does not exist (EDGE-001).
     log_file = Path(settings.log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)
-
     # Rotating file sink.
-    logger.add(str(log_file), **_file_sink_options(settings))
-
+    _sink_state.ids.append(logger.add(str(log_file), **_file_sink_options(settings)))
     # Match the stdlib root logger's level to the configured level so records
     # (e.g. INFO) are not dropped by the inherited WARNING default before
     # reaching the intercept handler (REQ-003 / AC-004).
     logging.getLogger().setLevel(settings.log_level)
-
     # Install the stdlib intercept handler on the root logger exactly once.
     _install_intercept_handler()
 

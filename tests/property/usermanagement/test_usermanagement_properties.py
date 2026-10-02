@@ -106,7 +106,17 @@ def test_inv_002_password_round_trip(p1: str, p2: str) -> None:
     assert manager.verify_password(created.id, p1) is False
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+# deadline=1000 is measured, not guessed: the slowest local examples ran 258-270 ms against the
+# 200 ms default (seed 101 and the default random seed; this file is byte-identical to
+# origin/main, so the flake predates this change). The cost is argon2id password hashing
+# (~50-100 ms per create_user, ADR-019) with up to 8 creates per max_size=8 sequence. A hypothesis
+# deadline is a harness tolerance on per-example runtime, not a product performance budget (NFR
+# budgets are asserted by explicit budget tests), so the strategy and max_size stay untouched.
+@settings(
+    max_examples=_MAX_EXAMPLES,
+    deadline=1000,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 @given(
     ops=st.lists(
         st.sampled_from(["create_admin", "create_member", "delete_admin", "deactivate_admin"]),

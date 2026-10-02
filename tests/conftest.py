@@ -8,6 +8,7 @@ code in a subprocess via logging_test_helpers.run_python().
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -51,6 +52,34 @@ def session_settings(_logging_session_setup: Any) -> Any:
     return _logging_session_setup
 
 
+@pytest.fixture(autouse=True)
+def _stdlib_root_logging_restored() -> Iterator[None]:
+    """Restore the stdlib root logger's routing state around every test.
+
+    Three tests apply the alembic migration in-process, and ``migrations/env.py``
+    calls ``fileConfig(alembic.ini)``, which replaces the root logger's handler
+    list and level and disables the pre-existing non-root loggers. That drops the
+    logging feature's stdlib intercept handler (REQ-003) and raises the root level
+    above INFO, so every later test that routes stdlib records into loguru
+    (AC-004, AC-005, EDGE-005, the logging integration pipeline) silently loses
+    them — the full-suite flake, since the order is randomized. The snapshot and
+    restore keep the process-global state installed by ``setup_logger()`` intact;
+    no test's assertions change.
+    """
+    root = logging.getLogger()
+    handlers: list[logging.Handler] = list(root.handlers)
+    level = root.level
+    manager = logging.Logger.manager
+    disabled = {name: lg.disabled for name, lg in manager.loggerDict.items() if isinstance(lg, logging.Logger)}
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
+    for name, was_disabled in disabled.items():
+        lg = manager.loggerDict.get(name)
+        if isinstance(lg, logging.Logger):
+            lg.disabled = was_disabled
+
+
 class _Captured:
     """A captured loguru record.
 
@@ -79,14 +108,45 @@ def log_records() -> Iterator[list[Any]]:
 
     Each record supports ``str(m)`` (the message text) and ``m["level"]`` /
     ``m["record"]`` (record fields), matching the suite's assertions.
+
+    The shared event bus is drained before the sink is added: the bus
+    dispatches events asynchronously on a background worker, so stale events
+    from previous tests (e.g. ``SettingChanged`` events from ``set_value``
+    calls) can otherwise be dispatched during this test, triggering the
+    logging feature's ``_configure()`` (which calls ``logger.remove()``) and
+    removing the sink added here. Draining first ensures the stale events are
+    dispatched before the sink exists, so the sink is safe for the test.
     """
     records: list[Any] = []
 
     def _sink(message: Any) -> None:
         records.append(_Captured(message.record))
 
+    _drain_event_bus()
     handler_id = logger.add(_sink, level="DEBUG", catch=False)
     try:
         yield records
     finally:
         logger.remove(handler_id)
+
+
+def _drain_event_bus() -> None:
+    """Wait for the shared event bus to dispatch all queued events.
+
+    The event bus dispatches events asynchronously on a background worker
+    thread. Waiting for the queue to be empty (plus a short grace period for
+    the worker to finish the in-flight dispatch) ensures no stale event is
+    dispatched after this point. Used by the ``log_records`` fixture so a
+    stale ``SettingChanged`` event does not trigger ``_configure()`` (which
+    calls ``logger.remove()``) and remove the fixture's sink mid-test.
+    """
+    import time
+
+    from settings_test_helpers import wait_for
+
+    from backend.eventbus import get_event_bus
+
+    bus = get_event_bus()
+    if wait_for(lambda: bus.pending_count == 0):
+        # Grace period for the worker to finish the in-flight dispatch.
+        time.sleep(0.05)

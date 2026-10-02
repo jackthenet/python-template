@@ -22,10 +22,53 @@ from typing import Any
 from loguru import logger
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
+from ruamel.yaml.nodes import ScalarNode
+from ruamel.yaml.representer import SafeRepresenter
 
 from backend.logging import logged_class
 from backend.settings.exceptions import TemplateStorageError, ValueStorageError
 from backend.settings.models import Template
+
+# The characters the YAML-1.1 reader (the reader ``typ="safe"`` uses) treats as
+# line breaks: inside a plain or single-quoted scalar they fold to a line break
+# on load, so a scalar containing one has to be emitted in an escaped
+# (double-quoted) style. A full-BMP scan (docs/verification/main-ci-green.md,
+# item A) showed U+0085 (NEL) is the only code point the pre-fix serializer
+# actually corrupted — it wrote NEL literally inside a single-quoted scalar while
+# its reader folded it away — and U+2028/U+2029 are listed alongside it so the
+# rule follows the reader instead of the emitter's incidental behaviour.
+_YAML_LINE_BREAKS = "\x85\u2028\u2029"
+
+
+def _str_representer(dumper: Any, data: str) -> ScalarNode:
+    """Represent ``str`` scalars, forcing double-quoted style on affected ones.
+
+    ruamel's emitter writes U+0085 (NEL) literally inside a single-quoted
+    scalar while its reader folds that same character to a line break, so a
+    stored value silently comes back changed (settings INV-009 /
+    settings-coverage INV-002: ``'\\x85'`` loaded as ``' '``). Only scalars that
+    actually contain such a character get the escaped style, so the on-disk
+    format stays byte-identical for every other value (keys, ``null``, numbers
+    and unaffected strings are untouched).
+    """
+    style = '"' if any(ch in data for ch in _YAML_LINE_BREAKS) else None
+    return ScalarNode("tag:yaml.org,2002:str", data, style=style)
+
+
+# The safe representer table with the ``str`` entry replaced (a copy, so the
+# shared ruamel table is never mutated).
+_YAML_REPRESENTERS: dict[Any, Any] = {**SafeRepresenter.yaml_representers, str: _str_representer}
+
+
+class _SafeRepresenter(SafeRepresenter):
+    """The safe representer with the ``str`` override above.
+
+    Subclassing keeps the override instance-scoped: ``add_representer`` is a
+    classmethod that mutates the shared ``SafeRepresenter`` class, which would
+    change the output of every other ruamel user in the process.
+    """
+
+    yaml_representers = _YAML_REPRESENTERS
 
 
 def _dump_yaml(data: dict[str, Any]) -> str:
@@ -34,9 +77,15 @@ def _dump_yaml(data: dict[str, Any]) -> str:
     A fresh ``YAML`` instance is used per call: ruamel instances hold
     per-call state and are not thread-safe, so this keeps the dump
     stateless (and thread-safe) per invocation.
+
+    The representer swap is per instance, and the loader is untouched, so the
+    safe-YAML semantics of REQ-022 / settings-coverage REQ-010 are unchanged:
+    the document stays plain YAML (no custom tags, no object loading) and files
+    written before the fix keep loading.
     """
     yaml = YAML(typ="safe")
     yaml.default_flow_style = False
+    yaml.Representer = _SafeRepresenter
     buf = StringIO()
     yaml.dump(data, buf)
     return buf.getvalue()

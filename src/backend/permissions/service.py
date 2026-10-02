@@ -479,7 +479,7 @@ class PermissionService:
         try:
             if registry.has(_SYSTEM_PRINCIPAL_SETTING_KEY):
                 registry.set_value(_SYSTEM_PRINCIPAL_SETTING_KEY, list(permissions))
-        except Exception:
+        except Exception:  # nosec B110
             pass  # best-effort: a registry failure never breaks the table write
 
     def _is_valid_grant_key(self, permission: str) -> bool:

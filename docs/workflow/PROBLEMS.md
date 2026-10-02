@@ -261,3 +261,67 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 aborted run + 1 fresh relaunch
 - **Resolution:** Relaunched S6.1 with a fresh subagent (completion guard, P-3/P-7) whose prompt is strictly bounded: single objective (normative-basis compliance), explicit inputs (spec + verification file + final `src/` state), an explicit instruction NOT to re-run the full test suite (Phase 5 already confirmed the gate CLEAN) and NOT to do S6.2–S6.4, and a required structured handoff.
 - **Date:** 2026-09-22
+
+## P-28 — three step subagents exhausted the model context window in one change (S3.1, S4.2-H, S4.2-I); the cause was the change's own verification doc, not the task
+- **Problem:** The S3.1 test-derivation run failed with `prompt (80579 tokens) + max tokens exceeds the context`; the S4.2 (item H) run failed the same way at `prompt (127442 tokens)`; the S4.2 (item I) run died on a `Connection error` after ~25 min. `docs/verification/main-ci-green.md` had grown to 1454–1600 lines, and each subagent read it whole (several times), while verbose pytest output (`-v`, long tracebacks, full-suite logs of 639 tests) added the rest.
+- **Step / Phase:** S3.1 (Phase 3), S4.2 items H and I (Phase 4)
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 2 failed runs + 1 aborted run, 3 fresh relaunches
+- **Resolution:** Relaunches carried explicit context budgets: grep-first + windowed reads (≤15–25 lines) and **never read the verification doc whole**; **append evidence with a heredoc instead of read-and-rewrite**; every pytest run terse (`-q --tb=line --color=no 2>&1 | tail -8`), never `-v`; explicit run and tool-call budgets; and the step was split into **part 1 (verify + commit code, no docs)** and **part 2 (record the evidence, no code)**. After that the same class of step ran in 86–715s with 7–24 tool calls.
+- **Date:** 2026-10-02
+
+## P-29 — Phase 5 S5.1 gate FAILED: the full suite was red in 2 of 6 runs; re-entered Phase 4 with a new item (I)
+- **Problem:** After items A–H, every targeted group was GREEN but `uv run pytest tests/ -q` failed in ~1 of 3 runs (`test_ac_004_intercept_handler_routes_records`, `test_ac_005_intercept_handler_skips_bootstrap`, `test_stdlib_loguru_decorator_pipeline`). Each node passes in isolation (0/5) and in the known polluting groups (0/5), so the trigger was only visible in the full-suite randomized permutation — and CI runs the same randomized suite, so "green locally" was not evidence.
+- **Step / Phase:** S5.1 (Phase 5) → re-entry to S4.2 (item I) → S5.1 re-run
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 3 full-suite runs to observe + 10 probe/bisect runs + ~25 min of full-suite runs to separate the channels + 4-run proof + 2-run re-confirmation
+- **Resolution:** Two independent channels, found by capturing the `pytest-randomly` seed of a red run and bisecting the test tree with that seed: (1) `migrations/env.py:27` calls `logging.config.fileConfig(...)`, which replaces the stdlib root logger's handlers/level and disables existing loggers, killing the logging feature's intercept handler (REQ-003) for every later test — closed by an autouse snapshot/restore fixture in `tests/conftest.py`; (2) Hypothesis' 200 ms default deadline on I/O-bound filemanagement property tests — closed with the file's own existing `deadline=500`. Lesson: for a flaky-suite change the Phase 5 gate must be **N consecutive full-suite runs**, and seed-capture + bisect is the efficient diagnosis; a single green run proves nothing under `pytest-randomly`.
+- **Date:** 2026-10-02
+
+## P-30 — the orchestrator's S1.1 launch brief asserted wrong premises about which CI jobs were failing
+- **Problem:** The change was opened with a brief asserting main's CI failed on the settings YAML round-trip and the hypothesis deadline defects. The triage subagent proved both **pass on CI** (they are local-only findings replayed from the per-worktree `.hypothesis` example DB) and that the real `tests`-job failure was a logging-interception family whose failing set varies run to run. Two of the brief's premises were wrong; the scope had to be re-asked (Q-127).
+- **Step / Phase:** S1.1 (Phase 1, ISSUE triage)
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 BLOCKED-USER round + 1 triage re-run
+- **Resolution:** The triage record's §6/§11 corrections are now the authoritative statement. Lesson for the orchestrator: when opening a CI-related change, attach the **per-job** failure evidence (`gh run view <id> --log-failed` per job, plus the job list) to the launch brief instead of summarizing from memory.
+- **Date:** 2026-10-02
+
+## P-31 — a single large heredoc append was truncated mid-write by the tool's command-size limit (S5.4)
+- **Problem:** The Phase 5 verification report (~103 lines) was appended in one heredoc; the write was cut mid-line, leaving a partial row in the file.
+- **Step / Phase:** S5.4 (Phase 5)
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 extra iteration (truncate the partial line, re-append in two smaller heredocs)
+- **Resolution:** Verified no duplicated rows and the correct net insertion count. Lesson: keep heredoc appends under ~50 lines and verify with `git diff --stat` after each append.
+- **Date:** 2026-10-02
+
+## P-32 — `tests/architecture/` is referenced by AGENTS.md and the verify skill but does not exist in the repository
+- **Problem:** Phase 5 (REFACTOR/FEATURE gate) and Phase 6 (architecture check) name `uv run pytest tests/architecture/ -v`, and the verify skill runs it as a gate. The directory exists on neither this branch nor `origin/main`, so the gate is unrunnable and had to be recorded as N/A.
+- **Step / Phase:** S5.2 (Phase 5)
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 (discovery + N/A record)
+- **Resolution:** Recorded as a follow-up reconciliation item (either add the architecture tests or correct AGENTS.md/the skill). Not fixed in this change (out of scope).
+- **Date:** 2026-10-02
+
+## P-33 — `bump-my-version` under `uvx` produced no output and `show` crashed; the bump had to be verified from git instead (S6.4)
+- **Problem:** `uvx bump-my-version bump patch` (and `--dry-run`) exited 0 with **no stdout** (rich logging swallowed on this host), and `uvx bump-my-version show` raised a rich-click traceback, so the tool gave no evidence that it bumped anything.
+- **Step / Phase:** S6.4 (version bump + open PR) — Phase 6
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 extra verification round
+- **Resolution:** Verified the bump with `git show --stat HEAD` + `git diff HEAD~1` (`pyproject.toml` `version` and `[tool.bumpversion] current_version`, 0.5.0 → 0.5.1, no tag). Lesson: after a tool run that reports nothing, verify the effect from the VCS state, not from the tool's report.
+- **Date:** 2026-10-02
+
+## P-34 — fixing `pip-audit` unmasked a never-executed `bandit` failure; Phase 6 re-entered Phase 4 with a new item (J)
+- **Problem:** PR #58's `security` job failed in 12s on `bandit -r src/` with 6 low-severity findings, although the Phase 5 gate had run `pip-audit` and `deptry` locally. Cause: the job runs `pip-audit` (`.github/workflows/quality.yml:41`) **before** `bandit -r src/` (:43), and pip-audit had been failing on `main` for weeks — so bandit had never actually executed in CI and its findings were invisible. The Phase 5 gate set did not include bandit, so the change's verification was incomplete.
+- **Step / Phase:** S6.4 (Phase 6) → re-entry to S4.2 (item J) → S5.2-equivalent security gate
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 CI failure + 1 new item (fix + record), 2 extra subagent runs
+- **Resolution:** Item J applied the repo's existing inline `# nosec BXXX` pattern (5× B105 on permission **description** strings in the `feature_actions.py` files, 1× B110 in `permissions/service.py`), comment-only, `+6/−6`, `bandit -r src/` now reports 0 issues and exits 0; CI `security` is green. Lessons: (a) when a CI job has multiple sequential steps, a green local run of the *first* one is not evidence about the later ones — enumerate every step of each red job; (b) the verify skill's gate list should include `uv run bandit -r src/` for any change that touches the security job.
+- **Date:** 2026-10-02
+
+## P-35 — a locally calibrated Hypothesis deadline tripped on CI; the `coverage` job failed after `tests` passed
+- **Problem:** Item I set `deadline=500` on the filemanagement property tests (copied from a sibling test) after local measurement. CI's `coverage` job then failed: `test_inv_001_no_partial_state_on_failure - DeadlineExceeded('Test took 739.77ms, which exceeds the deadline of 500.00ms')`, while the `tests` job on the same commit **passed** (different `pytest-randomly` seed). Coverage itself was fine (93.57% vs 92).
+- **Step / Phase:** S6.4 follow-up (Phase 6) → re-entry to S4.2 (item K)
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 CI failure + 1 fix/record run (~2.5 min CI each)
+- **Resolution:** Item K made the file uniform at `deadline=2000` (≈2.7× the CI worst) with the CI run id recorded in the docstring; decorator-only, no assertion/strategy change. Lessons: (a) a Hypothesis deadline must be calibrated against **CI** timings, not local ones; (b) the `tests` and `coverage` jobs run the same suite with **different seeds**, so one green job is not evidence about the other — check both.
+- **Date:** 2026-10-02

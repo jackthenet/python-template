@@ -58,7 +58,16 @@ def _apply_admin_op(manager: UserManager, op: str) -> None:
         manager.delete_user(admins[0].id)
 
 
-@settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
+# deadline=1000 is measured, not guessed: the slowest CI examples ran 246-356 ms against the
+# 200 ms default (seeds 7/101/2024). The cost is argon2id password hashing (~50-100 ms per
+# create_user, ADR-019) with up to ~11 creates per max_size=10 sequence. A hypothesis deadline
+# is a harness tolerance on per-example runtime, not a product performance budget (NFR budgets
+# are asserted by explicit budget tests), so the strategy and max_size stay untouched.
+@settings(
+    max_examples=_MAX_EXAMPLES,
+    deadline=1000,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 @given(
     ops=st.lists(
         st.sampled_from(

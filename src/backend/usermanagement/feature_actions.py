@@ -26,8 +26,8 @@ def register_actions(catalog: PermissionCatalog) -> None:
             "usermanagement.list_users": "List users",
             "usermanagement.update_user": "Update mutable user fields",
             "usermanagement.delete_user": "Delete a user account",
-            "usermanagement.change_password": "Change a user's password",
-            "usermanagement.verify_password": "Verify a user's password",
+            "usermanagement.change_password": "Change a user's password",  # nosec B105
+            "usermanagement.verify_password": "Verify a user's password",  # nosec B105
             "usermanagement.set_role": "Replace a user's roles with a single role",
             "usermanagement.activate_user": "Activate a user",
             "usermanagement.deactivate_user": "Deactivate a user",

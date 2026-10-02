@@ -59,6 +59,11 @@ jobs:
         run: uv run pytest tests/ --cov --cov-report=xml
 
   dependency-review:
+    # dependency-review-action needs a base/head ref pair, which only exists for
+    # pull_request / pull_request_target / merge_group events. The workflow also
+    # triggers on push to main, where the action always fails, so the job is
+    # skipped on push (no branch protection on main depends on it).
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

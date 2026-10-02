@@ -12,9 +12,10 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
-from settings_test_helpers import install_isolated_registry, isolated_registry
+from settings_test_helpers import install_isolated_registry, isolated_registry, set_value_settled
 
 from backend.settings import (
     ListSpec,
@@ -32,6 +33,7 @@ from backend.settings.exceptions import (
 
 _DEFAULT_QUEUE_SIZE = 1000
 _CUSTOM_QUEUE_SIZE = 500
+_ROTATED_MAX_BYTES = 20971520  # the rotation size written by EDGE-008 (double the default)
 
 # --- AC-002: no import side effects ---
 
@@ -324,18 +326,29 @@ def test_setup_logger_idempotent() -> None:
 
 # --- EDGE-008: sink reconfigured rotation ---
 
-def test_sink_reconfigured_rotation() -> None:
+def test_sink_reconfigured_rotation(session_settings: Any) -> None:
     """EDGE-008: a logging.* setting change reconfigures the sink (rotation parameters)."""
-    from backend.logging import setup_logger
+    from backend.logging import register_settings, setup_logger
 
     setup_logger()
     install_isolated_registry()
     reg = get_settings_registry()
+    # The isolated registry starts without the logging.* definitions, so a
+    # reconfigure triggered from it would read the feature's hardcoded defaults
+    # (logs/app.log, INFO) and re-point the process's file sink away from the
+    # session log file — state that leaks into every later test that reads that
+    # file. Register the feature's own settings and restore the session's values
+    # first, so only the rotation parameter changes.
+    register_settings(reg)
+    # Every write below is settled (its SettingChanged dispatch awaited) because
+    # the logging feature's subscription reconfigures the sinks on the event-bus
+    # worker (AC-020). An un-awaited reconfigure lands in whichever test runs
+    # next, and its remove-then-add window transiently drops the process-global
+    # loguru handler count (main-ci-green item G).
+    set_value_settled(reg, "logging.log_file", session_settings.log_file)
+    set_value_settled(reg, "logging.log_level", session_settings.log_level)
     # Change a rotation parameter (requires sink replacement).
-    reg.register(
-        SettingDefinition(key="logging.log_max_bytes", kind=SettingKind.NUMBER, default=10485760)
-    )
-    reg.set_value("logging.log_max_bytes", 20971520)
+    set_value_settled(reg, "logging.log_max_bytes", _ROTATED_MAX_BYTES)
 
 
 # --- EDGE-009: persist all values ---

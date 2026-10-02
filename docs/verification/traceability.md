@@ -13,11 +13,11 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
-| REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks` | RED |
+| REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks`; `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_keeps_foreign_sink`, `test_reconfigure_after_external_removal_of_a_managed_sink` (issue main-ci-green, item E) | GREEN (issue main-ci-green Phase 5 S5.1, 2026-10-02) |
 | REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | RED |
-| REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` | RED |
-| REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records` | RED |
-| REQ-003 | AC-005 | `test_ac_005_intercept_handler_skips_bootstrap` | RED |
+| REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` (victim of the items G/H pollution — assertion unchanged) | RED |
+| REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records`; `test_reconfigure_keeps_foreign_sink` (item E); autouse `tests/conftest.py::_stdlib_root_logging_restored` (item I — restores the stdlib root handlers the alembic `fileConfig` call replaced) | RED |
+| REQ-003 | AC-005 | `test_ac_005_intercept_handler_skips_bootstrap`; autouse `_stdlib_root_logging_restored` (item I) | RED |
 | REQ-004 | AC-006 | `test_ac_006_logged_sync_entry_exit` | RED |
 | REQ-004 | AC-007 | `test_ac_007_logged_async_entry_exit` | RED |
 | REQ-004 | AC-008 | `test_ac_008_logged_exception_propagates` | RED |
@@ -28,14 +28,14 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 | REQ-007 | AC-013 | `test_ac_013_logged_class_private_method` | RED |
 | REQ-008 | AC-014 | `test_ac_014_get_settings_defaults` | RED |
 | REQ-009 | AC-015 | `test_ac_015_obsolete_module_deleted` | RED |
-| INV-001 | — | `test_inv_001_concurrent_setup_logger_sinks` | RED |
+| INV-001 | — | `test_inv_001_concurrent_setup_logger_sinks`; `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_after_external_removal_of_a_managed_sink` (item E) | RED |
 | INV-002 | — | `test_inv_002_elapsed_time_non_negative` | RED |
 | INV-003 | — | `test_inv_003_exception_propagates_unchanged` | RED |
 | EDGE-001 | — | `test_edge_001_log_file_parent_created` | RED |
 | EDGE-002 | — | `test_edge_002_logged_no_args` | RED |
 | EDGE-003 | — | `test_edge_003_logged_nonexistent_setting` | RED |
 | EDGE-004 | — | `test_edge_004_logged_class_no_public_methods` | RED |
-| EDGE-005 | — | `test_edge_005_intercept_unknown_level` | RED |
+| EDGE-005 | — | `test_edge_005_intercept_unknown_level`; autouse `_stdlib_root_logging_restored` (item I — the intercept handler must survive the migration path) | RED |
 | NFR-001 | — | `test_nfr_001_setup_time_budget` | GREEN |
 | NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | RED |
 | NFR-003 | — | `test_nfr_003_diagnose_false` | RED |
@@ -55,13 +55,13 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | REQ-003 | AC-005 | `test_ac_005_error_isolation` | GREEN |
 | REQ-003 | AC-006 | `test_ac_006_exception_no_propagate` | GREEN |
 | REQ-004 | AC-007 | `test_ac_007_thread_safe_publish` | GREEN |
-| REQ-005 | AC-008 | `test_ac_008_shutdown_drains` | GREEN |
+| REQ-005 | AC-008 | `test_ac_008_shutdown_drains`; `tests/eventbus_test_helpers.py::isolated_event_bus` (issue main-ci-green item H — the helper now **parks** the shared singleton instead of resetting/shutting it down, so a later test's publish is no longer silently dropped) | GREEN |
 | REQ-005 | AC-009 | `test_ac_009_shutdown_idempotent` | GREEN |
 | REQ-005 | AC-010 | `test_ac_010_context_manager` | GREEN |
 | REQ-006 | AC-011 | `test_ac_011_singleton` | GREEN |
 | REQ-007 | AC-012 | `test_ac_012_bounded_queue_drop` | GREEN |
 | INV-001 | — | `test_inv_001_exactly_once` | GREEN |
-| INV-002 | — | `test_inv_002_isolation` | GREEN |
+| INV-002 | — | `test_inv_002_isolation`; `isolated_event_bus` (item H: instance isolation without shutting down the shared bus) | GREEN |
 | INV-003 | — | `test_inv_003_queue_bounded` | GREEN |
 | INV-004 | — | `test_inv_004_handler_order` | GREEN |
 | EDGE-001 | — | `test_edge_001_lazy_start` | GREEN |
@@ -70,7 +70,7 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | EDGE-004 | — | `test_edge_004_non_class_event` | GREEN |
 | EDGE-005 | — | `test_edge_005_unsubscribe_not_subscribed` | GREEN |
 | EDGE-006 | — | `test_edge_006_dedup` | GREEN |
-| EDGE-007 | — | `test_edge_007_publish_after_shutdown` | GREEN |
+| EDGE-007 | — | `test_edge_007_publish_after_shutdown` (the early-return-on-shut-down behaviour that made the item-H pollution silent); `isolated_event_bus` | GREEN |
 | EDGE-008 | — | `test_edge_008_handler_raises` | GREEN |
 | EDGE-009 | — | `test_edge_009_start_idempotent` | GREEN |
 | EDGE-010 | — | `test_edge_010_no_handlers` | GREEN |
@@ -97,7 +97,7 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | REQ-005 | AC-011 | `test_ac_011_duplicate_registration` | GREEN |
 | REQ-006 | AC-012 | `test_ac_012_register_feature` | GREEN |
 | REQ-009 | AC-013 | `test_ac_013_reset_to_default` | GREEN |
-| REQ-010 | AC-014 | `test_ac_014_unknown_key` | GREEN |
+| REQ-010 | AC-014 | `test_ac_014_unknown_key`; `test_yaml_value_roundtrip_nel` (issue main-ci-green item A — `YamlValueRepository` round-trips U+0085) | GREEN |
 | REQ-011 | AC-015 | `test_ac_015_grouped_views` | GREEN |
 | REQ-012, REQ-001 | AC-016 | `test_ac_016_to_view` | GREEN |
 | REQ-013 | AC-017 | `test_ac_017_status_transitions` | GREEN |
@@ -114,8 +114,8 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | REQ-018 | AC-027 | `test_ac_027_update_template_invalid` | GREEN |
 | REQ-019 | AC-028 | `test_ac_028_delete_template` | GREEN |
 | REQ-020 | AC-029 | `test_ac_029_template_access` | GREEN |
-| REQ-022 | AC-030 | `test_ac_030_yaml_file_written` | GREEN |
-| REQ-021, REQ-022 | AC-031 | `test_ac_031_persistence_across_instances` | GREEN |
+| REQ-022 | AC-030 | `test_ac_030_yaml_file_written`; `test_yaml_template_roundtrip_nel` (issue main-ci-green item A) | GREEN |
+| REQ-021, REQ-022 | AC-031 | `test_ac_031_persistence_across_instances`; `test_yaml_template_roundtrip_nel` (item A) | GREEN |
 | REQ-023 | AC-032 | `test_ac_032_corrupted_file` | GREEN |
 | REQ-023 | AC-033 | `test_ac_033_missing_file` | GREEN |
 | REQ-021 | AC-034 | `test_ac_034_storage_agnostic` | GREEN |
@@ -132,7 +132,7 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | INV-006 | — | `test_inv_006_views_match_values` | GREEN |
 | INV-007 | — | `test_inv_007_load_scope_valid` | GREEN |
 | INV-008 | — | `test_inv_008_exactly_one_event_per_change` | GREEN |
-| INV-009 | — | `test_inv_009_yaml_roundtrip` | GREEN |
+| INV-009 | — | `test_inv_009_yaml_roundtrip` (property; alphabet widened to always generate U+0085); `test_yaml_template_roundtrip_nel` (issue main-ci-green item A) | GREEN (Phase 5 S5.1, 2026-10-02; was RED) |
 | INV-010 | — | `test_inv_010_status_derivation` | GREEN |
 | EDGE-001 | — | `test_edge_001_unknown_key_lookups` | GREEN |
 | EDGE-002 | — | `test_edge_002_duplicate_registration` | GREEN |
@@ -218,7 +218,7 @@ The user-management feature (`docs/specs/user-management.md`) uses its own REQ/A
 | REQ-017 | AC-038 | `test_ac_038_no_publisher` | GREEN |
 | INV-001 | — | `test_inv_001_create_read_consistency` | GREEN |
 | INV-002 | — | `test_inv_002_password_round_trip` | GREEN |
-| INV-003 | — | `test_inv_003_last_admin_invariant` | GREEN |
+| INV-003 | — | `test_inv_003_last_admin_invariant` (`@settings(deadline=1000)`, measured — issue main-ci-green items B/H) | GREEN |
 | INV-004 | — | `test_inv_004_update_semantics` | GREEN |
 | INV-005 | — | `test_inv_005_uniqueness` | GREEN |
 | INV-006 | — | `test_inv_006_event_correspondence` | GREEN |
@@ -380,13 +380,13 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | REQ-008 | AC-011 | `test_list_min_gt_max_rejected` | RED |
 | REQ-008 | AC-012 | `test_list_spec_on_text_rejected` | RED |
 | REQ-009 | AC-013 | `test_set_value_persists` | RED |
-| REQ-010 | AC-014 | `test_yaml_value_repository` | RED |
+| REQ-010 | AC-014 | `test_yaml_value_repository`; `test_yaml_value_roundtrip_nel` (issue main-ci-green item A) | RED |
 | REQ-011 | AC-015 | `test_persisted_precedence` | RED |
 | REQ-012 | AC-016 | `test_guarded_read_no_side_effect` | RED |
 | REQ-013 | AC-017 | `test_eventbus_no_registry_default` | RED |
 | REQ-013 | AC-018 | `test_eventbus_registry_value` | RED |
-| REQ-014 | AC-019 | `test_setup_logger_reads_registry` | RED |
-| REQ-015 | AC-020 | `test_sink_reconfigured_on_change` | RED |
+| REQ-014 | AC-019 | `test_setup_logger_reads_registry`; `tests/unit/logging/test_logging_sink_ownership.py` (item E — the reconfigure touches only the sinks it owns) | RED |
+| REQ-015 | AC-020 | `test_sink_reconfigured_on_change`; `tests/settings_test_helpers.py::set_value_settled` (item G — awaits the write's dispatch) and `isolated_event_bus` (item H — the publish is no longer dropped by a shut-down bus) | RED |
 | REQ-016 | AC-021 | `test_logging_stub_removed` | RED |
 | REQ-017 | AC-022 | `test_key_prefix` | RED |
 | REQ-018 | AC-023 | `test_category_group` | RED |
@@ -395,7 +395,7 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | REQ-021 | AC-026 | `test_no_env_vars` | RED |
 | REQ-022 | AC-027 | `test_settings_registers_nothing` | RED |
 | INV-001 | — | `test_get_value_valid_for_kind` | RED |
-| INV-002 | — | `test_list_round_trip` | RED |
+| INV-002 | — | `test_list_round_trip`; `test_yaml_value_roundtrip_nel` (issue main-ci-green item A) | RED (reproduction GREEN after the fix; row status predates the fix) |
 | INV-003 | — | `test_live_read_after_set` | RED |
 | INV-004 | — | `test_register_idempotent_fresh` | RED |
 | INV-005 | — | `test_persisted_precedence_invariant` | RED |
@@ -406,7 +406,7 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | EDGE-005 | — | `test_list_item_pattern_mismatch` | RED |
 | EDGE-006 | — | `test_list_min_gt_max` | RED |
 | EDGE-007 | — | `test_setup_logger_idempotent` | RED |
-| EDGE-008 | — | `test_sink_reconfigured_rotation` | RED |
+| EDGE-008 | — | `test_sink_reconfigured_rotation` (routes its `logging.*` write through `set_value_settled` — issue main-ci-green item G) | RED |
 | EDGE-009 | — | `test_persist_all_values` | RED |
 | EDGE-010 | — | `test_live_read_no_trace_on_same` | RED |
 | EDGE-011 | — | `test_guarded_read_none` | RED |
@@ -526,13 +526,13 @@ The file-management feature (`docs/specs/file-management.md`) uses its own REQ/A
 | REQ-025 | AC-054 | `test_ac_054_operations_traced` | GREEN |
 | REQ-026 | AC-055 | `test_ac_055_layout_convention` | GREEN |
 | INV-001 | — | `test_inv_001_no_partial_state_on_failure` | GREEN |
-| INV-002 | — | `test_inv_002_concurrent_same_key_last_write_wins` | GREEN |
+| INV-002 | — | `test_inv_002_concurrent_same_key_last_write_wins` (`@settings(deadline=500)`, measured — issue main-ci-green item I; assertion unchanged) | GREEN |
 | INV-003 | — | `test_inv_003_metadata_matches_content` | GREEN |
 | INV-004 | — | `test_inv_004_at_most_one_avatar_per_user` | GREEN |
 | INV-005 | — | `test_inv_005_avatar_url_format` | GREEN |
 | INV-006 | — | `test_inv_006_event_correspondence` | GREEN |
 | INV-007 | — | `test_inv_007_key_containment` | GREEN |
-| INV-008 | — | `test_inv_008_variant_consistency` | GREEN |
+| INV-008 | — | `test_inv_008_variant_consistency` (`deadline=500`, item I; assertion unchanged) | GREEN |
 | EDGE-001 | — | `test_edge_001_source_not_found` | GREEN |
 | EDGE-002 | — | `test_edge_002_source_not_a_file` | GREEN |
 | EDGE-003 | — | `test_edge_003_stream_exceeds_limit_mid_stream` | GREEN |
@@ -699,7 +699,7 @@ The user-roles-permissions change (type CROSS-CUTTING; spec `docs/specs/user-rol
 | REQ-024 | — | `test_authentication_enforcement_wiring`, `test_settings_enforcement_wiring`, `test_mail_enforcement_wiring`, `test_sessionmanagement_enforcement_wiring` (per-feature wiring, no AC) | GREEN |
 | INV-001 | — | `test_check_true_iff_granted_and_active` | GREEN |
 | INV-002 | — | `test_undeterminable_never_true` | GREEN |
-| INV-003 | — | `test_last_admin_invariant` | GREEN |
+| INV-003 | — | `test_last_admin_invariant` (`tests/property/usermanagement/test_multi_role_invariants.py`, `@settings(deadline=1000)`, measured 246–356 ms CI examples; strategy, `max_size=10`, `max_examples=20` and the assertion unchanged) | GREEN (issue main-ci-green item B closed, Phase 5 S5.1 2026-10-02) |
 | INV-004 | — | `test_effective_set_monotone` | GREEN |
 | INV-005 | — | `test_admin_passes_any_catalog_permission` | GREEN |
 | INV-006 | — | `test_valid_grant_keys_exactly_catalog_plus_wildcards` | GREEN |
@@ -747,6 +747,27 @@ The change wires the shared `PermissionChecker` into six features via the ADR-07
 | filemanagement | `test_enforced_method_denies_without_permission` (REQ-024/AC-029; 10 methods, 8 enforced) | GREEN |
 | mail | `test_mail_enforcement_wiring` (REQ-024; 3 methods, all enforced) | GREEN |
 | sessionmanagement | `test_sessionmanagement_enforcement_wiring` (REQ-024; 6 methods, all enforced) | GREEN |
+
+## Issue: main-ci-green (nine items — Phase 3 S3.1 → Phase 5 S5.3, 2026-10-02)
+
+Issue `main-ci-green` (type ISSUE; triage, RED and GREEN evidence: `docs/verification/main-ci-green.md` §1 scope table, §7, and the Phase 3/4/5 sections). Every affected spec ID below points at an executable test that is GREEN on the branch.
+
+**GREEN evidence (all rows).** Phase 5 S5.1 re-run (`docs/verification/main-ci-green.md` §"Phase 5 (S5.1 re-run)"): two consecutive full-suite runs `639 passed, 1 skipped` (the single skip is the host symlink limitation), plus four consecutive green randomized-order runs recorded in the item-I section; targeted `tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py` → `5 passed`. Lint/types gate: S5.2 (`uv run ruff check .` → `All checks passed!`).
+
+| Item | Spec | ID | Test / evidence | Status | Commit |
+|---|---|---|---|---|---|
+| **A** | settings.md | INV-009, REQ-022, AC-030, AC-031 | `test_yaml_template_roundtrip_nel` (new, `tests/unit/settings/test_repository_roundtrip.py`); property `test_inv_009_yaml_roundtrip` (`tests/property/settings/test_settings_properties.py`, alphabet widened so U+0085 is always generated) | GREEN (was RED) | `d2f8f32` RED · `f9cfe45` fix · `9611757` test |
+| **A** (value side) | settings-coverage.md | INV-002, REQ-009, REQ-010, REQ-011 | `test_yaml_value_roundtrip_nel` (new, same file — the two repositories share one serializer) | GREEN (was RED) | `d2f8f32` · `f9cfe45` |
+| **B** | user-roles-permissions.md; user-management.md | INV-003, REQ-013, AC-015, AC-036; REQ-008, AC-017..019 | `test_last_admin_invariant` (`tests/property/usermanagement/test_multi_role_invariants.py`) with measured `@settings(deadline=1000)`; invariant, strategy, `max_size=10`, `max_examples=20` unchanged | GREEN (flake closed) | `91cee38` |
+| **C** | — (chore, no spec ID) | — | `tests/acceptance/permissions/test_check_api.py`, `tests/acceptance/permissions/test_enforcement.py`, `tests/contract/permissions/test_performance.py` — import blocks sorted; no behavior change | GREEN (S5.2 ruff clean) | `b52d032` |
+| **D** | — (chore, no spec ID) | — | `uv.lock` — urllib3 2.8.0, virtualenv 21.14.3, python-discovery 1.6.1 (pip-audit) | n/a (no test; full suite still GREEN) | `772d9dc` |
+| **E** | logging.md; settings-coverage.md | REQ-001/002/003, AC-001/002/004/005, INV-001, EDGE-005; REQ-014/015, AC-019/020 | new `tests/unit/logging/test_logging_sink_ownership.py` — `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_keeps_foreign_sink`, `test_reconfigure_after_external_removal_of_a_managed_sink`; helper changes (`install_isolated_registry` keeps every `logging.*` key, `_SinkState`) | GREEN (was RED — the CI `tests`-job failure) | `d2f8f32` RED · `4d9514e` fix · `9fec0a1` · `0f41dc8` |
+| **F** | — (chore, CI config, no spec ID) | — | `.github/workflows/quality.yml` — `dependency-review` runs on `pull_request` only | n/a (no test) | `dd27702` |
+| **G** | logging.md; settings-coverage.md | AC-003, REQ-002 (victim, unchanged); EDGE-008, REQ-015, AC-020 | `tests/settings_test_helpers.py::set_value_settled` (ordered drain of the write's own dispatch) applied in `tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation` | GREEN (flake closed) | `52c70b5` |
+| **H** | event-bus.md; settings-coverage.md; logging.md; user-management.md | REQ-005 (AC-008/009/010), REQ-006/AC-011, INV-002, EDGE-007; REQ-015/AC-020; AC-003/REQ-002; REQ-008/INV-003 | `tests/eventbus_test_helpers.py::isolated_event_bus` (parks the shared singleton instead of shutting it down); eventbus test groups `31 passed`; `tests/property/usermanagement/test_usermanagement_properties.py::test_inv_003_last_admin_invariant` (`deadline=1000`) | GREEN | `6c40147` · `983fe2a` |
+| **I** | logging.md; file-management.md | REQ-003, AC-004, AC-005, EDGE-005; INV-002, INV-008 | autouse `tests/conftest.py::_stdlib_root_logging_restored` (snapshots/restores root handlers, level and per-logger `disabled` around every test); `tests/property/filemanagement/test_filemanagement_properties.py` — 7 property tests at measured `deadline=500` (assertions, example counts and skips unchanged) | GREEN (was the ≈1-in-3 red full-suite run) | `e1508ec` · `f03f9ce` |
+
+**Traceability-path drift (recorded, not a behavior issue).** `docs/specs/user-roles-permissions.md:725` binds INV-003 to `tests/property/permissions/test_invariants.py::test_last_admin_invariant`; the implemented copies are `tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant` and `tests/property/usermanagement/test_usermanagement_properties.py::test_inv_003_last_admin_invariant` (both GREEN). The spec's test-strategy path is the drift; a spec amendment is not required by this ISSUE (no behavior change).
 
 ## Drift Checks
 

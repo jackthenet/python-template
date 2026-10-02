@@ -7,12 +7,14 @@ helper pattern (async delivery is observed via ``wait_for``).
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from backend.eventbus import EventBus
-from backend.settings import SettingsRegistry
+from backend.settings import SettingChanged, SettingDefinition, SettingsRegistry
 
 
 def wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> bool:
@@ -28,6 +30,46 @@ def wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> bool:
             return True
         time.sleep(0.005)
     return False
+
+
+def set_value_settled(registry: SettingsRegistry, key: str, value: Any, timeout: float = 5.0) -> Any:
+    """``registry.set_value(key, value)`` with the resulting dispatch awaited.
+
+    ``set_value`` publishes ``SettingChanged`` to the shared event bus, which
+    dispatches it asynchronously on a background worker. A write whose dispatch
+    is not awaited runs its handlers during whatever test happens to run next:
+    a ``logging.*`` write reconfigures the logging feature's sinks (settings-coverage
+    REQ-015 / AC-020), and that reconfigure's remove-then-add window transiently
+    changes process-global state (the loguru handler set) inside an unrelated test.
+
+    The wait is ordered, not timed. The bus dispatches one event to its handlers
+    in subscription order on a single worker thread, and drains its queue FIFO, so
+    a sentinel handler subscribed here — after every handler that can react to the
+    write — is invoked for this event only once those handlers have returned. The
+    sentinel matches this write's key **and** value, so a stale ``SettingChanged``
+    for another key (or an earlier value of this one) cannot satisfy it, and FIFO
+    order means every event queued before this one has also been dispatched. The
+    timeout only bounds a hang; it is not part of the ordering argument.
+
+    Applies to a registry publishing on the shared bus (the module singleton);
+    a registry wired to its own ``EventBus`` has its own lifecycle. Raises
+    ``AssertionError`` if the event is never dispatched.
+    """
+    bus: EventBus = registry._event_bus  # the registry exposes no public bus accessor
+    dispatched = threading.Event()
+
+    def _sentinel(event: SettingChanged) -> None:
+        if event.key == key and event.value == value:
+            dispatched.set()
+
+    bus.subscribe(SettingChanged, _sentinel)
+    try:
+        result = registry.set_value(key, value)
+        if not dispatched.wait(timeout):
+            raise AssertionError(f"SettingChanged for {key!r} was never dispatched within {timeout}s")
+        return result
+    finally:
+        bus.unsubscribe(SettingChanged, _sentinel)
 
 
 def make_registry(event_bus: EventBus | None = None) -> tuple[SettingsRegistry, EventBus]:
@@ -56,14 +98,37 @@ def install_isolated_registry() -> SettingsRegistry:
     persisted to the shared default ``settings/`` directory and nothing written
     by one test leaks into another (test isolation). Returns the installed
     registry.
+
+    Preserves the current ``logging.*`` settings (definitions + values) so the
+    logging feature's file sink keeps pointing at the session log file and the
+    installed registry is in a consistent state (all ``logging.*`` settings
+    registered, or none). Restoring only ``logging.log_file`` (the previous
+    behavior) left a partial state: a test that then re-registered the logging
+    settings (because ``logging.log_level`` was absent) hit a duplicate-key error
+    on the already-restored ``logging.log_file``. Without preserving the
+    ``logging.*`` settings, a test that installs a fresh isolated registry would
+    trigger a sink re-configure that re-points the file sink to the default file,
+    leaking state into later tests that assert on the session log file.
     """
     import tempfile
 
     from backend.settings import YamlValueRepository
     from backend.settings import registry as _registry_module
 
+    # The previous registry's logging.* definitions paired with their values.
+    previous = _registry_module.get_settings_registry(required=False)
+    logging_settings: list[tuple[SettingDefinition, Any]] = []
+    if previous is not None:
+        for view in previous.views():
+            if view.key.startswith("logging."):
+                logging_settings.append((previous.get_definition(view.key), previous.get_value(view.key)))
+
     _registry_module.reset_settings_registry()
     isolated = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    # set_value only accepts a registered key, so each definition precedes its value.
+    for definition, value in logging_settings:
+        isolated.register(definition)
+        isolated.set_value(definition.key, value)
     _registry_module._registry[0] = isolated
     return isolated
 
@@ -92,9 +157,7 @@ def isolated_registry(install: bool = True) -> Iterator[None]:
     saved = get_settings_registry(required=False)
     reset_settings_registry()
     if install:
-        _registry_module._registry[0] = SettingsRegistry(
-            value_repository=YamlValueRepository(tempfile.mkdtemp())
-        )
+        _registry_module._registry[0] = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
     try:
         yield
     finally:

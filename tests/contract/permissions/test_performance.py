@@ -36,6 +36,7 @@ def test_check_latency_under_5ms_median(tmp_path: Path) -> None:
     """
     from alembic import command
     from alembic.config import Config as AlembicConfig
+
     from backend.permissions import (
         PermissionCatalog,
         PermissionService,
