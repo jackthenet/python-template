@@ -10,7 +10,7 @@
 - **Worktree:** `C:/workspace/active-projects/python-template_kopie-worktrees/issue/main-ci-green`
 - **Why this change exists:** `main`'s CI is red after three merged dependabot PRs (#55 lint-and-types, #56 test-tooling, #57 runtime-core). The user decided to fix `main` in one dedicated change before PR #54 (crosscut/search) merges into it.
 
-### Scope composition (eight items — extended by Q-127, answered 2026-10-02, and by items G and H, found in Phase 4)
+### Scope composition (nine items — extended by Q-127, answered 2026-10-02, and by items G, H and I, found in Phase 4)
 
 | Item | Nature | Type | Affected spec IDs | Expected files |
 |---|---|---|---|---|
@@ -22,6 +22,7 @@
 | **F** | `dependency-review` job runs on `push` and fails by construction | **chore** (CI config, non-behavior) | none | `.github/workflows/quality.yml` |
 | **G** | the residual order-dependent flake in the §6.4 corroboration recipe: `test_sink_reconfigured_rotation` publishes a `logging.*` write whose `SettingChanged` dispatch is never awaited, so the logging feature's reconfigure lands inside a later test and transiently drops the process-global loguru handler count | **defect** (test isolation; found in Phase 4 by the item-E step, recorded as the "residual flake" finding under item E) | `logging.md` AC-003/REQ-002 (the victim's assertion, unchanged); `settings-coverage.md` EDGE-008, REQ-015/AC-020 (the polluter's write) | `tests/settings_test_helpers.py`, `tests/unit/test_settings_coverage.py` |
 | **H** | full-suite pollution: `isolated_event_bus()` called `reset_event_bus()`, which shuts down the instance it resets, and `EventBus.publish()` returns early on a shut-down bus — so after any test using that helper the settings registry's `SettingChanged` publishes were silently dropped and the logging feature's AC-020 reconfigure never ran (later logging sink tests lost their console sink or timed out) | **defect** (test isolation; found in Phase 4 at the full-suite gate, opened from the item-G residue) | `settings-coverage.md` REQ-015/AC-020 (the dropped publish); `logging.md` AC-003/REQ-002 (the victims' assertions, unchanged); `user-management.md` REQ-008/INV-003 (item-B extension: the second last-admin property test's measured deadline) | `tests/eventbus_test_helpers.py`, `tests/property/usermanagement/test_usermanagement_properties.py` |
+| **I** | full-suite pollution: `migrations/env.py` calls `logging.config.fileConfig(config.config_file_name)`, which replaces the stdlib root logger's handlers/level and disables pre-existing non-root loggers — dropping the logging feature's stdlib intercept handler, so later tests routing stdlib records into loguru lose them (the ≈1-in-3 red full-suite runs); plus a second hypothesis deadline channel in the filemanagement property file (cold first example > 200 ms default) | **defect** (test isolation; found in Phase 4 after the Phase 5 S5.1 residue, opened from the item-H residue) | `logging.md` REQ-003/AC-004/AC-005/EDGE-005 (the lost intercept handler and the victims' assertions, unchanged); `file-management.md` INV-002/INV-008 (the property tests' measured deadline, unchanged assertions) | `tests/conftest.py`, `tests/property/filemanagement/test_filemanagement_properties.py` |
 
 Items C, D and F alter no externally observable behavior; they ride along by user decision. A is the ISSUE core. B is a test-harness defect (the specified invariant itself still holds). E is a real product-side defect in the logging feature's reconfiguration path (it mutates global loguru state it does not own) and is the only item that currently reddens CI's `tests` job. G is a test-side isolation defect (no `src/` change): it was opened from the item-E step's "residual flake" finding, which the E section explicitly recommended as a separate item rather than a widening of E. H is likewise a test-side isolation defect (no `src/` change): the shared event bus was being shut down under the tests, so cross-feature publishes were silently dropped for every later test in the session; it also carries the item-B extension (the same measured-deadline policy applied to the second last-admin property test).
 
@@ -1549,3 +1550,42 @@ Classification **(c) pre-existing on `origin/main` is NOT claimed** for the thre
 ### Verdict
 
 **NO — the `tests` job is not expected to be reliably green on CI.** Across 6 full-suite runs on this branch (3 here + 3 in Phase 4-H) **2 are red (≈33%)**, each red run carrying 2-3 logging sink nodes. The change's own reproduction tests are GREEN and the settings/repository pollution channel is closed; the remaining gap is the **logging sink-ownership / sink-target channel under randomized full-suite ordering** (capture-sink deletion race + file-sink re-point drift). Closing it needs a new Phase 4 item; pinning the `pytest-randomly` seed (or `-p no:randomly`) in CI would mask the ordering dependence, not fix it, and is a decision rather than a fix.
+
+## Phase 4 (S4.2, item I) — the alembic fileConfig root-logger leak + a second hypothesis deadline channel (2026-10-02)
+
+Opened from the Phase 5 S5.1 residue nodes. Two independent channels made full-suite runs red ≈1-in-3; both are closed test-side.
+
+**Commits.** `e1508ec` `test(main-ci-green): restore stdlib root logging state around every test (alembic fileConfig leak)` (only `tests/conftest.py`, +29) · `f03f9ce` `test(main-ci-green): widen Hypothesis deadline to 500ms for filemanagement property tests`.
+
+### Channel 1 — `fileConfig` replaces the stdlib root logger (root cause of the flake)
+
+`migrations/env.py:27` calls `logging.config.fileConfig(config.config_file_name)`, which **replaces the stdlib root logger's handlers and level and disables pre-existing non-root loggers**. That drops the logging feature's stdlib intercept handler (REQ-003), so every later test that routes stdlib records into loguru (AC-004, AC-005, EDGE-005, the integration pipeline) loses them.
+
+Only two tests trigger it in-process — `tests/integration/permissions/test_persistence.py` and `tests/contract/permissions/test_performance.py`, which pass `AlembicConfig(str(root/"alembic.ini"))`. `tests/acceptance/usermanagement/test_multi_role.py::_apply_migrations` uses a bare `Config()`, so `config_file_name is None` and it does not leak.
+
+Proof (`test_persistence.py` + `tests/unit/logging/test_logging.py tests/integration/logging/test_logging_integration.py`, `-p no:randomly`):
+
+```text
+without the fixture: 3 failed, 12 passed, 11 warnings in 16.64s
+                     test_ac_004_intercept_handler_routes_records
+                     test_ac_005_intercept_handler_skips_bootstrap
+                     test_stdlib_loguru_decorator_pipeline
+with the fixture:    15 passed, 11 warnings in 1.63s
+```
+
+**Fix 1.** autouse `_stdlib_root_logging_restored` in `tests/conftest.py`: snapshots and restores the root logger's handlers, level, and `Logger.manager.loggerDict[*].disabled` around every test (exact restore, O(#loggers) per test). Considered and rejected: guarding `fileConfig` in `migrations/env.py` would change the migration path's behavior and needs a spec check.
+
+### Channel 2 — a second hypothesis deadline channel (surfaced by the first proof attempt, 2/4 red)
+
+`tests/property/filemanagement/test_filemanagement_properties.py::test_inv_008_variant_consistency` (and `test_inv_002_concurrent_same_key_last_write_wins`) hit `hypothesis DeadlineExceeded: took 253.22ms > 200.00ms` on a cold first example (`FlakyFailure`).
+
+**Fix 2.** the 7 property tests in that file that still used Hypothesis' default 200 ms deadline now use `deadline=500` — the value the sibling avatar test (INV-004) already used in the same file. No assertion, example count, or skip changed (same Q-128 policy as items B/H).
+
+### Evidence
+
+- Targeted regression (logging families + multi_role + permissions contract/integration): `36 passed, 33 warnings in 10.64s`.
+- Final proof, 4 consecutive green full-suite runs under randomized ordering: `639 passed, 1 skipped, 33 warnings` at 187.91s / 181.23s / 177.24s / 172.59s.
+- Ruff: clean on both changed files (`ruff format --check` clean after one formatter pass on the property file).
+- The Phase 5 S5.1 residue nodes (`test_edge_005_intercept_unknown_level`, `test_inv_005_avatar_url_format`, `test_ac_004/005`, `test_stdlib_loguru_decorator_pipeline`) are all explained by these two channels.
+
+No assertion was weakened, no test was deleted/skipped/xfail'd, no seed was pinned, and no `src/` file was touched.
