@@ -629,3 +629,41 @@ The two failures are the hypothesis-replayed pair above; no acceptance, contract
 - Conflicts: 2, both docs, resolved as a union of both sides (no test deleted or weakened) — `docs/verification/traceability.md` (main-ci-green rows + Search Matrix rows both kept) and `docs/workflow/PROBLEMS.md` (main's P-28..P-35 kept; the search entry renumbered **P-36** to avoid the duplicate P-28 id).
 - Gates after the rebase: `uv run ruff check .` → `All checks passed!`; `uv run bandit -r src/` → 0 issues (Low/Medium/High all 0); search-family smoke (`tests/{acceptance,unit,contract,integration,property}/search`) → `87 passed in 14.05s`.
 - Full suite / mypy / mkdocs not re-run here — they stay the Phase 5/6 gate.
+
+## Phase 5 S5.1 re-run on the rebased base (2026-10-02)
+
+Base: `origin/main` = `e8dd2bc` (PR #58 issue/main-ci-green merged); branch HEAD at run time `2a507bc`, 34 commits ahead, version `0.6.0`.
+Command (identical for all three runs, run inside the change worktree): `uv run pytest tests/ -q --tb=line --color=no`
+pytest-randomly reorders per run, so three independent runs were taken (hard cap 3; cap not exceeded).
+
+### Run summaries (verbatim)
+
+| Run | Result |
+|---|---|
+| 1 | `727 passed, 1 skipped in 207.38s (0:03:27)` |
+| 2 | `727 passed, 1 skipped in 205.36s (0:03:25)` |
+| 3 | `727 passed, 1 skipped in 204.74s (0:03:24)` |
+
+Only non-passing entry in every run (identical, environment-conditional skip, not a failure):
+`SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host`
+
+### Distinct failing nodes
+
+None. Zero failures and zero errors across all three runs.
+
+### Per-node isolation classification
+
+Not applicable — no failing node was observed, so no isolated re-runs were performed (the classification step is conditional on a failure).
+
+### PR #58 fixed families — reappearance check
+
+| Family | Status on the rebased base |
+|---|---|
+| Logging interception (4 nodes: `test_edge_005_intercept_unknown_level`, `test_ac_004_intercept_handler_routes_records`, `test_ac_005_intercept_handler_skips_bootstrap`, `test_stdlib_loguru_decorator_pipeline`) | green — did not reappear |
+| `test_inv_009_yaml_roundtrip` | green — did not reappear |
+| `test_last_admin_invariant` | green — did not reappear |
+| Filemanagement property nodes (`test_inv_002_concurrent_same_key_last_write_wins`, `test_inv_005_avatar_url_format`, `test_inv_008_variant_consistency`) | green — did not reappear in any of the 3 randomized runs |
+
+No `.hypothesis` directory was deleted or modified; no stale replayed counterexample surfaced.
+
+**S5.1 gate: MET**
