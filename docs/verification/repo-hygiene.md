@@ -178,3 +178,37 @@ Self-introduced slip fixed in-step: the sweep exploded the one-line list in
 unflagged one — comment-only, no test logic changed.
 
 Commits: `583a4f7` (.gitignore), `cb287a9` (pyproject.toml, .github/workflows/lint.yml, 54 .py).
+
+## Phase 4 (S4.3) — item 3 (2026-10-02)
+
+3a: convention **B (historical gate record, Q-129)** written down in two places — three
+bullets appended to AGENTS.md §"Traceability & Spec Drift" and one blockquote note at the
+top of `docs/verification/traceability.md` (3 added lines total; no other prose, table or
+row touched; 0 matrix rows rewritten).
+
+3b: new `scripts/check_traceability.py` (stdlib only, `verify_spec.py` style: `main() -> int`,
+exit 0 one-line summary / exit 1 one line per violation). It parses the 16 matrix tables
+(any table with a `Status` header column), the normative IDs of the 12 specs (`template.md`
+excluded — its IDs are formatting examples), and every `def test_*` under `tests/`.
+Assertions (Q-129 → B, no status-freshness check): (1) every `REQ`/`AC` defined in a spec has
+≥1 row; (2) no row references an ID no spec defines; (3) every backticked `test_*` name in the
+matrix exists under `tests/`; (4) every Status cell starts with a declared value
+(`PENDING`, `RED`, `GREEN`, `REFACTORED`, `VERIFIED`, `N/A` — the §Invariants vocabulary plus
+`N/A`, which legitimately occurs in the wiring tables). CI: new hard-failing `traceability`
+job in `.github/workflows/spec-validation.yml` (`uv run python scripts/check_traceability.py`,
+no `|| true`); `yaml.safe_load` → `yaml ok`.
+
+| Gate | Command | Result |
+|---|---|---|
+| G1 check (positive) | `uv run python scripts/check_traceability.py` | **exit 0** — `Traceability: PASS (746 matrix rows, 129 spec IDs, 713 test functions)` |
+| G2 negative (2)+(3) | bogus row `\| REQ-999 \| bogus \| \`test_that_does_not_exist\` \| GREEN \|` | **exit 1** — `row references undefined REQ-999` + `row references missing test test_that_does_not_exist` (2 violations) |
+| G3 negative (4) | one Status cell → `BOGUS` | **exit 1** — `undeclared Status value 'BOGUS'` |
+| G4 negative (1) | sole row of `AC-046` blanked | **exit 1** — `AC-046 defined in docs/specs/ has no row in docs\verification\traceability.md` |
+| G5 ruff (changed path) | `uv run ruff check scripts/check_traceability.py` | `All checks passed!` (one in-step fix: PLR2004 → `MIN_TABLE_LINES` constant) |
+| G6 format | `uv run ruff format --check scripts/check_traceability.py` / `.` | `1 file already formatted` / `323 files already formatted` (0 pending) |
+| G7 types | `uv run mypy src/` | `Success: no issues found in 83 source files` (== baseline) |
+| G8 smoke | `uv run pytest tests/unit -q --tb=line --color=no` | `237 passed` (full suite is Phase 5) |
+
+No violation was found on the current matrix, so **no matrix row was corrected** and the check
+was not weakened. All four assertions are proven non-vacuous by the negative controls (G2–G4);
+the matrix was restored from a byte copy after each probe and re-verified exit 0.
