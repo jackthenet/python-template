@@ -556,7 +556,7 @@ def get_search_service(
                 event_bus=event_bus, settings_registry=settings_registry, permission_service=permission_service
             )
         service = _singleton[0]
-    assert service is not None, "singleton not initialized"
+    assert service is not None, "singleton not initialized"  # nosec B101
     return service
 
 
