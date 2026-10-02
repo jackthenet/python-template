@@ -1500,3 +1500,52 @@ item H, not a regression introduced by it.
 **Ruff.** clean on both changed files (`uv run ruff check tests/eventbus_test_helpers.py tests/property/usermanagement/test_usermanagement_properties.py`).
 
 **No assertion was weakened, no test was deleted or skipped, and no `src/` file was touched by item H.**
+
+## Phase 5 (S5.1) — full regression suite (2026-10-02)
+
+Branch `issue/main-ci-green` @ `7681439`, clean tree (untracked `data/` only). Command:
+`uv run pytest tests/ -q --tb=line --color=no`.
+
+### Summary lines (3 runs)
+
+| run | summary |
+|---|---|
+| 1 | `639 passed, 1 skipped, 33 warnings in 213.47s` |
+| 2 | `639 passed, 1 skipped, 33 warnings in 197.00s` |
+| 3 | `3 failed, 636 passed, 1 skipped, 33 warnings in 206.28s` |
+
+Run-3 failures (one-line tracebacks):
+
+- `tests/unit/logging/test_logging.py::test_ac_005_intercept_handler_skips_bootstrap` — `assert []` (test_logging.py:79); the record reached the loguru **stderr** sink instead of the test's capture list.
+- `tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records` — `assert []` (test_logging.py:58); same shape.
+- `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` — `assert False` from `wait_for_file_content(<session log file>, timeout=15)`; the loguru line never landed in the session file sink.
+
+Ordering mechanism: `pytest-randomly 5.0.0` is installed and active (no seed line under `-q`), so every run — local **and** CI (`quality.yml:59`, `uv run pytest tests/ --cov`) — uses a fresh permutation.
+
+### Probes (5× each, small subsets)
+
+| probe | set | result |
+|---|---|---|
+| A | the two failing files alone (`tests/unit/logging/test_logging.py` + `tests/integration/logging/test_logging_integration.py`) | `13 passed` ×5 — **0/5 fail** |
+| B | known polluting group (`tests/unit/test_settings_coverage.py` + `tests/unit/logging` + `tests/integration/logging`) | `51 passed` ×5 — **0/5 fail** |
+
+Neither node reproduces outside the full-suite permutation.
+
+### Reproduction tests (this change)
+
+`uv run pytest tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py` → **`5 passed`** (GREEN).
+
+### Per-node classification
+
+| node | class | evidence |
+|---|---|---|
+| `test_ac_004_intercept_handler_routes_records` | **(b) order-dependent flake on this branch** | 1/3 full-suite runs here (and 1 of the Phase 4-H runs, §run-2/CI evidence lines 287-289); 0/10 in probes A+B; in scope — the `log_records` capture-sink channel (line 331) |
+| `test_ac_005_intercept_handler_skips_bootstrap` | **(b) order-dependent flake on this branch** | same run, same channel; 0/10 in probes A+B |
+| `test_stdlib_loguru_decorator_pipeline` | **(b) order-dependent flake on this branch** | same run; 0/10 in probes A+B; the sink-target drift channel (line 1269) |
+| Phase 4-H residue (`test_edge_005_intercept_unknown_level`, `test_inv_005_avatar_url_format`) | (b) order-dependent flake (unchanged) | did not recur in these 3 runs; same mechanism family |
+
+Classification **(c) pre-existing on `origin/main` is NOT claimed** for the three run-3 nodes: they are the defect this change exists to fix (recorded CI evidence, lines 287-289), so they are in scope, not background noise.
+
+### Verdict
+
+**NO — the `tests` job is not expected to be reliably green on CI.** Across 6 full-suite runs on this branch (3 here + 3 in Phase 4-H) **2 are red (≈33%)**, each red run carrying 2-3 logging sink nodes. The change's own reproduction tests are GREEN and the settings/repository pollution channel is closed; the remaining gap is the **logging sink-ownership / sink-target channel under randomized full-suite ordering** (capture-sink deletion race + file-sink re-point drift). Closing it needs a new Phase 4 item; pinning the `pytest-randomly` seed (or `-p no:randomly`) in CI would mask the ordering dependence, not fix it, and is a decision rather than a fix.
