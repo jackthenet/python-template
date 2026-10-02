@@ -317,3 +317,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 CI failure + 1 new item (fix + record), 2 extra subagent runs
 - **Resolution:** Item J applied the repo's existing inline `# nosec BXXX` pattern (5× B105 on permission **description** strings in the `feature_actions.py` files, 1× B110 in `permissions/service.py`), comment-only, `+6/−6`, `bandit -r src/` now reports 0 issues and exits 0; CI `security` is green. Lessons: (a) when a CI job has multiple sequential steps, a green local run of the *first* one is not evidence about the later ones — enumerate every step of each red job; (b) the verify skill's gate list should include `uv run bandit -r src/` for any change that touches the security job.
 - **Date:** 2026-10-02
+
+## P-35 — a locally calibrated Hypothesis deadline tripped on CI; the `coverage` job failed after `tests` passed
+- **Problem:** Item I set `deadline=500` on the filemanagement property tests (copied from a sibling test) after local measurement. CI's `coverage` job then failed: `test_inv_001_no_partial_state_on_failure - DeadlineExceeded('Test took 739.77ms, which exceeds the deadline of 500.00ms')`, while the `tests` job on the same commit **passed** (different `pytest-randomly` seed). Coverage itself was fine (93.57% vs 92).
+- **Step / Phase:** S6.4 follow-up (Phase 6) → re-entry to S4.2 (item K)
+- **Change:** main-ci-green / ISSUE
+- **Duration / iterations:** 1 CI failure + 1 fix/record run (~2.5 min CI each)
+- **Resolution:** Item K made the file uniform at `deadline=2000` (≈2.7× the CI worst) with the CI run id recorded in the docstring; decorator-only, no assertion/strategy change. Lessons: (a) a Hypothesis deadline must be calibrated against **CI** timings, not local ones; (b) the `tests` and `coverage` jobs run the same suite with **different seeds**, so one green job is not evidence about the other — check both.
+- **Date:** 2026-10-02

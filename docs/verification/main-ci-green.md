@@ -1919,3 +1919,21 @@ Commit `6ce0531` `fix(main-ci-green): suppress bandit false positives in feature
 **Gates.** `uv run ruff check <path>` → `All checks passed!`; `uv run ruff format --check <path>` → `1 file already formatted`.
 
 Commit `28545d2` `test(main-ci-green): raise filemanagement property deadline to CI-measured 2000ms` — 1 file, +16/−9.
+
+## Phase 6 (S6.4 follow-up) — CI green on PR #58 (2026-10-02)
+
+Head `e7909c6`, run `37040854980` / `37040855031` / `37040854994`:
+
+| job | result | note |
+|---|---|---|
+| tests | **pass** (4m30s) | the job that was red on `main` since ≥2026-09-22 |
+| coverage | **pass** (2m39s) | 93.57% vs `fail_under = 92`; green only after item K |
+| security | **pass** (14s) | green only after items D (pip-audit) + J (bandit) |
+| lint | pass (13s) | green after item C |
+| dependency-review | pass (9s) | green after item F (runs on `pull_request`, skipped on `push`) |
+| type-check · dependencies · migrations · docs · spec-validation | pass | unchanged |
+
+Two CI-only findings surfaced after the Phase 5 gate and were fixed inside Phase 6 re-entries:
+item J (bandit findings never executed on `main` because `pip-audit` aborted the job first) and
+item K (item I's 500 ms deadline tripped on CI at 739.77 ms — the local machine is not the calibration
+basis). Both are recorded above; the review report's criteria remain satisfied (no assertion changed).
