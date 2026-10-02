@@ -812,3 +812,18 @@ No Blocking finding; no open finding.
 **CI: NOT RUN — PR #54 CONFLICTING with main (`docs/workflow/PROBLEMS.md`); 0 runs for head `eeeba17`**
 Blocker: resolve the conflict (merge `origin/main` into `crosscut/search`, or rebase — rebase needs a
 force-push, which is prohibited) so GitHub can build the merge ref and run the 10 checks.
+
+## Phase 6 S6.4 re-entry — merge of main + CI (2026-10-02)
+
+- **Why:** `origin/main` advanced `e8dd2bc → a0c0897` (PR #59 `chore/workflow-optimization`). PR #54 became `mergeable: CONFLICTING`, so GitHub triggered **zero** `pull_request` runs on head `eeeba17`/`355f625` — CI was never pending, it never started (P-37).
+- **Method:** `git merge origin/main --no-edit` (normal merge + normal push; no rebase, no force-push).
+- **Merge commit:** `80450a3` (parents `355f625` + `a0c0897`); pushed head `80450a3eec59fe6c52f6f89eb5cf3839f67d67dd`.
+- **Conflicts:** `docs/workflow/PROBLEMS.md` only (`AGENTS.md` auto-merged). Resolved as a **union**: main's `P-1..P-35` and its `## After-workflow-optimization — user-roles-permissions (2026-09-22)` section kept verbatim, plus this branch's `P-36` entry and the new `P-37` entry. No entry dropped.
+- **Resolution evidence:** 0 conflict markers in both files; `grep -oE "^## P-[0-9]+" | sort | uniq -d` empty (36 unique IDs); `git diff --check` clean; `git diff origin/main -- AGENTS.md` = 25 insertions / 0 deletions (only `## Using the Search Feature` added, so main's workflow-rule edits survived — `no-op fast-path` present in both); `git diff origin/main -- docs/workflow/PROBLEMS.md` = 16 insertions / 0 deletions.
+- **Main's delta is docs/skills-only:** `git diff --name-only e8dd2bc..a0c0897` → `.agents/skills/{decompose,review,test}/SKILL.md`, `AGENTS.md`, `docs/workflow/PROBLEMS.md`. No `src/`, `tests/`, `docs/specs/`, `pyproject.toml`, or `uv.lock` change, so the Phase 5 verification evidence remains valid; no local test/lint/type re-run was needed.
+- **CI on the merged head `80450a3`** (3 runs triggered; `gh pr view 54 --json mergeable` → `MERGEABLE`):
+  - `tests` pass 4m51s · `coverage` pass 4m42s · `lint` pass 14s · `type-check` pass 25s
+  - `docs` pass 16s · `migrations` pass 14s · `security` pass 16s
+  - `dependencies` pass 10s · `dependency-review` pass 11s · `spec-validation` pass 15s
+- **CI: ALL GREEN**
+
