@@ -8,6 +8,7 @@ code in a subprocess via logging_test_helpers.run_python().
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -49,6 +50,34 @@ def _logging_session_setup(tmp_path_factory: pytest.TempPathFactory) -> Iterator
 def session_settings(_logging_session_setup: Any) -> Any:
     """The Settings instance used for the session's real setup."""
     return _logging_session_setup
+
+
+@pytest.fixture(autouse=True)
+def _stdlib_root_logging_restored() -> Iterator[None]:
+    """Restore the stdlib root logger's routing state around every test.
+
+    Three tests apply the alembic migration in-process, and ``migrations/env.py``
+    calls ``fileConfig(alembic.ini)``, which replaces the root logger's handler
+    list and level and disables the pre-existing non-root loggers. That drops the
+    logging feature's stdlib intercept handler (REQ-003) and raises the root level
+    above INFO, so every later test that routes stdlib records into loguru
+    (AC-004, AC-005, EDGE-005, the logging integration pipeline) silently loses
+    them — the full-suite flake, since the order is randomized. The snapshot and
+    restore keep the process-global state installed by ``setup_logger()`` intact;
+    no test's assertions change.
+    """
+    root = logging.getLogger()
+    handlers: list[logging.Handler] = list(root.handlers)
+    level = root.level
+    manager = logging.Logger.manager
+    disabled = {name: lg.disabled for name, lg in manager.loggerDict.items() if isinstance(lg, logging.Logger)}
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
+    for name, was_disabled in disabled.items():
+        lg = manager.loggerDict.get(name)
+        if isinstance(lg, logging.Logger):
+            lg.disabled = was_disabled
 
 
 class _Captured:
