@@ -91,12 +91,14 @@ C:/workspace/active-projects/
 - Each change branch lives in **exactly one worktree at a time**.
 - All worktrees share the same repository refs, so `git log main -- ...` works from anywhere.
 
-### Lifecycle (mapped to the 6 phases)
+### Lifecycle (mapped to Phase P and the 6 phases)
 
 Exact commands, procedures, and edge cases for each operation live in the git skill (`.agents/skills/git/SKILL.md`).
 
-- **Phase 1 (specify)** — classify the change type, then create the change branch **and its worktree** (git skill: "Create change worktree"). All work from Phase 1 through Phase 6 is performed inside the change worktree.
+- **Phase P (prepare)** — **P.1** writes `docs/todo/<name>.md` and `docs/questions/<name>.md` **on `main`** (planning records, see "Phase P: PREPARE"). The change branch **and its worktree** are created at **P.4** from `main` (git skill: "Create change worktree"), so the branch carries the TODO file and the answered questions.
+- **Phase 1 (approve)** — S1.4 only: commit the prepared spec in the change worktree and open the approval PR. All work from Phase 1 through Phase 6 is performed inside the change worktree.
 - **Phases 2–5** — decompose, test, implement, verify: all commands (`uv run ...`) run inside the change worktree. The primary worktree (`main`) is used for:
+  - the Phase P planning-artifact commits (`docs/todo/`, `docs/questions/`),
   - spec-approval verification (`git log main -- docs/specs/[name].md`, FEATURE/CROSS-CUTTING only),
   - running the full test suite against `main`,
   - post-merge verification.
@@ -113,16 +115,61 @@ Exact commands, procedures, and edge cases for each operation live in the git sk
 - `git worktree remove` fails on a dirty worktree: do NOT use `--force` on an unmerged change. Force-removal is only permitted when the changes are intentionally discarded.
 - If a worktree directory was deleted manually, run `git worktree prune`.
 - Check for leftovers with `git worktree list`; after cleanup, the only worktree should be the primary (`main`).
+- **Direct-to-`main` commits are allowed only for the Phase P planning artifacts** under `docs/todo/` and `docs/questions/`. Nothing else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
+
+---
+
+## Phase P: PREPARE — Front-Loaded Human Interaction
+
+All human interaction happens **before** the workflow runs. Phase P turns each change idea into a **prepared change**: a TODO file, a fully answered question file, and — for FEATURE/CROSS-CUTTING — a self-consistent draft specification. The normal workflow (Phases 1–6) then runs **autonomously**: the only human actions left are merging the spec PR (S1.4) and the change PR (S6.4), and neither stops the agent — it switches to another prepared change (see "Multi-change scheduling (never idle)").
+
+### Preparation artifacts (per change)
+
+| Artifact | Created at | Committed to |
+|---|---|---|
+| `docs/todo/<name>.md` (from `docs/todo/template.md`) | P.1 | `main` |
+| `docs/questions/<name>.md` (from `docs/questions/template.md`) | P.1, answered at P.3 | `main` |
+| `docs/specs/<name>.md` — draft spec | P.4, fixed at P.5 | the change branch |
+| `docs/verification/<name>.md` — type + triage / baseline / scope | P.4 | the change branch |
+
+`docs/todo/` and `docs/questions/` are **planning records, not normative**: they carry no approval gate and are the **only** files the workflow may commit directly to `main` (the backlog and the Q&A must be browsable in one place). Everything normative — `docs/specs/`, `docs/verification/`, `src/`, `tests/` — is written in the change worktree and reaches `main` only through a merged PR. The **Spec Approval Gate is unchanged**.
+
+### Phase P atomic steps
+
+| Step | Owner | Objective | Done when |
+|---|---|---|---|
+| **P.1 Frame** | orchestrator | classify the change type (Phase 0); create the TODO file and the question file from their templates; create the change's todo set | both files exist on `main`, TODO `Status: PREPARING` |
+| **P.2 Interrogate** | subagent (specify skill) | adversarially interrogate the idea; record every question in `docs/questions/<name>.md` | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch; overlap checked against `docs/specs/` **and** every TODO in `docs/todo/` |
+| **P.3 Answer** | orchestrator ⏸ | present the batch (≤ 4 per `ask_user_question` round, most blocking first) and record the answers | every question `ANSWERED` + incorporated; TODO `Status: QUESTIONS-ANSWERED` |
+| **P.4 Draft** | subagent (specify skill) | create the change branch + worktree from `main` (so the branch carries the TODO and the answers), then write the type's Phase 1 output: draft spec (FEATURE/CROSS-CUTTING), triage (ISSUE), GREEN baseline (REFACTOR), scope (DOCS/CHORE) | the artifact exists in the worktree and is committed |
+| **P.5 Verify self-consistency** | subagent (specify skill) | run the Self-Consistency Checklist + the Dependency Smoke-Test; fix the spec itself | the spec passes the checklist |
+
+**Prep gate ◆ READY.** A change is **READY** when its TODO file says `Status: READY`, **every** question in its question file is `ANSWERED`, and the P.4 artifact exists. Only a READY change may enter the normal workflow.
+
+### Phase P outputs per change type
+
+| Type | Phase P output | Normal workflow starts at |
+|---|---|---|
+| FEATURE / CROSS-CUTTING | TODO + answered questions + self-consistent draft spec | **S1.4** Present for approval (spec PR → human merge) → Phase 2 |
+| ISSUE | TODO + answered questions + triage record (affected REQ/AC, defect confirmation, reproduction plan) | **Phase 3** (reproduction test → RED) |
+| REFACTOR | TODO + answered questions + GREEN baseline + refactor scope | **Phase 4** |
+| DOCS/CHORE | TODO + answered questions + no-behavior scope | **Phase 4** |
+
+The former steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5** — same content, run during preparation. **S1.4** keeps its number and stays in the normal workflow.
+
+### Preparing many changes
+
+Prepare as many changes as you like before starting the workflow — preparation is what makes the workflow parallel. A prepared change costs nothing while it waits: its TODO, Q&A and draft spec are on disk and its worktree exists, but no phase runs for it until it is picked up.
 
 ---
 
 ## The Spec-TDD Workflow Protocol (Change-Type Routed)
 
-Every change in this repository is one of five **change types**. The type determines which phases run, what each phase produces, and which gates apply. **Phase 1 is the single entry point for all types**: it classifies the change first (Phase 0), then executes the type-specific Phase 1.
+Every change in this repository is one of five **change types**. The type determines which phases run, what each phase produces, and which gates apply. **Phase P (PREPARE) is the single entry point for all types**: it classifies the change first (Phase 0, at **P.1**), then produces the type's Phase 1 output during preparation. The normal workflow starts at **S1.4** (FEATURE/CROSS-CUTTING), **Phase 3** (ISSUE), or **Phase 4** (REFACTOR, DOCS/CHORE).
 
 ### Change Types & Classification (Phase 0)
 
-Classify the change **before any other work** (specify skill, step 0). Use the **first matching criterion, in this order**:
+Classify the change at **P.1 Frame** — before any other work (specify skill, Phase P). Use the **first matching criterion, in this order**:
 
 | # | Type | Criterion |
 |---|------|-----------|
@@ -140,7 +187,8 @@ Which phases run for each type, and what each phase produces:
 
 | Phase | FEATURE | ISSUE | CROSS-CUTTING | REFACTOR | DOCS/CHORE |
 |-------|---------|-------|---------------|----------|------------|
-| **1 Specify** | Adversarial interrogation → spec (REQ/AC/INV/EDGE/NFR) → **PR approval** | **Triage**: affected REQ/AC from existing specs, defect confirmation, reproduction plan. No spec, no PR. | Adversarial interrogation → spec **with per-feature impact analysis** → **PR approval** | **Baseline**: full suite GREEN + refactor scope. No spec, no PR. | **Scope**: exact non-behavior changes; confirm no behavior delta. No spec, no PR. |
+| **P Prepare** | Adversarial interrogation → TODO + answered questions + draft spec (REQ/AC/INV/EDGE/NFR) | TODO + answered questions + **Triage**: affected REQ/AC from existing specs, defect confirmation, reproduction plan. No spec. | Adversarial interrogation → TODO + answered questions + draft spec **with per-feature impact analysis** | TODO + answered questions + **Baseline**: full suite GREEN + refactor scope. No spec. | TODO + answered questions + **Scope**: exact non-behavior changes; confirm no behavior delta. No spec. |
+| **1 Specify** | S1.4 only: commit the prepared spec → **PR approval** | — (done in Phase P) | S1.4 only: commit the prepared spec → **PR approval** | — (done in Phase P) | — (done in Phase P) |
 | **2 Decompose** | ADRs + task DAG | — (skip; the triage is the plan) | ADRs + task DAG **grouped by affected feature** | — (skip) | — (skip) |
 | **3 Test & RED** | Tests derived from spec → RED | **Reproduction test** → RED | Tests derived from spec → RED | — (skip; existing tests are the contract) | — (skip) |
 | **4 Implement** | GREEN from DAG + refactor | **Minimal fix** → GREEN | GREEN from DAG + refactor | Behavior-preserving steps; suite stays GREEN | Make the change |
@@ -151,23 +199,26 @@ Which phases run for each type, and what each phase produces:
 
 ### Workflow Diagram (atomic steps, dependencies, ownership, validation / user input)
 
-Legend: **[O]** = orchestrator (no subagent) · **[S]** = step subagent (**synchronous, never background**) · **◆** = gate (validation) · **⏸** = user input (workflow **stops** until answered)
+Legend: **[O]** = orchestrator (no subagent) · **[S]** = step subagent (**synchronous, never background**) · **◆** = gate (validation) · **⏸** = user input (the **change** stops until answered) · **P.x** steps run during preparation (Phase P), before the workflow
 
 ```text
-PHASE 0   [O] ORCHESTRATOR (no subagent)
-  S0.1   Classify + create worktree + create todo set
+PHASE P   PREPARE (per change, before the workflow — all human input here)
+  P.1    [O] Frame: classify + docs/todo/<name>.md + docs/questions/<name>.md (on main) + todo set
+             │
+             ▼
+  P.2    [S] Interrogate (specify skill) ──► docs/questions/<name>.md ──⏸──► BLOCKED-USER
+             │
+             ▼
+  P.3    [O] Answer ⏸ ──► answers recorded in docs/questions/<name>.md ◆
+             │
+             ▼
+  P.4    [S] Create worktree + draft spec / triage / baseline / scope
+             │
+             ▼
+  P.5    [S] Verify self-consistency ◆ ──► READY ◆
              │
              ▼
 PHASE 1   [S] SPECIFY (specify skill)
-  S1.1   Interrogate ────────────⏸──► AI_Questions.md (USER INPUT)
-             │
-             ▼
-  S1.2   Draft spec
-             │
-             ▼
-  S1.3   Verify self-consistency
-             │
-             ▼
   S1.4   Present for approval ──► PR ──⏸──► HUMAN APPROVAL ◆
              │
              ▼
@@ -232,15 +283,17 @@ POST-MERGE [S] CLEANUP (git skill)
 ```
 
 - **Dependencies:** steps run in order within a phase; a phase runs only after the previous phase's gate ◆ passes. A failed gate re-enters the same or an earlier step with a **new** subagent.
-- **Ownership:** Phase 0 is the orchestrator; every other step is a dedicated, **synchronous** subagent (one atomic step each).
-- **User input (⏸):** the workflow stops at S1.1 (questions → `AI_Questions.md`), S1.4 (spec approval), and S6.4 (PR merge). It never proceeds past a ⏸ until the user answers.
+- **Ownership:** Phase P's **P.1 Frame** and **P.3 Answer** are the orchestrator; every other step is a dedicated, **synchronous** subagent (one atomic step each).
+- **User input (⏸):** the user is needed at **P.2/P.3** (questions → `docs/questions/<name>.md`), **S1.4** (spec approval) and **S6.4** (PR merge). A change never proceeds past a ⏸ until the user answers.
+- **Non-blocking:** a change that reaches a ⏸ gate goes **WAITING** and the orchestrator immediately works on another READY change (see "Multi-change scheduling (never idle)") — the workflow never idles.
 - **Friction (Problem Log):** any step that fails / is relaunched / iterates / blocks is recorded in `docs/workflow/PROBLEMS.md`.
 
 ### Skill-to-Phase Mapping
 
 | Phase | Skill | Applies to | Purpose |
 |-------|-------|------------|---------|
-| Phase 0+1: CLASSIFY & SPECIFY | `specify` | all | Classifies the change type, creates the change branch and worktree, and executes the type-specific Phase 1 (spec, triage, baseline, or scope). |
+| Phase P: PREPARE | `specify` | all | Turns an idea into a prepared change: TODO file, interrogation, answered questions, draft spec / triage / baseline / scope. |
+| Phase 1: APPROVE | `specify` | FEATURE, CROSS-CUTTING | S1.4 only: commit the prepared spec and open the approval PR (other types' Phase 1 output is produced in Phase P). |
 | Phase 2: DECOMPOSE | `decompose` | FEATURE, CROSS-CUTTING | Creates ADRs and decomposes the spec into a machine-readable JSON task DAG (per-feature grouping for CROSS-CUTTING). |
 | Phase 3: TEST & RED | `test` | FEATURE, CROSS-CUTTING, ISSUE | Derives tests from the spec (FEATURE/CROSS-CUTTING) or writes the reproduction test (ISSUE), and confirms RED state. |
 | Phase 4: IMPLEMENT | `implement` | all | Turns RED into GREEN (or performs behavior-preserving steps / makes the chore change), then refactors without changing specified behavior. |
@@ -254,19 +307,20 @@ Every workflow step is executed by a **new subagent** launched via the `subagent
 
 #### Execution Model
 
-- **Synchronous — never background.** Every subagent is launched with `run_in_background: false` (the default). The orchestrator **waits for the subagent to complete its step and return a handoff** before proceeding to the next step. A subagent is never left running in the background and is never polled. If a subagent does not return (timeout / network / error), the orchestrator treats it as a **failed step**: it logs the problem (Problem Log), launches a **fresh** subagent for the same step (never resumes a stuck one), and continues. A step subagent MUST end with the **structured handoff**; a step that returns without it (e.g., ends with an intermediate statement) is treated as a **FAILED step** and relaunched with a fresh subagent (completion guard, P-3/P-7).
+- **Synchronous — never background.** Every subagent is launched with `run_in_background: false` (the default). The orchestrator **waits for the subagent to complete its step and return a handoff** before proceeding to the next step. A subagent is never left running in the background and is never polled. If a subagent does not return (timeout / network / error), the orchestrator treats it as a **failed step**: it logs the problem (Problem Log), launches a **fresh** subagent for the same step (never resumes a stuck one), and continues. A step subagent MUST end with the **structured handoff**; a step that returns without it (e.g., ends with an intermediate statement) is treated as a **FAILED step** and relaunched with a fresh subagent (completion guard, P-3/P-7). The synchronous model applies **per step**; the orchestrator interleaves **changes** (see "Multi-change scheduling (never idle)"), so a human gate on one change never idles the agent.
 - **Atomic steps.** Each phase is broken into **atomic steps** (table below). An atomic step has a **single objective**, clear **inputs/outputs**, a **required skill**, a **dedicated subagent**, a clear **“done” definition**, and a **validation** before the next step. A step subagent executes **exactly one atomic step** — never more. Small steps exist so a subagent can actually **finish** its work.
 - **One subagent per atomic step.** Every time an atomic step is (re-)entered — including re-entry after a failed gate (Phase 5 → Phase 4/3) and reclassification re-runs — the orchestrator launches a **new** subagent. A `BLOCKED-USER` step is re-entered with a **fresh** subagent; the orchestrator includes the user's recorded answers in the new launch prompt. The orchestrator **NEVER** resumes/restores a previously launched subagent session (its context is full/stale) — every (re-)entry, including after BLOCKED-USER, after a failed gate, and after reclassification, launches a **new** subagent.
 - **In-step fix-and-recheck (trivial self-introduced issues).** The fresh-subagent rule governs step **re-entries**, not internal retries. A step subagent that hits a **trivial, self-introduced** issue while finishing its step (a single lint violation, a formatting nit, a missed import) MUST fix it and re-check **within the same execution**, then return one handoff — it does NOT return `FAILED` for a nit it can fix itself. `FAILED` (which triggers a fresh-subagent relaunch) is reserved for substantive failures: done-criteria genuinely not met, missing context, or a block the subagent cannot resolve on its own.
-- **Naming.** The orchestrator names each step subagent's description `Sx.x: <short objective>` (e.g., `S4.2: implement FileService.upload`); for per-task steps it includes the task ID (e.g., `S4.2 (T-005): implement FileService.upload`).
+- **Naming.** The orchestrator names each step subagent's description `Sx.x: <short objective>` (e.g., `S4.2: implement FileService.upload`), or `Px.x: <short objective>` for a Phase P step (e.g., `P.2: interrogate the settings-coverage idea`); for per-task steps it includes the task ID (e.g., `S4.2 (T-005): implement FileService.upload`).
 
 #### Atomic Steps
 
-The six phases are the **gates** (entry/exit criteria per the Phase Matrix). Within each phase, the work is done in atomic steps; **each atomic step is one subagent execution**. Phase 0 (classify + worktree + todo set) stays on the **orchestrator**.
+Phase P plus the six phases are the **gates** (entry/exit criteria per the Phase Matrix). Within each phase, the work is done in atomic steps; **each atomic step is one subagent execution**. Phase P's **P.1 Frame** and **P.3 Answer** stay on the **orchestrator** (the worktree is created at P.4).
 
 | Phase | Atomic steps (one subagent each, in order) |
 |-------|-------------------------------------------|
-| **1 Specify** | **S1.1 Interrogate** → **S1.2 Draft spec** → **S1.3 Verify self-consistency** → **S1.4 Present for approval** (commit + PR) |
+| **P Prepare** | **P.1 Frame** (orchestrator) → **P.2 Interrogate** → **P.3 Answer** (orchestrator ⏸) → **P.4 Draft** → **P.5 Verify self-consistency** ◆ READY |
+| **1 Specify** | **S1.4 Present for approval** (commit + PR) |
 | **2 Decompose** | **S2.1 Create ADRs** → **S2.2 Decompose into task DAG** |
 | **3 Test & RED** | **S3.1 Derive tests (per task: one fresh subagent derives one DAG task's `tests_to_create`)** → **S3.2 Ruff + confirm RED** |
 | **4 Implement** | **S4.1 Pick task + confirm RED** → **S4.2 Implement + confirm GREEN** (ruff gate) → **S4.3 Refactor** (keep GREEN; ruff gate; no-op fast-path) → **S4.4 Commit + update status** |
@@ -289,29 +343,31 @@ The orchestrator's launch prompt for an atomic step MUST contain **exactly** wha
 
 #### Roles
 
-- **Orchestrator** — performs Phase 0 (classify, create worktree, create the todo set); launches one subagent per atomic step (**synchronously**); **waits** for each handoff; presents user questions and approval requests to the user; manages the todo list; verifies each step's handoff; logs problems (Problem Log). **The orchestrator does NOT execute a step, investigate a failure, or make an implementation decision.** When a step is blocked or fails, the orchestrator supplies more context (or the user's answer) and **relaunches the same step** — it never does the work itself.
+- **Orchestrator** — performs Phase 0 **at P.1** (classify the change type, create `docs/todo/<name>.md` and `docs/questions/<name>.md` on `main`, create the change's todo set) and runs **P.3** (present the question batch, record the answers); launches one subagent per atomic step (**synchronously**); **waits** for each handoff; **schedules across changes** — when one change is WAITING it picks the next READY change (see "Multi-change scheduling (never idle)"); presents user questions and approval requests to the user; manages the todo list; verifies each step's handoff; logs problems (Problem Log). **The orchestrator does NOT execute a step, investigate a failure, or make an implementation decision.** When a step is blocked or fails, the orchestrator supplies more context (or the user's answer) and **relaunches the same step** — it never does the work itself.
 - **Step subagent** — reads its skill file and executes **exactly one atomic step** inside the change worktree. It never executes another step, never launches a subagent, never talks to the user, and never runs in the background.
 
 #### Handoff Output
 
 The step subagent MUST end with a structured handoff:
 - `step` — the step ID (e.g., `S4.2`).
-- `status` — `DONE` (done-criteria met) | `BLOCKED-USER` (needs user input) | `BLOCKED-HUMAN` (needs human governance: spec approval, PR merge) | `FAILED` (done-criteria not met, with reason).
+- `status` — `DONE` (done-criteria met) | `BLOCKED-USER` (needs user input) | `BLOCKED-HUMAN` (needs human governance: spec approval, PR merge) | `FAILED` (done-criteria not met, with reason). A `BLOCKED-USER` or `BLOCKED-HUMAN` handoff puts **that change** in **WAITING** state: the orchestrator records it and moves on to another READY change instead of waiting.
 - `gate` — the step's validation result and where the evidence is recorded (`docs/verification/<name>.md`).
 - `artifacts` — the files, commits, and PRs created.
 - `ruff` — the ruff result on the step's changed paths (`uv run ruff check <changed-paths>`; the whole-repo sweep is a Phase 5 gate) (for steps that write tests/implementation), or `n/a`.
-- `questions` (BLOCKED-USER only) — the questions for the user (each also recorded in `AI_Questions.md`).
+- `questions` (BLOCKED-USER only) — the questions for the user (each also recorded in `docs/questions/<name>.md`).
 - `problem` (optional) — a friction point to log (see Problem Log).
 - `next` — the next atomic step, or `STOP`.
 
-#### AI Questions Mechanism (`AI_Questions.md`)
+#### Question files (`docs/questions/<name>.md`)
 
-Questions that need user input are recorded persistently in `AI_Questions.md` (repo root) so they are not lost between steps. Each entry has: the question, the generating step (step ID + phase), why it is needed, the context at the time, the user's answer, the date/status, and whether the answer has been incorporated.
+Questions that need user input are recorded persistently in **one file per change** — `docs/questions/<name>.md`, created at **P.1** from `docs/questions/template.md` — so they are not lost between steps. Each entry has: the question, the generating step (step ID `P.x` / `Sx.x` + phase), why it is needed, the context at the time, the user's answer, the date/status, and whether the answer has been incorporated.
 
 - **MAY create questions:** any step, when it meets an ambiguity, a missing requirement, or a decision that requires user input.
-- **MUST create questions:** the **Interrogate** step (**S1.1**) MUST create a question for every ambiguity, missing requirement, edge case, and scope boundary it identifies — the spec phase is where user input is most needed. Any step that returns `BLOCKED-USER` MUST have its questions recorded in `AI_Questions.md`.
-- **Batching (one round-trip per step):** a step that needs user input MUST collect **all** of its open questions into a **single** `BLOCKED-USER` batch (one set of `AI_Questions.md` entries, one handoff) — never one round-trip per question, and never partial batches across re-entries. For **S1.1**: interrogate fully first, then return the complete question batch. The orchestrator presents the batch in as few `ask_user_question` rounds as possible (≤ 4 questions per round; the most blocking questions first), records all answers in `AI_Questions.md`, and relaunches the step **once** with the full answer set. This keeps human-response latency off the critical path of every individual question.
-- **Workflow stop:** when a step returns `BLOCKED-USER`, the orchestrator **stops the workflow**, presents the questions to the user (via `ask_user_question`), records the answers in `AI_Questions.md`, marks them **incorporated**, and **relaunches the same step** with the answers. The workflow never proceeds past a `BLOCKED-USER` step until the user has answered. If the BLOCKED-USER subagent's session is released (resume unavailable) and the only remaining work is verifying already-recorded answers, the orchestrator may record the answers, mark the step done directly, and commit — without relaunching (P-2).
+- **MUST create questions:** the **Interrogate** step (**P.2**) MUST create a question for every ambiguity, missing requirement, edge case, and scope boundary it identifies — the prep phase is where user input is most needed. Any step that returns `BLOCKED-USER` MUST have its questions recorded in the change's question file.
+- **Late questions (Phases 2–6):** a question discovered after the change entered the normal workflow is appended to the **same** file under `## Late questions (Phases 2–6)`, with its `Step:` field set to the step that found it.
+- **Batching (one round-trip per step):** a step that needs user input MUST collect **all** of its open questions into a **single** `BLOCKED-USER` batch (one set of question-file entries, one handoff) — never one round-trip per question, and never partial batches across re-entries. For **P.2**: interrogate fully first, then return the complete question batch. The orchestrator presents the batch in as few `ask_user_question` rounds as possible (≤ 4 questions per round; the most blocking questions first), records all answers in the question file, and relaunches the step **once** with the full answer set. This keeps human-response latency off the critical path of every individual question.
+- **Change stop, not workflow stop:** when a step returns `BLOCKED-USER`, **that change** goes **WAITING**: the orchestrator presents the questions to the user (via `ask_user_question`), records the answers in the question file, marks them **incorporated**, and **relaunches the same step** with the answers — while it works on another READY change (see "Multi-change scheduling (never idle)"). The change never proceeds past a `BLOCKED-USER` step until the user has answered; the **workflow** does not stop. If the BLOCKED-USER subagent's session is released (resume unavailable) and the only remaining work is verifying already-recorded answers, the orchestrator may record the answers, mark the step done directly, and commit — without relaunching (P-2).
+- **Central file retired.** The central repo-root question file is no longer live guidance: it is archived at `docs/questions/archive-AI_Questions.md` and MUST NOT be edited again. Historical references to it (ADRs, older verification records) are left intact.
 
 #### Problem Log (`docs/workflow/PROBLEMS.md`)
 
@@ -327,22 +383,33 @@ The orchestrator MUST verify a handoff before marking the step's todo `completed
 
 #### Fast Path
 
-Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing failing test, `--skip-spec`) bypass the workflow entirely — no phases, no subagents. (The **Light ISSUE tier** at the end of this document is the in-workflow counterpart — it shrinks Phase 5, it does not bypass the workflow.)
+Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing failing test, `--skip-spec`) bypass the workflow entirely — no phases, no subagents. A fast-path change needs **no TODO file and no question file**. (The **Light ISSUE tier** at the end of this document is the in-workflow counterpart — it shrinks Phase 5, it does not bypass the workflow.)
+
+#### Multi-change scheduling (never idle)
+
+- **Unbounded in flight.** Any number of changes may be in flight, each in its own worktree with its own todo set. Parallelism comes from **interleaving changes**, not from concurrent subagents — only one step subagent runs at a time (see Execution Model).
+- **Never idle.** A change that reaches a human gate — S1.4 (spec approval), S6.4 (PR merge), or a mid-workflow `BLOCKED-USER` / `BLOCKED-HUMAN` — goes **WAITING**; the orchestrator immediately takes the next ready step of **another** change. It stops only when every in-flight change is WAITING **and** no prepared change is READY.
+- **Ready selection order.** (1) a change whose `Depends on:` changes are already merged; (2) among ready changes, **easiest first** (see Todo Tracking Discipline); (3) tie-break **FIFO by READY date**.
+- **Resume.** A WAITING change's gate is cleared when its spec PR / PR merge is reachable from `origin/main` after `git fetch` (`git merge-base --is-ancestor <merge-commit> origin/main`), or when its question file shows every answer. Then launch a **fresh** subagent at its next atomic step.
+- **Todo sets.** One todo set per change; at most one `in_progress` **per change**; a WAITING change's step stays `in_progress` with an `activeForm` naming the wait (e.g. "waiting for spec PR merge").
 
 ### Todo Tracking Discipline (todo tool)
 
-The agent MUST track every in-flight change with the `todo` tool. The todo list is the change's live progress record: **one item per phase** the change type runs (per the Phase Matrix), **linked by dependency** in phase order, with **status orders** driven by the workflow gates. Each phase is executed in **atomic steps** (see Phase Execution (Atomic Steps, Synchronous Subagents)); a phase's todo is `completed` only when **all of its atomic steps are done** and the phase's gate passes. Todo management belongs to the **orchestrator** (see Phase Execution (Atomic Steps, Synchronous Subagents)): step subagents never create, update, or read the todo list.
+The agent MUST track every in-flight change with the `todo` tool. The todo list is the change's live progress record: **one item per phase** the change type runs (per the Phase Matrix, Phase P included), **linked by dependency** in phase order, with **status orders** driven by the workflow gates. Each phase is executed in **atomic steps** (see Phase Execution (Atomic Steps, Synchronous Subagents)); a phase's todo is `completed` only when **all of its atomic steps are done** and the phase's gate passes. Todo management belongs to the **orchestrator** (see Phase Execution (Atomic Steps, Synchronous Subagents)): step subagents never create, update, or read the todo list.
 
-**Creating the todo set (Phase 0).** When starting a change, create one todo item per workflow step the change type executes, in phase order. Give each a short imperative subject naming the phase and its key output. A step the type skips (per the Phase Matrix) gets **no** todo item.
+**One todo set per change.** With Phase P and multi-change scheduling there are several sets in the single todo list at once. Each set covers the **Phase P steps** plus the phases its type runs, linked by `blockedBy`. At most one item is `in_progress` **per change**; a **WAITING** change's step stays `in_progress` with an `activeForm` naming the wait. Sets are created at **P.1** and completed by the **Post-merge cleanup** item.
+
+**Creating the todo set (P.1).** When preparing a change, create one todo item per workflow step the change type executes, in phase order, starting with the Phase P item. Give each a short imperative subject naming the phase and its key output. A step the type skips (per the Phase Matrix) gets **no** todo item.
 
 **Task ordering (easiest first).** When a todo set contains tasks that are not dependency-locked, work them **easiest first**: the task you already have a solution for, or reach one with least effort. Early easy wins establish the scaffolding, conventions, and gate mechanics the harder tasks then reuse. Where `blockedBy` or the phase order fixes the sequence, the dependency wins — the ease ordering applies only among tasks that are ready at the same time (e.g. which DAG task to pick in Phase 4).
 
 **Linking dependencies.** Link each step to its predecessor with `blockedBy` so the list encodes the phase order: Phase 2 blocked by Phase 1, Phase 3 blocked by Phase 2, and so on. The final **Post-merge cleanup** item is blocked by Phase 6.
 
 **Status orders (at the right steps).**
-- **Before starting a step**, the orchestrator marks its todo `in_progress` (with a present-continuous `activeForm` label, e.g. "running the RED gate") **before launching the step's subagent**. Exactly one step is `in_progress` at a time.
+- **Before starting a step**, the orchestrator marks its todo `in_progress` (with a present-continuous `activeForm` label, e.g. "running the RED gate") **before launching the step's subagent**. At most one step is `in_progress` **per change** (several changes may each have one).
 - **Immediately when a step's type-specific gate passes**, the orchestrator marks its todo `completed` **after verifying the step's handoff** — never batch completions. A step is `completed` only when its gate is satisfied:
-  - Phase 1 — `completed` when the type-specific output exists (spec PR opened / triage recorded / GREEN baseline / scope recorded).
+  - Phase P — `completed` only at the **READY** gate: TODO `Status: READY`, every question `ANSWERED`, and the type's Phase 1 output (draft spec / triage / baseline / scope) recorded.
+  - Phase 1 — `completed` when the spec PR is opened (FEATURE/CROSS-CUTTING, S1.4); the other types have no Phase 1 step — their Phase 1 output is the Phase P gate.
   - Phase 2 — `completed` when the task DAG is initialized (copied to `.github/task-runner/tasks.json`).
   - Phase 3 — `completed` only when **RED is observed** and recorded.
   - Phase 4 — `completed` only when **GREEN is achieved** and recorded.
@@ -352,35 +419,36 @@ The agent MUST track every in-flight change with the `todo` tool. The todo list 
 
 **Reclassification (Escalation Rules).** When the change type changes, re-derive the todo set for the new type (add/remove items, relink with `blockedBy`) and record the reclassification in `docs/verification/[name].md`.
 
-**Example (FEATURE).**
+**Example (FEATURE, prepared).**
 ```text
-#1 Phase 1: Specify — spec + PR approval
-#2 Phase 2: Decompose — ADRs + task DAG            ⛓ #1
-#3 Phase 3: Test & RED — tests RED                 ⛓ #2
-#4 Phase 4: Implement — GREEN                       ⛓ #3
-#5 Phase 5: Verify — full gate set                 ⛓ #4
-#6 Phase 6: Review — clean report + PR             ⛓ #5
-#7 Post-merge cleanup — verify + remove + delete   ⛓ #6
+#1 Phase P: Prepare — TODO + questions answered + draft spec
+#2 Phase 1: Approve — spec PR opened                ⛓ #1
+#3 Phase 2: Decompose — ADRs + task DAG             ⛓ #2
+#4 Phase 3: Test & RED — tests RED                  ⛓ #3
+#5 Phase 4: Implement — GREEN                       ⛓ #4
+#6 Phase 5: Verify — full gate set                  ⛓ #5
+#7 Phase 6: Review — clean report + PR              ⛓ #6
+#8 Post-merge cleanup — verify + remove + delete    ⛓ #7
 ```
 
-**Example (ISSUE)** — Phase 2 is skipped, so it has no todo item:
+**Example (ISSUE, prepared)** — Phase 1 and Phase 2 are skipped, so they have no todo item:
 ```text
-#1 Phase 1: Triage — affected REQ/AC + repro plan
-#2 Phase 3: Repro test — RED                       ⛓ #1
-#3 Phase 4: Minimal fix — GREEN                    ⛓ #2
-#4 Phase 5: Verify — regression + lint/types      ⛓ #3
-#5 Phase 6: Review — clean report + PR            ⛓ #4
-#6 Post-merge cleanup — verify + remove + delete  ⛓ #5
+#1 Phase P: Prepare — TODO + questions answered + triage
+#2 Phase 3: Repro test — RED                        ⛓ #1
+#3 Phase 4: Minimal fix — GREEN                     ⛓ #2
+#4 Phase 5: Verify — regression + lint/types        ⛓ #3
+#5 Phase 6: Review — clean report + PR              ⛓ #4
+#6 Post-merge cleanup — verify + remove + delete    ⛓ #5
 ```
 
-### Phase 1: CLASSIFY & SPECIFY
-Single entry point for all change types (specify skill).
+### Phase P + Phase 1: PREPARE & SPECIFY
+Single entry point for all change types (specify skill). The procedure below is unchanged and normative; what changed is **where each part runs**: the **Phase 0 — Classify** items run at **P.1 Frame**, the FEATURE / ISSUE / CROSS-CUTTING / REFACTOR / DOCS-CHORE items run at **P.2–P.5** (interrogate → answer → draft → self-consistency), and only **S1.4 Present for approval** (FEATURE/CROSS-CUTTING) runs inside the normal workflow.
 
-**Phase 0 — Classify (all types):**
-1. Create the change branch **and its worktree** from `main` per the "Git Worktrees" section. Branch: `<type>/<name>` (`feature/`, `issue/`, `crosscut/`, `refactor/`, `chore/`).
+**Phase 0 — Classify (all types, at P.1):**
+1. Create the change branch **and its worktree** from `main` per the "Git Worktrees" section — at **P.4**, after the answers are recorded, so the branch carries the TODO file and the answered questions. Branch: `<type>/<name>` (`feature/`, `issue/`, `crosscut/`, `refactor/`, `chore/`).
 2. Classify the change using the Change Types table. Record the type in the change's verification artifact (`docs/verification/[name].md`).
 
-**FEATURE:**
+**FEATURE** (at **P.2–P.5**):
 3. Adversarially interrogate the feature idea to discover ambiguity, hidden requirements, edge cases, and scope boundaries; capture a feature brief. The brief is an **intermediate artifact** of the interrogation — do **not** save it as a separate `.brief.md` file. Fold it into the spec (goals/overview, scope boundaries, out-of-scope, edge cases); the spec is the single kept artifact.
 4. Search and read existing codebase files to understand current context and patterns.
 5. Check `docs/specs/template.md` for formatting requirements.
@@ -388,26 +456,26 @@ Single entry point for all change types (specify skill).
 7. Include exact API schemas, Pydantic models, interface signatures, and non-functional requirements.
 8. Assign stable IDs to every normative requirement (`REQ-XXX`), acceptance criterion (`AC-XXX`), invariant (`INV-XXX`), edge case (`EDGE-XXX`), and NFR (`NFR-XXX`).
 9. Define the test strategy mapping each AC/INV/EDGE to a test category and test function.
-10. **STOP and present the spec for human approval via Git PR.**
+10. **STOP and present the spec for human approval via Git PR** — this is **S1.4**, the only item of this list that runs inside the normal workflow.
 
-**ISSUE (triage — no spec, no PR):**
+**ISSUE** (triage — no spec, no PR) (at **P.2–P.5**):
 11. Identify the affected requirements (`REQ-XXX`) and acceptance criteria (`AC-XXX`) from the **existing approved specs** in `docs/specs/`; cite the spec files and IDs.
 12. Confirm the defect: the observed behavior deviates from what the spec requires (cite the spec ID and state the observed vs. required behavior).
 13. If the fix requires behavior the spec does not state, STOP: open a Spec Amendment PR (Spec Amendment Workflow) or reclassify as FEATURE.
 14. Write the reproduction plan: the failing test(s) that reproduce the defect, the fix scope, and the files expected to change.
 15. Record the triage in `docs/verification/[name].md` (type: ISSUE, affected REQ/AC, defect confirmation, reproduction plan).
 
-**CROSS-CUTTING:**
+**CROSS-CUTTING** (at **P.2–P.5**):
 16. Adversarially interrogate the change (goals, affected features, constraints, out-of-scope, edge cases).
 17. Draft the spec at `docs/specs/[name].md` with an **Impact Analysis** section: every affected feature, what changes in each, and which of their REQ/AC IDs are touched.
 18. Assign stable IDs (`REQ-XXX`, `AC-XXX`, `INV-XXX`, `EDGE-XXX`, `NFR-XXX`) and define the test strategy as for FEATURE.
-19. **STOP and present the spec for human approval via Git PR.**
+19. **STOP and present the spec for human approval via Git PR** — **S1.4**, inside the normal workflow.
 
-**REFACTOR (baseline — no spec, no PR):**
+**REFACTOR** (baseline — no spec, no PR) (at **P.2–P.5**):
 20. Run the full suite (`uv run pytest tests/ -v`) and confirm it is GREEN. Record the baseline in `docs/verification/[name].md`.
 21. Define the refactor scope: which code moves/renames/simplifies, and the invariants that MUST hold (no observable behavior change, no test changes).
 
-**DOCS/CHORE (scope — no spec, no PR):**
+**DOCS/CHORE** (scope — no spec, no PR) (at **P.2–P.5**):
 22. Define the exact non-behavior changes (files, content) and confirm they do not alter externally observable behavior. Record the scope in `docs/verification/[name].md`.
 
 ### Phase 2: DECOMPOSE (`docs/decisions/`, `docs/tasks/`)
@@ -523,7 +591,7 @@ Apply during any phase when the change's true nature is revealed:
 - **REFACTOR → ISSUE or FEATURE**: a behavior change is discovered. Stop; reclassify (defect → ISSUE, new behavior → FEATURE).
 - **DOCS/CHORE → any**: a behavior change is discovered. Stop; reclassify.
 
-On reclassification: keep the same worktree, rename the branch to the new type (`git branch -m <old> <new>`), re-run the new type's Phase 1 from its first step, and record the reclassification in `docs/verification/[name].md`.
+On reclassification: keep the same worktree, rename the branch to the new type (`git branch -m <old> <new>`), re-run the new type's Phase P from **P.1** (its Phase 1 output is produced there), and record the reclassification in `docs/verification/[name].md`.
 
 ---
 
@@ -548,8 +616,10 @@ When the review report IS clean, the change branch MUST be merged into `main` vi
 Every task transitions through this state machine:
 
 ```
-SPECIFIED → TESTS_WRITTEN → RED_CONFIRMED → IMPLEMENTING → GREEN → REFACTORED → VERIFIED
+PREPARED → SPECIFIED → TESTS_WRITTEN → RED_CONFIRMED → IMPLEMENTING → GREEN → REFACTORED → VERIFIED
 ```
+
+`PREPARED` is reached at the Phase P **READY** gate (TODO `Status: READY` + every question `ANSWERED` + the type's Phase 1 output recorded). A change MUST NOT enter Phase 1/2/3/4 unless it is `PREPARED`.
 
 Each change type enters at a different state (phases it skips are not entered):
 
@@ -568,7 +638,7 @@ Each change type enters at a different state (phases it skips are not entered):
 ## Agent Prohibitions
 
 An agent MUST NOT:
-- Start implementation work before classifying the change type (Phase 0).
+- Start implementation work before classifying the change type (Phase 0, at P.1).
 - Apply one change type's gates to a different type's change (use the Escalation Rules instead).
 - Write implementation before acceptance tests exist.
 - Modify an acceptance test merely to make implementation pass.
@@ -581,16 +651,20 @@ An agent MUST NOT:
 - Advance a workflow phase without the todo status discipline (the phase's todo must be `in_progress` before the step starts and `completed` only when its type-specific gate passes — see the Todo Tracking Discipline).
 - Execute a workflow step directly in the orchestrator's context — every workflow step runs in a new subagent (see Phase Execution (Atomic Steps, Synchronous Subagents)).
 - Run a step subagent in the **background** — step subagents are always synchronous; the workflow waits for the step to complete and return its handoff before proceeding.
-- Proceed past a `BLOCKED-USER` step until the user has answered the recorded question.
+- Proceed past a `BLOCKED-USER` step until the user has answered the recorded question — the **change** must not proceed; the **workflow** continues with another change.
+- Start Phase 1 (S1.4) or any later phase for a change whose question file still has a `PENDING` answer or whose TODO is not `READY`.
+- Idle or wait in place on a human gate (spec approval, PR merge, `BLOCKED-USER`) while another change is READY — mark the gated change WAITING and continue with another change.
+- Commit anything except the Phase P planning artifacts (`docs/todo/`, `docs/questions/`) directly to `main`.
+- Record questions in a central question file — questions go in `docs/questions/<name>.md`, one file per change.
 - Skip the **ruff** gate after an implementation or test step (ruff must be clean before the step's other gates).
-- Let a step subagent call `ask_user_question` directly — questions are recorded in `AI_Questions.md` and presented by the orchestrator.
+- Let a step subagent call `ask_user_question` directly — questions are recorded in `docs/questions/<name>.md` and presented by the orchestrator.
 
 ---
 
 ## Agent Obligations
 
 An agent MUST:
-1. Classify the change type (Phase 0) and record it in `docs/verification/[name].md`.
+1. Classify the change type (Phase 0, at P.1) and record it in `docs/verification/[name].md`.
 2. Identify affected requirements (REQ-XXX).
 3. Identify acceptance criteria (AC-XXX).
 4. Create executable tests.
@@ -603,9 +677,11 @@ An agent MUST:
 11. Produce a traceability/evidence report.
 12. Track the change with the `todo` tool per the Todo Tracking Discipline: one item per phase the type runs, linked by `blockedBy`, `in_progress` before a phase starts, `completed` only when all of its atomic steps are done and its gate passes.
 13. Execute each workflow step in a new **synchronous** subagent via the `subagent` tool (see Phase Execution (Atomic Steps, Synchronous Subagents)); verify each step's handoff before marking its todo `completed`.
-14. Record every `BLOCKED-USER` question in `AI_Questions.md` (step, why needed, context, question, answer, status, incorporated) and present it to the user before proceeding.
+14. Record every `BLOCKED-USER` question in the change's question file `docs/questions/<name>.md` (step, why needed, context, question, answer, status, incorporated) and present it to the user before that change proceeds.
 15. Run **ruff** after each implementation or test step and require it to be clean before the step's other gates.
 16. Log friction (failed/relaunched/iterating/blocked steps) in `docs/workflow/PROBLEMS.md` so the after-workflow-optimization can read it.
+17. Prepare every change before running its workflow (Phase P): TODO file, ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING, all answers recorded, draft spec / triage / baseline / scope, self-consistency check.
+18. Keep the workflow moving: when a change reaches a human gate, mark it WAITING and continue with the next READY change; resume it with a fresh subagent when its gate clears.
 
 ---
 
@@ -1010,6 +1086,8 @@ Before starting Phase 2, verify approval via:
 **Direct commits to `main` do NOT constitute approval.** The spec must go through GitHub PR review to maintain the boundary: human controls WHAT, agent controls HOW.
 
 **Verify once per change (cache the result).** The approval check runs **once**, before Phase 2, and its result (approved + merge commit + date) is recorded in `docs/verification/[name].md`. A merged spec cannot become unapproved, so later phases and step subagents MUST NOT re-run the check — they read the cached result (if the cached result is missing on re-entry, run the check once and record it). Re-running `git log main -- docs/specs/[name].md` at later phase transitions is wasted round-trips.
+
+The spec is drafted and self-checked during **Phase P**; S1.4 only commits it and opens the approval PR, so the approval check runs after that PR is merged — the caching rule is unchanged.
 
 ## Project Structure
 The project is organized around a single `src/` package, with `frontend` and `backend` as the primary runtime boundaries inside it.
