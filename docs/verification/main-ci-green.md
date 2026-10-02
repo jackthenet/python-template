@@ -629,3 +629,132 @@ uv run pytest tests/property/usermanagement/test_multi_role_invariants.py -q -p 
 uv run ruff check tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py   # All checks passed!
 uv run ruff format --check tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py  # 2 files already formatted
 ```
+
+---
+
+## Phase 4 (S4.2, item E) — fix applied, GREEN (2026-10-02)
+
+Item E only (logging sink ownership). Items A, B, C, D, F untouched: `src/backend/settings/repository.py`, the hypothesis test, the permissions test files, `pyproject.toml`/`uv.lock` and `.github/workflows/` were not modified — the diff below lists exactly the four files the fix touches.
+
+### Cherry-pick (the §6.5 re-home plan) — zero conflicts
+
+```bash
+git cherry-pick b1e61ea f25e2ec e973821     # applied cleanly, no conflict to resolve
+```
+
+| source on `crosscut/search` (read-only) | new commit on `issue/main-ci-green` | message |
+|---|---|---|
+| `b1e61ea` | `0f41dc8` | test(logging): make enqueued-sink waits and registry isolation deterministic |
+| `f25e2ec` | `4d9514e` | fix(logging): reconfigure removes only managed sinks (test-sink race on CI) |
+| `e973821` | `9fec0a1` | test(settings): preserve all logging.* settings in install_isolated_registry |
+
+Zero conflicts, as §6.5 predicted (main's 7 commits since the merge-base touch none of the four files), and the re-homed result is byte-identical to the search branch:
+
+```bash
+# git rev-parse HEAD:<f> == git rev-parse crosscut/search:<f>
+IDENTICAL src/backend/logging/_setup.py
+IDENTICAL tests/conftest.py
+IDENTICAL tests/logging_test_helpers.py
+IDENTICAL tests/settings_test_helpers.py
+
+git diff --stat d2f8f32..HEAD
+ src/backend/logging/_setup.py  | 39 +++++++++++++++++++++++++++++----------
+ tests/conftest.py              | 33 +++++++++++++++++++++++++++++++++
+ tests/logging_test_helpers.py  | 37 ++++++++++++++++++++++++++++++++++---
+ tests/settings_test_helpers.py | 33 +++++++++++++++++++++++++++++----
+ 4 files changed, 125 insertions(+), 17 deletions(-)
+```
+
+No existing test assertion was weakened, changed or deleted by this step; the only test-side changes are the three cherry-picked helper commits. `crosscut/search` and its worktree were **not** modified (read-only source of the commits). **Note: when `crosscut/search` later rebases onto the fixed `main`, these three commits are duplicates and drop out of that branch (PR #54 becomes search-only, per Q-127).**
+
+### GREEN gate (targeted — the full suite stays a Phase 5 gate)
+
+Before (base `d2f8f32`, re-observed in this step):
+
+```bash
+uv run pytest tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py -q -p no:randomly
+FFFF.                                                                    [100%]
+4 failed, 1 passed in 5.33s
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_value_roundtrip_nel
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_template_roundtrip_nel
+FAILED tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_keeps_foreign_sink
+FAILED tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_replaces_only_the_managed_sinks
+```
+
+After (HEAD `9fec0a1`):
+
+```bash
+uv run pytest tests/unit/logging/test_logging_sink_ownership.py tests/unit/settings/test_repository_roundtrip.py -q -p no:randomly
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_value_roundtrip_nel
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_template_roundtrip_nel
+2 failed, 3 passed in 0.42s
+```
+
+| node | before (`d2f8f32`) | after (`9fec0a1`) |
+|---|---|---|
+| `test_reconfigure_keeps_foreign_sink` | FAILED | **PASSED** |
+| `test_reconfigure_replaces_only_the_managed_sinks` | FAILED | **PASSED** |
+| `test_reconfigure_after_external_removal_of_a_managed_sink` | PASSED (GREEN by design — the pin that reddens a naive "remove the ids I remember" fix) | **PASSED** (still GREEN, as required) |
+| `test_yaml_value_roundtrip_nel` | FAILED | FAILED — item A, still RED by design (not this step's scope) |
+| `test_yaml_template_roundtrip_nel` | FAILED | FAILED — item A, still RED by design |
+
+### Regression (targeted, not the full suite)
+
+Logging family + settings-coverage acceptance, run 1 (`-p no:randomly`) and run 2 (default randomized order):
+
+```bash
+uv run pytest tests/unit/logging tests/integration/logging tests/acceptance/logging tests/property/logging tests/acceptance/settings_coverage -q -p no:randomly
+35 passed in 10.99s
+uv run pytest tests/unit/logging tests/integration/logging tests/acceptance/logging tests/property/logging tests/acceptance/settings_coverage -q
+35 passed in 10.21s
+```
+
+Because item E is a timing/dispatch-timing flake, the group was re-run 3 more times in randomized order: `35 passed` ×3 (5 GREEN runs total across both orders). Collection check (nothing silently deselected): 20 unit + 1 integration + 3 acceptance + 3 property + 8 acceptance/settings_coverage = 35.
+
+The three known offenders that trigger the reconfigure, both orders:
+
+```bash
+uv run pytest tests/contract/filemanagement/test_filemanagement_contracts.py tests/contract/permissions/test_performance.py tests/unit/test_settings_coverage.py -q
+36 passed, 11 warnings in 4.15s
+uv run pytest <same paths> -q -p no:randomly
+36 passed, 11 warnings in 2.05s
+# + 3 further randomized re-runs: 36 passed ×3
+```
+
+The 11 warnings are the pre-existing `sqlite3` deprecated-datetime-adapter `DeprecationWarning` from `tests/contract/permissions/test_performance.py` — that is item C's area and was not touched here.
+
+Must-stay-GREEN spec evidence (settings-coverage AC-019/AC-020, untouched):
+
+```bash
+uv run pytest tests/acceptance/settings_coverage/test_setup_logger.py::test_sink_reconfigured_on_change -q -p no:randomly
+1 passed in 0.64s
+```
+
+### Ruff (changed paths)
+
+```bash
+uv run ruff check src/backend/logging/_setup.py tests/conftest.py tests/logging_test_helpers.py tests/settings_test_helpers.py tests/unit/logging/test_logging_sink_ownership.py
+All checks passed!
+uv run ruff format --check <same five paths>
+5 files already formatted
+```
+
+### Spec compliance (reference: §6.3 verdict — COMPLIANT, no Spec Amendment)
+
+The fix keeps every cited ID: logging REQ-001/AC-001 (exactly one console + one file sink present with the stated options), REQ-002/AC-002 (idempotent setup), INV-001 (exactly one console + one file sink **added** per configure/reconfigure), REQ-003/AC-004/AC-005/EDGE-005 (a routed stdlib record still reaches the caller's own sink), and settings-coverage REQ-014/REQ-015 + AC-019/AC-020 (a `logging.*` write reconfigures **the feature's own** sink). The first `_configure()` call still removes loguru's default sink; later calls remove only the ids `_configure()` added, with `ValueError` suppressed for sinks removed externally.
+
+### Finding — residual flake in the §6.4 corroboration recipe (pre-existing; not an E gate; not resolved here)
+
+The §6.4 recipe is recorded as "Corroboration only (NOT the contract)". It is still flaky after the fix:
+
+```bash
+uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/logging/test_logging.py tests/unit/logging/test_logging_edges.py -p no:randomly -q
+# 10 runs: 1 failed, 17 passed ×6  /  18 passed ×4
+# tests/unit/logging/test_logging.py:46: AssertionError: assert 1 == 2   (test_ac_003_setup_logger_thread_safe)
+```
+
+- Pre-fix rate on the same recipe: **4/5 failed** (§6.4, on `75ca243`) → the fix reduces it but does not eliminate it. This is **not** a regression introduced by the cherry-pick.
+- `uv run pytest tests/unit/logging/test_logging.py -p no:randomly -q` alone: **10/10 GREEN** → the flake needs the polluter test in front of it.
+- Mechanism: `tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation` (line 327) writes `logging.log_max_bytes` and never awaits the resulting `SettingChanged`; the bus worker dispatches it during the next test, and `_configure()`'s remove-then-add window is observed by `test_ac_003_setup_logger_thread_safe`'s **process-global** handler-count assertion (`_EXPECTED_HANDLER_COUNT = 2`, `tests/unit/logging/test_logging.py:22,46`) as a transient `1`.
+- Why the fix cannot close it: that assertion inspects `len(logger._core.handlers)` for the whole process, which any concurrent reconfigure transiently changes. §6.3 already flagged these two assertions as stricter than INV-001 and ruled that they **MUST NOT be weakened**; the only closings are test-side (drain/await the bus in the polluter, or assert on a settled state), which is outside item E's fix scope (§6.5: `_setup.py` + the three helpers) and outside this step's three cherry-picked commits.
+- Consequence for the change objective: the four CI-red nodes item E was opened for are addressed; this residual is a separate test-isolation concern. **Flagged for the orchestrator** — recommend a new item (e.g. "G — drain/await the shared event bus in the settings-coverage polluter tests") rather than widening item E.
