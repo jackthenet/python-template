@@ -238,10 +238,20 @@ def test_inv_008_exactly_one_event_per_change(values: list[str]) -> None:
         previous = v
 
 
+# INV-009 alphabet hardening (main-ci-green item A): U+0085 (NEL) is the one
+# BMP code point the settings YAML serializer used to corrupt (emitted
+# literally, folded to a line break on load). Hypothesis could draw it from the
+# default alphabet, but only by chance — weighting it in makes the property hit
+# it on essentially every example, so the defect cannot silently return. The
+# alphabet is only widened (the default minus surrogates stays), never narrowed.
+_NEL = "\x85"
+_YAML_SENSITIVE_TEXT = st.characters(blacklist_categories=("Cs",)) | st.just(_NEL)
+
+
 @settings(max_examples=_MAX_EXAMPLES)
 @given(
     name=st.from_regex(r"[a-z][a-z0-9]{0,9}", fullmatch=True),
-    value=st.text(min_size=0, max_size=10),
+    value=st.text(alphabet=_YAML_SENSITIVE_TEXT, min_size=0, max_size=10),
 )
 def test_inv_009_yaml_roundtrip(name: str, value: str) -> None:
     """INV-009: repository.save(t) then get(t.name) returns an equal template."""
