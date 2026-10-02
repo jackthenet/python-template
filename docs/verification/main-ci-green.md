@@ -1738,3 +1738,62 @@ found in 73 source files`), the supporting gates (deptry, pip-audit, `alembic up
 normative ID backed by a GREEN test. The only non-PASS row is the architecture gate, which is
 **N/A because `tests/architecture/` does not exist in this repo** — recorded as a docs/repo
 reconciliation follow-up (§4.2), not a failed gate.
+
+## Phase 6 (S6.1) — normative-basis review (2026-10-02)
+
+Bounded inputs: this triage record + the nine items' Phase 4 sections, the FINAL state of the 16 non-doc files (`git diff origin/main...HEAD -- <file>`), and the cited spec IDs. No full-suite run (Phase 5 owns that gate); one targeted run: `tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py` → `5 passed in 0.27s`.
+
+### Findings
+
+| # | finding | severity | resolution / decision |
+|---|---|---|---|
+| F-1 | Item C touched more than "import blocks only": `test_enforcement.py` also re-wraps the `BOOTSTRAP_SYSTEM_PERMISSIONS` frozenset literal (ruff format) | Low | **Resolved.** Indentation only — same nine keys in the same order; the other two files are import-order / blank-line only. Non-behavior, inside item C's predicted file set. Accepted. |
+| F-2 | Item D's lock diff adds an edge `virtualenv → packaging` | Info | **Resolved.** `packaging` is already a locked package (`uv.lock:1281`) → no new dependency; only urllib3 / virtualenv / python-discovery versions move; `pyproject.toml` untouched; `pip-audit` + `deptry` clean. Accepted. |
+| F-3 | Item F's CI evidence is half-pending: the `pull_request` run proving the job still executes exists only after S6.4 opens the PR; the `push`-skip proof only after merge | Info | **Carried to S6.4.** Verified here: `gh api .../branches/main/protection` → 404 (no branch protection ⇒ no required check depends on the job), and `if: github.event_name != 'push'` leaves `pull_request` / `merge_group` runs untouched (`quality.yml` triggers only on `pull_request` + `push: main`). |
+| F-4 | The `deadline=` widenings (1000 ms ×2, 500 ms ×7 nodes) do reduce what those property tests can detect: a per-example slowdown between 200 ms and the new bound no longer fails | Low | **Accepted, stated plainly.** A hypothesis deadline is a harness tolerance, not a product budget; the specified invariants are asserted by unchanged assertions, and strategy / `max_size` / `max_examples` are untouched. `HealthCheck.too_slow` was already suppressed on `main` in all three files; performance budgets live in `tests/contract/permissions/test_performance.py`. Bases are measured (246–356 ms; cold first example > 200 ms). |
+| F-5 | `_sink_state` in `src/backend/logging/_setup.py` is module-global and mutated without a lock | Info | **Accepted, no change.** Same exposure pre-fix (blanket `logger.remove()` + re-add); the bus dispatches on one worker thread and `setup_logger()` keeps its `threading.Event` guard ⇒ no new race. |
+| F-6 | Test-name drift vs the §7 plan (`test_reconfigure_keeps_foreign_sinks` → `..._keeps_foreign_sink`, etc.) | Info | **Resolved.** S5.3's traceability rows use the final names and every referenced node id collects (30 collected over the six touched files). |
+
+### Q1 — does every item stay inside its declared fix scope?
+
+Yes — every touched file is one the scope table predicted, and no file is touched that no item claims.
+
+- **A** `src/backend/settings/repository.py` + `tests/unit/settings/test_repository_roundtrip.py` (new) + `tests/property/settings/test_settings_properties.py`.
+- **B** `tests/property/usermanagement/test_multi_role_invariants.py` only.
+- **C** the three permissions files (`test_check_api.py`, `test_enforcement.py`, `test_performance.py`).
+- **D** `uv.lock` only.
+- **E** `src/backend/logging/_setup.py`, `tests/conftest.py`, `tests/logging_test_helpers.py`, `tests/settings_test_helpers.py` + `tests/unit/logging/test_logging_sink_ownership.py` (new).
+- **F** `.github/workflows/quality.yml` only.
+- **G** `tests/settings_test_helpers.py`, `tests/unit/test_settings_coverage.py`.
+- **H** `tests/eventbus_test_helpers.py`, `tests/property/usermanagement/test_usermanagement_properties.py`.
+- **I** `tests/conftest.py`, `tests/property/filemanagement/test_filemanagement_properties.py`.
+
+`tests/conftest.py` (E's bus drain + I's root-logger restore) and `tests/settings_test_helpers.py` (E's cherry-pick + G's `set_value_settled`) are shared by named items only. `AI_Questions.md`, `docs/verification/*`, `docs/workflow/PROBLEMS.md` are workflow records, not behavior.
+
+### Q2 — is the fix minimal (no behavior beyond the affected spec IDs)?
+
+Only two `src/` files changed, and each changes exactly the one thing the defect required.
+
+- `src/backend/settings/repository.py` (A): only the YAML **emission style** changes. `YAML(typ="safe")` and the loader are untouched; the `str` representer is overridden on a **copied** table inside a representer subclass, so ruamel's shared `SafeRepresenter` is never mutated; only scalars containing U+0085 / U+2028 / U+2029 get the escaped style, so every other document is byte-identical. `_dump_yaml` is the single writer for both repositories (line 136 value, line 244 template), which is why one file covers A's template and value sides.
+- `src/backend/logging/_setup.py` (E): only **which sinks are removed** changes — first call keeps the blanket `logger.remove()` (loguru's default sink must go, REQ-001/INV-001), later calls remove only the managed sink IDs by ID, with `contextlib.suppress(ValueError)` for a managed sink already removed externally. The sinks added, the root-level sync and `_install_intercept_handler()` are unchanged. No other `src/` change exists ⇒ no finding.
+
+### Q3 — spec compliance of the two `src/` changes (re-verified independently)
+
+**(a) Item A — settings INV-009 / REQ-022 / AC-030 / AC-031, settings-coverage INV-002.** `settings.md:303` INV-009: "For any valid `Template`: `repository.save(t)` followed by `repository.get(t.name)` returns a template equal to t (YAML round-trip)." Pre-fix `'\x85'` loaded as `' '`, a direct violation. `settings-coverage.md:192` INV-002: "For a `LIST` setting, a persisted value round-trips: `save(values)` then `load()` returns the same value" — same violation on the value path. `settings.md:242` REQ-022: "one file per template named `<name>.yaml`, safe YAML, atomic writes (a template file is always either absent or valid YAML)". The fix emits a standard double-quoted scalar under the standard `tag:yaml.org,2002:str` tag — no custom tags, no object loading, `typ="safe"` unchanged — so the document stays safe YAML and AC-030 ("a file `<name>.yaml` exists in the directory … valid YAML containing the template's fields") and AC-031 (cross-instance `get_template`) still hold; pre-fix files keep loading because the loader is untouched. **Verdict: COMPLIANT** (agrees with §1).
+
+**(b) Item E — logging REQ-001/002/003, AC-001/002, INV-001, EDGE-005; settings-coverage REQ-014/015.** `logging.md:66` REQ-001: "configures loguru with a console sink (stderr, colorized, backtrace enabled) and a rotating file sink (UTF-8, enqueued, backtrace enabled, `diagnose=False`)"; `:82` AC-001 asserts that exact sink pair; `:83` AC-002: "the second call is a no-op and no new sinks are added"; `:104` INV-001: "the number of loguru sinks added is exactly one console sink and one file sink"; `:67` REQ-002: "`setup_logger()` is idempotent … Thread-safe via a `threading.Event`" (untouched — the `_setup` guard is unchanged); `:68` REQ-003: an `_InterceptHandler` "routes stdlib `logging` records into loguru sinks"; `:116` EDGE-005: "Record is routed using the numeric level number instead of the name". `settings-coverage.md:142` REQ-015: "reconfigures the sink at runtime when any `logging.*` setting changes, re-applying all current `logging.*` values"; `:141` REQ-014 covers `setup_logger()` idempotence. No sentence authorises removing sinks the feature does not own, so the pre-fix blanket `logger.remove()` on every reconfigure was the deviation; the fix re-applies the same values and leaves the handler set exactly one console + one file sink (pinned by `test_reconfigure_keeps_foreign_sink` and the one-console/one-file guard), and EDGE-005 / REQ-003 are additionally protected by item I's root-logger restore. **Verdict: COMPLIANT** (agrees with §6.3) — no Spec Amendment, type stays ISSUE.
+
+### Q4 — no test was weakened, narrowed, skipped, xfail'd or deleted to reach GREEN
+
+`git diff origin/main...HEAD -- tests/ | grep '^-.*assert '` → **empty**: no assertion was removed or edited anywhere in the test diff. No `skip` / `skipif` / `xfail` marker was added; no test file was deleted (two were added). No seed is pinned in test code — the pinned seeds (`--hypothesis-seed=7/101/2024/99`) were CLI reproduction commands recorded in §0/§7, never written into a test.
+
+- **`deadline=1000` (B, H) and `deadline=500` (I)** — these **do** reduce detection, in exactly one dimension: a per-example runtime between the old 200 ms default and the new bound no longer raises `DeadlineExceeded`. They cannot reduce detection of the specified behavior itself — the invariant assertions, the strategies, `max_size` and `max_examples` are byte-unchanged, and shrinking any of those (the alternative that would have mattered) was rejected. All three files already carried `suppress_health_check=[HealthCheck.too_slow]` on `main`, so the suite's pre-existing posture already tolerated slow examples; the real performance contract is asserted by `tests/contract/permissions/test_performance.py` (`test_check_latency_under_5ms_median`), untouched. See F-4.
+- **Widened hypothesis alphabet (A)** — strictly widening: `st.characters(blacklist_categories=("Cs",)) | st.just("\x85")` is the default alphabet plus a weighted NEL; nothing is removed, so detection only increases (the defect was previously findable only by chance).
+
+### Q5 — do the chore items (C, D, F) really have no behavior delta?
+
+**C:** import-order and blank-line changes only, plus the F-1 frozenset re-wrap (indentation only, same nine keys). The three tests still collect and pass; `uv run ruff check .` → `All checks passed!`. **D:** dev-tooling versions only (urllib3 2.7.0→2.8.0, virtualenv 21.3.3→21.14.3, python-discovery 1.3.1→1.6.1); no `pyproject.toml` change, no new dependency (F-2); `pip-audit` → `No known vulnerabilities found`, `deptry` clean. **F:** `if: github.event_name != 'push'` on the `dependency-review` job. No branch protection exists on `main` (`gh api repos/jackthenet/python-template/branches/main/protection` → `{"message":"Branch not protected"…}`, re-run in this step), so no required status check depends on the job and nothing can block a merge; `quality.yml` triggers only on `pull_request: main` and `push: main`, so the condition removes the job from `push` runs and leaves `pull_request` runs (and any `merge_group` run) exactly as before.
+
+### Q6 — does the change achieve its objective (a green `tests` job on `main`)?
+
+Yes, and every red job is addressed. Independently re-verified in this step for `main` @ `75ca243`: `lint` failed (lint.yml run `36894698193`), `security` and `dependency-review` failed (quality.yml run `36894698244`), `tests` failed (spec-validation.yml run `36894698181`), while `coverage`, `spec-validation`, `type-check`, `dependencies`, `docs`, `migrations` succeeded — exactly the four jobs §6.7 names. Mapping: `tests` → E (+G/H/I), `security` → D, `dependency-review` → F, `lint` → C. `coverage` and `spec-validation` run the same suite (`quality.yml:59`, `spec-validation.yml:70`) and were green on that run only because the pollution family is order-dependent (`pytest-randomly`); E/G/H/I close that family for them too, so no job's redness is left unaddressed. Phase 5 evidence covers each gate: 6 consecutive clean full-suite runs (2 at the S5.1 re-run + 4 for item I, `639 passed, 1 skipped`), `ruff check .` clean (the `lint` gate), `pip-audit` clean (the `security` gate), and the trigger fix (the `dependency-review` gate). The only outstanding evidence is F's post-PR / post-merge observation (F-3), which S6.4 produces.
