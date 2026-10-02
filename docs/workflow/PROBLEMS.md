@@ -333,3 +333,27 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 2 subagent runs (both returned without a structured handoff, stuck on the optimization)
 - **Resolution:** User decision (2026-09-25): increase the budget via spec amendment (option 2) — `docs/specs/search.md` v2: NFR-001 single-source query budget increased from 100 ms to ~300 ms (10k items, scaling linearly to ~3000 ms for 100k items); the test's `_QUERY_BUDGET_S` re-aligned to 0.3 (10k items kept); T-008 GREEN (69 passed).
 - **Date:** 2026-09-25
+## After-workflow-optimization — user-roles-permissions (2026-09-22)
+- **Trigger:** the user-roles-permissions change (~48.5h subagent time, ~90 subagents) reached Phase 6; the after-workflow-optimization meta-task analyzed the friction (this file + the change worktree's PROBLEMS.md P-27 + the subagent timing data) and improved the workflow.
+- **Friction found (with timing evidence):**
+  1. Redundant S4.3 (ruff) step — ~36m + 13 launches (S4.2 already runs the ruff gate).
+  2. Invalid test data reached Phase 4 (recurring 2-char usernames, T-004/5/6) — ~1.3h + 4 launches (S3.1 generated `u1`/`u2`; S3.2 confirmed RED without separating `ValidationError` setup errors from behavioral failures).
+  3. Pre-existing test breaks deferred to Phase 5 (T-002 `role→roles` amendment, 118 breaks) — ~3.6h + 3 launches (gate not-clean on first pass).
+  4. S4.4 (refactor) mostly no-ops for repetitive-pattern tasks — ~2.7h + 14 launches.
+  5. Phase 6 review looped (aborted) — 6404.8s (unbounded "review the whole diff" scope).
+- **Workflow changes (AGENTS.md + skills):**
+  1. Removed the redundant S4.3 (ruff) step → 4-step Phase 4 protocol (S4.1 pick+RED, S4.2 implement+GREEN+ruff gate, S4.3 refactor+ruff gate+no-op fast-path, S4.4 commit).
+  2. Added test-data validity to S3.1 (fixtures construct valid model instances) + S3.2 sanity check (a `ValidationError` building test data = invalid test data, not RED) — test skill + AGENTS.md Phase 3.
+  3. Added the breaking-change rule to decompose S2.2 (a breaking API change's task MUST fix the pre-existing tests it breaks within its scope, not defer to Phase 5) — decompose skill + AGENTS.md.
+  4. Added the S4.4 (refactor) no-op fast-path (a small/clean-pattern change confirms "no structural changes" without a full-suite re-run) — AGENTS.md Phase 4.
+  5. Added the bounded-scope rule to the review skill (each S6.x step reviews bounded inputs — spec + verification + final code state — not the full diff; no test re-run) — review skill + AGENTS.md Phase 6.
+- **Date:** 2026-09-22
+
+## P-37 — CI never triggered on a PR that had become CONFLICTING; 18 poll iterations (~18 min) wasted (S6.4)
+- **Problem:** PR #54 (`crosscut/search`) showed **no** `pull_request` checks at all after the head was pushed. 18 `gh pr checks` polls (60 s each, ~18 min) reported nothing, and were read as "CI pending". In fact `gh pr view --json mergeable` returned `CONFLICTING`: `origin/main` had advanced (`e8dd2bc → a0c0897`, PR #59) and both changes append to `AGENTS.md` and `docs/workflow/PROBLEMS.md`, so GitHub triggered **zero** `pull_request` runs — a pending run and a never-triggered run look identical through `gh pr checks`.
+- **Step / Phase:** S6.4 (Phase 6) — CI polling
+- **Change:** search / CROSS-CUTTING
+- **Duration / iterations:** 18 poll iterations (~18 min) + 1 merge/resolve run
+- **Resolution:** merged `origin/main` into `crosscut/search` (normal push, no rebase/force-push); the single conflict (`docs/workflow/PROBLEMS.md`) was resolved as a **union** — `P-36` (branch) and main's `## After-workflow-optimization — user-roles-permissions` section both kept, no entry dropped; `AGENTS.md` auto-merged with both sides' content intact. Main's delta was docs/skills-only (no `src/`/`tests/`), so the Phase 5 evidence stays valid.
+- **Durable lesson:** check `gh pr view --json mergeable` **before** polling, and use `gh api repos/<repo>/actions/runs?head_sha=<sha> --jq .total_count` to tell "not triggered" (0) from "pending" (>0). A CONFLICTING PR runs no CI — poll `mergeable` first, then checks.
+- **Date:** 2026-10-02

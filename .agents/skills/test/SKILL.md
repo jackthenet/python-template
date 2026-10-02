@@ -51,7 +51,7 @@ The test phase is decomposed into two atomic steps. Each has a **single objectiv
 - **Objective:** Derive the executable tests for the single DAG task assigned in the task definition (its `tests_to_create`) (FEATURE/CROSS-CUTTING), or write the reproduction test (ISSUE).
 - **Inputs:** the approved specification + the task definition (task ID, requirements, acceptance criteria) (FEATURE/CROSS-CUTTING) or the triage record (ISSUE); the MUST list (below).
 - **Outputs:** that task's test functions (FEATURE/CROSS-CUTTING) or the reproduction test(s) (ISSUE).
-- **Done-criteria:** that task's `AC-XXX` test functions (names reference the IDs); property tests for its `INV-XXX` (Hypothesis); unit tests for its `EDGE-XXX` cases; contract tests for its `NFR-XXX` requirements; externally observable behavior only; the tests are committed.
+- **Done-criteria:** that task's `AC-XXX` test functions (names reference the IDs); property tests for its `INV-XXX` (Hypothesis); unit tests for its `EDGE-XXX` cases; contract tests for its `NFR-XXX` requirements; externally observable behavior only; the test fixtures/data construct valid model instances (pass the model's validation — no `ValidationError` when building test data); the tests are committed.
 
 ### S3.2 Ruff + confirm RED
 
@@ -65,6 +65,7 @@ The test phase is decomposed into two atomic steps. Each has a **single objectiv
 - FEATURE/CROSS-CUTTING: derive one or more test functions per `AC-XXX`.
 - Test names MUST reference the `AC-XXX` ID (e.g., `test_ac_001_valid_request`).
 - Test externally observable behavior only — not implementation details.
+- **Validate test data:** the test fixtures/data MUST construct valid model instances (pass the model's validation). A `ValidationError`/`ValueError` when building test data (e.g., a username too short/long for the model's pattern) is **invalid test data, not a valid RED** — fix it to in-domain values before confirming RED.
 - Confirm RED on the **newly derived tests** (targeted RED — the new tests fail before implementation; the full suite is a Phase 5 gate, not a per-derivation run).
 - **Run ruff** on the step's changed paths (`uv run ruff check <changed-paths>`) after deriving the tests and require it to be clean before confirming RED (S3.2; the whole-repo sweep is a Phase 5 gate).
 - Record RED evidence in `docs/verification/<name>.md` using `TDD-evidence-template.md`.
@@ -92,6 +93,7 @@ A valid RED is an **assertion failure on behavior that does not yet match the sp
 - **Failure mode.** Run the suite and inspect each red test. It must FAIL (`AssertionError`) on the unimplemented behavior. If it ERRORS in setup/fixture/collection/import (e.g., `AttributeError` in a helper, a bad import, a fixture collision), that is a broken test contract — fix the test, do not confirm RED.
 - **Strategy/domain match.** Every Hypothesis strategy must match the spec's domain (min/max length, value ranges, types). A strategy that generates out-of-domain input (e.g., a 5-char password when the spec requires 8–128) is a contract bug — fix the strategy.
 - **Fixture uniqueness.** Setup fixtures must not collide on unique fields (e.g., two users sharing one email in a test that asserts UNIQUE). Give each fixture distinct unique values.
+- **Test data validity.** The test fixtures/data MUST construct VALID model instances (pass the model's validation). A test that fails with a `ValidationError`/`ValueError` when building test data (e.g., a username too short/long for the model's pattern, a password with a disallowed character) has **invalid test data, not a valid RED** — fix the test data to in-domain values before confirming RED. This is the most common test-data bug and MUST be checked per test, not just by counting failures (a `ValidationError` in the test body is a setup error, exactly like the `AttributeError` case above).
 - **Record the failure mode** (assertion vs error) in the RED evidence so the gate is auditable.
 
 ## MUST-NOT
