@@ -31,6 +31,7 @@ from backend.usermanagement.feature_settings import register_settings
 from backend.usermanagement.models import User, UserCreate, UserRead, UserUpdate
 from backend.usermanagement.repository import SqliteUserRepository, UserRepository
 from backend.usermanagement.role_store import RoleStore, StaticRoleStore
+from backend.usermanagement.search_source import build_user_source
 from backend.usermanagement.service import UserManager
 
 __all__ = [
@@ -57,6 +58,7 @@ __all__ = [
     "UserRoleChanged",
     "UserUpdate",
     "UserUpdated",
+    "build_user_source",
     "register_actions",
     "register_settings",
 ]

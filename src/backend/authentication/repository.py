@@ -146,6 +146,11 @@ class SqliteSessionRepository(SessionRepository):
             s.commit()
         return len(rows)
 
+    def list_all(self) -> list[Session]:
+        with self._session() as s:
+            statement = select(Session).order_by(Session.created_at.desc(), Session.id.desc())
+            return [_attach_utc(row) for row in s.exec(statement).all()]
+
 
 @logged_class(slow_threshold_ms=100, include_args=False)
 class SqlitePasswordResetRepository(PasswordResetRepository):

@@ -80,6 +80,18 @@ def _create_tables(tables: set[str]) -> None:
         )
 
 
+def _sqlite_datetime(value: datetime) -> str:
+    """Format ``value`` for raw-SQL SQLite storage.
+
+    The seed inserts use ``sa.text()`` (no SQLAlchemy type binding), so a raw
+    ``datetime`` would reach ``sqlite3``'s default adapter — deprecated as of
+    Python 3.12. Passing a pre-formatted string (byte-identical to the legacy
+    adapter format) avoids the deprecation warning without changing the stored
+    data.
+    """
+    return value.isoformat(sep=" ")
+
+
 def _insert_or_ignore(statement: str, parameters: dict[str, object]) -> None:
     """Idempotent single-row insert (an existing row is a no-op)."""
     op.get_bind().execute(sa.text(statement), parameters)
@@ -92,7 +104,7 @@ def _seed_builtin_roles(now: datetime) -> None:
             "INSERT OR IGNORE INTO roles "
             "(role, description, is_builtin, created_at) "
             "VALUES (:role, :description, :is_builtin, :created_at)",
-            {"role": role, "description": None, "is_builtin": True, "created_at": now},
+            {"role": role, "description": None, "is_builtin": True, "created_at": _sqlite_datetime(now)},
         )
 
 
@@ -103,7 +115,7 @@ def _seed_bootstrap_system_permissions(now: datetime) -> None:
             "INSERT OR IGNORE INTO system_principal_permissions "
             "(permission, granted_at) "
             "VALUES (:permission, :granted_at)",
-            {"permission": permission, "granted_at": now},
+            {"permission": permission, "granted_at": _sqlite_datetime(now)},
         )
 
 

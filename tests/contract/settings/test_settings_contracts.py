@@ -148,14 +148,19 @@ def test_nfr_002_api_and_repository_contract() -> None:
 def test_nfr_003_resource_contract(tmp_path: Path) -> None:
     collector = EventCollector()
     registry = SettingsRegistry(event_bus=collector, value_repository=YamlValueRepository(tempfile.mkdtemp()))
-    before = threading.active_count()
+    # Snapshot the set of active thread names (not the global count): other
+    # features' background threads (event bus, enqueued sinks) can start or
+    # finish under load, which makes the raw count non-deterministic. The
+    # contract is that the settings feature creates no NEW threads of its own.
+    before = {t.name for t in threading.enumerate()}
     for i in range(50):
         registry.register(_text(f"app.s{i}", category="app"))
     registry.set_value("app.s0", "x")
     registry.create_template("t1", "app", None, None)
     registry.load_template("t1")
-    after = threading.active_count()
-    assert after == before, "the settings feature must not create threads of its own"
+    after = {t.name for t in threading.enumerate()}
+    new_threads = after - before
+    assert not new_threads, f"the settings feature must not create threads of its own: {new_threads}"
 
     # Templates persist as YAML files when a YAML repository is used.
     repo = YamlTemplateRepository(tmp_path)

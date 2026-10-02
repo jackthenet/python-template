@@ -326,6 +326,13 @@ A step MUST log a problem when it:
 - **Resolution:** Item K made the file uniform at `deadline=2000` (≈2.7× the CI worst) with the CI run id recorded in the docstring; decorator-only, no assertion/strategy change. Lessons: (a) a Hypothesis deadline must be calibrated against **CI** timings, not local ones; (b) the `tests` and `coverage` jobs run the same suite with **different seeds**, so one green job is not evidence about the other — check both.
 - **Date:** 2026-10-02
 
+## P-36 — NFR-001 performance budget (100 ms) unrealistic given the source's query path (fetches full Pydantic models via the repository ABC); T-008 subagents stuck
+- **Problem:** The NFR-001 budget is "a single-source query < 100 ms median; 10k–100k items per source on local hardware against SQLite-backed sources". The test (`test_nfr_001_performance_budgets`) uses 10k items. The source's query function (`build_user_source`'s `_query`) fetches ALL items via the repository ABC's `list_all` (which returns full Pydantic `User` models) and processes them in Python — measured ~293 ms (median) for 10k items (fetch ~216 ms + processing ~77 ms). A lighter path (raw-row fetch + `SourceItem` build + sort) would be ~41 ms (under budget), but the source only sees the `UserRepository` ABC (whose `list_all` returns full models); using a lighter path requires changing the persistence contract (adding a lighter method to the repository), which is out of scope for the search feature (additive only — no new behavior in the feature's operations).
+- **Step / Phase:** S4.2 (T-008) — Phase 4
+- **Change:** search / CROSS-CUTTING
+- **Duration / iterations:** 2 subagent runs (both returned without a structured handoff, stuck on the optimization)
+- **Resolution:** User decision (2026-09-25): increase the budget via spec amendment (option 2) — `docs/specs/search.md` v2: NFR-001 single-source query budget increased from 100 ms to ~300 ms (10k items, scaling linearly to ~3000 ms for 100k items); the test's `_QUERY_BUDGET_S` re-aligned to 0.3 (10k items kept); T-008 GREEN (69 passed).
+- **Date:** 2026-09-25
 ## After-workflow-optimization — user-roles-permissions (2026-09-22)
 - **Trigger:** the user-roles-permissions change (~48.5h subagent time, ~90 subagents) reached Phase 6; the after-workflow-optimization meta-task analyzed the friction (this file + the change worktree's PROBLEMS.md P-27 + the subagent timing data) and improved the workflow.
 - **Friction found (with timing evidence):**
@@ -341,3 +348,12 @@ A step MUST log a problem when it:
   4. Added the S4.4 (refactor) no-op fast-path (a small/clean-pattern change confirms "no structural changes" without a full-suite re-run) — AGENTS.md Phase 4.
   5. Added the bounded-scope rule to the review skill (each S6.x step reviews bounded inputs — spec + verification + final code state — not the full diff; no test re-run) — review skill + AGENTS.md Phase 6.
 - **Date:** 2026-09-22
+
+## P-37 — CI never triggered on a PR that had become CONFLICTING; 18 poll iterations (~18 min) wasted (S6.4)
+- **Problem:** PR #54 (`crosscut/search`) showed **no** `pull_request` checks at all after the head was pushed. 18 `gh pr checks` polls (60 s each, ~18 min) reported nothing, and were read as "CI pending". In fact `gh pr view --json mergeable` returned `CONFLICTING`: `origin/main` had advanced (`e8dd2bc → a0c0897`, PR #59) and both changes append to `AGENTS.md` and `docs/workflow/PROBLEMS.md`, so GitHub triggered **zero** `pull_request` runs — a pending run and a never-triggered run look identical through `gh pr checks`.
+- **Step / Phase:** S6.4 (Phase 6) — CI polling
+- **Change:** search / CROSS-CUTTING
+- **Duration / iterations:** 18 poll iterations (~18 min) + 1 merge/resolve run
+- **Resolution:** merged `origin/main` into `crosscut/search` (normal push, no rebase/force-push); the single conflict (`docs/workflow/PROBLEMS.md`) was resolved as a **union** — `P-36` (branch) and main's `## After-workflow-optimization — user-roles-permissions` section both kept, no entry dropped; `AGENTS.md` auto-merged with both sides' content intact. Main's delta was docs/skills-only (no `src/`/`tests/`), so the Phase 5 evidence stays valid.
+- **Durable lesson:** check `gh pr view --json mergeable` **before** polling, and use `gh api repos/<repo>/actions/runs?head_sha=<sha> --jq .total_count` to tell "not triggered" (0) from "pending" (>0). A CONFLICTING PR runs no CI — poll `mergeable` first, then checks.
+- **Date:** 2026-10-02
