@@ -532,3 +532,86 @@ Friction: the first ruff run panicked with `wrong package cache for file` (corru
 - Ruff clean on the changed paths.
 - `uv.lock` deliberately left uncommitted (stale-lock artifact, Problem Log P-26); `data/` is gitignored.
 - **Date:** 2026-10-02
+
+---
+
+## Phase 5 re-run (S5.1) — full suite after CI remediation
+
+**Head under test:** `9d8f475` (includes `d400225` spec v3 + contract budget, `f25e2ec` fix(logging) managed-sink reconfigure + conftest bus drain + `captured_stderr` fd, `e973821` test(settings) full `logging.*` restore, `9d8f475` remediation evidence).
+**Date:** 2026-10-02. All commands run in the change worktree. Working tree: `uv.lock` modified (stale-lock artifact, P-26, left as-is), `data/` untracked + gitignored.
+
+### 1. Full suite, run 1
+
+```
+uv run pytest tests/ -q
+...
+FAILED tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip
+FAILED tests/property/filemanagement/test_filemanagement_properties.py::test_inv_002_concurrent_same_key_last_write_wins
+FAILED tests/property/filemanagement/test_filemanagement_properties.py::test_inv_005_avatar_url_format
+FAILED tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant
+FAILED tests/unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level
+5 failed, 717 passed, 1 skipped in 185.97s (0:03:05)
+```
+
+### 2. Full suite, run 2 (flake check)
+
+```
+uv run pytest tests/ -q
+...
+FAILED tests/unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level
+FAILED tests/property/filemanagement/test_filemanagement_properties.py::test_inv_008_variant_consistency
+FAILED tests/property/filemanagement/test_filemanagement_properties.py::test_inv_002_concurrent_same_key_last_write_wins
+FAILED tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline
+FAILED tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip
+FAILED tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant
+FAILED tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records
+FAILED tests/unit/logging/test_logging.py::test_ac_005_intercept_handler_skips_bootstrap
+8 failed, 714 passed, 1 skipped in 200.80s (0:03:20)
+```
+
+**The two runs fail with different sets** (5 vs 8; only `test_inv_009_yaml_roundtrip` and `test_last_admin_invariant` appear in both) — the suite is not deterministic in full-suite context.
+
+### 3. Per-node re-runs (deterministic vs flaky classification; nothing fixed)
+
+Each failing node id from either run, run alone, 3 consecutive times (`-p no:cacheprovider`):
+
+| Node | Isolated runs (×3) | Classification |
+|---|---|---|
+| `unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level` | pass, pass, pass | **flaky** — order/state-dependent (fails only in full-suite context) |
+| `unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records` | pass, pass, pass | **flaky** — same group |
+| `unit/logging/test_logging.py::test_ac_005_intercept_handler_skips_bootstrap` | pass, pass, pass | **flaky** — same group |
+| `integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` | pass, pass, pass | **flaky** — same group |
+| `property/filemanagement/…::test_inv_002_concurrent_same_key_last_write_wins` | pass, pass, pass | **flaky** (hypothesis random discovery; failed in both full runs) |
+| `property/filemanagement/…::test_inv_005_avatar_url_format` | pass (in the 5-node batch), pass, **fail** | **flaky** (hypothesis random discovery) |
+| `property/filemanagement/…::test_inv_008_variant_consistency` | pass, **fail**, pass | **flaky** (hypothesis random discovery) |
+| `property/settings/…::test_inv_009_yaml_roundtrip` | **fail, fail, fail** | **deterministic while replayed** — hypothesis replays the cached counterexample `value='\x85'` from this worktree's `.hypothesis` example DB |
+| `property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant` | **fail, fail, fail** | **deterministic while replayed** — cached `hypothesis.errors.DeadlineExceeded: Test took 259.45ms, which exceeds the deadline of 200.00ms` example |
+
+**Hypothesis example-DB experiment.** With an empty `HYPOTHESIS_STORAGE_DIRECTORY` (fresh example DB), both "deterministic" failures pass: `2 passed in 2.79s` / `2 passed in 2.59s` / `2 passed in 1.73s` (3 runs). So both are **replayed cached examples**, not failures that random search reproduces on demand.
+
+**`test_inv_009_yaml_roundtrip` substance (diagnostic only, nothing changed).** The cached counterexample is a genuine round-trip failure at the library level: `yaml.safe_dump({'a': '\x85'}, allow_unicode=True)` → `"a: '\x85  '\n"`, and `yaml.safe_load(...)['a']` → `' '` (NEL is a YAML line break). `src/backend/settings/repository.py` (the `YamlTemplateRepository` under test) and `tests/property/settings/test_settings_properties.py` are **not** in this change's diff (`git diff --name-only main...HEAD` lists only `src/backend/settings/__init__.py`, `feature_actions.py`, `registry.py`) — the file's last commit on `main` is `cb95ce2` (settings-coverage). **Pre-existing, out of this change's scope** (a PyYAML control-character round-trip defect exposed by an unconstrained `st.text()` strategy).
+
+**`test_last_admin_invariant` substance.** The failure is a **deadline** (wall-clock) violation, not an invariant violation — the INV-003 assertion never runs. The test file was added by commit `9a5e552` (the `user-roles-permissions` change), not by the search change. **Timing flake, not a behavior regression.**
+
+**Logging group substance.** The four logging tests fail only inside the full suite; run as their own group they pass: `uv run pytest tests/unit/logging tests/integration/logging tests/acceptance/logging_coverage -q` → `34 passed in 2.95s` and `34 passed in 3.08s` (2 runs). Failure mode is the same as the remediated CI group C/D: the stdlib→loguru intercept does not deliver the record to the `log_records` fixture sink (`assert []`), or the file sink never receives the line (`wait_for_file_content(... timeout=15)` → `False`). **Order/state-dependent test pollution — flaky, not deterministic.**
+
+### 4. Category run (CROSS-CUTTING Phase 5 categories)
+
+`uv run pytest tests/architecture/ …` is not applicable: **`tests/architecture/` does not exist in this repository** (`ls tests/` → acceptance, contract, property, unit + helpers; the command exits 4 with `ERROR: file or directory not found: tests/architecture/`).
+
+```
+uv run pytest tests/acceptance/ tests/property/ tests/contract/ -q
+FAILED tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip
+FAILED tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant
+2 failed, 459 passed, 1 skipped in 157.04s (0:02:37)
+```
+
+The two failures are the hypothesis-replayed pair above; no acceptance, contract, or architecture test failed, and the logging group was GREEN in this run.
+
+### 5. Gate verdict: **FAIL** (S5.1)
+
+- Full suite is **not GREEN**: run 1 `5 failed, 717 passed, 1 skipped`; run 2 `8 failed, 714 passed, 1 skipped`.
+- The failure sets differ between runs → the suite is flaky in full-suite context; 7 of the 9 distinct failing nodes pass in isolation.
+- Two nodes fail deterministically **only** because this worktree's `.hypothesis` example DB replays them; with a fresh example DB they pass. Neither is a search-change regression (`test_inv_009_yaml_roundtrip` → pre-existing PyYAML round-trip defect in untouched code; `test_last_admin_invariant` → hypothesis deadline flake in a test added by `user-roles-permissions`).
+- No test or implementation file was modified in this step; nothing was fixed, weakened, deleted, or xfailed.
+- **Date:** 2026-10-02
