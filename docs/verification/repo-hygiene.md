@@ -212,3 +212,29 @@ no `|| true`); `yaml.safe_load` → `yaml ok`.
 No violation was found on the current matrix, so **no matrix row was corrected** and the check
 was not weakened. All four assertions are proven non-vacuous by the negative controls (G2–G4);
 the matrix was restored from a byte copy after each probe and re-verified exit 0.
+
+## Phase 4 (S4.4) — refactor pass (2026-10-02)
+
+Scope: `scripts/check_traceability.py` (the only substantial new code) plus the diffs of
+`.gitignore`, `pyproject.toml`, `.github/workflows/lint.yml`, `.github/workflows/spec-validation.yml`.
+The 54 reformatted `.py` files were not reviewed (formatting-only, AST-proven in §S4.2).
+
+**Verdict: one restructuring, everything else already clean.**
+
+- **Changed:** `check()` took the three paths and re-derived `rows`/`specs`/`tests` internally, while
+  `main()` re-derived them again for the PASS summary — three redundant scans of `docs/specs` and
+  `tests/`. `main()` now parses once and passes `rows`, `specs`, `tests` to `check()`, matching the
+  parse → check → report shape of `scripts/verify_spec.py`. Behavior-preserving (same inputs, same messages).
+- **No change needed:** the four assertions are separately commented and each maps to one spec check;
+  the only numeric literal is the named `MIN_TABLE_LINES`; table parsing exists once (`matrix_rows`);
+  violation messages carry `path:line` and the offending value; `main()` mirrors `verify_spec.py`
+  (missing-input guard → violations → PASS summary → exit code). Config diffs are commented one-liners.
+
+| Gate | Command | Result |
+|---|---|---|
+| ruff (changed path) | `uv run ruff check scripts/check_traceability.py` | `All checks passed!` |
+| format (changed path) | `uv run ruff format --check scripts/check_traceability.py` | `1 file already formatted` (one in-step reformat after the edit) |
+| positive | `uv run python scripts/check_traceability.py` | **exit 0** — `Traceability: PASS (746 matrix rows, 129 spec IDs, 713 test functions)` |
+| negatives (1)(2)(3)(4) | synthetic matrix probes (isolated temp tree, real matrix untouched) | **exit 1 / 1 / 1 / 1** — all four violation kinds still detected |
+| repo lint | `uv run ruff check .` | `All checks passed!` |
+| smoke | `uv run pytest tests/unit -q --tb=line --color=no` | `237 passed` |

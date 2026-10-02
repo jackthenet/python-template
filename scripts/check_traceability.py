@@ -94,13 +94,10 @@ def matrix_rows(matrix_path: Path) -> list[MatrixRow]:
     return rows
 
 
-def check(matrix_path: Path, spec_dir: Path, test_dir: Path) -> list[str]:
+def check(matrix_path: Path, rows: list[MatrixRow], specs: set[str], tests: set[str]) -> list[str]:
     """Return one message per referential-integrity violation."""
     violations: list[str] = []
-    rows = matrix_rows(matrix_path)
     referenced = {id_ for row in rows for id_ in row.ids}
-    specs = defined_ids(spec_dir)
-    tests = test_names(test_dir)
 
     # (1) every REQ/AC defined by a spec has at least one matrix row
     for id_ in sorted(specs):
@@ -137,19 +134,18 @@ def main() -> int:
             print(f"Traceability: FAIL (missing input: {path})")
             return 1
 
-    violations = check(matrix_path, spec_dir, test_dir)
+    rows = matrix_rows(matrix_path)
+    specs = defined_ids(spec_dir)
+    tests = test_names(test_dir)
+
+    violations = check(matrix_path, rows, specs, tests)
     if violations:
         print(f"Traceability: FAIL ({len(violations)} violation(s))")
         for violation in violations:
             print(f"  {violation}")
         return 1
 
-    rows = matrix_rows(matrix_path)
-    print(
-        f"Traceability: PASS ({len(rows)} matrix rows, "
-        f"{len(defined_ids(spec_dir))} spec IDs, "
-        f"{len(test_names(test_dir))} test functions)"
-    )
+    print(f"Traceability: PASS ({len(rows)} matrix rows, {len(specs)} spec IDs, {len(tests)} test functions)")
     return 0
 
 
