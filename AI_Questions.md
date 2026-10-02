@@ -1449,3 +1449,14 @@ Each question is a section with the following fields:
 - **Date:** 2026-10-02
 - **Status:** ANSWERED
 - **Incorporated:** yes (fix policy fixed for S3.1/S4.x)
+
+## Q-129 — traceability matrix: is the Status column live status or a historical gate record?
+- **Step:** S1.1 DOCS/CHORE scope — Phase 1
+- **Change:** repo-hygiene, DOCS/CHORE
+- **Why needed:** The follow-up asks to (a) settle the Status-column convention in writing and (b) add a CI drift check. The two candidate conventions assert different things, so the check cannot be written before the convention is chosen — and the convention decides whether every future change owes a mandatory matrix refresh.
+- **Context:** `docs/verification/traceability.md` (901 lines) declares "Status values: `PENDING`, `RED`, `GREEN`, `REFACTORED`, `VERIFIED`" but never says what a row's status *means*. Some changes treat it as live status, others as the record of the change that wrote the row; 75 stale `RED` rows sat on main until the search change flipped them (measured now: 647 `| GREEN |` cells, 0 `| RED |`). No approved spec covers the matrix format (`grep -rn -i gitignore docs/specs/` and `… -e "ruff format" -e formatting …` → no match), so no Spec Amendment is needed — the convention lives in AGENTS.md §"Traceability & Spec Drift" and the matrix's §Invariants.
+- **Question:** Which convention becomes normative? **(A) live status** — every row describes the matrix's current state; every change must refresh the rows of every REQ it touches; the drift check additionally fails on any `PENDING`/`RED` row on `main`; per-change evidence in the cells is overwritten over time. **(B) historical gate record (recommended)** — a row records the state observed by the change that wrote it (with its change name/date, the existing practice); later changes touch only the REQs they change; the drift check derives coverage from the tests themselves (every spec REQ/AC has ≥1 row, every referenced test exists, statuses use a declared value) and never asserts status freshness. Recommendation **B**: the observed rot was referential (rows naming tests that no longer exist, REQs with no row), not status staleness, and B keeps the file's audit value while making the check deterministic and cheap.
+- **Answer:**
+- **Date:** 2026-10-02
+- **Status:** OPEN
+- **Incorporated:** no
