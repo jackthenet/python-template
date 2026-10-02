@@ -49,20 +49,38 @@ def wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> bool:
 
 @contextmanager
 def isolated_event_bus() -> Iterator[None]:
-    """Ensure the event-bus singleton is well-defined after the block.
+    """Park the real shared bus, run the block on a scratch bus, then put it back.
 
-    A test that calls ``reset_event_bus`` leaves the module singleton missing
-    (the previous instance is shut down) — a state leak that changes what
-    later tests observe (a ``SettingsRegistry`` built after the leak creates a
-    fresh ``EventBus`` instead of reusing the singleton). On exit, if the slot
-    is missing, a fresh singleton is installed so the suite state after the
-    block is a well-defined singleton (no "missing" state leak). The block's
-    own resets are untouched — only the post-block state is guaranteed.
+    ``reset_event_bus()`` SHUTS DOWN the instance it resets — a later
+    ``publish()`` on a shut-down bus is a silent no-op. A test that resets the
+    real shared instance therefore permanently disconnects every long-lived
+    holder of that instance: the settings registry built earlier publishes its
+    ``SettingChanged`` events on the dead bus, and the logging feature's
+    AC-020 ``SettingChanged`` subscription lives on that same bus. Every later
+    ``logging.*`` write is then published into the dead bus and never
+    dispatches, so the sink reconfiguration never happens and the logging
+    sink-ownership tests time out (main-ci-green item H: the whole suite's
+    bus wiring dies after the first test that resets the shared instance).
+
+    The real instance is therefore only PARKED for the duration of the block:
+    a scratch instance is installed in the slot, the block's own resets act on
+    the scratch, and on exit the scratch is shut down and the parked instance
+    is restored — so the suite state after the block is exactly the state
+    before it (same live singleton instance, same subscribers). The block still
+    sees a fresh, handler-free bus: the scratch instance has no subscribers of
+    its own, and callers that reset the slot first get a brand-new one.
     """
     from backend.eventbus import eventbus as _eventbus_module
+    from backend.eventbus.eventbus import EventBus
 
+    saved = _eventbus_module._default_bus[0]
+    _eventbus_module._default_bus[0] = EventBus()
     try:
         yield
     finally:
+        scratch = _eventbus_module._default_bus[0]
+        if scratch is not None and scratch is not saved:
+            scratch.shutdown()
+        _eventbus_module._default_bus[0] = saved
         if _eventbus_module._default_bus[0] is None:
             _eventbus_module.get_event_bus()
