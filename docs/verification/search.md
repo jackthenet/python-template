@@ -667,3 +667,18 @@ Not applicable — no failing node was observed, so no isolated re-runs were per
 No `.hypothesis` directory was deleted or modified; no stale replayed counterexample surfaced.
 
 **S5.1 gate: MET**
+
+## Phase 5 S5.2 re-run on the rebased base (2026-10-02)
+
+Base: `origin/main` = `e8dd2bc` (post PR #58); branch HEAD before this commit: `7bbc05a`.
+
+- `uv run ruff check .` → `All checks passed!` (whole-repo sweep, matches the CI lint job)
+- `uv run mypy src/` → `Success: no issues found in 83 source files`
+- `uv run deptry .` → `Scanning 88 files...` / `Success! No dependency issues found.`
+- `uv run bandit -r src/` → total issues by severity: Low 0, Medium 0, High 0; by confidence: Undefined/Low/Medium/High all 0; `Files skipped (0)`
+- `uv run pip-audit` → `No known vulnerabilities found` (only skip reason: the local project `python-template (0.6.0)` is not on PyPI and could not be audited)
+
+No lint, type, dependency, or security violation was introduced by this change on the rebased
+base, so no fix was made and no file outside this report was touched.
+
+**S5.2 gate: MET**
