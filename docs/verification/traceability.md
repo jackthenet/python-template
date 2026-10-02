@@ -14,33 +14,33 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
 | REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks`; `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_keeps_foreign_sink`, `test_reconfigure_after_external_removal_of_a_managed_sink` (issue main-ci-green, item E) | GREEN (issue main-ci-green Phase 5 S5.1, 2026-10-02) |
-| REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | RED |
-| REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` (victim of the items G/H pollution — assertion unchanged) | RED |
-| REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records`; `test_reconfigure_keeps_foreign_sink` (item E); autouse `tests/conftest.py::_stdlib_root_logging_restored` (item I — restores the stdlib root handlers the alembic `fileConfig` call replaced) | RED |
-| REQ-003 | AC-005 | `test_ac_005_intercept_handler_skips_bootstrap`; autouse `_stdlib_root_logging_restored` (item I) | RED |
-| REQ-004 | AC-006 | `test_ac_006_logged_sync_entry_exit` | RED |
-| REQ-004 | AC-007 | `test_ac_007_logged_async_entry_exit` | RED |
-| REQ-004 | AC-008 | `test_ac_008_logged_exception_propagates` | RED |
-| REQ-005 | AC-009 | `test_ac_009_logged_level_param` | RED |
-| REQ-005 | AC-010 | `test_ac_010_logged_include_args` | RED |
-| REQ-006 | AC-011 | `test_ac_011_logged_slow_threshold` | RED |
-| REQ-007 | AC-012 | `test_ac_012_logged_class_public_method` | RED |
-| REQ-007 | AC-013 | `test_ac_013_logged_class_private_method` | RED |
-| REQ-008 | AC-014 | `test_ac_014_get_settings_defaults` | RED |
-| REQ-009 | AC-015 | `test_ac_015_obsolete_module_deleted` | RED |
-| INV-001 | — | `test_inv_001_concurrent_setup_logger_sinks`; `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_after_external_removal_of_a_managed_sink` (item E) | RED |
-| INV-002 | — | `test_inv_002_elapsed_time_non_negative` | RED |
-| INV-003 | — | `test_inv_003_exception_propagates_unchanged` | RED |
-| EDGE-001 | — | `test_edge_001_log_file_parent_created` | RED |
-| EDGE-002 | — | `test_edge_002_logged_no_args` | RED |
-| EDGE-003 | — | `test_edge_003_logged_nonexistent_setting` | RED |
-| EDGE-004 | — | `test_edge_004_logged_class_no_public_methods` | RED |
-| EDGE-005 | — | `test_edge_005_intercept_unknown_level`; autouse `_stdlib_root_logging_restored` (item I — the intercept handler must survive the migration path) | RED |
+| REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` (victim of the items G/H pollution — assertion unchanged) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records`; `test_reconfigure_keeps_foreign_sink` (item E); autouse `tests/conftest.py::_stdlib_root_logging_restored` (item I — restores the stdlib root handlers the alembic `fileConfig` call replaced) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-003 | AC-005 | `test_ac_005_intercept_handler_skips_bootstrap`; autouse `_stdlib_root_logging_restored` (item I) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-004 | AC-006 | `test_ac_006_logged_sync_entry_exit` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-004 | AC-007 | `test_ac_007_logged_async_entry_exit` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-004 | AC-008 | `test_ac_008_logged_exception_propagates` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-005 | AC-009 | `test_ac_009_logged_level_param` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-005 | AC-010 | `test_ac_010_logged_include_args` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-006 | AC-011 | `test_ac_011_logged_slow_threshold` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-007 | AC-012 | `test_ac_012_logged_class_public_method` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-007 | AC-013 | `test_ac_013_logged_class_private_method` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-008 | AC-014 | `test_ac_014_get_settings_defaults` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-009 | AC-015 | `test_ac_015_obsolete_module_deleted` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| INV-001 | — | `test_inv_001_concurrent_setup_logger_sinks`; `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_after_external_removal_of_a_managed_sink` (item E) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| INV-002 | — | `test_inv_002_elapsed_time_non_negative` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| INV-003 | — | `test_inv_003_exception_propagates_unchanged` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-001 | — | `test_edge_001_log_file_parent_created` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-002 | — | `test_edge_002_logged_no_args` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-003 | — | `test_edge_003_logged_nonexistent_setting` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-004 | — | `test_edge_004_logged_class_no_public_methods` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-005 | — | `test_edge_005_intercept_unknown_level`; autouse `_stdlib_root_logging_restored` (item I — the intercept handler must survive the migration path) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | NFR-001 | — | `test_nfr_001_setup_time_budget` | GREEN |
-| NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | RED |
-| NFR-003 | — | `test_nfr_003_diagnose_false` | RED |
-| NFR-004 | — | `test_nfr_004_backward_compatible_api` | RED |
-| — | — | `test_stdlib_loguru_decorator_pipeline` (integration) | RED |
+| NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-003 | — | `test_nfr_003_diagnose_false` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-004 | — | `test_nfr_004_backward_compatible_api` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| — | — | `test_stdlib_loguru_decorator_pipeline` (integration) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 
 ## Event Bus Matrix
 
@@ -367,56 +367,56 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
-| REQ-001 | AC-001 | `test_register_settings_registers` | RED |
-| REQ-001 | AC-002 | `test_no_import_side_effects` | RED |
-| REQ-002 | AC-003 | `test_main_wires_all_features` | RED |
-| REQ-003 | AC-004 | `test_set_value_affects_running_feature` | RED |
-| REQ-004 | AC-005 | `test_constructor_default_registry_value` | RED |
-| REQ-005 | AC-006 | `test_unregistered_key_fallback` | RED |
-| REQ-006 | AC-007 | `test_list_definition_accepted` | RED |
-| REQ-007 | AC-008 | `test_list_value_validation` | RED |
-| REQ-007 | AC-009 | `test_list_min_items` | RED |
-| REQ-007 | AC-010 | `test_list_no_duplicates` | RED |
-| REQ-008 | AC-011 | `test_list_min_gt_max_rejected` | RED |
-| REQ-008 | AC-012 | `test_list_spec_on_text_rejected` | RED |
-| REQ-009 | AC-013 | `test_set_value_persists` | RED |
-| REQ-010 | AC-014 | `test_yaml_value_repository`; `test_yaml_value_roundtrip_nel` (issue main-ci-green item A) | RED |
-| REQ-011 | AC-015 | `test_persisted_precedence` | RED |
-| REQ-012 | AC-016 | `test_guarded_read_no_side_effect` | RED |
-| REQ-013 | AC-017 | `test_eventbus_no_registry_default` | RED |
-| REQ-013 | AC-018 | `test_eventbus_registry_value` | RED |
-| REQ-014 | AC-019 | `test_setup_logger_reads_registry`; `tests/unit/logging/test_logging_sink_ownership.py` (item E — the reconfigure touches only the sinks it owns) | RED |
-| REQ-015 | AC-020 | `test_sink_reconfigured_on_change`; `tests/settings_test_helpers.py::set_value_settled` (item G — awaits the write's dispatch) and `isolated_event_bus` (item H — the publish is no longer dropped by a shut-down bus) | RED |
-| REQ-016 | AC-021 | `test_logging_stub_removed` | RED |
-| REQ-017 | AC-022 | `test_key_prefix` | RED |
-| REQ-018 | AC-023 | `test_category_group` | RED |
-| REQ-019 | AC-024 | `test_inventory_matches` | RED |
-| REQ-020 | AC-025 | `test_tracing` | RED |
-| REQ-021 | AC-026 | `test_no_env_vars` | RED |
-| REQ-022 | AC-027 | `test_settings_registers_nothing` | RED |
-| INV-001 | — | `test_get_value_valid_for_kind` | RED |
+| REQ-001 | AC-001 | `test_register_settings_registers` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-001 | AC-002 | `test_no_import_side_effects` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-002 | AC-003 | `test_main_wires_all_features` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-003 | AC-004 | `test_set_value_affects_running_feature` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-004 | AC-005 | `test_constructor_default_registry_value` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-005 | AC-006 | `test_unregistered_key_fallback` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-006 | AC-007 | `test_list_definition_accepted` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-007 | AC-008 | `test_list_value_validation` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-007 | AC-009 | `test_list_min_items` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-007 | AC-010 | `test_list_no_duplicates` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-008 | AC-011 | `test_list_min_gt_max_rejected` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-008 | AC-012 | `test_list_spec_on_text_rejected` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-009 | AC-013 | `test_set_value_persists` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-010 | AC-014 | `test_yaml_value_repository`; `test_yaml_value_roundtrip_nel` (issue main-ci-green item A) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-011 | AC-015 | `test_persisted_precedence` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-012 | AC-016 | `test_guarded_read_no_side_effect` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-013 | AC-017 | `test_eventbus_no_registry_default` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-013 | AC-018 | `test_eventbus_registry_value` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-014 | AC-019 | `test_setup_logger_reads_registry`; `tests/unit/logging/test_logging_sink_ownership.py` (item E — the reconfigure touches only the sinks it owns) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-015 | AC-020 | `test_sink_reconfigured_on_change`; `tests/settings_test_helpers.py::set_value_settled` (item G — awaits the write's dispatch) and `isolated_event_bus` (item H — the publish is no longer dropped by a shut-down bus) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-016 | AC-021 | `test_logging_stub_removed` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-017 | AC-022 | `test_key_prefix` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-018 | AC-023 | `test_category_group` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-019 | AC-024 | `test_inventory_matches` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-020 | AC-025 | `test_tracing` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-021 | AC-026 | `test_no_env_vars` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-022 | AC-027 | `test_settings_registers_nothing` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| INV-001 | — | `test_get_value_valid_for_kind` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | INV-002 | — | `test_list_round_trip`; `test_yaml_value_roundtrip_nel` (issue main-ci-green item A) | RED (reproduction GREEN after the fix; row status predates the fix) |
-| INV-003 | — | `test_live_read_after_set` | RED |
-| INV-004 | — | `test_register_idempotent_fresh` | RED |
-| INV-005 | — | `test_persisted_precedence_invariant` | RED |
-| EDGE-001 | — | `test_eventbus_bootstrap_cycle` | RED |
-| EDGE-002 | — | `test_unregistered_key_warning` | RED |
-| EDGE-003 | — | `test_corrupted_values_yaml` | RED |
-| EDGE-004 | — | `test_missing_values_yaml` | RED |
-| EDGE-005 | — | `test_list_item_pattern_mismatch` | RED |
-| EDGE-006 | — | `test_list_min_gt_max` | RED |
-| EDGE-007 | — | `test_setup_logger_idempotent` | RED |
-| EDGE-008 | — | `test_sink_reconfigured_rotation` (routes its `logging.*` write through `set_value_settled` — issue main-ci-green item G) | RED |
-| EDGE-009 | — | `test_persist_all_values` | RED |
-| EDGE-010 | — | `test_live_read_no_trace_on_same` | RED |
-| EDGE-011 | — | `test_guarded_read_none` | RED |
-| EDGE-012 | — | `test_list_non_string_rejected` | RED |
-| NFR-001 | — | `test_live_read_in_memory` | RED |
-| NFR-002 | — | `test_no_secret_settings` | RED |
-| NFR-003 | — | `test_inventory_backward_compatible` | RED |
-| NFR-004 | — | `test_observability_tracing` | RED |
-| NFR-005 | — | `test_atomic_write` | RED |
-| NFR-006 | — | `test_thread_safety` | RED |
+| INV-003 | — | `test_live_read_after_set` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| INV-004 | — | `test_register_idempotent_fresh` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| INV-005 | — | `test_persisted_precedence_invariant` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-001 | — | `test_eventbus_bootstrap_cycle` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-002 | — | `test_unregistered_key_warning` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-003 | — | `test_corrupted_values_yaml` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-004 | — | `test_missing_values_yaml` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-005 | — | `test_list_item_pattern_mismatch` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-006 | — | `test_list_min_gt_max` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-007 | — | `test_setup_logger_idempotent` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-008 | — | `test_sink_reconfigured_rotation` (routes its `logging.*` write through `set_value_settled` — issue main-ci-green item G) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-009 | — | `test_persist_all_values` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-010 | — | `test_live_read_no_trace_on_same` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-011 | — | `test_guarded_read_none` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-012 | — | `test_list_non_string_rejected` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-001 | — | `test_live_read_in_memory` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-002 | — | `test_no_secret_settings` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-003 | — | `test_inventory_backward_compatible` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-004 | — | `test_observability_tracing` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-005 | — | `test_atomic_write` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-006 | — | `test_thread_safety` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 
 ## Mail Service Matrix
 
@@ -771,7 +771,7 @@ Issue `main-ci-green` (type ISSUE; triage, RED and GREEN evidence: `docs/verific
 
 ## Search Matrix
 
-The search change (type CROSS-CUTTING; spec `docs/specs/search.md`) uses its own REQ/AC ID space (REQ-001..023, AC-001..037, INV-001..005, EDGE-001..021, NFR-001..005) that overlaps the other features' matrices, so it is kept separate. Phase 3 (S3.2) confirmed all 70 newly derived tests RED (failure modes: `ModuleNotFoundError` on the unimplemented `backend.search` module; `ImportError` on the additive `build_user_source` / `build_file_source` / `build_session_source` modules; `AttributeError` on the additive `SessionRepository.list_all`). Status `GREEN`: all 73 rows pass (Phase 5, S5.1 re-run + S5.3 targeted re-check, 2026-09-25) — every REQ has at least one GREEN test, every AC has at least one executable (GREEN) test, every INV has a property test (GREEN), every EDGE has a test (GREEN), every NFR has a test (GREEN). Targeted re-check (S5.3): `uv run pytest -q tests/acceptance/search/ tests/contract/search/ tests/integration/search/ tests/property/search/ tests/unit/search/ tests/unit/authentication/test_sessions.py` → **74 passed** (the 70 newly derived search tests + the 4 pre-existing authentication session tests in that file); all 8 task DAG tasks are `VERIFIED` (`.github/task-runner/tasks.json`).
+The search change (type CROSS-CUTTING; spec `docs/specs/search.md`) uses its own REQ/AC ID space (REQ-001..023, AC-001..037, INV-001..005, EDGE-001..021, NFR-001..005) that overlaps the other features' matrices, so it is kept separate. Phase 3 (S3.2) confirmed all 70 newly derived tests RED (failure modes: `ModuleNotFoundError` on the unimplemented `backend.search` module; `ImportError` on the additive `build_user_source` / `build_file_source` / `build_session_source` modules; `AttributeError` on the additive `SessionRepository.list_all`). Status `GREEN`: all 73 rows pass — **re-confirmed on the rebased base** `origin/main` = `e8dd2bc` (Phase 5 S5.1 re-run, 2026-10-02, commit `7bbc05a`: `uv run pytest tests/ -v` → **727 passed, 1 skipped** in each of 3 runs, zero failures; search-family smoke `tests/{acceptance,unit,contract,integration,property}/search` → **87 passed**; S5.2 lint/types/deps/security clean, commit `55a9f73`). Earlier evidence (2026-09-25): Phase 5 S5.1 re-run + S5.3 targeted re-check — every REQ has at least one GREEN test, every AC has at least one executable (GREEN) test, every INV has a property test (GREEN), every EDGE has a test (GREEN), every NFR has a test (GREEN). Targeted re-check (S5.3): `uv run pytest -q tests/acceptance/search/ tests/contract/search/ tests/integration/search/ tests/property/search/ tests/unit/search/ tests/unit/authentication/test_sessions.py` → **74 passed** (the 70 newly derived search tests + the 4 pre-existing authentication session tests in that file); all 8 task DAG tasks are `VERIFIED` (`.github/task-runner/tasks.json`).
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
@@ -851,7 +851,7 @@ The search change (type CROSS-CUTTING; spec `docs/specs/search.md`) uses its own
 
 ### Affected Features (CROSS-CUTTING — per-feature source wiring)
 
-The change wires existing features' content as search sources via additive `search_source.py` modules (ADR-077) and one additive repository method (ADR-080). **No existing REQ or AC of any affected feature is touched** — every change is additive, and each affected feature's test suite stays GREEN (Phase 5, S5.1 re-run). Each affected feature's wiring is covered by a dedicated test (all GREEN):
+The change wires existing features' content as search sources via additive `search_source.py` modules (ADR-077) and one additive repository method (ADR-080). **No existing REQ or AC of any affected feature is touched** — every change is additive, and each affected feature's own suite stays GREEN on the rebased base (Phase 5 S5.1 re-run, 2026-10-02: the full suite is GREEN — `727 passed, 1 skipped` ×3 runs, zero failures — which covers `tests/*/usermanagement`, `tests/*/filemanagement`, `tests/*/authentication`, `tests/*/sessionmanagement`, `tests/*/permissions` and the startup-wiring tests; the PR #58 fixed flaky families did not reappear in any of the 3 runs, see `docs/verification/search.md` §"PR #58 fixed families — reappearance check"). Each affected feature's wiring is covered by a dedicated test (all GREEN):
 
 | Feature | Wiring | Wiring test | Status |
 |---------|--------|-------------|--------|
@@ -861,6 +861,11 @@ The change wires existing features' content as search sources via additive `sear
 | authentication | `SessionRepository.list_all()` (additive ABC method, backward-compatible per authentication NFR-003, REQ-022) | `test_list_all_returns_all_sessions_created_at_desc` (T-004) | GREEN |
 | user-roles-permissions | `search.search` action declaration (additive catalog action via the feature-owned `register_actions`, REQ-016) | `test_ac_031_permission_enforcement` (AC-031) | GREEN |
 | startup (application entrypoint) | all three feature sources wired at startup (additive wiring, REQ-023) | `test_startup_wiring_all_sources` (integration) | GREEN |
+| user-management (supplementary query coverage) | `build_user_source` field/filter/group/sort/pagination behaviour (AC-034) | `tests/unit/search/test_feature_source_queries.py` — `test_user_source_free_text_all_fields`, `test_user_source_string_filter_ops`, `test_user_source_exact_filter_ops`, `test_user_source_nested_groups`, `test_user_source_sort`, `test_user_source_pagination` | GREEN (87-test search-family smoke, `7bbc05a`) |
+| file-management (supplementary query coverage) | `build_file_source` field/filter/group/sort/pagination behaviour (AC-035) | `tests/unit/search/test_feature_source_queries.py` — `test_file_source_free_text_all_fields`, `test_file_source_string_filter_ops`, `test_file_source_exact_filter_ops`, `test_file_source_nested_groups`, `test_file_source_sort`, `test_file_source_pagination` | GREEN (87-test search-family smoke, `7bbc05a`) |
+| session-management (supplementary query coverage) | `build_session_source` field/filter/group/sort/pagination behaviour (AC-036) | `tests/unit/search/test_feature_source_queries.py` — `test_session_source_free_text`, `test_session_source_string_filter_ops`, `test_session_source_exact_filter_ops`, `test_session_source_nested_groups`, `test_session_source_sort`, `test_session_source_pagination` | GREEN (87-test search-family smoke, `7bbc05a`) |
+| authentication (own-spec contract) | `SessionRepository` ABC widened additively with `list_all()` — the authentication public-API backward-compatibility contract must still hold | `test_nfr_003_public_api_stable` (`tests/contract/authentication/test_public_api.py`, authentication NFR-003) + `test_list_all_returns_all_sessions_created_at_desc` | GREEN (full suite `7bbc05a`) |
+| user-roles-permissions (own-spec contract) | the `search.search` action joins the static catalog built from feature-owned `register_actions` (permissions REQ-004, REQ-005, REQ-010) | `test_ac_031_permission_enforcement` (AC-031) + the permissions catalog/contract suite (`tests/acceptance/permissions/`, `tests/contract/permissions/`) | GREEN (full suite `7bbc05a`) |
 
 ## Drift Checks
 
@@ -886,3 +891,11 @@ uv run pytest tests/unit/ -v
 # Run full suite
 uv run pytest tests/ -v
 ```
+
+## Rebase reconciliation (2026-10-02, search S5.3)
+
+- Union of `main`'s `main-ci-green` rows with the Search Matrix (rebase onto `origin/main` = `e8dd2bc`); the union was verified, not re-derived: no conflict markers, no duplicate section headings, no duplicate rows, no duplicated requirement IDs (73 Search rows; the two repeated test names — `test_ac_001_register_source`, `test_ac_005_search_free_text_returns_items` — are legitimate many-to-one REQ/AC mappings).
+- Defects found and fixed: (1) the Search Matrix and the per-feature wiring rows still cited the pre-rebase 2026-09-25 evidence — re-labelled with the rebased-run evidence (S5.1 `727 passed, 1 skipped` ×3, commit `7bbc05a`; S5.2 clean, commit `55a9f73`); (2) 75 legacy rows in the pre-existing feature matrices (logging `Matrix`, settings-coverage, …) were still `RED` although GREEN — byte-identical on `origin/main`, i.e. pre-existing staleness, not a union defect — flipped to GREEN with the rebased-run evidence label; (3) the 18 per-feature source query tests had no matrix row — added as supplementary rows (AC-034/035/036) plus own-spec contract rows for authentication NFR-003 and permissions REQ-004/005/010.
+- Search spec IDs covered: **91/91** (`comm -23` of the IDs in `docs/specs/search.md` against the matrix → 0 missing).
+- Orphans: **none** — all 87 search test functions are either named in the matrix or trace to a spec ID in their docstrings.
+- No test or source file was modified in this step (docs only).
