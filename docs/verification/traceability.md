@@ -13,7 +13,7 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
-| REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks` | RED |
+| REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks`; `test_reconfigure_replaces_only_the_managed_sinks`, `test_reconfigure_after_external_removal_of_a_managed_sink` (issue main-ci-green) | RED; see "Issue: main-ci-green" |
 | REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | RED |
 | REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` | RED |
 | REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records` | RED |
@@ -132,7 +132,7 @@ The event bus feature (`docs/specs/event-bus.md`) uses its own REQ/AC ID space (
 | INV-006 | — | `test_inv_006_views_match_values` | GREEN |
 | INV-007 | — | `test_inv_007_load_scope_valid` | GREEN |
 | INV-008 | — | `test_inv_008_exactly_one_event_per_change` | GREEN |
-| INV-009 | — | `test_inv_009_yaml_roundtrip` | GREEN |
+| INV-009 | — | `test_inv_009_yaml_roundtrip`; `test_yaml_template_roundtrip_nel` (issue main-ci-green) | GREEN; RED (issue main-ci-green) |
 | INV-010 | — | `test_inv_010_status_derivation` | GREEN |
 | EDGE-001 | — | `test_edge_001_unknown_key_lookups` | GREEN |
 | EDGE-002 | — | `test_edge_002_duplicate_registration` | GREEN |
@@ -395,7 +395,7 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | REQ-021 | AC-026 | `test_no_env_vars` | RED |
 | REQ-022 | AC-027 | `test_settings_registers_nothing` | RED |
 | INV-001 | — | `test_get_value_valid_for_kind` | RED |
-| INV-002 | — | `test_list_round_trip` | RED |
+| INV-002 | — | `test_list_round_trip`; `test_yaml_value_roundtrip_nel` (issue main-ci-green, RED) | RED |
 | INV-003 | — | `test_live_read_after_set` | RED |
 | INV-004 | — | `test_register_idempotent_fresh` | RED |
 | INV-005 | — | `test_persisted_precedence_invariant` | RED |
@@ -699,7 +699,7 @@ The user-roles-permissions change (type CROSS-CUTTING; spec `docs/specs/user-rol
 | REQ-024 | — | `test_authentication_enforcement_wiring`, `test_settings_enforcement_wiring`, `test_mail_enforcement_wiring`, `test_sessionmanagement_enforcement_wiring` (per-feature wiring, no AC) | GREEN |
 | INV-001 | — | `test_check_true_iff_granted_and_active` | GREEN |
 | INV-002 | — | `test_undeterminable_never_true` | GREEN |
-| INV-003 | — | `test_last_admin_invariant` | GREEN |
+| INV-003 | — | `test_last_admin_invariant` | GREEN (deadline flake — pending, issue main-ci-green) |
 | INV-004 | — | `test_effective_set_monotone` | GREEN |
 | INV-005 | — | `test_admin_passes_any_catalog_permission` | GREEN |
 | INV-006 | — | `test_valid_grant_keys_exactly_catalog_plus_wildcards` | GREEN |
@@ -747,6 +747,19 @@ The change wires the shared `PermissionChecker` into six features via the ADR-07
 | filemanagement | `test_enforced_method_denies_without_permission` (REQ-024/AC-029; 10 methods, 8 enforced) | GREEN |
 | mail | `test_mail_enforcement_wiring` (REQ-024; 3 methods, all enforced) | GREEN |
 | sessionmanagement | `test_sessionmanagement_enforcement_wiring` (REQ-024; 6 methods, all enforced) | GREEN |
+
+## Issue: main-ci-green (reproduction tests, Phase 3 S3.1 — 2026-10-02)
+
+Issue `main-ci-green` (type ISSUE; triage + RED evidence: `docs/verification/main-ci-green.md` §7 and "Phase 3 (S3.1)"). New reproduction tests are RED on the defective code; the fixes land in Phase 4.
+
+| Spec | ID | Test | Status |
+|---|---|---|---|
+| settings.md | INV-009 | `test_yaml_template_roundtrip_nel` (new, `tests/unit/settings/test_repository_roundtrip.py`) | RED |
+| settings-coverage.md | INV-002 | `test_yaml_value_roundtrip_nel` (new, same file) | RED |
+| logging.md | REQ-001, AC-001, INV-001 | `test_reconfigure_replaces_only_the_managed_sinks` (new, `tests/unit/logging/test_logging_sink_ownership.py`) | RED |
+| logging.md | REQ-003, AC-004 (sink observability) + settings-coverage REQ-015 | `test_reconfigure_keeps_foreign_sink` (new, same file) | RED |
+| logging.md | REQ-001, INV-001 | `test_reconfigure_after_external_removal_of_a_managed_sink` (new, same file) | GREEN pin (must stay GREEN under the fix; reddens a naive fix) |
+| user-roles-permissions.md | INV-003 | `test_last_admin_invariant` (existing, `tests/property/usermanagement/test_multi_role_invariants.py`; not modified) | pending — `DeadlineExceeded` evidence is the CI record (triage §3); seeds 7/101/2024 GREEN on this host 2026-10-02 (load-dependent flake) |
 
 ## Drift Checks
 

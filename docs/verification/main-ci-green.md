@@ -549,3 +549,83 @@ The re-run brief was checked command-by-command. Four corrections:
 Confirmed as stated by the brief: the E/F scope decision (Q-127), the B fix policy (Q-128), the `dependency-review` error text and the failing job (`gh run view 36894698244`), the current CI `tests`-job failure set (2 failed on `75ca243`), the spec IDs for E (logging REQ-001/002/003, AC-001/002/004/005, INV-001, EDGE-005; settings-coverage REQ-014/015, AC-019/020), and the COMPLIANT verdict for E (re-derived independently in §6.3).
 
 Base note: this branch's base is `origin/main` @ `75ca243`. Local `main` has since moved to `0d2720f` ("chore(workflow-optimization)…", skills/AGENTS/PROBLEMS only — no `src/`, no `tests/`, no workflow files), which does not affect any item's scope or the cherry-pick.
+
+---
+
+## Phase 3 (S3.1) — reproduction tests, RED confirmed (2026-10-02)
+
+Two new test files (items A and E). No `src/` change, no existing test touched, no cherry-pick (Phase 4).
+
+### Files added
+
+- `tests/unit/settings/test_repository_roundtrip.py` — item A (settings YAML persistence round-trip, U+0085 NEL)
+- `tests/unit/logging/test_logging_sink_ownership.py` — item E (loguru sink ownership across a settings-driven reconfigure)
+
+### RED gate (targeted, verbatim)
+
+```bash
+uv run pytest tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py -q -p no:randomly --tb=no
+```
+
+```text
+FFFF.                                                                    [100%]
+=========================== short test summary info ===========================
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_value_roundtrip_nel
+FAILED tests/unit/settings/test_repository_roundtrip.py::test_yaml_template_roundtrip_nel
+FAILED tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_keeps_foreign_sink
+FAILED tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_replaces_only_the_managed_sinks
+4 failed, 1 passed in 5.33s
+```
+
+Every failure is an assertion on behavior (no setup error, no `ValidationError`, no collection/import error):
+
+```text
+E   AssertionError: assert {'app.a': ' '} == {'app.a': '\x85'}          # test_yaml_template_roundtrip_nel
+E   Differing items:
+E   {'app.a': ' '} != {'app.a': '\x85'}
+
+E   AssertionError: assert {'app.embedde...pp.text': ' '} == {'app.list': ...ed': 'a\x85b'}   # test_yaml_value_roundtrip_nel
+E   Differing items:
+E   {'app.list': [' ', 'ok']} != {'app.list': ['\x85', 'ok']}
+E   {'app.text': ' '} != {'app.text': '\x85'}
+E   {'app.embedded': 'a b'} != {'app.embedded': 'a\x85b'}
+
+E   AssertionError: the reconfigure removed a sink it does not own: records emitted after it are lost
+E   AssertionError: the reconfigure removed a sink it does not own
+```
+
+### What each new test pins (non-vacuity)
+
+| Test | Pins |
+|---|---|
+| `test_yaml_value_roundtrip_nel` | `YamlValueRepository.save(values)` → `load()` returns the identical mapping, including a LIST item and an embedded U+0085 (settings-coverage INV-002). |
+| `test_yaml_template_roundtrip_nel` | `YamlTemplateRepository.save(t)` → `get(name)` returns a template whose `values` are exactly the stored ones for `{"app.a": "\x85"}` (settings INV-009). |
+| `test_reconfigure_keeps_foreign_sink` | A third-party loguru sink (added exactly the way `tests/conftest.py::log_records` adds one) still receives a record emitted **after** a `logging.*`-driven reconfigure (logging REQ-003/AC-004 observability; settings-coverage REQ-015 reconfigures *its own* sink). |
+| `test_reconfigure_replaces_only_the_managed_sinks` | After a reconfigure the logging feature's own sink set is exactly one console + one file sink (REQ-001/AC-001/INV-001 — the fix may not "re-add without removing"), **and** the foreign sink id is still installed (the defect). |
+| `test_reconfigure_after_external_removal_of_a_managed_sink` | A reconfigure whose managed console sink was removed by someone else still re-establishes exactly one console + one file sink and raises nothing on the event bus worker (no `ValueError` from removing an already-removed id). |
+
+Determinism: pinned literals, no hypothesis, no sleeps (`settings_test_helpers.wait_for`), no timing assertions — sink identity/count and console level only. The reconfigure is driven through the public path (a `logging.log_level` write on the shared registry; the feature's `SettingChanged` subscription reconfigures on the bus worker) and observed by the console sink's level reaching the written value, a signal specific to the test's own write, so a queued reconfigure from another test can never satisfy it. The fixture restores the original level and awaits its reconfigure, so no reconfigure leaks into the next test.
+
+Item E RED stability (defective code, `3cd35cf`): `-p no:randomly` 3/3 runs → `2 failed, 1 passed`; default (randomized) order 10/10 runs → `2 failed, 1 passed`, always the same two nodes. `test_reconfigure_after_external_removal_of_a_managed_sink` is **GREEN on the current code by design** — it is the pin that reddens a naive "remove the ids I remember" fix, and it must stay GREEN under the real one.
+
+Not in S3.1's deliverable set: §7 item A.3 (hardening the `test_inv_009_yaml_roundtrip` strategy so U+0085 is always generated rather than found by chance) — the existing property test stays untouched here; the pinned unit tests are the deterministic reproduction (§7 item A.4).
+
+### Item B — pinned-seed evidence (no new test; fix is Phase 4)
+
+```bash
+uv run pytest tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant -q -p no:randomly --hypothesis-seed=101
+# 1 passed in 2.30s
+uv run pytest ... --hypothesis-seed=7      # 1 passed in 2.21s
+uv run pytest ... --hypothesis-seed=2024   # 1 passed in 2.97s
+uv run pytest tests/property/usermanagement/test_multi_role_invariants.py -q -p no:randomly --hypothesis-seed=101
+# 1 passed in 2.29s
+```
+
+**Finding:** the pinned seeds do **not** reproduce `DeadlineExceeded` on this host today — the failure is load-dependent (the recorded CI/observed per-example cost is 246–356 ms against the 200 ms default deadline, §3). The authoritative RED evidence for B therefore stays the CI record in §3 (`DeadlineExceeded`, 355.59 ms at seed 101 on `75ca243`); B's RED cannot be re-observed on demand locally, which is exactly why the decided fix (Q-128, `deadline=1000`) is a flake fix rather than a behavior fix. No test change made here.
+
+### Ruff (changed paths)
+
+```bash
+uv run ruff check tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py   # All checks passed!
+uv run ruff format --check tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py  # 2 files already formatted
+```
