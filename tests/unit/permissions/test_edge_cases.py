@@ -126,7 +126,11 @@ def test_malformed_key_denied() -> None:
     )
 
     service, _, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     for malformed in ("no-dot", "UPPER.case", "a.b.c"):
@@ -151,7 +155,11 @@ def test_unknown_permission_denied() -> None:
     )
 
     service, _, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     unknown = "mail.not_in_catalog"
@@ -175,7 +183,11 @@ def test_unknown_user_denied() -> None:
     )
 
     service, _, _, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     unknown_id = uuid4()
@@ -199,8 +211,13 @@ def test_inactive_user_denied() -> None:
     )
 
     service, manager, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
-        user_roles=["admin"], username="admin1",
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["admin"],
+        username="admin1",
     )
     _create_admin_pair(manager, "admin1", "admin2")
     manager.deactivate_user(user.id)
@@ -226,8 +243,13 @@ def test_revoked_expired_token_denied() -> None:
     now = datetime.now(UTC)
     lookup = _FakeSessionLookup()
     service, _, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
-        user_roles=["admin"], session_lookup=lookup,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["admin"],
+        session_lookup=lookup,
     )
     # A revoked token denies.
     lookup.add("revoked", _SessionRecord(user.id, now + timedelta(hours=1), True))
@@ -262,8 +284,13 @@ def test_mismatched_token_denied() -> None:
     now = datetime.now(UTC)
     lookup = _FakeSessionLookup()
     service, manager, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
-        user_roles=["admin"], session_lookup=lookup,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["admin"],
+        session_lookup=lookup,
     )
     other = manager.create_user(
         UserCreate(username="user2", email="user2@example.com", password="correct-horse-1", roles=["admin"])
@@ -291,7 +318,11 @@ def test_unavailable_session_lookup_denied() -> None:
 
     # Case A: the session lookup is ``None``.
     service, _, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["admin"],
     )
     assert service.has_permission(user.id, "mail.send_email", session_token="tok") is False
@@ -302,8 +333,13 @@ def test_unavailable_session_lookup_denied() -> None:
         assert exc.reason == "storage_error"
     # Case B: the session lookup raises.
     service2, _, user2, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
-        user_roles=["admin"], session_lookup=_RaisingSessionLookup(),
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["admin"],
+        session_lookup=_RaisingSessionLookup(),
     )
     assert service2.has_permission(user2.id, "mail.send_email", session_token="tok") is False
     try:
@@ -326,8 +362,13 @@ def test_user_deleted_concurrent_denied() -> None:
     )
 
     service, manager, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
-        user_roles=["admin"], username="admin1",
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["admin"],
+        username="admin1",
     )
     _create_admin_pair(manager, "admin1", "admin2")
     manager.delete_user(user.id)
@@ -352,7 +393,11 @@ def test_lookup_raises_denied() -> None:
     )
 
     service, _, _, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_manager=_RaisingUserManager(),
     )
     user_id = uuid4()
@@ -377,7 +422,11 @@ def test_set_system_unknown_permission() -> None:
     )
 
     service, _, _, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     try:
@@ -399,7 +448,11 @@ def test_set_system_wildcard_allowed() -> None:
     )
 
     service, _, _, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     # A feature wildcard is allowed (no error).
@@ -424,8 +477,14 @@ def test_token_deleted_user_denied() -> None:
     now = datetime.now(UTC)
     lookup = _FakeSessionLookup()
     service, manager, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
-        user_roles=["admin"], username="admin1", session_lookup=lookup,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["admin"],
+        username="admin1",
+        session_lookup=lookup,
     )
     _create_admin_pair(manager, "admin1", "admin2")
     # A valid session token for the user (added while the user exists).
@@ -457,8 +516,13 @@ def test_expired_session_denied() -> None:
     now = datetime.now(UTC)
     lookup = _FakeSessionLookup()
     service, _, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
-        user_roles=["admin"], session_lookup=lookup,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
+        user_roles=["admin"],
+        session_lookup=lookup,
     )
     # An expired session for a granted permission (the admin wildcard) still denies.
     lookup.add("expired", _SessionRecord(user.id, now - timedelta(hours=1), False))
@@ -540,7 +604,11 @@ def test_role_no_mapping_zero_permissions() -> None:
     )
 
     service, _, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     for perm in ("mail.send_email", "mail.send_password_reset_email"):
@@ -567,7 +635,11 @@ def test_concurrent_thread_safe() -> None:
     )
 
     service, _, user, _ = _build(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     perm = "mail.send_email"
@@ -618,7 +690,11 @@ def test_delete_builtin_role_protected() -> None:
     )
 
     service, _, _, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         seed_roles=[("admin", True), ("user", True)],
     )
     for builtin in ("admin", "user"):
@@ -646,7 +722,11 @@ def test_delete_in_use_role() -> None:
     from backend.usermanagement import StaticRoleStore
 
     service, _, _, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["editor"],
         role_store=StaticRoleStore(("admin", "user", "editor")),
         seed_roles=[("editor", False)],
@@ -674,7 +754,11 @@ def test_create_duplicate_role() -> None:
     )
 
     service, _, _, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
     )
     service.create_role("editor")
     try:
@@ -699,7 +783,11 @@ def test_create_malformed_name() -> None:
     )
 
     service, _, _, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
     )
     for malformed in ("Editor", "a" * 33):
         try:
@@ -725,7 +813,11 @@ def test_grant_unknown_permission() -> None:
     )
 
     service, _, _, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         seed_roles=[("user", True)],
     )
     try:
@@ -751,7 +843,11 @@ def test_unknown_role_operations() -> None:
     )
 
     service, _, _, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
     )
     for operation in (
         lambda: service.grant_permission("ghost", "mail.send_email"),
@@ -779,7 +875,11 @@ def test_revoke_absent_idempotent() -> None:
     )
 
     service, _, _, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         seed_roles=[("user", True)],
     )
     # Revoking a grant that was never made is a no-op (no error).
@@ -803,7 +903,11 @@ def test_grant_existing_idempotent() -> None:
     )
 
     service, _, _, _, grant_repo = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         seed_roles=[("user", True)],
     )
     perm = "mail.send_email"
@@ -833,7 +937,11 @@ def test_assignment_unknown_role() -> None:
     )
 
     service, manager, user, _, _ = _build_role(
-        PermissionService, MemoryRoleRepository, MemoryGrantRepository, MemorySystemPrincipalRepository, PermissionCatalog,
+        PermissionService,
+        MemoryRoleRepository,
+        MemoryGrantRepository,
+        MemorySystemPrincipalRepository,
+        PermissionCatalog,
         user_roles=["user"],
     )
     unknown = "nonexistent"
@@ -857,17 +965,19 @@ def test_assignment_unknown_role() -> None:
 # The bootstrap system set (spec Section 3, D10): the default system principal
 # permission set. It covers the internal login flow (password verification +
 # user read) so login stays reachable for zero-permission users.
-BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset({
-    "usermanagement.get_user",
-    "usermanagement.verify_password",
-    "usermanagement.change_password",
-    "settings.register",
-    "settings.register_feature",
-    "mail.send_email",
-    "mail.send_password_reset_email",
-    "mail.send_email_verification_email",
-    "sessionmanagement.cleanup_expired",
-})
+BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset(
+    {
+        "usermanagement.get_user",
+        "usermanagement.verify_password",
+        "usermanagement.change_password",
+        "settings.register",
+        "settings.register_feature",
+        "mail.send_email",
+        "mail.send_password_reset_email",
+        "mail.send_email_verification_email",
+        "sessionmanagement.cleanup_expired",
+    }
+)
 
 
 class _SpyPermissionChecker:

@@ -44,9 +44,7 @@ def _seed_expired(session_repository, user_id, count: int, base: datetime) -> No
         )
 
 
-def test_ac_024_cleanup_bounded_by_batch_size(
-    session_service, session_repository, settings_registry, user_id
-) -> None:
+def test_ac_024_cleanup_bounded_by_batch_size(session_service, session_repository, settings_registry, user_id) -> None:
     """AC-024: 150 expired rows with cleanup_batch_size 100 → 100 deleted, 100 returned."""
     batch_size = 100
     expired_rows = 150
@@ -55,15 +53,11 @@ def test_ac_024_cleanup_bounded_by_batch_size(
     _seed_expired(session_repository, user_id, expired_rows, base)
     deleted = session_service.cleanup_expired()
     assert deleted == batch_size
-    remaining_expired = [
-        s for s in session_repository.list_for_user(user_id) if s.expires_at < base
-    ]
+    remaining_expired = [s for s in session_repository.list_for_user(user_id) if s.expires_at < base]
     assert len(remaining_expired) == expired_rows - batch_size
 
 
-def test_ac_025_cleanup_no_expired_returns_zero(
-    session_service, session_repository, user_id
-) -> None:
+def test_ac_025_cleanup_no_expired_returns_zero(session_service, session_repository, user_id) -> None:
     """AC-025: no expired rows → cleanup_expired returns 0 (no error); valid rows untouched."""
     valid_rows = 2
     base = _now()
@@ -75,9 +69,7 @@ def test_ac_025_cleanup_no_expired_returns_zero(
     assert len(entries) == valid_rows
 
 
-def test_edge_012_cleanup_below_batch_size(
-    session_service, session_repository, settings_registry, user_id
-) -> None:
+def test_edge_012_cleanup_below_batch_size(session_service, session_repository, settings_registry, user_id) -> None:
     """EDGE-012: fewer expired rows than cleanup_batch_size → all deleted, count returned."""
     batch_size = 100
     expired_rows = 3
@@ -86,7 +78,5 @@ def test_edge_012_cleanup_below_batch_size(
     _seed_expired(session_repository, user_id, expired_rows, base)
     deleted = session_service.cleanup_expired()
     assert deleted == expired_rows
-    remaining_expired = [
-        s for s in session_repository.list_for_user(user_id) if s.expires_at < base
-    ]
+    remaining_expired = [s for s in session_repository.list_for_user(user_id) if s.expires_at < base]
     assert remaining_expired == []

@@ -49,23 +49,23 @@ def test_semantic_log_levels(log_records: list[Any]) -> None:
             time.sleep(0.01)
     finally:
         bus.shutdown()
-    assert any(level_name(r) == "ERROR" for r in log_records), (
-        "expected an ERROR-level record for the failing handler"
-    )
+    assert any(level_name(r) == "ERROR" for r in log_records), "expected an ERROR-level record for the failing handler"
 
     # SettingsRegistry: a duplicate registration is a recoverable issue logged at
     # WARNING (the implementation logs the warning and then raises
     # SettingsRegistrationError, which the test catches).
     from backend.settings.exceptions import SettingsRegistrationError
 
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    reg = SettingsRegistry(
+        template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     definition = SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="d")
     reg.register(definition)
     with contextlib.suppress(SettingsRegistrationError):
         reg.register(definition)  # duplicate
-    assert any(
-        level_name(r) == "WARNING" and "duplicate registration" in str(r) for r in log_records
-    ), "expected a WARNING-level record for the duplicate registration"
+    assert any(level_name(r) == "WARNING" and "duplicate registration" in str(r) for r in log_records), (
+        "expected a WARNING-level record for the duplicate registration"
+    )
 
     # Not only DEBUG: at least one non-DEBUG record was produced.
     assert any(level_name(r) != "DEBUG" for r in log_records)

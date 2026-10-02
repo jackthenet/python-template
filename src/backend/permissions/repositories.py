@@ -199,9 +199,7 @@ class SqliteGrantRepository(_SqliteRepository, GrantRepository):
 
     def list_all(self) -> Sequence[RolePermission]:
         with Session(self._engine) as session:
-            return (
-                session.exec(select(RolePermission).order_by(RolePermission.role, RolePermission.permission)).all()
-            )
+            return session.exec(select(RolePermission).order_by(RolePermission.role, RolePermission.permission)).all()
 
 
 class SqliteSystemPrincipalRepository(_SqliteRepository, SystemPrincipalRepository):

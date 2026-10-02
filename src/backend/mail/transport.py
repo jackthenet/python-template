@@ -86,7 +86,7 @@ class SmtpTransportImpl(SmtpTransport):
             raise MailTransportError("smtp") from None
         except smtplib.SMTPException:
             raise MailTransportError("smtp") from None
-        except (ConnectionRefusedError, socket.gaierror, OSError):
+        except ConnectionRefusedError, socket.gaierror, OSError:
             raise MailTransportError("connection") from None
         finally:
             if server is not None:

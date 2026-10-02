@@ -60,9 +60,7 @@ def test_ac_039_register_settings_defaults(settings_registry: SettingsRegistry) 
         assert settings_registry.get_value(key) == default
 
 
-def test_ac_040_live_read_max_listed_sessions(
-    session_service, session_repository, settings_registry, user_id
-) -> None:
+def test_ac_040_live_read_max_listed_sessions(session_service, session_repository, settings_registry, user_id) -> None:
     """AC-040: max_listed_sessions changed in the registry → list_sessions without an explicit limit uses the new value (live read)."""
     new_limit = 2
     _set_max_listed_sessions(settings_registry, new_limit)

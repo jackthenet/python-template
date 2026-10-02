@@ -47,6 +47,7 @@ class RoleListType(TypeDecorator):
             return json.loads(value)
         return list(value)
 
+
 # Password / display-name length limits (spec NFR-001, ADR-023).
 _PASSWORD_MIN_LEN = 8
 _PASSWORD_MAX_LEN = 128

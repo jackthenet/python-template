@@ -138,9 +138,7 @@ class SessionService:
         )
         now = datetime.now(UTC)
         valid = [
-            row
-            for row in self._repository.list_for_user(event.user_id)
-            if not row.revoked and row.expires_at > now
+            row for row in self._repository.list_for_user(event.user_id) if not row.revoked and row.expires_at > now
         ]
         excess = len(valid) - cap
         if excess <= 0:

@@ -24,7 +24,5 @@ def test_inv_003_reset_token_at_most_once(attempts: int) -> None:
     # every further attempt fails (double-spend is impossible)
     for _ in range(attempts):
         with pytest.raises(InvalidResetTokenError) as exc:
-            fixture.service.complete_password_reset(
-                PasswordResetComplete(token=token, new_password="new-pass-1")
-            )
+            fixture.service.complete_password_reset(PasswordResetComplete(token=token, new_password="new-pass-1"))
         assert exc.value.reason == "used"

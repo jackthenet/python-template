@@ -351,17 +351,13 @@ def test_ac_013_filter_number_comparisons() -> None:
     r_gt = svc.search(search_query(feature="demo", filters=filter_group("and", [filter_condition("count", "gt", 2)])))
     n_gt = 2  # count 3, 4
     assert r_gt.total == n_gt
-    r_gte = svc.search(
-        search_query(feature="demo", filters=filter_group("and", [filter_condition("count", "gte", 2)]))
-    )
+    r_gte = svc.search(search_query(feature="demo", filters=filter_group("and", [filter_condition("count", "gte", 2)])))
     n_gte = 3  # count 2, 3, 4
     assert r_gte.total == n_gte
     r_lt = svc.search(search_query(feature="demo", filters=filter_group("and", [filter_condition("count", "lt", 2)])))
     n_lt = 2  # count 0, 1
     assert r_lt.total == n_lt
-    r_lte = svc.search(
-        search_query(feature="demo", filters=filter_group("and", [filter_condition("count", "lte", 2)]))
-    )
+    r_lte = svc.search(search_query(feature="demo", filters=filter_group("and", [filter_condition("count", "lte", 2)])))
     n_lte = 3  # count 0, 1, 2
     assert r_lte.total == n_lte
 
@@ -381,9 +377,7 @@ def test_ac_015_filter_is_null() -> None:
     """AC-015: an ``is_null`` filter returns only items whose field is None."""
     svc = service()
     svc.register_source(demo_source("demo"))  # tag is None for i % 3 == 0 → items 0, 3
-    result = svc.search(
-        search_query(feature="demo", filters=filter_group("and", [filter_condition("tag", "is_null")]))
-    )
+    result = svc.search(search_query(feature="demo", filters=filter_group("and", [filter_condition("tag", "is_null")])))
     n_null = 2  # items 0, 3
     assert result.total == n_null
     assert all(it.fields["tag"] is None for it in result.items)
@@ -432,9 +426,9 @@ def test_ac_018_offset_pagination() -> None:
     page0 = svc.search(search_query(feature="demo", offset=0, limit=page_size))
     page1 = svc.search(search_query(feature="demo", offset=page_size, limit=page_size))
     page2 = svc.search(search_query(feature="demo", offset=page_size * 2, limit=page_size))
-    all_ids = [it.item_id for it in page0.items] + [it.item_id for it in page1.items] + [
-        it.item_id for it in page2.items
-    ]
+    all_ids = (
+        [it.item_id for it in page0.items] + [it.item_id for it in page1.items] + [it.item_id for it in page2.items]
+    )
     # No overlap, no gaps.
     assert len(set(all_ids)) == len(all_ids) == n
     assert page0.total == page1.total == page2.total == n
@@ -532,9 +526,13 @@ def test_ac_024_malformed_query_errors() -> None:
     # filter on a non-filterable field / sort on a non-sortable field:
     # a source with a field that is neither filterable nor sortable.
     fields = [
-        SourceField(name="title", type=FieldType.STRING, searchable=True, filterable=False, sortable=False, display=True)
+        SourceField(
+            name="title", type=FieldType.STRING, searchable=True, filterable=False, sortable=False, display=True
+        )
     ]
-    src = InMemorySource(name="locked", fields=fields, items=[SourceItem(item_id="0", fields={"title": "x"})]).to_source()
+    src = InMemorySource(
+        name="locked", fields=fields, items=[SourceItem(item_id="0", fields={"title": "x"})]
+    ).to_source()
     svc.register_source(src)
     with pytest.raises(MalformedQueryError):
         svc.search(

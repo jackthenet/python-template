@@ -2,12 +2,14 @@
 
 This matrix maintains bidirectional traceability between requirements, acceptance criteria, tests, and implementation.
 
+> **The Status column is a historical gate record** (decision Q-129, convention B): each row records the state observed by the change that wrote it (change name + date are inside the cell), and a later change touches only the REQs/ACs it changes — it never refreshes rows it did not change, so a dated `RED`/`PENDING` row is a legal record of a past gate. What is enforced is **referential integrity** (coverage, dangling IDs, missing tests, undeclared status values), by `uv run python scripts/check_traceability.py` in CI.
+
 ## Invariants
 
 - Every normative requirement MUST have one or more executable tests.
 - Every acceptance test MUST trace back to a normative requirement.
 - Acceptance tests are the authoritative executable representation of externally observable behavior. Unit tests must not replace missing acceptance tests.
-- Status values: `PENDING`, `RED`, `GREEN`, `REFACTORED`, `VERIFIED`.
+- Status values: `PENDING`, `RED`, `GREEN`, `REFACTORED`, `VERIFIED`, `N/A`.
 
 ## Matrix
 

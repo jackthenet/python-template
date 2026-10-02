@@ -132,7 +132,9 @@ def failing_source(name: str = "failing") -> Any:
     return SearchSource(
         name=name,
         fields=[
-            SourceField(name="title", type=FieldType.STRING, searchable=True, filterable=True, sortable=True, display=True),
+            SourceField(
+                name="title", type=FieldType.STRING, searchable=True, filterable=True, sortable=True, display=True
+            ),
         ],
         query=query,
     )
@@ -151,7 +153,9 @@ def slow_source(name: str = "slow", sleep_s: float = 0.5) -> Any:
     return SearchSource(
         name=name,
         fields=[
-            SourceField(name="title", type=FieldType.STRING, searchable=True, filterable=True, sortable=True, display=True),
+            SourceField(
+                name="title", type=FieldType.STRING, searchable=True, filterable=True, sortable=True, display=True
+            ),
         ],
         query=query,
     )

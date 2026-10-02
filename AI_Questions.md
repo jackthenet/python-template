@@ -1449,3 +1449,36 @@ Each question is a section with the following fields:
 - **Date:** 2026-10-02
 - **Status:** ANSWERED
 - **Incorporated:** yes (fix policy fixed for S3.1/S4.x)
+
+## Q-129 — traceability matrix: is the Status column live status or a historical gate record?
+- **Step:** S1.1 DOCS/CHORE scope — Phase 1
+- **Change:** repo-hygiene, DOCS/CHORE
+- **Why needed:** The follow-up asks to (a) settle the Status-column convention in writing and (b) add a CI drift check. The two candidate conventions assert different things, so the check cannot be written before the convention is chosen — and the convention decides whether every future change owes a mandatory matrix refresh.
+- **Context:** `docs/verification/traceability.md` (901 lines) declares "Status values: `PENDING`, `RED`, `GREEN`, `REFACTORED`, `VERIFIED`" but never says what a row's status *means*. Some changes treat it as live status, others as the record of the change that wrote the row; 75 stale `RED` rows sat on main until the search change flipped them (measured now: 647 `| GREEN |` cells, 0 `| RED |`). No approved spec covers the matrix format (`grep -rn -i gitignore docs/specs/` and `… -e "ruff format" -e formatting …` → no match), so no Spec Amendment is needed — the convention lives in AGENTS.md §"Traceability & Spec Drift" and the matrix's §Invariants.
+- **Question:** Which convention becomes normative? **(A) live status** — every row describes the matrix's current state; every change must refresh the rows of every REQ it touches; the drift check additionally fails on any `PENDING`/`RED` row on `main`; per-change evidence in the cells is overwritten over time. **(B) historical gate record (recommended)** — a row records the state observed by the change that wrote it (with its change name/date, the existing practice); later changes touch only the REQs they change; the drift check derives coverage from the tests themselves (every spec REQ/AC has ≥1 row, every referenced test exists, statuses use a declared value) and never asserts status freshness. Recommendation **B**: the observed rot was referential (rows naming tests that no longer exist, REQs with no row), not status staleness, and B keeps the file's audit value while making the check deterministic and cheap.
+- **Answer:** **B — historical gate record.** A row records the state observed by the change that wrote it (change name + date, the existing practice); later changes touch only the REQs they actually change. The drift check therefore verifies **references only** — every `REQ-XXX`/`AC-XXX` in `docs/specs/*.md` has ≥1 row, no row names a nonexistent ID, every backticked test function exists in `tests/`, every Status cell uses one of the five declared values — and does **not** assert status freshness: assertion (5) of the drafted design is dropped, so no `PENDING`/`RED` row ever fails CI.
+- **Date:** 2026-10-02
+- **Status:** ANSWERED
+- **Incorporated:** yes (scope record `docs/verification/repo-hygiene.md` §Item 3: convention paragraph wording fixed to B, drift-check assertion set reduced to (1)–(4), assertion (5) removed)
+
+## Q-130 — format sweep: Python only, or also the 21 Markdown files?
+- **Step:** S1.1 DOCS/CHORE scope — Phase 1
+- **Change:** repo-hygiene, DOCS/CHORE
+- **Why needed:** ruff 0.16.9 also formats fenced code blocks inside `.md`, so `ruff format --check .` counts 21 Markdown files among the 75 pending. Reformatting them would rewrite the 13 approved specs — files the Spec Amendment Workflow reserves for normative change — and it decides whether the CI format gate can use `.` or must list directories.
+- **Context:** Measured `uv run ruff format --check .` → 75 would be reformatted (54 `.py`: 12 `src/`, 40 `tests/`, 2 `migrations/`; 21 `.md`: 13 `docs/specs/*.md`, `AGENTS.md`, ADR-038/039, `docs/workflow/PROBLEMS.md`, 5 `tests/*/README.md`). The input premise assumed a repo-wide sweep.
+- **Question:** Is the sweep **Python only** (`uv run ruff format src tests scripts migrations` + `[tool.ruff] extend-exclude = ["**/*.md"]` so the specs, `AGENTS.md` and the ADRs stay byte-identical), or must the 21 Markdown files be reformatted too?
+- **Answer:** **Python only (as recommended).** Sweep `uv run ruff format src tests scripts migrations` (the 54 `.py` files) and add `extend-exclude = ["**/*.md"]` to `[tool.ruff]` in `pyproject.toml`, so the 13 approved specs, `AGENTS.md` and the ADRs stay byte-identical and `ruff format --check .` becomes a permanently green gate. Markdown code blocks are documentation, not executable product code.
+- **Date:** 2026-10-02
+- **Status:** ANSWERED
+- **Incorporated:** yes (scope record §Item 2: 2a/2b fixed as the approved sweep; Markdown sweep ruled out of scope)
+
+## Q-131 — make `ruff format --check .` a hard-failing CI step in the `lint` job?
+- **Step:** S1.1 DOCS/CHORE scope — Phase 1
+- **Change:** repo-hygiene, DOCS/CHORE
+- **Why needed:** Item 2's third part turns a one-off cleanup into a permanent gate; adding a hard-failing CI step changes what future PRs must satisfy, which is a governance decision the agent must not take unilaterally in a DOCS/CHORE change.
+- **Context:** `.github/workflows/lint.yml` runs `ruff check .` only; format drift surfaces today solely through the `ruff-format` pre-commit hook (ruff `v0.15.12`) when a file is staged, so drift re-accumulated to 75 files on `main`.
+- **Question:** Add `uv run ruff format --check .` as a hard-failing (no `continue-on-error`) step in the `lint` job of `.github/workflows/lint.yml`?
+- **Answer:** **Yes (as recommended).** One added step, `uv run ruff format --check .`, hard-failing, in the `lint` job — green from the first run because the sweep plus `extend-exclude` close the drift.
+- **Date:** 2026-10-02
+- **Status:** ANSWERED
+- **Incorporated:** yes (scope record §Item 2c + exact file list item 4)

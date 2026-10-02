@@ -67,9 +67,7 @@ class SettingsRegistry:
 
         self._event_bus = event_bus if event_bus is not None else get_event_bus()
         self._repository = template_repository if template_repository is not None else MemoryTemplateRepository()
-        self._value_repository = (
-            value_repository if value_repository is not None else YamlValueRepository("settings")
-        )
+        self._value_repository = value_repository if value_repository is not None else YamlValueRepository("settings")
         self._definitions: dict[str, SettingDefinition] = {}
         self._values: dict[str, Any] = {}
         self._lock = threading.Lock()
@@ -92,9 +90,7 @@ class SettingsRegistry:
                 raise SettingsRegistrationError(f"duplicate key {definition.key}")
             self._definitions[definition.key] = definition
             # Persisted values take precedence over definition defaults (REQ-011).
-            self._values[definition.key] = self._persisted.get(
-                definition.key, definition.default
-            )
+            self._values[definition.key] = self._persisted.get(definition.key, definition.default)
         logger.debug("setting registered: key={} kind={}", definition.key, definition.kind)
         self._persist_values()
 

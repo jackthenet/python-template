@@ -26,12 +26,7 @@ from backend.logging import logged
 
 
 def _is_concrete_threshold(value: Any) -> bool:
-    return (
-        value is not None
-        and isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and value > 0
-    )
+    return value is not None and isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
 
 
 def test_traced_classes_have_concrete_threshold() -> None:
@@ -39,20 +34,17 @@ def test_traced_classes_have_concrete_threshold() -> None:
     ``slow_threshold_ms``."""
     for name, cls in INVENTORY_CLASSES.items():
         threshold = getattr(cls, "slow_threshold_ms", None)
-        assert _is_concrete_threshold(threshold), (
-            f"{name} has no concrete slow_threshold_ms (got {threshold!r})"
-        )
+        assert _is_concrete_threshold(threshold), f"{name} has no concrete slow_threshold_ms (got {threshold!r})"
 
     for name, fn in INVENTORY_MODULE_FUNCTIONS.items():
         threshold = getattr(fn, "slow_threshold_ms", None)
-        assert _is_concrete_threshold(threshold), (
-            f"{name} has no concrete slow_threshold_ms (got {threshold!r})"
-        )
+        assert _is_concrete_threshold(threshold), f"{name} has no concrete slow_threshold_ms (got {threshold!r})"
 
 
 def test_slow_call_logs_warning_not_interrupted(log_records: list[Any]) -> None:
     """AC-014 / NFR-001: a traced call exceeding its threshold logs a WARNING and
     completes normally."""
+
     # The slow-call mechanism: a traced call slower than its threshold.
     @logged(slow_threshold_ms=1)
     def slow() -> None:

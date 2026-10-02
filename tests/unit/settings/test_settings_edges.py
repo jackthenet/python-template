@@ -302,7 +302,9 @@ def test_edge_026_empty_scope_template(registry: SettingsRegistry) -> None:
 def test_edge_027_load_unregistered_settings(tmp_path: Path) -> None:
     shared_repo = YamlTemplateRepository(tmp_path)
     bus_a = EventBus()
-    reg_a = SettingsRegistry(event_bus=bus_a, template_repository=shared_repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    reg_a = SettingsRegistry(
+        event_bus=bus_a, template_repository=shared_repo, value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     reg_a.register(
         SettingDefinition(
             key="app.a",
@@ -316,7 +318,9 @@ def test_edge_027_load_unregistered_settings(tmp_path: Path) -> None:
 
     # A second registry shares the template store but has app.a unregistered.
     bus_b = EventBus()
-    reg_b = SettingsRegistry(event_bus=bus_b, template_repository=shared_repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    reg_b = SettingsRegistry(
+        event_bus=bus_b, template_repository=shared_repo, value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     with pytest.raises(SettingsNotFoundError):
         reg_b.load_template("t1")
     bus_b.shutdown()

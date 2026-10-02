@@ -209,9 +209,7 @@ def test_settings_enforcement_wiring() -> None:
 
     # --- standalone mode (AC-031): a registry without a checker performs no check ---
     bus = EventBus()
-    standalone = SettingsRegistry(
-        event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp())
-    )
+    standalone = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))
     try:
         standalone.register(_text_def())
         # An enforced method called with an explicit principal (a user without any

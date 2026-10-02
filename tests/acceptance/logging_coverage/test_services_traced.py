@@ -59,7 +59,9 @@ def test_service_registry_classes_traced(log_records: list[Any]) -> None:
     # (checking if eventbus.max_queue_size is registered), so we expect 2 entry
     # records total (one from the EventBus constructor, one from the test's call).
     _EXPECTED_HAS_RECORDS = 2
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    reg = SettingsRegistry(
+        template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     reg.has("some.key")
     assert len([r for r in entry_records(log_records) if "SettingsRegistry.has" in str(r)]) == _EXPECTED_HAS_RECORDS
     assert len([r for r in exit_records(log_records) if "SettingsRegistry.has" in str(r)]) == _EXPECTED_HAS_RECORDS
@@ -74,8 +76,14 @@ def test_concrete_repo_provider_traced(log_records: list[Any], tmp_path: Any) ->
     subjects: list[tuple[str, Callable[[], Any]]] = [
         ("SqliteUserRepository.get_by_username", lambda: SqliteUserRepository(db).get_by_username("probe")),
         ("SqliteSessionRepository.delete_expired", lambda: SqliteSessionRepository(db).delete_expired()),
-        ("SqlitePasswordResetRepository.get_by_token_hash", lambda: SqlitePasswordResetRepository(db).get_by_token_hash("probe")),
-        ("SqliteWebAuthnCredentialRepository.get_by_credential_id", lambda: SqliteWebAuthnCredentialRepository(db).get_by_credential_id("probe")),
+        (
+            "SqlitePasswordResetRepository.get_by_token_hash",
+            lambda: SqlitePasswordResetRepository(db).get_by_token_hash("probe"),
+        ),
+        (
+            "SqliteWebAuthnCredentialRepository.get_by_credential_id",
+            lambda: SqliteWebAuthnCredentialRepository(db).get_by_credential_id("probe"),
+        ),
         (
             "InMemoryAttemptTracker.is_locked",
             lambda: InMemoryAttemptTracker(3, timedelta(minutes=5)).is_locked("probe"),
@@ -97,7 +105,9 @@ def test_concrete_repo_provider_traced(log_records: list[Any], tmp_path: Any) ->
     # installed in the test environment — the auth suite uses a fake provider),
     # so tracing is verified via the decorator attributes instead of a call.
     assert getattr(PyWebAuthnProvider, "__logged_class__", False) is True, "PyWebAuthnProvider: not traced"
-    assert getattr(PyWebAuthnProvider, "slow_threshold_ms", None) == _WEBAUTHN_SLOW_THRESHOLD_MS, "PyWebAuthnProvider: wrong slow threshold"
+    assert getattr(PyWebAuthnProvider, "slow_threshold_ms", None) == _WEBAUTHN_SLOW_THRESHOLD_MS, (
+        "PyWebAuthnProvider: wrong slow threshold"
+    )
 
 
 def test_module_functions_traced(log_records: list[Any]) -> None:

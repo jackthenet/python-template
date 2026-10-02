@@ -50,9 +50,7 @@ def test_ac_033_lifecycle_events_and_none_publisher(auth, tmp_path: Path) -> Non
     assert token is not None
     auth.service.complete_password_reset(PasswordResetComplete(token=token, new_password="new-pass-1"))
     # passkey registration + deletion
-    read = auth.service.complete_passkey_registration(
-        PasskeyRegistrationComplete(user_id=user.id, response={})
-    )
+    read = auth.service.complete_passkey_registration(PasskeyRegistrationComplete(user_id=user.id, response={}))
     auth.service.delete_passkey(user.id, read.credential_id)
 
     assert len(auth.collector.of_type(Logout)) == 1

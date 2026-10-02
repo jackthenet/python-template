@@ -15,9 +15,7 @@ _MAX_EXAMPLES = 10
 @settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
 @given(max_failures=st.integers(min_value=2, max_value=10), failures=st.integers(min_value=0, max_value=12))
 def test_inv_004_lockout_threshold(max_failures: int, failures: int) -> None:
-    tracker = InMemoryAttemptTracker(
-        max_failed_attempts=max_failures, lockout_duration=timedelta(minutes=15)
-    )
+    tracker = InMemoryAttemptTracker(max_failed_attempts=max_failures, lockout_duration=timedelta(minutes=15))
     for _ in range(failures):
         tracker.record_failure("alice")
     if failures < max_failures:

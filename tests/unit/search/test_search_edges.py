@@ -73,7 +73,9 @@ def test_edge_004_non_filterable_field() -> None:
     svc = service()
     # A source with a field that is not filterable.
     fields = [SourceField(name="title", type=FieldType.STRING, searchable=True, filterable=False, display=True)]
-    src = InMemorySource(name="locked", fields=fields, items=[SourceItem(item_id="0", fields={"title": "x"})]).to_source()
+    src = InMemorySource(
+        name="locked", fields=fields, items=[SourceItem(item_id="0", fields={"title": "x"})]
+    ).to_source()
     svc.register_source(src)
     with pytest.raises(MalformedQueryError) as exc_info:
         svc.search(
@@ -105,7 +107,9 @@ def test_edge_006_non_sortable_field() -> None:
     svc = service()
     # A source with a field that is not sortable.
     fields = [SourceField(name="title", type=FieldType.STRING, searchable=True, sortable=False, display=True)]
-    src = InMemorySource(name="locked", fields=fields, items=[SourceItem(item_id="0", fields={"title": "x"})]).to_source()
+    src = InMemorySource(
+        name="locked", fields=fields, items=[SourceItem(item_id="0", fields={"title": "x"})]
+    ).to_source()
     svc.register_source(src)
     with pytest.raises(MalformedQueryError):
         svc.search(search_query(feature="locked", sort=sort("title")))
@@ -283,9 +287,7 @@ def test_edge_017_is_null_matches_none() -> None:
     where the field is None."""
     svc = service()
     svc.register_source(demo_source("demo"))  # tag is None for i % 3 == 0 → items 0, 3
-    result = svc.search(
-        search_query(feature="demo", filters=filter_group("and", [filter_condition("tag", "is_null")]))
-    )
+    result = svc.search(search_query(feature="demo", filters=filter_group("and", [filter_condition("tag", "is_null")])))
     n_null = 2  # items 0, 3
     assert result.total == n_null
     assert all(it.fields["tag"] is None for it in result.items)

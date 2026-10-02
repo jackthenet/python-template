@@ -54,9 +54,7 @@ def test_ac_032_passkey_login_stores_method(tmp_path: Path) -> None:
     fixture = build_auth_service(tmp_path)  # FakeWebAuthnProvider by default
     user = create_user(fixture.user_manager)
     # Given: a passkey login (authentication REQ-015).
-    fixture.service.complete_passkey_registration(
-        PasskeyRegistrationComplete(user_id=user.id, response={})
-    )
+    fixture.service.complete_passkey_registration(PasskeyRegistrationComplete(user_id=user.id, response={}))
     fixture.service.begin_passkey_login(PasskeyLoginBegin(credential_id="fake-credential"))
     result = fixture.service.complete_passkey_login(
         PasskeyLoginComplete(credential_id="fake-credential", response={"id": "fake"})

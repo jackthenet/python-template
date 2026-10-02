@@ -373,7 +373,9 @@ class FileService:
         limit = self._effective_limit(registry, namespace)
         content, original_filename = self._resolve_source(source, key, namespace, limit, original_filename)
         detected = self._validate_content(
-            key, namespace, content,
+            key,
+            namespace,
+            content,
             limit=limit,
             registry=registry,
             original_filename=original_filename,
@@ -484,7 +486,9 @@ class FileService:
         limit = self._effective_limit(registry, "avatars")
         content, original_filename = self._resolve_source(source, key, "avatars", limit, None)
         detected = self._validate_content(
-            key, "avatars", content,
+            key,
+            "avatars",
+            content,
             limit=limit,
             registry=registry,
             original_filename=original_filename,

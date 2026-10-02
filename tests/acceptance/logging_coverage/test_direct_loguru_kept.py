@@ -33,7 +33,9 @@ def test_existing_direct_loguru_kept(log_records: list[Any]) -> None:
         bus.shutdown()
 
     # SettingsRegistry one-off facts.
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    reg = SettingsRegistry(
+        template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     reg.register(SettingDefinition(key="x.y", kind=SettingKind.TEXT, default="d"))
     reg.set_value("x.y", "v")
 
@@ -49,6 +51,4 @@ def test_existing_direct_loguru_kept(log_records: list[Any]) -> None:
     assert any("setting registered: key=" in m for m in msgs), (
         "SettingsRegistry 'setting registered' direct statement is missing"
     )
-    assert any("value set: key=" in m for m in msgs), (
-        "SettingsRegistry 'value set' direct statement is missing"
-    )
+    assert any("value set: key=" in m for m in msgs), "SettingsRegistry 'value set' direct statement is missing"

@@ -160,6 +160,9 @@ allowed-unresolved-imports = ["webauthn"]
 target-version = "py314"
 indent-width = 4
 line-length = 120
+# Markdown code blocks are documentation, not executable product code: keeping .md
+# out of the formatter keeps `ruff format --check .` a usable gate (see the lint job).
+extend-exclude = ["**/*.md"]
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"

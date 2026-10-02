@@ -168,7 +168,9 @@ def _build(
     return service, manager, user, grant_repo, catalog
 
 
-def _session_scenario_service(scenario, perm, service_cls, *, role_repo_cls, grant_repo_cls, system_repo_cls, catalog_cls):
+def _session_scenario_service(
+    scenario, perm, service_cls, *, role_repo_cls, grant_repo_cls, system_repo_cls, catalog_cls
+):
     """Build a service with a bound session lookup for a session-validation scenario.
 
     Returns ``(service, user_id, token, check_perm)``. The lookup is created after the user
@@ -271,8 +273,7 @@ def test_check_true_iff_granted_and_active(ops) -> None:
         current = manager.get_user(user.id)
         for perm in _PERMS:
             expected = current.is_active and (
-                "admin" in current.roles
-                or any(_grant_matches(g, perm) for role in current.roles for g in grants[role])
+                "admin" in current.roles or any(_grant_matches(g, perm) for role in current.roles for g in grants[role])
             )
             assert service.has_permission(user.id, perm) is expected
 
@@ -354,7 +355,9 @@ def test_undeterminable_never_true(scenario) -> None:
             )
         target_id = uuid4() if scenario in ("unknown_user", "lookup_raises") else user.id
         token = "tok" if scenario in ("lookup_none", "lookup_raises_session") else None
-        check_perm = {"malformed_permission": "UPPER.case", "unknown_permission": "mail.not_in_catalog"}.get(scenario, perm)
+        check_perm = {"malformed_permission": "UPPER.case", "unknown_permission": "mail.not_in_catalog"}.get(
+            scenario, perm
+        )
 
     # has_permission returns False (never True).
     assert service.has_permission(target_id, check_perm, session_token=token) is False
@@ -499,6 +502,6 @@ def test_valid_grant_keys_exactly_catalog_plus_wildcards(key) -> None:
         try:
             service.grant_permission("user", key)
             raise AssertionError(f"expected a grant of {key!r} to raise")
-        except (AuthorizationError, ValueError):
+        except AuthorizationError, ValueError:
             pass
         assert key not in service.get_role_permissions("user")
