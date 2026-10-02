@@ -21,7 +21,7 @@ def register_actions(catalog: PermissionCatalog) -> None:
         "mail",
         {
             "mail.send_email": "Send an email",
-            "mail.send_password_reset_email": "Send a password-reset email",
+            "mail.send_password_reset_email": "Send a password-reset email",  # nosec B105
             "mail.send_email_verification_email": "Send an email-verification email",
         },
     )

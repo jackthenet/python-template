@@ -25,8 +25,8 @@ def register_actions(catalog: PermissionCatalog) -> None:
             "authentication.login": "Log in with username/email + password",
             "authentication.session_info": "Read session metadata for a token",
             "authentication.logout": "Log out (revoke a session)",
-            "authentication.request_password_reset": "Request a password reset",
-            "authentication.complete_password_reset": "Complete a password reset",
+            "authentication.request_password_reset": "Request a password reset",  # nosec B105
+            "authentication.complete_password_reset": "Complete a password reset",  # nosec B105
             "authentication.begin_passkey_registration": "Begin passkey registration",
             "authentication.complete_passkey_registration": "Complete passkey registration",
             "authentication.begin_passkey_login": "Begin passkey login",
