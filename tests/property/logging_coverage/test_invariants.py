@@ -42,7 +42,9 @@ def _subjects(tmp_path: Path) -> list[tuple[str, Callable[[], Any]]]:
     connection is never locked on disk.
     """
     db = "sqlite:///:memory:"
-    reg = SettingsRegistry(template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    reg = SettingsRegistry(
+        template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     tracker = InMemoryAttemptTracker(3, timedelta(minutes=5))
     urepo = SqliteUserRepository(db)
     mem = MemoryTemplateRepository()
@@ -71,9 +73,7 @@ def test_one_entry_one_exit_per_call(idx: int) -> None:
         assert len(for_qualname(entry_records(records), qualname)) == 1, (
             f"{qualname}: expected exactly one entry record"
         )
-        assert len(for_qualname(exit_records(records), qualname)) == 1, (
-            f"{qualname}: expected exactly one exit record"
-        )
+        assert len(for_qualname(exit_records(records), qualname)) == 1, f"{qualname}: expected exactly one exit record"
 
 
 @given(secret=st.from_regex(r"secret-[a-z0-9]{16}", fullmatch=True))

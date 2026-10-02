@@ -12,9 +12,7 @@ from sessionmanagement_test_helpers import make_session
 from backend.authentication import hash_token
 
 
-def test_ac_026_expiration_unchanged_no_activity_tracking(
-    session_service, session_repository, user_id
-) -> None:
+def test_ac_026_expiration_unchanged_no_activity_tracking(session_service, session_repository, user_id) -> None:
     """AC-026: a session created with TTL T is invalid once T has elapsed, and
     no operation of this feature changes expires_at or tracks activity (REQ-013)."""
     base = datetime.now(UTC)

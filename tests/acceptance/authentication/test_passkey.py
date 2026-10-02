@@ -17,9 +17,7 @@ from backend.authentication import (
 
 def test_ac_022_begin_registration_options(auth) -> None:
     user = create_user(auth.user_manager)
-    options = auth.service.begin_passkey_registration(
-        PasskeyRegistrationBegin(user_id=user.id, username="alice")
-    )
+    options = auth.service.begin_passkey_registration(PasskeyRegistrationBegin(user_id=user.id, username="alice"))
     assert isinstance(options, dict)
     assert options  # non-empty WebAuthn registration options
 
@@ -40,9 +38,7 @@ def test_ac_023_complete_registration_stores(auth) -> None:
 
 def test_ac_024_begin_login_options(auth) -> None:
     user = create_user(auth.user_manager)
-    auth.service.complete_passkey_registration(
-        PasskeyRegistrationComplete(user_id=user.id, response={})
-    )
+    auth.service.complete_passkey_registration(PasskeyRegistrationComplete(user_id=user.id, response={}))
     options = auth.service.begin_passkey_login(PasskeyLoginBegin(credential_id="fake-credential"))
     assert isinstance(options, dict)
     assert options  # non-empty WebAuthn authentication options
@@ -101,9 +97,7 @@ def test_ac_029_password_and_passkey_coexist(auth) -> None:
     # password login works
     assert auth.service.login(LoginRequest(**valid_login("alice"))).user.id == user.id
     # passkey login works
-    result = auth.service.complete_passkey_login(
-        PasskeyLoginComplete(credential_id="fake-credential", response={})
-    )
+    result = auth.service.complete_passkey_login(PasskeyLoginComplete(credential_id="fake-credential", response={}))
     assert result.user.id == user.id
     # and the password still works after passkey use
     assert auth.service.login(LoginRequest(**valid_login("alice"))).user.id == user.id

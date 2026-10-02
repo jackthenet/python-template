@@ -117,10 +117,10 @@ class ValueRepository(ABC):
 class YamlValueRepository(ValueRepository):
     """Single ``values.yaml`` file, safe YAML, atomic write, thread-safe (REQ-010).
 
-    The class is traced via the shared logging feature (``@logged_class``).
+        The class is traced via the shared logging feature (``@logged_class``).
 
-    Writes are atomic (a temp file in the same directory is renamed over the
-target), so the file is always either absent or valid YAML.
+        Writes are atomic (a temp file in the same directory is renamed over the
+    target), so the file is always either absent or valid YAML.
     """
 
     def __init__(self, directory: str) -> None:

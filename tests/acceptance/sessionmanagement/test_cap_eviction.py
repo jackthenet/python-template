@@ -82,10 +82,7 @@ def test_ac_027_cap_evicts_oldest_at_sixth_login(
     cap = 5
     _set_max_sessions_per_user(settings_registry, cap)
     base = _now()
-    rows = [
-        make_session(session_repository, user_id, created_at=base + timedelta(minutes=i))
-        for i in range(cap)
-    ]
+    rows = [make_session(session_repository, user_id, created_at=base + timedelta(minutes=i)) for i in range(cap)]
     oldest_row, oldest_token = rows[0]
     # the 6th login issues a new session, then LoginSucceeded is dispatched
     new_row, _ = make_session(session_repository, user_id, created_at=base + timedelta(minutes=cap))
@@ -100,18 +97,13 @@ def test_ac_027_cap_evicts_oldest_at_sixth_login(
         session_service.list_sessions(token=oldest_token)
 
 
-def test_ac_028_no_eviction_below_cap(
-    session_service, session_repository, settings_registry, user_id
-) -> None:
+def test_ac_028_no_eviction_below_cap(session_service, session_repository, settings_registry, user_id) -> None:
     """AC-028: cap 5 with 3 valid sessions — a login revokes nothing; the user has 4 valid sessions."""
     cap = 5
     existing = 3
     _set_max_sessions_per_user(settings_registry, cap)
     base = _now()
-    rows = [
-        make_session(session_repository, user_id, created_at=base + timedelta(minutes=i))
-        for i in range(existing)
-    ]
+    rows = [make_session(session_repository, user_id, created_at=base + timedelta(minutes=i)) for i in range(existing)]
     new_row, _ = make_session(session_repository, user_id, created_at=base + timedelta(minutes=existing))
     _login(user_id)
     entries = session_service.list_sessions(user_id=user_id)
@@ -119,17 +111,12 @@ def test_ac_028_no_eviction_below_cap(
     assert {e.session_id for e in entries} == {r[0].id for r in rows} | {new_row.id}
 
 
-def test_edge_011_cap_eviction_at_exact_cap(
-    session_service, session_repository, settings_registry, user_id
-) -> None:
+def test_edge_011_cap_eviction_at_exact_cap(session_service, session_repository, settings_registry, user_id) -> None:
     """EDGE-011: user already at exactly the cap — the login evicts exactly the oldest session and keeps the new one."""
     cap = 5
     _set_max_sessions_per_user(settings_registry, cap)
     base = _now()
-    rows = [
-        make_session(session_repository, user_id, created_at=base + timedelta(minutes=i))
-        for i in range(cap)
-    ]
+    rows = [make_session(session_repository, user_id, created_at=base + timedelta(minutes=i)) for i in range(cap)]
     oldest_row, _ = rows[0]
     second_oldest_row, _ = rows[1]
     new_row, new_token = make_session(session_repository, user_id, created_at=base + timedelta(minutes=cap))

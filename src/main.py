@@ -158,9 +158,7 @@ _permission_service_proxy.set_service(_permission_service)
 # registry.has / registry.get_value, REQ-011/REQ-005). The bootstrap set covers the
 # internal startup calls (settings registration, password verification, mail, cleanup);
 # the settings-read keys cover the live settings reads at startup.
-_permission_service.set_system_permissions(
-    BOOTSTRAP_SYSTEM_PERMISSIONS | {"settings.has", "settings.get_value"}
-)
+_permission_service.set_system_permissions(BOOTSTRAP_SYSTEM_PERMISSIONS | {"settings.has", "settings.get_value"})
 
 # --- Register every feature's settings ---
 register_logging_settings(_settings_registry)

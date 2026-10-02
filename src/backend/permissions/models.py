@@ -87,14 +87,16 @@ class SessionLookup(Protocol):
 BUILTIN_ROLES: frozenset[str] = frozenset({"admin", "user"})
 
 
-BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset({
-    "usermanagement.get_user",
-    "usermanagement.verify_password",
-    "usermanagement.change_password",
-    "settings.register",
-    "settings.register_feature",
-    "mail.send_email",
-    "mail.send_password_reset_email",
-    "mail.send_email_verification_email",
-    "sessionmanagement.cleanup_expired",
-})
+BOOTSTRAP_SYSTEM_PERMISSIONS: frozenset[str] = frozenset(
+    {
+        "usermanagement.get_user",
+        "usermanagement.verify_password",
+        "usermanagement.change_password",
+        "settings.register",
+        "settings.register_feature",
+        "mail.send_email",
+        "mail.send_password_reset_email",
+        "mail.send_email_verification_email",
+        "sessionmanagement.cleanup_expired",
+    }
+)

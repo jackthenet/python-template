@@ -141,9 +141,9 @@ def test_system_set_settings_alias_sync() -> None:
 
         # A registry write updates the system-set table (via SettingChanged).
         registry.set_value("permissions.system_principal", ["mail.send_password_reset_email"])
-        assert wait_for(
-            lambda: service.get_system_permissions() == frozenset({"mail.send_password_reset_email"})
-        ), "the system-set table was not updated via SettingChanged"
+        assert wait_for(lambda: service.get_system_permissions() == frozenset({"mail.send_password_reset_email"})), (
+            "the system-set table was not updated via SettingChanged"
+        )
 
         # set_system_permissions syncs the registry key (best-effort).
         service.set_system_permissions({"mail.send_email_verification_email"})

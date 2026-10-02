@@ -84,12 +84,19 @@ def test_nfr_001_performance_budgets(tmp_path: Path) -> None:
     assert _median_ms(lambda: scope_registry.load_template("t1"), n=50) < _LOAD_MS
 
     # create/update/delete (YAML file I/O) < 50 ms; list < 500 ms with 100 stored.
-    yaml_registry = SettingsRegistry(event_bus=collector, template_repository=YamlTemplateRepository(tmp_path), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    yaml_registry = SettingsRegistry(
+        event_bus=collector,
+        template_repository=YamlTemplateRepository(tmp_path),
+        value_repository=YamlValueRepository(tempfile.mkdtemp()),
+    )
     for i in range(100):
         yaml_registry.register(_text(f"y.s{i}", category="y"))
-    assert _median_ms(lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10) < _YAML_MS
     assert (
-        _median_ms(lambda: yaml_registry.update_template("ct1000", {f"y.s{i}": "v" for i in range(100)}), n=10) < _YAML_MS
+        _median_ms(lambda: yaml_registry.create_template(f"ct{next(create_counter)}", "y", None, None), n=10) < _YAML_MS
+    )
+    assert (
+        _median_ms(lambda: yaml_registry.update_template("ct1000", {f"y.s{i}": "v" for i in range(100)}), n=10)
+        < _YAML_MS
     )
     delete_counter = iter(range(2000, 2010))
 
@@ -164,7 +171,9 @@ def test_nfr_003_resource_contract(tmp_path: Path) -> None:
 
     # Templates persist as YAML files when a YAML repository is used.
     repo = YamlTemplateRepository(tmp_path)
-    yaml_registry = SettingsRegistry(event_bus=collector, template_repository=repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    yaml_registry = SettingsRegistry(
+        event_bus=collector, template_repository=repo, value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     yaml_registry.register(_text("y.a", category="y"))
     yaml_registry.create_template("t1", "y", None, None)
     assert (tmp_path / "t1.yaml").exists()

@@ -164,9 +164,7 @@ def test_migration_seeds_roles_and_system_set(tmp_path: Path) -> None:
         assert seeded_roles.get("admin") is True, f"'admin' not seeded as a built-in role: {seeded_roles}"
         assert seeded_roles.get("user") is True, f"'user' not seeded as a built-in role: {seeded_roles}"
         seeded_system = {row[0] for row in conn.execute("SELECT permission FROM system_principal_permissions")}
-        assert seeded_system == set(_BOOTSTRAP_SYSTEM_PERMISSIONS), (
-            f"system set seed mismatch: {sorted(seeded_system)}"
-        )
+        assert seeded_system == set(_BOOTSTRAP_SYSTEM_PERMISSIONS), f"system set seed mismatch: {sorted(seeded_system)}"
 
     # The SQLite repositories work on the same file.
     url = f"sqlite:///{db_path}"

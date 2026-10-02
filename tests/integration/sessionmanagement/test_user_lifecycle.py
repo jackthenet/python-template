@@ -104,9 +104,7 @@ def test_ac_031_deletion_revokes_all(tmp_path: Path) -> None:
         # When: the user is deleted (publishes UserDeleted).
         manager.delete_user(user.id)
         # Then: all sessions for the user are revoked (async subscription delivery).
-        assert wait_for(lambda: service.list_sessions(user_id=user.id) == []), (
-            "UserDeleted did not revoke all sessions"
-        )
+        assert wait_for(lambda: service.list_sessions(user_id=user.id) == []), "UserDeleted did not revoke all sessions"
         for _, token in rows:
             with pytest.raises(InvalidSessionError):
                 service.list_sessions(token=token)

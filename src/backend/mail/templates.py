@@ -48,8 +48,6 @@ EMAIL_VERIFICATION_TEMPLATE: EmailTemplate = EmailTemplate(
         '<p><a href="{{verification_url}}">Verify email</a></p>'
     ),
     body_text=(
-        "Hello {{display_name}},\n\n"
-        "Verify your email address by visiting the link below:\n"
-        "{{verification_url}}\n"
+        "Hello {{display_name}},\n\nVerify your email address by visiting the link below:\n{{verification_url}}\n"
     ),
 )

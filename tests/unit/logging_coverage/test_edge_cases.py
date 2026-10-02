@@ -28,17 +28,13 @@ from backend.usermanagement.service import UserManager
 
 
 def _is_concrete_threshold(value: Any) -> bool:
-    return (
-        value is not None
-        and isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and value > 0
-    )
+    return value is not None and isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
 
 
 def test_slow_threshold_exceeded(log_records: list[Any]) -> None:
     """EDGE-001: a traced call exceeding its ``slow_threshold_ms`` logs a WARNING and
     is NOT interrupted."""
+
     @logged(slow_threshold_ms=1)
     def slow() -> None:
         time.sleep(0.05)
@@ -65,9 +61,7 @@ def test_sink_failure_graceful(log_records: list[Any], tmp_path: Any) -> None:
     finally:
         logger.remove(handler_id)
     # The traced call still produced an entry record (via the working sink).
-    assert any(
-        "SqliteUserRepository.get_by_username" in str(r) for r in entry_records(log_records)
-    )
+    assert any("SqliteUserRepository.get_by_username" in str(r) for r in entry_records(log_records))
 
 
 def test_abc_subclass_traced(log_records: list[Any], tmp_path: Any) -> None:
@@ -79,9 +73,7 @@ def test_abc_subclass_traced(log_records: list[Any], tmp_path: Any) -> None:
     # The concrete subclass is traced.
     repo = SqliteUserRepository(f"sqlite:///{tmp_path}/edge3.db")
     repo.get_by_username("probe")
-    assert any(
-        "SqliteUserRepository.get_by_username" in str(r) for r in entry_records(log_records)
-    )
+    assert any("SqliteUserRepository.get_by_username" in str(r) for r in entry_records(log_records))
 
 
 def test_traced_method_exception_propagates(log_records: list[Any], tmp_path: Any) -> None:

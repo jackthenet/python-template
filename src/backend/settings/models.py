@@ -116,9 +116,7 @@ def is_valid_value(  # noqa: PLR0911, PLR0912
         if not all(isinstance(item, str) for item in value):
             return False
         spec = list_spec if list_spec is not None else ListSpec()
-        if spec.item_pattern is not None and any(
-            re.fullmatch(spec.item_pattern, item) is None for item in value
-        ):
+        if spec.item_pattern is not None and any(re.fullmatch(spec.item_pattern, item) is None for item in value):
             return False
         if spec.min_items is not None and len(value) < spec.min_items:
             return False
@@ -176,19 +174,13 @@ class ListSpec(BaseModel):
             raise SettingsValidationError("list min_items must be >= 0")
         if self.max_items is not None and self.max_items < 0:
             raise SettingsValidationError("list max_items must be >= 0")
-        if (
-            self.min_items is not None
-            and self.max_items is not None
-            and self.min_items > self.max_items
-        ):
+        if self.min_items is not None and self.max_items is not None and self.min_items > self.max_items:
             raise SettingsValidationError("list min_items must be <= max_items")
         if self.item_pattern is not None:
             try:
                 re.compile(self.item_pattern)
             except re.error as e:
-                raise SettingsValidationError(
-                    f"list item_pattern is not a valid regex: {e}"
-                ) from e
+                raise SettingsValidationError(f"list item_pattern is not a valid regex: {e}") from e
         return self
 
 

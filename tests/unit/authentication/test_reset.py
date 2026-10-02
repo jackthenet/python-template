@@ -29,9 +29,7 @@ def test_edge_008_reset_expired_token(tmp_path: Path) -> None:
     assert token is not None
     time.sleep(0.15)
     with pytest.raises(InvalidResetTokenError) as exc:
-        fixture.service.complete_password_reset(
-            PasswordResetComplete(token=token, new_password="new-pass-1")
-        )
+        fixture.service.complete_password_reset(PasswordResetComplete(token=token, new_password="new-pass-1"))
     assert exc.value.reason == "expired"
 
 
@@ -47,9 +45,7 @@ def test_edge_009_reset_used_token(auth) -> None:
 
 def test_edge_010_reset_unknown_token(auth) -> None:
     with pytest.raises(InvalidResetTokenError) as exc:
-        auth.service.complete_password_reset(
-            PasswordResetComplete(token="no-such-token", new_password="new-pass-1")
-        )
+        auth.service.complete_password_reset(PasswordResetComplete(token="no-such-token", new_password="new-pass-1"))
     assert exc.value.reason == "unknown"
 
 

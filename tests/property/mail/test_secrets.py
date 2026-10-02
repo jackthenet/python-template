@@ -21,8 +21,26 @@ from backend.mail import MailService, MailTransportError, PasswordResetEmailRequ
 # while still exercising the invariant that the secret never leaks into the
 # result, error, or events.
 _HIGH_ENTROPY_ALPHABET = [
-    "Ω", "Σ", "Φ", "Ψ", "Δ", "Θ", "Λ", "Ξ", "Π", "Γ",
-    "μ", "ν", "ξ", "ρ", "σ", "τ", "φ", "χ", "ψ", "ω",  # noqa: RUF001
+    "Ω",
+    "Σ",
+    "Φ",
+    "Ψ",
+    "Δ",
+    "Θ",
+    "Λ",
+    "Ξ",
+    "Π",
+    "Γ",
+    "μ",
+    "ν",  # noqa: RUF001
+    "ξ",
+    "ρ",  # noqa: RUF001
+    "σ",  # noqa: RUF001
+    "τ",
+    "φ",
+    "χ",
+    "ψ",
+    "ω",
 ]
 
 

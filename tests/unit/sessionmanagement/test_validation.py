@@ -22,9 +22,7 @@ def test_ac_003_both_or_neither_token_user_id_value_error(session_service) -> No
         session_service.list_sessions()
 
 
-def test_ac_013_limit_below_one_value_error(
-    session_service, session_repository, user_id
-) -> None:
+def test_ac_013_limit_below_one_value_error(session_service, session_repository, user_id) -> None:
     """AC-013: limit < 1 raises ValueError (with a valid token)."""
     _, token = make_session(session_repository, user_id, created_at=datetime.now(UTC))
     with pytest.raises(ValueError):
@@ -41,9 +39,7 @@ def test_edge_008_both_or_neither_value_error(session_service) -> None:
         session_service.list_sessions()
 
 
-def test_edge_009_limit_below_one_value_error(
-    session_service, session_repository, user_id
-) -> None:
+def test_edge_009_limit_below_one_value_error(session_service, session_repository, user_id) -> None:
     """EDGE-009: list_sessions with limit < 1 raises ValueError."""
     _, token = make_session(session_repository, user_id, created_at=datetime.now(UTC))
     for limit in (0, -1, -5):

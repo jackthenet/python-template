@@ -14,9 +14,7 @@ def test_nfr_002_no_secrets_in_logs_or_events(auth, log_records) -> None:
     token = result.token
     reset_token = auth.service.request_password_reset(PasswordResetRequest(email="alice@example.com"))
     assert reset_token is not None
-    auth.service.complete_password_reset(
-        PasswordResetComplete(token=reset_token, new_password="new-pass-1")
-    )
+    auth.service.complete_password_reset(PasswordResetComplete(token=reset_token, new_password="new-pass-1"))
     auth.service.logout(token)
     # passwords, raw session tokens, and raw reset tokens never appear in
     # log records or events

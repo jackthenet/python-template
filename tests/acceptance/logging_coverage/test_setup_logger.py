@@ -33,17 +33,11 @@ def test_entrypoint_calls_setup_logger_once() -> None:
 
     # Count every setup_logger(...) call in the module.
     all_calls = [n for n in ast.walk(tree) if _is_setup_logger_call(n)]
-    assert len(all_calls) == 1, (
-        f"src/main.py must call setup_logger exactly once (found {len(all_calls)})"
-    )
+    assert len(all_calls) == 1, f"src/main.py must call setup_logger exactly once (found {len(all_calls)})"
 
     # The call must be at module level (a top-level expression statement), i.e.
     # it runs at startup before any feature code is invoked.
     module_level_calls = [
-        stmt
-        for stmt in tree.body
-        if isinstance(stmt, ast.Expr) and _is_setup_logger_call(stmt.value)
+        stmt for stmt in tree.body if isinstance(stmt, ast.Expr) and _is_setup_logger_call(stmt.value)
     ]
-    assert len(module_level_calls) == 1, (
-        "the setup_logger call must be a top-level module statement (runs at startup)"
-    )
+    assert len(module_level_calls) == 1, "the setup_logger call must be a top-level module statement (runs at startup)"

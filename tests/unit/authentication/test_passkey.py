@@ -19,9 +19,7 @@ def test_edge_013_registration_invalid_response(auth) -> None:
     user = create_user(auth.user_manager)
     auth.webauthn_provider.fail_registration = True
     with pytest.raises(InvalidPasskeyResponseError):
-        auth.service.complete_passkey_registration(
-            PasskeyRegistrationComplete(user_id=user.id, response={})
-        )
+        auth.service.complete_passkey_registration(PasskeyRegistrationComplete(user_id=user.id, response={}))
     # nothing is stored
     assert auth.webauthn_repository.get_by_credential_id("fake-credential") is None
 

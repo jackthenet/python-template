@@ -97,9 +97,7 @@ def build_session_service(
     from backend.sessionmanagement import SessionService
 
     if settings_registry is None:
-        settings_registry = SettingsRegistry(
-            value_repository=YamlValueRepository(tempfile.mkdtemp())
-        )
+        settings_registry = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
     return SessionService(
         repository,
         event_bus=event_bus,
@@ -129,6 +127,4 @@ def settings_registry() -> SettingsRegistry:
 
 @pytest.fixture
 def session_service(session_repository, collector, settings_registry):
-    return build_session_service(
-        session_repository, event_bus=collector, settings_registry=settings_registry
-    )
+    return build_session_service(session_repository, event_bus=collector, settings_registry=settings_registry)

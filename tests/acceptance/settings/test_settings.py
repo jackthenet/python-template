@@ -432,7 +432,9 @@ def test_ac_029_template_access(registry: SettingsRegistry) -> None:
 def test_ac_030_yaml_file_written(tmp_path: Path) -> None:
     repo = YamlTemplateRepository(tmp_path)
     bus = EventBus()
-    registry = SettingsRegistry(event_bus=bus, template_repository=repo, value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    registry = SettingsRegistry(
+        event_bus=bus, template_repository=repo, value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
     _register_app_scope(registry)
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     f = tmp_path / "t1.yaml"
@@ -446,13 +448,21 @@ def test_ac_030_yaml_file_written(tmp_path: Path) -> None:
 
 def test_ac_031_persistence_across_instances(tmp_path: Path) -> None:
     bus1 = EventBus()
-    r1 = SettingsRegistry(event_bus=bus1, template_repository=YamlTemplateRepository(tmp_path), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    r1 = SettingsRegistry(
+        event_bus=bus1,
+        template_repository=YamlTemplateRepository(tmp_path),
+        value_repository=YamlValueRepository(tempfile.mkdtemp()),
+    )
     _register_app_scope(r1)
     r1.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     bus1.shutdown()
 
     bus2 = EventBus()
-    r2 = SettingsRegistry(event_bus=bus2, template_repository=YamlTemplateRepository(tmp_path), value_repository=YamlValueRepository(tempfile.mkdtemp()))
+    r2 = SettingsRegistry(
+        event_bus=bus2,
+        template_repository=YamlTemplateRepository(tmp_path),
+        value_repository=YamlValueRepository(tempfile.mkdtemp()),
+    )
     t = r2.get_template("t1")
     assert t.values == {"app.a": "x", "app.b": 1}
     bus2.shutdown()
@@ -474,7 +484,9 @@ def test_ac_033_missing_file(tmp_path: Path) -> None:
 def test_ac_034_storage_agnostic() -> None:
     # An in-memory template repository (default) must behave like the YAML one.
     bus = EventBus()
-    registry = SettingsRegistry(event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp()))  # default in-memory template repo
+    registry = SettingsRegistry(
+        event_bus=bus, value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )  # default in-memory template repo
     _register_app_scope(registry)
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     registry.load_template("t1")
@@ -492,8 +504,10 @@ def test_ac_035_set_value_publishes_event(registry_with_bus) -> None:
     registry, bus = registry_with_bus
     registry.register(_text("app.name", default="orig"))
     received: list[SettingChanged] = []
+
     def _on_event(e: SettingChanged) -> None:
         received.append(e)
+
     bus.subscribe(SettingChanged, _on_event)
     registry.set_value("app.name", "new")
     assert wait_for(lambda: len(received) == 1), "SettingChanged not published"
@@ -507,8 +521,10 @@ def test_ac_036_load_template_publishes_events(registry_with_bus) -> None:
     _register_app_scope(registry)
     registry.create_template("t1", "app", None, {"app.a": "x", "app.b": 1})
     received: list[SettingChanged] = []
+
     def _on_event(e: SettingChanged) -> None:
         received.append(e)
+
     bus.subscribe(SettingChanged, _on_event)
     registry.load_template("t1")
     assert wait_for(lambda: len(received) == _EVENT_COUNT), "expected one event per setting set"
@@ -523,10 +539,13 @@ def test_ac_037_custom_bus() -> None:
     registry.register(_text("app.name", default="orig"))
     on_custom: list[SettingChanged] = []
     on_shared: list[SettingChanged] = []
+
     def _on_custom(e: SettingChanged) -> None:
         on_custom.append(e)
+
     def _on_shared(e: SettingChanged) -> None:
         on_shared.append(e)
+
     custom.subscribe(SettingChanged, _on_custom)
     shared.subscribe(SettingChanged, _on_shared)
     registry.set_value("app.name", "new")
@@ -544,8 +563,10 @@ def test_ac_039_reset_publishes_events(registry_with_bus) -> None:
     # handler; we then wait for and clear them, so no setup event is in flight
     # when we assert on the reset events (the bus is asynchronous).
     received: list[SettingChanged] = []
+
     def _on_event(e: SettingChanged) -> None:
         received.append(e)
+
     bus.subscribe(SettingChanged, _on_event)
     registry.set_value("app.a", "x")
     registry.set_value("app.b", 5)

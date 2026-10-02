@@ -131,9 +131,7 @@ class UserManager:
             updated_at=now,
         )
         self._repository.add(user)
-        self._publish(
-            UserCreated(user_id=user.id, username=user.username, email=user.email, roles=list(user.roles))
-        )
+        self._publish(UserCreated(user_id=user.id, username=user.username, email=user.email, roles=list(user.roles)))
         return _to_read(user)
 
     # --- update / delete ---
