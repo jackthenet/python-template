@@ -1589,3 +1589,24 @@ with the fixture:    15 passed, 11 warnings in 1.63s
 - The Phase 5 S5.1 residue nodes (`test_edge_005_intercept_unknown_level`, `test_inv_005_avatar_url_format`, `test_ac_004/005`, `test_stdlib_loguru_decorator_pipeline`) are all explained by these two channels.
 
 No assertion was weakened, no test was deleted/skipped/xfail'd, no seed was pinned, and no `src/` file was touched.
+
+## Phase 5 (S5.1 re-run) — full regression suite after item I (2026-10-02)
+
+Re-run of the S5.1 regression gate after item I closed the logging flake (alembic `fileConfig`
+leak + deadline channel never connected). Branch `issue/main-ci-green` @ `77c0a69`. No code edits.
+
+Full suite (`uv run pytest tests/ -q --tb=line --color=no`), two independent runs:
+- run 1: `639 passed, 1 skipped, 33 warnings in 175.22s (0:02:55)` — `SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host`
+- run 2: `639 passed, 1 skipped, 33 warnings in 174.18s (0:02:54)` — same single skip (host limitation)
+
+Reproduction tests GREEN: `tests/unit/settings/test_repository_roundtrip.py` +
+`tests/unit/logging/test_logging_sink_ownership.py` → `5 passed in 0.23s`
+
+Previously red nodes, families re-run once in randomized order (`--randomly-seed=20261002`,
+pytest-randomly 5.0.0): `tests/acceptance/logging tests/unit/logging tests/integration/logging
+tests/property/filemanagement` → `32 passed in 8.79s`
+
+vs. pre-item-I state: the flake made 2 of 6 full-suite runs red; post-item-I both runs are green
+(0 failed, 0 errors, 1 skipped = symlink host limitation, expected).
+
+**Verdict: PASS** — Phase 5 full-regression gate satisfied.
