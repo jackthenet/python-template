@@ -1,6 +1,6 @@
 ---
 name: git
-description: "Cross-cutting git operations for the Spec-TDD workflow: creating change branches and worktrees per change type (Phase 1), opening PRs (Phase 6), and post-merge cleanup (verify merge on main, remove worktree, delete local + remote branches). Use when a phase skill delegates a git operation, or when inspecting, managing, or recovering worktrees, branches, or PRs."
+description: "Cross-cutting git operations for the Spec-TDD workflow: committing the Phase P planning artifacts (docs/todo/, docs/questions/) directly to main, creating change branches and worktrees per change type (at P.4), detecting a cleared human gate so a WAITING change can resume, opening PRs (Phase 6), and post-merge cleanup (verify merge on main, remove worktree, delete local + remote branches). Use when a phase skill delegates a git operation, or when inspecting, managing, or recovering worktrees, branches, or PRs."
 ---
 
 # Git
@@ -9,15 +9,19 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 
 ## When to Use
 
-- Phase 1 (specify) delegates: create the change branch and its worktree (per change type).
+- **P.1–P.3 (Phase P)** delegate: commit the change's planning artifacts (`docs/todo/<name>.md`, `docs/questions/<name>.md`) directly to `main`.
+- **P.4 (specify)** delegates: create the change branch and its worktree (per change type) — the worktree is created at P.4, after the questions are answered, NOT at Phase 0/Phase 1.
 - Phase 6 (review) delegates: open the PR for the change branch.
 - After a PR is merged (human governance): post-merge cleanup.
+- Multi-change scheduling: detect that a WAITING change's gate has cleared and resume it.
 - Any time you need to inspect or recover worktree/branch state.
 
 ## Execution Context (Atomic Step, Synchronous Subagent)
 
 Per "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`:
-- **Create change worktree** — orchestrator (Phase 0), not a subagent.
+- **Commit Phase P planning artifacts (P.1–P.3)** — orchestrator, in the primary worktree, committed directly to `main`.
+- **Create change worktree (P.4)** — orchestrator, not a subagent; runs at **P.4 Draft**, after the questions are answered.
+- **Detect a cleared gate** — orchestrator, between steps, when scheduling which change to run next.
 - **Create PR** — runs inside the Phase 6 (review) subagent (atomic step **S6.4**).
 - **Post-merge cleanup** — runs in a **new, synchronous subagent** (atomic step **S7.1**, launched by the orchestrator after the human merges the PR).
 - **Inspect / recover** — orchestrator or any step subagent, as needed.
@@ -34,7 +38,7 @@ Subagents are always **synchronous** (never background); the workflow waits for 
 
 ## Todo
 
-Per the AGENTS.md Todo Tracking Discipline: mark the Post-merge cleanup item `in_progress` after the human merges the PR; `completed` when the worktree is removed and the local + remote branches are deleted.
+Per the AGENTS.md Todo Tracking Discipline: mark the Post-merge cleanup item `in_progress` after the human merges the PR; `completed` when the worktree is removed and the local + remote branches are deleted. Each in-flight change has **its own todo set**, and at most **one item per change** is `in_progress` — a WAITING change's step stays `in_progress` with an `activeForm` naming the wait (e.g. "waiting for spec PR merge").
 
 ## Atomic Steps
 
@@ -56,9 +60,21 @@ The git skill's phase steps are decomposed into two atomic steps (S6.4 Create PR
 
 ## Operations
 
-### Create change worktree (Phase 1)
+### Commit Phase P planning artifacts (P.1–P.3)
 
-Run from the primary worktree:
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`** from the primary worktree (P.1 creates them, P.3 records the answers):
+
+```bash
+git add docs/todo/<name>.md docs/questions/<name>.md
+git commit -m "chore(<name>): prepare"
+```
+
+- They are the **only** files the workflow may commit directly to `main`. NOTHING else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
+- The change worktree is created afterwards, at **P.4**, from `main` — so the change branch already carries the TODO file and the answered questions.
+
+### Create change worktree (P.4)
+
+Run from the primary worktree, at **P.4 Draft** (after the questions are answered):
 
 ```bash
 git worktree add ../<repo-name>-worktrees/<type>/<name> -b <type>/<name> main
@@ -69,6 +85,21 @@ git worktree add ../<repo-name>-worktrees/<type>/<name> -b <type>/<name> main
 - If the branch already exists (re-entering the change), omit `-b`:
   `git worktree add ../<repo-name>-worktrees/<type>/<name> <type>/<name>`
 - All subsequent work for the change (Phases 1–6) happens inside the change worktree.
+- Because the worktree branches from `main` at P.4, it carries the TODO file and the answered question file committed there at P.1–P.3.
+
+### Detect a cleared gate (resume a WAITING change)
+
+A change is **WAITING** while it sits on a human gate (S1.4 spec approval, S6.4 PR merge, or a `BLOCKED-USER` question). Between steps, check whether a WAITING change's gate has cleared, then launch a **fresh** subagent at its next atomic step:
+
+```bash
+git fetch
+# spec-approval PR (S1.4) or change PR (S6.4): is the merge reachable from origin/main?
+git merge-base --is-ancestor <merge-commit> origin/main   # exit 0 = cleared
+```
+
+- For a `BLOCKED-USER` gate: the change's `docs/questions/<name>.md` has **no** entry with `**Answer:** PENDING` (every entry `ANSWERED`) — then the answers are recorded and the step is relaunched once with the full answer set.
+- Do NOT rely on the local `main` ref, which may lag; `git fetch` first.
+- Never idle on a gate: while one change is WAITING, take the next ready step of another READY change (see "Multi-change scheduling (never idle)" in `AGENTS.md`).
 
 ### Create PR (Phase 6)
 
@@ -114,11 +145,12 @@ After the human merges the PR:
 - **Remote ref already gone**: `git push origin --delete <branch>` errors with "remote ref does not exist" if the branch was already deleted on the server (e.g., GitHub auto-deletes merged branches). Not an error to fix — prune the stale ref: `git fetch --prune`.
 - **Multi-ref delete partially fails**: `git push origin --delete a b c` reports per-ref errors; check `git ls-remote --heads origin` for what remains and delete the rest individually.
 - **Branch checked out in a worktree**: `git branch -d` refuses to delete a branch that is current in any worktree — remove that worktree first.
-- **Change re-entry**: if a change is re-opened after cleanup, re-create its worktree per "Create change worktree" (with `-b` for a new branch, or without `-b` if the branch still exists).
+- **Change re-entry**: if a change is re-opened after cleanup, re-create its worktree per "Create change worktree (P.4)" (with `-b` for a new branch, or without `-b` if the branch still exists).
 
 ## Rules
 
 - Never check out a change branch in the primary worktree.
+- Commit **directly to `main`** only for the Phase P planning artifacts under `docs/todo/` and `docs/questions/`. Everything else reaches `main` only through a merged PR.
 - Never create two worktrees for the same change branch.
 - Do NOT merge PRs (human governance).
 - Do NOT force-remove worktrees (`git worktree remove --force`) or force-delete branches (`git branch -D`) on unmerged changes.

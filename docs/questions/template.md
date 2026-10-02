@@ -11,8 +11,9 @@ One question file per change, created at **P.1 Frame** from this template and na
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
-## Entry format
+### Entry format
 
+```markdown
 ## Q-<n> — <short title>
 - **Step:** <P.2 Interrogate, or Sx.x <step name> — Phase <n>>
 - **Why needed:** <the ambiguity, missing requirement, or decision>
@@ -22,6 +23,7 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Date:** <YYYY-MM-DD>
 - **Status:** PENDING | ANSWERED
 - **Incorporated:** no | yes — <where: REQ-XXX / AC-XXX / spec section / decision>
+```
 
 ## Preparation questions (P.2)
 
