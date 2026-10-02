@@ -1635,3 +1635,106 @@ Run in the change worktree at `8c80342`; no code was written by this step.
 ## Phase 5 (S5.3) — traceability matrix updated (2026-10-02)
 
 `docs/verification/traceability.md`: the "Issue: main-ci-green" section is now a complete per-item table (A, A-value-side, B, C, D, E, F, G, H, I rows) mapping every affected spec ID to a GREEN test/evidence reference, the Phase 5 S5.1 run as the evidence, and the implementing commit. Existing rows updated with the new references: logging matrix REQ-001/AC-001 (status GREEN), REQ-002/AC-003, REQ-003/AC-004, REQ-003/AC-005, INV-001, EDGE-005; event-bus matrix REQ-005/AC-008, INV-002, EDGE-007; settings matrix REQ-010/AC-014, REQ-022/AC-030, REQ-021+022/AC-031, INV-009 (GREEN); user-management INV-003; settings-coverage matrix REQ-010/AC-014, REQ-014/AC-019, REQ-015/AC-020, INV-002, EDGE-008; file-management INV-002, INV-008; user-roles-permissions INV-003 (deadline flake closed). Orphan check: the two new test files (`tests/unit/settings/test_repository_roundtrip.py`, `tests/unit/logging/test_logging_sink_ownership.py`) and the widened property/property-deadline tests are all referenced, and every referenced node id collects (`pytest --collect-only` over the six touched files → 30 tests collected); the helper/fixture names referenced (`set_value_settled`, `isolated_event_bus`, `_stdlib_root_logging_restored`, `install_isolated_registry`) all exist. The INV-003 spec test-strategy path drift is recorded in the section.
+
+## Phase 5 — verification report (2026-10-02)
+
+S5.4 consolidates the Phase 5 evidence already recorded in this document (S5.1, S5.1 re-run, S5.2,
+S5.3, and the item records) into the gate summary, spec-coverage and verdict. Docs-only step: no
+code or test file was written, and no gate was re-run except the reproduction tests (cheap, and they
+are the ISSUE's primary evidence).
+
+### 1. Gate summary (full ISSUE gate set — the light tier does not apply, see §8)
+
+| # | gate | command | verbatim evidence | result |
+|---|---|---|---|---|
+| 1 | reproduction tests GREEN | `uv run pytest tests/unit/settings/test_repository_roundtrip.py tests/unit/logging/test_logging_sink_ownership.py -q --tb=line --color=no` | `5 passed in 0.24s` (re-run at `f0b6d84` by S5.4; matches the S5.1 re-run `5 passed in 0.23s`) | **PASS** |
+| 2 | full regression suite | `uv run pytest tests/ -q --tb=line --color=no` | S5.1 re-run, two independent runs: `639 passed, 1 skipped, 33 warnings in 175.22s` and `... in 174.18s` (the single skip is `tests/acceptance/filemanagement/test_filemanagement.py:364: symlinks not available on this host`) | **PASS** |
+| 2b | full regression under randomized ordering (flake closure proof) | same, 4 consecutive runs (item I evidence) | `639 passed, 1 skipped, 33 warnings` at 187.91s / 181.23s / 177.24s / 172.59s — 0 failed, 0 errors | **PASS** |
+| 3 | lint (CI gate) | `uv run ruff check .` | `All checks passed!` | **PASS** |
+| 4 | types (gate) | `uv run mypy src/` | `Success: no issues found in 73 source files` | **PASS** |
+| 5 | dependencies | `uv run deptry .` | `Success! No dependency issues found.` (78 files scanned) | **PASS** |
+| 6 | vulnerabilities | `uv run pip-audit` | `No known vulnerabilities found` | **PASS** |
+| 7 | migrations | `ALEMBIC_DATABASE_URL=sqlite:///<temp> uv run alembic upgrade head` | `Running upgrade eace2f772150 -> d94b7f2e6a31, permissions persistence (...)` | **PASS** |
+| 8 | docs (CI gate) | `uv run mkdocs build --strict` | `Documentation built in 1.50 seconds` (exit 0, no warnings) | **PASS** |
+| 9 | architecture rules | `uv run pytest tests/architecture/ -q` | `ERROR: file or directory not found: tests/architecture/` | **N/A** — `tests/architecture/` does not exist on this branch or on `origin/main`. AGENTS.md (Phase 5 REFACTOR step, Phase 6 check 4) and the verify skill reference a directory this repo has never had: a **docs/repo reconciliation item**, not a regression introduced here. Recorded as a follow-up (§4). |
+
+Informational, non-gate (pre-existing, unchanged by this change): `ruff format --check .` →
+`72 files would be reformatted, 370 files already formatted`; `ty check src/` → `Found 134
+diagnostics` (mypy is the gate). Both are analysed in the S5.2 section.
+
+### 2. Spec coverage for the affected IDs
+
+Every affected normative ID has at least one GREEN test. Test names below are the GREEN evidence
+rows written into `docs/verification/traceability.md` by S5.3; the per-item table there is the
+authoritative row-level detail.
+
+| item | spec IDs (source spec) | GREEN test(s) / evidence | status |
+|---|---|---|---|
+| A — settings YAML round-trip loses U+0085 NEL | INV-009, REQ-022, AC-030, AC-031 (`settings.md`) | `tests/unit/settings/test_repository_roundtrip.py::test_yaml_template_roundtrip_nel`; property `tests/property/settings/test_settings_properties.py::test_inv_009_yaml_roundtrip` | **GREEN** |
+| A (value side) | REQ-009, REQ-010, REQ-011, INV-002 (`settings-coverage.md`) | `test_repository_roundtrip.py::test_yaml_value_roundtrip_nel` | **GREEN** |
+| B — hypothesis `DeadlineExceeded` in the last-admin property | INV-003, REQ-013, AC-015, AC-036 (`user-roles-permissions.md`); REQ-008, AC-017/018/019 (`user-management.md`) | `tests/property/usermanagement/test_multi_role_invariants.py::test_last_admin_invariant`; `tests/property/usermanagement/test_usermanagement_properties.py::test_inv_003_last_admin_invariant` (assertions unchanged; measured `deadline=` widening only) | **GREEN** |
+| E — loguru sink ownership across a settings-driven reconfigure | REQ-001/AC-001, REQ-002/AC-003, REQ-003/AC-004, AC-005, INV-001, EDGE-005 (`logging.md`); REQ-014/AC-019, REQ-015/AC-020 (`settings-coverage.md`) | `tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_replaces_only_the_managed_sinks`, `::test_reconfigure_after_external_removal_of_a_managed_sink`, `::test_reconfigure_keeps_foreign_sink`; the logging acceptance/unit/integration families | **GREEN** |
+| C — 3 ruff errors on main | none (lint-only import ordering in 3 test files) | `ruff check .` → `All checks passed!` | **GREEN (chore)** |
+| D — pip-audit CVEs | none (dependency manifest) | `pip-audit` → `No known vulnerabilities found` | **GREEN (chore)** |
+| F — CI trigger conditions | none (workflow file) | `.github/workflows/*` conditions; no test surface | **GREEN (chore)** |
+| G — residual logging flake (bus drain in settings-coverage polluters) | REQ-002/AC-003, REQ-015/AC-020 (pollution path only; assertions untouched) | `tests/unit/test_settings_coverage.py` logging-sink tests + logging families, 10/10 recipe runs green after the fix | **GREEN** |
+| H — shared event bus shut down by the test helper | REQ-005/AC-008, INV-002, EDGE-007 (`event-bus.md`) | `isolated_event_bus()` parks instead of resetting; full suite green (S5.1 re-run) | **GREEN** |
+| I — alembic `fileConfig` root-logger leak + second deadline channel | REQ-003/AC-004, AC-005, EDGE-005 (`logging.md`); INV-002, INV-008 (`file-management.md`) | autouse `tests/conftest.py::_stdlib_root_logging_restored`; `tests/property/filemanagement/test_filemanagement_properties.py` (`deadline=500`); 4 consecutive green randomized-order full runs | **GREEN** |
+
+**No spec amendment was needed.** The logging side was adjudicated in §6.3 ("E — spec-compliance
+verdict: **COMPLIANT** (no Spec Amendment, no reclassification)"), and the settings side in §1
+("The requirement exists — no spec amendment is needed for A", the `Template`/INV-009 basis). Both
+verdicts stand; nothing in Phases 3–5 changed them, so no Spec Amendment PR was opened and the
+change type stayed ISSUE.
+
+### 3. No-behavior-delta statement (chore items C, D, F; test-harness items B, G, H, I)
+
+| item | what changed | why externally observable behavior is unchanged |
+|---|---|---|
+| C | Import-ordering fixes in 3 test files (I001/RUF001-class lint errors). | Import order is not observable at runtime; no symbol, signature, or assertion changed. `ruff check .` clean is the only effect. |
+| D | Dependency-manifest bumps (patch/minor, CVE-driven) in `pyproject.toml` / `uv.lock`. | No dependency was added, removed, or replaced; APIs used by `src/` are unchanged across the bumped versions; the full suite and `deptry` confirm it. |
+| F | GitHub Actions trigger-condition changes (`.github/workflows/*`). | CI configuration is not part of the shipped runtime; no `src/` or `tests/` file was touched. |
+| B | `deadline=` widened on two last-admin Hypothesis properties (measured values, Q-128 policy). | A deadline is a scheduling budget, not an assertion. Example counts, strategies, and assertions are unchanged; the invariant is still checked over the same input space. |
+| G | Test-side bus drain/await added in the settings-coverage polluter tests. | Only test synchronization changed; the production publish path and the AC-020 reconfigure behavior are untouched. |
+| H | `isolated_event_bus()` parks the shared bus instead of `reset_event_bus()`-ing it. | The helper lives in `tests/`; `src/backend/eventbus/` is unchanged. The fix removes a test-harness-induced shutdown, restoring the documented bus lifecycle for later tests. |
+| I | Autouse `_stdlib_root_logging_restored` fixture in `tests/conftest.py`; `deadline=500` on 7 filemanagement property tests. | The fixture snapshots and restores stdlib root-logger state around each test — it changes no production logging behavior, it stops one test's `fileConfig` call from leaking into the next. The deadline change is scheduling-only. `migrations/env.py` was deliberately **not** modified (see §4). |
+
+No acceptance test was weakened, deleted, skipped, xfail'd, or converted to a weaker assertion at any
+point in this change; no seed was pinned; no `src/` file was touched by items B, G, H, I.
+
+### 4. Residual risks / follow-ups (out of scope here)
+
+1. **`ruff format --check` drift (72 files repo-wide).** Not a CI gate (`lint.yml` runs `ruff check .`
+   only); pre-existing since the dependabot ruff bump. Of this change's 16 touched `.py` files, 2
+   report drift (`src/backend/settings/repository.py`, `tests/unit/test_settings_coverage.py`) and
+   both were already unformatted on `origin/main`. A repo-wide `ruff format` is a separate explicit
+   chore (P-6: repo-wide `--fix`/`format` inside a task step modifies out-of-scope files).
+2. **`tests/architecture/` does not exist** although AGENTS.md (Phase 5 REFACTOR, Phase 6 check 4)
+   and the verify skill reference it, and CI has no architecture job. Either the docs stop
+   referencing it or the architecture tests get added — a DOCS/CHORE or FEATURE follow-up.
+3. **Test runs create `data/` and `logs/` in the worktree root** (e.g. `alembic.ini:92` →
+   `./data/migrations.db`; the logging file sink defaults to a `logs/` path). Neither is gitignored,
+   so they show up as untracked noise and can be committed by accident. Follow-up: gitignore them or
+   point the defaults at a temp dir under test conditions.
+4. **Stale `RED` statuses in the logging and settings-coverage traceability matrices.** Rows such as
+   logging REQ-002/AC-002 … REQ-009/AC-015 still read `RED` from the original feature's state machine
+   even though those tests are GREEN in the suite today. Matrix drift, not a coverage gap: S5.3
+   updated only the rows this change actually touched. Follow-up: a DOCS/CHORE matrix refresh.
+5. **`migrations/env.py:27` `logging.config.fileConfig(...)` was left as-is.** The alternative fix
+   (guard or replace the `fileConfig` call) changes the migration path's behavior and needs a spec
+   check against the alembic scaffold's requirements; the ISSUE's minimal-fix rule kept it out. The
+   autouse fixture neutralises the symptom for tests, so the underlying call stays a latent hazard
+   for any in-process migration followed by stdlib-intercept logging.
+6. **`ty check src/` reports 134 pre-existing diagnostics** while `mypy src/` (the gate) is clean —
+   a tool-divergence follow-up, not a gate failure.
+
+### 5. Verdict
+
+**Phase 5: PASS.** The ISSUE's Phase 5 criteria are all met: the reproduction tests are GREEN
+(`5 passed`), the full regression suite is clean (`639 passed, 1 skipped`, twice, plus 4 consecutive
+green randomized-order runs), lint and types are clean (`All checks passed!` / `Success: no issues
+found in 73 source files`), the supporting gates (deptry, pip-audit, `alembic upgrade head`,
+`mkdocs build --strict`) pass, and the traceability matrix was updated (S5.3) with every affected
+normative ID backed by a GREEN test. The only non-PASS row is the architecture gate, which is
+**N/A because `tests/architecture/` does not exist in this repo** — recorded as a docs/repo
+reconciliation follow-up (§4.2), not a failed gate.
