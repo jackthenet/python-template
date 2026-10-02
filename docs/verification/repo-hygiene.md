@@ -238,3 +238,37 @@ The 54 reformatted `.py` files were not reviewed (formatting-only, AST-proven in
 | negatives (1)(2)(3)(4) | synthetic matrix probes (isolated temp tree, real matrix untouched) | **exit 1 / 1 / 1 / 1** — all four violation kinds still detected |
 | repo lint | `uv run ruff check .` | `All checks passed!` |
 | smoke | `uv run pytest tests/unit -q --tb=line --color=no` | `237 passed` |
+
+## Phase 5 (S5.1) — full suite + gate set (2026-10-02)
+
+All commands run in the change worktree at head `d4e9494`. Light-tier DOCS/CHORE gate set
+(scope §"Phase 5 evidence plan"), extended with the CI jobs this change touches
+(`lint` format step, `traceability`, `security` bandit, `migrations`, `docs`).
+
+| # | Gate | Command | Result |
+|---|------|---------|--------|
+| 1 | Full suite | `uv run pytest tests/ -q` | **727 passed, 1 skipped, 0 failed** (187.9s) — identical to S4.1 baseline |
+| 2 | Lint | `uv run ruff check .` | All checks passed! |
+| 3 | Format (new CI step) | `uv run ruff format --check .` | **323 files already formatted** (0 pending; baseline: 75 pending) |
+| 4 | Types | `uv run mypy src/` | Success: no issues found in 83 source files (= baseline) |
+| 5 | Deps | `uv run deptry .` | Success! No dependency issues found (89 files) |
+| 6 | Security | `uv run bandit -r src/` | 0 issues (Low/Medium/High/Undefined 0; 0 files skipped) |
+| 7 | Audit | `uv run pip-audit` | No known vulnerabilities found (exit 0; only skip: `python-template` not on PyPI) |
+| 8 | Traceability (new job) | `uv run python scripts/check_traceability.py` | PASS — 746 matrix rows, 129 spec IDs, 713 test functions (exit 0) |
+| 9 | Spec validation | `uv run python scripts/verify_spec.py docs/specs/search.md` | exit 0 (existing entry point unaffected) |
+| 10 | Migrations | `ALEMBIC_DATABASE_URL=sqlite:///./.tmp_mig.db uv run alembic upgrade head` | exit 0, both revisions applied; temp db deleted |
+| 11 | Docs | `uv run mkdocs build --strict` | exit 0; `site/` is gitignored (`/site`) and removed |
+
+**Baseline vs now:** suite counts identical (727/1/0; the 1 skip is the symlink-conditional
+node `tests/acceptance/filemanagement/test_filemanagement.py:364`); ruff check, mypy, deptry,
+bandit, pip-audit unchanged-clean; the only movement is format drift 75 pending → 0.
+
+**Behavior-delta proof (AST equality).** `git diff --name-only ebbb233..HEAD`: 55 `.py`
+(54 reformatted + the new `scripts/check_traceability.py`) and 4 `.md` — all four are the
+intended item-3/record edits (`AGENTS.md`, `AI_Questions.md`, `docs/verification/repo-hygiene.md`,
+`docs/verification/traceability.md`); the format sweep touched **0** Markdown files.
+`ast.dump` of `git show ebbb233:<f>` vs the working file, on the project interpreter (3.14.5):
+**53/54 byte-identical AST, 1 docstring-whitespace-only (`src/backend/settings/repository.py`),
+0 real diffs.** Note: ruff format rewrote `except (A, B, C):` → `except A, B, C:`
+(`src/backend/mail/transport.py:89`) — legal under PEP 758 (Python 3.14) and AST-identical
+(both parse to a `Tuple` handler type); it only looks wrong to a pre-3.14 interpreter.
