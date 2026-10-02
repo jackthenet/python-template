@@ -1341,3 +1341,114 @@ tests/unit/test_settings_coverage.py  (test_sink_reconfigured_rotation: session-
 Two in-process publishers from the §6.1 offender inventory still publish `logging.*` on the shared bus without awaiting the dispatch: `tests/contract/filemanagement/test_filemanagement_contracts.py:93` (restored at `:120`) and `tests/contract/permissions/test_performance.py:57` (restored at `:120`). They write `logging.log_level` on the complete session registry, so they cannot cause channel-2 drift, and item E's `_SinkState` fix keeps them from deleting foreign sinks; what remains is the same transient handler-count window for whichever global-count assertion runs next. `set_value_settled` is the ready-made closing mechanism should a future run show them biting — widening to them here would have pulled two latency-budget contract tests into scope without evidence.
 
 Also noted, no action (not part of the flake): `tests/acceptance/settings_coverage/test_wiring.py` runs `src/main.py` in a subprocess with `cwd=_REPO_ROOT`, which creates `logs/app.log` in the worktree root. That is a subprocess artifact, not in-process sink drift; `logs/` at the repo root is not in `.gitignore` (only `data/logs/` and `src/data/logs/`) — a `.gitignore` gap for a separate chore item.
+
+---
+
+## Phase 4 (S4.3) — refactor pass (2026-10-02)
+
+Branch `issue/main-ci-green` @ `a7376a1` (items A–G landed). One bounded, behavior-preserving cleanup pass over the code this change wrote, then the targeted tests re-run. ISSUE change, so the Phase 4 refactor is a single pass, not per-task.
+
+### What was reviewed
+
+The change's own output (`git diff --name-only origin/main...HEAD`, docs excluded):
+
+```text
+src/backend/settings/repository.py                          (item A: _YAML_LINE_BREAKS / _str_representer / _SafeRepresenter)
+src/backend/logging/_setup.py                               (item E: _SinkState managed-sink logic)
+tests/settings_test_helpers.py                              (items E/G: install_isolated_registry, set_value_settled)
+tests/conftest.py                                           (_drain_event_bus / log_records)
+tests/logging_test_helpers.py                               (_console_sink_fd, wait_for_file_content)
+tests/unit/test_settings_coverage.py                        (test_sink_reconfigured_rotation)
+tests/unit/logging/test_logging_sink_ownership.py           (new)
+tests/unit/settings/test_repository_roundtrip.py            (new)
+tests/property/settings/test_settings_properties.py         (INV-009 alphabet hardening)
+tests/property/usermanagement/test_multi_role_invariants.py (deadline=1000)
+```
+
+Reviewed for: duplicated settle/wait logic, unclear names, missing/incorrect type hints, comments that restate the code, dead parameters, over-broad `except`, imprecise `Any`.
+
+### What changed (3 files, all behavior-preserving)
+
+1. `src/backend/logging/_setup.py` — module global `_state` → `_sink_state` (the assignment plus its 6 uses). The module already names its other globals by what they hold (`_setup_done`, `_setup_lock`); `_state` was the only one that said nothing. Pure rename: no statement, order, or value changed, and the name is module-private, so nothing outside the module can reference it.
+2. `tests/conftest.py` — `_drain_event_bus()` now reuses the shared `settings_test_helpers.wait_for` instead of hand-rolling the same poll loop: same 5.0 s bound, same 5 ms poll step, same 50 ms in-flight grace sleep, and the grace sleep still runs only when the queue actually drained. Removes the duplicated settle logic the helper module exists to own. The imports stay function-local (`PLC0415` is ignored repo-wide, and conftest deliberately imports the settings helpers lazily).
+3. `tests/settings_test_helpers.py` — the two inline comments in `install_isolated_registry()` restated the docstring paragraph above them almost verbatim; replaced with what each line does plus the one non-obvious constraint (the definition must precede its `set_value`, which rejects unregistered keys). Comment-only.
+
+No test assertion was added, changed, weakened or deleted. No public API change, no new dependency, no reformatting of untouched code (no repo-wide `ruff format`).
+
+### Considered and deliberately NOT changed
+
+- `repository.py` `_YAML_REPRESENTERS: dict[Any, Any]` — ruamel.yaml ships no `py.typed` (verified: no `py.typed` in `site-packages/ruamel/yaml/`, and `ignore_missing_imports = true`), so `SafeRepresenter` and `ScalarNode` are `Any` to mypy; a "precise" annotation would be unverifiable decoration.
+- `session_settings: Any` in `test_settings_coverage.py` — the fixture itself is declared `Any` in `conftest.py`, and four out-of-scope test files consume it as `Any`/`object` with `type: ignore` comments. Narrowing one consumer types nothing and forces edits outside this change.
+- `_NEL = "\x85"` appears in both new settings test files — two one-line constants; a shared helper would add an import for no gain.
+- `for sink_id in list(_sink_state.ids)` — the copy is defensive (nothing mutates the list during the loop); harmless, and removing it is churn.
+- `install_isolated_registry()`'s restore loop publishes `logging.*` `SettingChanged` on the shared bus without awaiting the dispatch — the same channel item G closed elsewhere. Closing it there adds waiting, i.e. it is a timing change rather than a refactor: flagged for a separate item, not done here.
+- `tests/property/settings/test_settings_properties.py`, `test_multi_role_invariants.py`, `test_repository_roundtrip.py`, `test_logging_sink_ownership.py`, `logging_test_helpers.py` — reviewed, nothing to restructure: no duplication, names are domain-clear, and the private-loguru access is already documented as such.
+
+### GREEN after the pass (verbatim)
+
+```bash
+uv run pytest tests/unit/settings tests/property/settings tests/unit/logging tests/integration/logging tests/acceptance/logging tests/property/logging tests/unit/test_settings_coverage.py tests/acceptance/settings_coverage tests/property/usermanagement -q --color=no
+1 failed, 112 passed in 26.56s
+FAILED tests/property/usermanagement/test_usermanagement_properties.py::test_inv_003_last_admin_invariant
+```
+
+The single failure is **pre-existing and outside this change** (that file is not in the diff): a hypothesis `DeadlineExceeded` (266 ms against the 200 ms default) — the same flake class item F fixed in `test_multi_role_invariants.py`, still open in `test_usermanagement_properties.py`. It fails identically on `main` (primary worktree, single file, 3 runs): `1 failed, 5 passed`, `6 passed`, `1 failed, 5 passed`; full suite on `main`: `1 failed, 556 passed, 1 skipped in 171.11s`.
+
+Same command with that one pre-existing flaky file excluded — 3 runs:
+
+```bash
+uv run pytest tests/unit/settings tests/property/settings tests/unit/logging tests/integration/logging tests/acceptance/logging tests/property/logging tests/unit/test_settings_coverage.py tests/acceptance/settings_coverage tests/property/usermanagement --ignore=tests/property/usermanagement/test_usermanagement_properties.py -q --color=no
+107 passed in 21.30s
+107 passed in 20.96s
+107 passed in 17.36s
+```
+
+Item-G corroboration recipe (the `log_records` drain is the path the conftest edit touched) — 5 runs:
+
+```bash
+uv run pytest tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/logging/test_logging.py tests/unit/logging/test_logging_edges.py -q --color=no -p no:randomly
+18 passed in 1.54s
+18 passed in 1.52s
+18 passed in 1.52s
+18 passed in 1.51s
+18 passed in 1.51s
+```
+
+### Ruff / format / mypy (verbatim)
+
+```bash
+uv run ruff check src/backend/logging/_setup.py src/backend/settings/repository.py tests/conftest.py tests/settings_test_helpers.py tests/logging_test_helpers.py tests/unit/test_settings_coverage.py tests/unit/logging/test_logging_sink_ownership.py tests/unit/settings/test_repository_roundtrip.py tests/property/settings/test_settings_properties.py tests/property/usermanagement/test_multi_role_invariants.py
+All checks passed!
+
+uv run ruff format --check <same paths>
+1 file would be reformatted, 8 files already formatted
+```
+
+The one file is `src/backend/settings/repository.py`, and the drift is **pre-existing, in an untouched docstring** (`YamlValueRepository`, ~line 119): `uv run ruff format --check` on `git show origin/main:src/backend/settings/repository.py` produces the identical diff, and `ruff format --diff` on the branch shows only that docstring — none of item A's added lines. Reformatting it would rewrite out-of-scope code; the whole-repo sweep stays the Phase 5 gate.
+
+```bash
+uv run mypy src/
+Success: no issues found in 73 source files
+```
+
+### Full-suite observation (flagged, NOT fixed here)
+
+`uv run pytest tests/ -q --color=no` on this branch is RED while every targeted set above is GREEN:
+
+```bash
+# with the S4.3 edits
+7 failed, 631 passed, 1 skipped, 33 warnings, 1 error in 218.47s
+# same command at a7376a1 with the S4.3 edits stashed
+9 failed, 630 passed, 1 skipped, 33 warnings in 219.88s
+# same command on main
+1 failed, 556 passed, 1 skipped in 171.11s
+```
+
+So the full-suite RED is a property of the branch, not of this refactor pass. It includes this change's own new file (`tests/unit/logging/test_logging_sink_ownership.py`: 2 errors + 1 failure), `tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks` (handler set collapses to `{19: FileSink}` — the console sink is gone), and `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline`. Smallest reproduction found (order-dependent, 1/2 runs):
+
+```bash
+uv run pytest tests/unit/logging tests/acceptance/logging tests/integration/logging tests/property/logging tests/unit/logging_coverage tests/acceptance/logging_coverage tests/property/logging_coverage -q --color=no
+1 failed, 50 passed, 2 errors in 31.07s      # second run of the same command: 53 passed
+```
+
+i.e. the `logging_coverage` family leaves sink state the new ownership tests assert on. CI runs the full suite, so this needs its own S4.2 item before Phase 5 can pass; fixing it is new behavior, not restructuring, so it is out of scope for a refactor pass.
