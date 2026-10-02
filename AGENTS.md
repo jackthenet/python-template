@@ -96,9 +96,9 @@ C:/workspace/active-projects/
 Exact commands, procedures, and edge cases for each operation live in the git skill (`.agents/skills/git/SKILL.md`).
 
 - **Phase P (prepare)** — **P.1** writes `docs/todo/<name>.md` and `docs/questions/<name>.md` **on `main`** (planning records, see "Phase P: PREPARE"). The change branch **and its worktree** are created at **P.4** from `main` (git skill: "Create change worktree"), so the branch carries the TODO file and the answered questions.
-- **Phase 1 (approve)** — S1.4 only: commit the prepared spec in the change worktree and open the approval PR. All work from **P.4** through Phase 6 is performed inside the change worktree (P.1–P.3 write the planning artifacts on `main`).
+- **Phase 1 (S1.4)** — S1.4 only: commit the prepared spec in the change worktree and open the approval PR. All work from **P.4** through Phase 6 is performed inside the change worktree (P.1–P.3 write the planning records on `main`).
 - **Phases 2–5** — decompose, test, implement, verify: all commands (`uv run ...`) run inside the change worktree. The primary worktree (`main`) is used for:
-  - the Phase P planning-artifact commits (`docs/todo/`, `docs/questions/`),
+  - the planning-record commits and `Status:` advances (`docs/todo/`, `docs/questions/`),
   - spec-approval verification (`git log main -- docs/specs/[name].md`, FEATURE/CROSS-CUTTING only),
   - running the full test suite against `main`,
   - post-merge verification.
@@ -115,13 +115,13 @@ Exact commands, procedures, and edge cases for each operation live in the git sk
 - `git worktree remove` fails on a dirty worktree: do NOT use `--force` on an unmerged change. Force-removal is only permitted when the changes are intentionally discarded.
 - If a worktree directory was deleted manually, run `git worktree prune`.
 - Check for leftovers with `git worktree list`; after cleanup, the only worktree should be the primary (`main`).
-- **Direct-to-`main` commits are allowed only for the Phase P planning artifacts** under `docs/todo/` and `docs/questions/`. Nothing else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
+- **Direct-to-`main` commits are allowed only for the planning records** under `docs/todo/` and `docs/questions/` — their creation at P.1–P.3 **and every later `Status:` advance through `MERGED`** (see "Planning records (owner: the orchestrator)"). Nothing else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
 
 ---
 
 ## Phase P: PREPARE — Front-Loaded Human Interaction
 
-All human interaction happens **before** the workflow runs. Phase P turns each change idea into a **prepared change**: a TODO file, a fully answered question file, and — for FEATURE/CROSS-CUTTING — a self-consistent draft specification. The normal workflow (Phases 1–6) then runs **autonomously**: the only human actions left are merging the spec PR (S1.4) and the change PR (S6.4), and neither stops the agent — it switches to another prepared change (see "Multi-change scheduling (never idle)").
+All **scheduled** human interaction happens **before** the workflow runs. Phase P turns each change idea into a **prepared change**: a TODO file, a fully answered question file, and — for FEATURE/CROSS-CUTTING — a self-consistent draft specification. The normal workflow (Phases 1–6) then runs **autonomously**: the human actions that remain are merging the spec PR (S1.4) and the change PR (S6.4), plus any **late** question a step raises. None of them stops the agent — a late question puts the change in WAITING and the agent switches to another prepared change (see "Multi-change scheduling (never idle)").
 
 ### Preparation artifacts (per change)
 
@@ -138,13 +138,30 @@ All human interaction happens **before** the workflow runs. Phase P turns each c
 
 | Step | Owner | Objective | Done when |
 |---|---|---|---|
-| **P.1 Frame** | orchestrator | classify the change type (Phase 0); create the TODO file and the question file from their templates; create the change's todo set | both files exist on `main`, TODO `Status: PREPARING` |
+| **P.1 Frame** | orchestrator | classify the change type (Phase 0); create the TODO file and the question file from their templates; create the change's todo set | both files exist on `main`; the orchestrator sets TODO `Status: PREPARING` |
 | **P.2 Interrogate** | subagent (specify skill) | adversarially interrogate the idea; record every question in `docs/questions/<name>.md` | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch; overlap checked against `docs/specs/` **and** every TODO in `docs/todo/` |
-| **P.3 Answer** | orchestrator ⏸ | present the batch (≤ 4 per `ask_user_question` round, most blocking first) and record the answers | every question `ANSWERED` + incorporated; TODO `Status: QUESTIONS-ANSWERED` |
+| **P.3 Answer** | orchestrator ⏸ | present the batch (≤ 4 per `ask_user_question` round, most blocking first) and record the answers | every question `ANSWERED` + incorporated; the orchestrator sets TODO `Status: QUESTIONS-ANSWERED` |
 | **P.4 Draft** | subagent (specify skill) | create the change branch + worktree from `main` (so the branch carries the TODO and the answers), then write the type's Phase 1 output: draft spec (FEATURE/CROSS-CUTTING), triage (ISSUE), GREEN baseline (REFACTOR), scope (DOCS/CHORE) | the artifact exists in the worktree and is committed |
-| **P.5 Verify self-consistency** | subagent (specify skill) | run the Self-Consistency Checklist + the Dependency Smoke-Test; fix the spec itself | the spec passes the checklist |
+| **P.5 Verify self-consistency** | subagent (specify skill) | run the Self-Consistency Checklist + the Dependency Smoke-Test; fix the Phase 1 output itself | the Phase 1 output passes the Self-Consistency Checklist and the Dependency Smoke-Test; the orchestrator sets the TODO `Status: READY` |
 
 **Prep gate ◆ READY.** A change is **READY** when its TODO file says `Status: READY`, **every** question in its question file is `ANSWERED`, and the P.4 artifact exists. Only a READY change may enter the normal workflow.
+
+### Planning records (owner: the orchestrator)
+
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **orchestrator-owned records that live only on `main`**: the orchestrator writes and updates them **from the primary worktree** and commits each change directly to `main` (git skill: "Commit planning artifacts and status advances (orchestrator, `main`)"). A change branch **never edits them** and a change PR **never contains them** — because the branch does not touch those paths, a later direct-to-`main` status update is never reverted by the merge.
+
+The orchestrator advances the TODO `Status:` on `main` at each of these moments, and commits each advance:
+
+| When | Status |
+|---|---|
+| P.1 Frame | `PREPARING` |
+| after P.3 Answer (every question `ANSWERED`) | `QUESTIONS-ANSWERED` |
+| after the P.5 handoff is verified (the type's Phase 1 output exists) | `READY` |
+| when the change enters the normal workflow (S1.4 / Phase 3 / Phase 4) | `IN-WORKFLOW` |
+| when the change reaches a human gate (`S1.4` approval, `S6.4` merge, `BLOCKED-USER`, `BLOCKED-HUMAN`) | `WAITING` |
+| after post-merge cleanup | `MERGED` |
+
+Step subagents never write the `Status:` field: they report the gate in their handoff and the orchestrator records it. A **late mid-workflow question** is returned in the step's handoff (`questions` field); the orchestrator appends it to the change's question file **on `main`** — a step subagent must not edit `docs/questions/` after P.4.
 
 ### Phase P outputs per change type
 
@@ -202,7 +219,7 @@ Which phases run for each type, and what each phase produces:
 Legend: **[O]** = orchestrator (no subagent) · **[S]** = step subagent (**synchronous, never background**) · **◆** = gate (validation) · **⏸** = user input (the **change** stops until answered) · **P.x** steps run during preparation (Phase P), before the workflow
 
 ```text
-PHASE P   PREPARE (per change, before the workflow — all human input here)
+PHASE P   PREPARE (per change, before the workflow — all scheduled human input here)
   P.1    [O] Frame: classify + docs/todo/<name>.md + docs/questions/<name>.md (on main) + todo set
              │
              ▼
@@ -335,7 +352,7 @@ Phase P plus the six phases are the **gates** (entry/exit criteria per the Phase
 The orchestrator's launch prompt for an atomic step MUST contain **exactly** what the step needs — the subagent must never have to infer it:
 - the **step ID** (e.g., `S4.2`) and its **single objective**;
 - the **change name and type**;
-- the **change worktree path** (all commands run there);
+- the **change worktree path** (all commands run there; **P.1–P.3** run in the **primary worktree** — no change worktree exists until P.4);
 - the **skill file** to read (`.agents/skills/<skill>/SKILL.md`) **and the specific skill section** that applies to this step;
 - the **inputs** — the prior step's handoff (status, gate result, artifacts, evidence location, and any user answers);
 - the **done criteria** (the step's validation, e.g., “GREEN confirmed and recorded in `docs/verification/<name>.md`”);
@@ -364,7 +381,7 @@ Questions that need user input are recorded persistently in **one file per chang
 
 - **MAY create questions:** any step, when it meets an ambiguity, a missing requirement, or a decision that requires user input.
 - **MUST create questions:** the **Interrogate** step (**P.2**) MUST create a question for every ambiguity, missing requirement, edge case, and scope boundary it identifies — the prep phase is where user input is most needed. Any step that returns `BLOCKED-USER` MUST have its questions recorded in the change's question file.
-- **Late questions (Phases 2–6):** a question discovered after the change entered the normal workflow is appended to the **same** file under `## Late questions (Phases 2–6)`, with its `Step:` field set to the step that found it.
+- **Late questions (Phases 2–6):** a question discovered after the change entered the normal workflow is returned in the step's handoff (`questions` field) and the **orchestrator** appends it to the **same** file on `main` under `## Late questions (Phases 2–6)`, with its `Step:` field set to the step that found it. Step subagents do not edit the question file after P.4 — `docs/questions/` is orchestrator-owned (see "Planning records (owner: the orchestrator)").
 - **Batching (one round-trip per step):** a step that needs user input MUST collect **all** of its open questions into a **single** `BLOCKED-USER` batch (one set of question-file entries, one handoff) — never one round-trip per question, and never partial batches across re-entries. For **P.2**: interrogate fully first, then return the complete question batch. The orchestrator presents the batch in as few `ask_user_question` rounds as possible (≤ 4 questions per round; the most blocking questions first), records all answers in the question file, and relaunches the step **once** with the full answer set. This keeps human-response latency off the critical path of every individual question.
 - **Change stop, not workflow stop:** when a step returns `BLOCKED-USER`, **that change** goes **WAITING**: the orchestrator presents the questions to the user (via `ask_user_question`), records the answers in the question file, marks them **incorporated**, and **relaunches the same step** with the answers — while it works on another READY change (see "Multi-change scheduling (never idle)"). The change never proceeds past a `BLOCKED-USER` step until the user has answered; the **workflow** does not stop. If the BLOCKED-USER subagent's session is released (resume unavailable) and the only remaining work is verifying already-recorded answers, the orchestrator may record the answers, mark the step done directly, and commit — without relaunching (P-2).
 - **Central file retired.** The central repo-root question file is no longer live guidance: it is archived at `docs/questions/archive-AI_Questions.md` and MUST NOT be edited again. Historical references to it (ADRs, older verification records) are left intact.
@@ -392,6 +409,7 @@ Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing faili
 - **Ready selection order.** (1) a change whose `Depends on:` changes are already merged; (2) among ready changes, **easiest first** (see Todo Tracking Discipline); (3) tie-break **FIFO by READY date**.
 - **Resume.** A WAITING change's gate is cleared when its spec PR / PR merge is reachable from `origin/main` after `git fetch` (`git merge-base --is-ancestor <merge-commit> origin/main`), or when its question file shows every answer. Then launch a **fresh** subagent at its next atomic step.
 - **Todo sets.** One todo set per change; at most one `in_progress` **per change**; a WAITING change's step stays `in_progress` with an `activeForm` naming the wait (e.g. "waiting for spec PR merge").
+- **Backlog status on `main`.** **WAITING**, **IN-WORKFLOW** and **MERGED** are written to the change's TODO file **on `main`** by the orchestrator at those moments (see "Planning records (owner: the orchestrator)"), so the backlog on `main` is the live schedule.
 
 ### Todo Tracking Discipline (todo tool)
 
@@ -422,7 +440,7 @@ The agent MUST track every in-flight change with the `todo` tool. The todo list 
 **Example (FEATURE, prepared).**
 ```text
 #1 Phase P: Prepare — TODO + questions answered + draft spec
-#2 Phase 1: Approve — spec PR opened                ⛓ #1
+#2 Phase 1: S1.4 — spec PR opened                   ⛓ #1
 #3 Phase 2: Decompose — ADRs + task DAG             ⛓ #2
 #4 Phase 3: Test & RED — tests RED                  ⛓ #3
 #5 Phase 4: Implement — GREEN                       ⛓ #4

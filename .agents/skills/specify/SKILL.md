@@ -9,7 +9,7 @@ description: "Single entry point for all change types: runs Phase P (PREPARE) �
 
 Single entry point for all change types. Run **Phase P (PREPARE)** — classify the change at **P.1**, interrogate it, get every question answered, produce the type's Phase 1 output, and verify it self-consistent — then run **S1.4** in the normal workflow to commit the prepared spec and open the approval PR.
 
-The skill's output is a **prepared change**: a TODO file (`docs/todo/<name>.md`), a **fully answered** question file (`docs/questions/<name>.md`), and the draft spec / triage / baseline / scope. With that in place the normal workflow (Phases 1–6) runs **without human input** — the only human actions left are merging the spec PR and the change PR (see "Phase P: PREPARE" in `AGENTS.md`).
+The skill's output is a **prepared change**: a TODO file (`docs/todo/<name>.md`), a **fully answered** question file (`docs/questions/<name>.md`), and the draft spec / triage / baseline / scope. With that in place the normal workflow (Phases 1–6) runs **without scheduled human input** — the human actions that remain are merging the spec PR and the change PR, plus any **late** question a step raises; a late question never idles the workflow — the change goes WAITING and another change runs (see "Phase P: PREPARE" and "Multi-change scheduling (never idle)" in `AGENTS.md`).
 
 The former steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5** — same content, run during preparation. Only **S1.4** stays inside the normal workflow, and the change branch and worktree are created at **P.4**, not at classification.
 
@@ -46,7 +46,7 @@ This phase runs in a **new, synchronous subagent** launched by the orchestrator 
 - **Ownership:** **P.1 Frame** and **P.3 Answer** are **orchestrator** steps (no subagent); P.2, P.4, P.5 and S1.4 each run in their own subagent. P.2 and P.3 run in the **primary worktree** (no change worktree exists yet); the change branch and worktree are created at **P.4**, and P.5 and S1.4 run inside it.
 - **Inputs from the orchestrator:** the change name and type, the change worktree path, this skill file, the previous step's handoff, and the **required skills + context** for the current step (the task-definition).
 - **Todo:** the orchestrator manages this phase's todo item (`in_progress` before launch, `completed` after verifying the handoff). The subagent never touches the todo list.
-- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in the change's question file `docs/questions/<name>.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in that file, and relaunches this subagent with the answer.
+- **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in the change's question file `docs/questions/<name>.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in that file, and relaunches this subagent with the answer. After **P.4** the question file is orchestrator-owned: a step that finds a late question returns it in the handoff's `questions` field and the orchestrator records it on `main` — never edit `docs/questions/` (or `docs/todo/`) yourself after P.4.
 - **BLOCKED-USER = WAITING, not idle:** a `BLOCKED-USER` handoff puts **this change** in **WAITING** state; the orchestrator presents the questions and continues with another READY change instead of idling, then resumes this change with a fresh subagent (see "Multi-change scheduling (never idle)" in `AGENTS.md`).
 - **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
 - **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
@@ -63,8 +63,8 @@ The FEATURE/CROSS-CUTTING path is decomposed into atomic steps. Each has a **sin
 
 - **Objective:** Classify the change type (Phase 0) and open the change's planning record.
 - **Inputs:** the change idea; `docs/todo/template.md`; `docs/questions/template.md`; the existing TODO files in `docs/todo/`.
-- **Outputs:** `docs/todo/<name>.md` and `docs/questions/<name>.md` created from their templates **on `main`** and committed directly to `main` (git skill, "Commit Phase P planning artifacts"); the change's todo set.
-- **Done-criteria:** both files exist on `main` with TODO `Status: PREPARING` and question file `Status: OPEN`; the change type is recorded in the TODO file. No worktree yet — it is created at P.4.
+- **Outputs:** `docs/todo/<name>.md` and `docs/questions/<name>.md` created from their templates **on `main`** and committed directly to `main` (git skill, "Commit planning artifacts and status advances (orchestrator, `main`)"); the change's todo set.
+- **Done-criteria:** both files exist on `main` with the orchestrator having set TODO `Status: PREPARING` and question file `Status: OPEN`; the change type is recorded in the TODO file. No worktree yet — it is created at P.4.
 
 ### P.2 Interrogate
 
@@ -86,8 +86,8 @@ The FEATURE/CROSS-CUTTING path is decomposed into atomic steps. Each has a **sin
 
 - **Objective:** Run the self-consistency checklist against the written specification and fix every inconsistency in the spec itself (never defer to implementation or review).
 - **Inputs:** the written specification; the Self-Consistency Checklist (below) + the Dependency Smoke-Test (below).
-- **Outputs:** a consistent specification (no internal inconsistencies).
-- **Done-criteria:** the specification passes the self-consistency checklist (configurability, parameter coverage, REQ↔AC wording, terminology drift, test strategy coverage, ID references, scope consistency, performance budget vs. observability) **and** every newly named dependency has been smoke-tested on the host.
+- **Outputs:** a consistent specification (no internal inconsistencies); a handoff reporting the **READY gate** (checklist + smoke-test result) for the orchestrator to act on.
+- **Done-criteria:** the specification passes the self-consistency checklist (configurability, parameter coverage, REQ↔AC wording, terminology drift, test strategy coverage, ID references, scope consistency, performance budget vs. observability) **and** every newly named dependency has been smoke-tested on the host. The step does **not** edit the TODO file: after the orchestrator verifies this handoff, the **orchestrator** sets `Status: READY` in `docs/todo/<name>.md` **on `main`** and commits it (git skill, "Commit planning artifacts and status advances (orchestrator, `main`)").
 
 ### S1.4 Present for approval
 
@@ -106,7 +106,7 @@ The FEATURE/CROSS-CUTTING path is decomposed into atomic steps. Each has a **sin
    - **CROSS-CUTTING** — intentionally spans **two or more features** (new shared capability, architecture change, shared-infrastructure change).
    - **REFACTOR** — restructures existing code **without altering externally observable behavior**.
    - **DOCS/CHORE** — **does not alter behavior** (documentation, comments, configuration, CI, tooling).
-2. Create `docs/todo/<name>.md` and `docs/questions/<name>.md` from their templates and commit them **directly to `main`** (git skill, "Commit Phase P planning artifacts") — these two folders are the **only** files the workflow may commit directly to `main`. Create the change's todo set (Phase P item + the phases its type runs). No worktree yet.
+2. Create `docs/todo/<name>.md` and `docs/questions/<name>.md` from their templates and commit them **directly to `main`** (git skill, "Commit planning artifacts and status advances (orchestrator, `main`)") — these two folders are the **only** files the workflow may commit directly to `main`. Create the change's todo set (Phase P item + the phases its type runs). No worktree yet.
 3. Record the type in the TODO file, then in `docs/verification/<name>.md` (created with a type header at **P.4**, in the change worktree).
 4. Route to the matching path below. If a later step reveals a different type, apply the **Escalation Rules** in `AGENTS.md`.
 
@@ -166,9 +166,9 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 - A change branch **and its worktree** MUST be created at **P.4**, before any normative artifact is written (all types); before P.4 the work happens in the primary worktree and touches only `docs/todo/` and `docs/questions/`.
 - The change type MUST be classified (**P.1**) before any other work, and recorded in the TODO file and in `docs/verification/<name>.md`.
-- The TODO file's `Status:` field MUST be updated at each Phase P step: **PREPARING** (P.1) → **QUESTIONS-ANSWERED** (P.3) → **READY** (P.5 gate) → **IN-WORKFLOW** / **WAITING** / **MERGED**.
+- The TODO file's `Status:` field MUST be updated at each Phase P step: **PREPARING** (P.1) → **QUESTIONS-ANSWERED** (P.3) → **READY** (P.5 gate) → **IN-WORKFLOW** / **WAITING** / **MERGED**. The **orchestrator** owns that write: it sets each status in the **primary worktree** and commits it to `main`; step subagents never edit the TODO file — they report the gate in their handoff (AGENTS.md, "Planning records (owner: the orchestrator)").
 - A change is **READY** only when **every** question in its question file is `ANSWERED` **and** the P.4 artifact exists (draft spec / triage / baseline / scope) and passed P.5. Only a READY change may enter the normal workflow.
-- `docs/todo/` and `docs/questions/` are the **only** files committed directly to `main`; everything normative reaches `main` through a merged PR from the change worktree.
+- `docs/todo/` and `docs/questions/` are the **only** files committed directly to `main`, and only by the **orchestrator** from the primary worktree; everything normative reaches `main` through a merged PR from the change worktree. A change branch never edits those two files and its PR never contains them.
 - Stay strictly on the change's branch/worktree. Do not modify unrelated changes, branches, or worktrees. Keep all changes isolated to this change.
 - Ask MORE questions than feels necessary during interrogation (FEATURE/CROSS-CUTTING).
 - Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). **Record each in the change's question file `docs/questions/<name>.md`** and return the **complete batch in a single** `BLOCKED-USER` handoff (the orchestrator presents the batch in as few `ask_user_question` rounds as possible — ≤ 4 per round, most blocking first — records the answers in that file, and relaunches this step **once** with the full answer set). Do not return partial batches across multiple round-trips.
@@ -193,7 +193,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 **Phase P (the prepared change):**
 
-- `docs/todo/<name>.md` (from `docs/todo/template.md`), committed to `main`, its `Status:` advanced to **READY**.
+- `docs/todo/<name>.md` (from `docs/todo/template.md`), committed to `main`, its `Status:` advanced to **READY** by the **orchestrator** (on `main`, after it verifies the P.5 handoff).
 - `docs/questions/<name>.md` (from `docs/questions/template.md`), committed to `main`, **every** entry `ANSWERED` and incorporated.
 - A change branch `<type>/<name>` and its worktree at `<repo-name>-worktrees/<type>/<name>`, created at **P.4** from `main` (so the branch carries the TODO file and the answered questions).
 - A recorded change type in the TODO file and in `docs/verification/<name>.md`.
@@ -208,7 +208,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 **Phase P — the READY gate (all types):**
 
-- The TODO file exists on `main` with `Status: READY`, and the question file exists with **every** question `ANSWERED` and incorporated.
+- The TODO file exists on `main` with `Status: READY` — set and committed by the **orchestrator** on `main` after it verifies the P.5 handoff — and the question file exists with **every** question `ANSWERED` and incorporated.
 - The change branch and its worktree exist (created at P.4).
 - The change type is classified and recorded in the TODO file and in `docs/verification/<name>.md`.
 - FEATURE/CROSS-CUTTING:

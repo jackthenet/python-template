@@ -1,6 +1,6 @@
 ---
 name: git
-description: "Cross-cutting git operations for the Spec-TDD workflow: committing the Phase P planning artifacts (docs/todo/, docs/questions/) directly to main, creating change branches and worktrees per change type (at P.4), detecting a cleared human gate so a WAITING change can resume, opening PRs (Phase 6), and post-merge cleanup (verify merge on main, remove worktree, delete local + remote branches). Use when a phase skill delegates a git operation, or when inspecting, managing, or recovering worktrees, branches, or PRs."
+description: "Cross-cutting git operations for the Spec-TDD workflow: committing the planning records (docs/todo/, docs/questions/) and their status advances directly to main from the primary worktree, creating change branches and worktrees per change type (at P.4), detecting a cleared human gate so a WAITING change can resume, opening PRs (Phase 6), and post-merge cleanup (verify merge on main, remove worktree, delete local + remote branches). Use when a phase skill delegates a git operation, or when inspecting, managing, or recovering worktrees, branches, or PRs."
 ---
 
 # Git
@@ -9,7 +9,7 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 
 ## When to Use
 
-- **P.1–P.3 (Phase P)** delegate: commit the change's planning artifacts (`docs/todo/<name>.md`, `docs/questions/<name>.md`) directly to `main`.
+- **Orchestrator (Phase P and every later status advance)** delegate: commit the change's planning records (`docs/todo/<name>.md`, `docs/questions/<name>.md`) and every `Status:` advance through `MERGED` directly to `main`.
 - **P.4 (specify)** delegates: create the change branch and its worktree (per change type) — the worktree is created at P.4, after the questions are answered, NOT at Phase 0/Phase 1.
 - Phase 6 (review) delegates: open the PR for the change branch.
 - After a PR is merged (human governance): post-merge cleanup.
@@ -19,7 +19,7 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 ## Execution Context (Atomic Step, Synchronous Subagent)
 
 Per "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`:
-- **Commit Phase P planning artifacts (P.1–P.3)** — orchestrator, in the primary worktree, committed directly to `main`.
+- **Commit planning artifacts and status advances (orchestrator, `main`)** — orchestrator only, always in the **primary worktree**, committed directly to `main`; covers the creation at P.1–P.3 **and every TODO `Status:` advance through `MERGED`**.
 - **Create change worktree (P.4)** — performed by the **P.4 Draft step subagent** as its first action (this skill owns the how); the orchestrator does NOT create it. It runs at P.4, after the questions are answered.
 - **Detect a cleared gate** — orchestrator, between steps, when scheduling which change to run next.
 - **Create PR** — runs inside the Phase 6 (review) subagent (atomic step **S6.4**).
@@ -60,17 +60,19 @@ The git skill's phase steps are decomposed into two atomic steps (S6.4 Create PR
 
 ## Operations
 
-### Commit Phase P planning artifacts (P.1–P.3)
+### Commit planning artifacts and status advances (orchestrator, `main`)
 
-`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`** from the primary worktree (P.1 creates them, P.3 records the answers):
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`**, always from the **primary worktree**. This operation covers **every** write to those two files: P.1 creates them, P.3 records the answers, and the orchestrator then commits **every `Status:` advance** — `PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED` — plus any late (`Phases 2–6`) question a step returned in its handoff (AGENTS.md, "Planning records (owner: the orchestrator)"):
 
 ```bash
 git add docs/todo/<name>.md docs/questions/<name>.md
-git commit -m "chore(<name>): prepare"
+git commit -m "chore(<name>): prepare"          # P.1–P.3
+git commit -m "chore(<name>): status <STATUS>"  # every later Status: advance
 ```
 
 - They are the **only** files the workflow may commit directly to `main`. NOTHING else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
-- The change worktree is created afterwards, at **P.4**, from `main` — so the change branch already carries the TODO file and the answered questions.
+- **A change branch and its PR must never contain `docs/todo/` or `docs/questions/` paths.** Only the orchestrator edits them, and only in the primary worktree; step subagents never do (they report the gate / the late question in their handoff). Because the change branch never touches those paths, a direct-to-`main` status update made while the change is in flight is never reverted when its PR merges.
+- The change worktree is created afterwards, at **P.4**, from `main` — so the change branch already carries the TODO file and the answered questions **as they were at P.3**; its copy is never updated afterwards.
 
 ### Create change worktree (P.4)
 
@@ -150,7 +152,8 @@ After the human merges the PR:
 ## Rules
 
 - Never check out a change branch in the primary worktree.
-- Commit **directly to `main`** only for the Phase P planning artifacts under `docs/todo/` and `docs/questions/`. Everything else reaches `main` only through a merged PR.
+- Commit **directly to `main`** only for the planning records under `docs/todo/` and `docs/questions/` — their creation at P.1–P.3 and every `Status:` advance through `MERGED` — and only from the primary worktree. Everything else reaches `main` only through a merged PR.
+- Never edit `docs/todo/` or `docs/questions/` on a change branch: a change branch and its PR must never contain those paths.
 - Never create two worktrees for the same change branch.
 - Do NOT merge PRs (human governance).
 - Do NOT force-remove worktrees (`git worktree remove --force`) or force-delete branches (`git branch -D`) on unmerged changes.
