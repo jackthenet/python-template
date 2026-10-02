@@ -236,12 +236,12 @@ The six phases are the **gates** (entry/exit criteria per the Phase Matrix). Wit
 | **1 Specify** | **S1.1 Interrogate** → **S1.2 Draft spec** → **S1.3 Verify self-consistency** → **S1.4 Present for approval** (commit + PR) |
 | **2 Decompose** | **S2.1 Create ADRs** → **S2.2 Decompose into task DAG** |
 | **3 Test & RED** | **S3.1 Derive tests (per task: one fresh subagent derives one DAG task's `tests_to_create`)** → **S3.2 Ruff + confirm RED** |
-| **4 Implement** | **S4.1 Pick task + confirm RED** → **S4.2 Implement + confirm GREEN** → **S4.3 Ruff** → **S4.4 Refactor** → **S4.5 Commit + update status** |
+| **4 Implement** | **S4.1 Pick task + confirm RED** → **S4.2 Implement + confirm GREEN** (ruff gate) → **S4.3 Refactor** (keep GREEN; ruff gate; no-op fast-path) → **S4.4 Commit + update status** |
 | **5 Verify** | **S5.1 Run full test suite** → **S5.2 Lint + types** → **S5.3 Update traceability** → **S5.4 Verification report** |
 | **6 Review** | **S6.1 Review vs. normative basis** → **S6.2 Traceability + boundaries** → **S6.3 Review report** → **S6.4 Bump version + open PR** |
 | **Post-merge** | **S7.1 Cleanup** (verify merge + remove worktree + delete branches) |
 
-**Ruff gate.** Every atomic step that writes or modifies **tests or implementation code** MUST run ruff on the **step's changed paths** (`uv run ruff check <changed-paths>`) before it returns and record the result in the handoff (`ruff` field). A step that leaves lint errors is **not done**. The **whole-repo** sweep (`uv run ruff check .`) is a **Phase 5** gate (verify) — per-task steps do NOT run it implicitly. Scope `uv run ruff check --fix` + `uv run ruff format` to the **task's changed paths** (not repo-wide) — repo-wide `--fix`/`format` during a task step modifies out-of-scope files and can introduce new errors (P-6); a repo-wide lint fix is a separate, explicit step (or the verify phase).
+**Ruff gate.** Every atomic step that writes or modifies **tests or implementation code** MUST run ruff on the **step's changed paths** (`uv run ruff check <changed-paths>`) before it returns and record the result in the handoff (`ruff` field). A step that leaves lint errors is **not done**. The **whole-repo** sweep (`uv run ruff check .`) is a **Phase 5** gate (verify) — per-task steps do NOT run it implicitly. Scope `uv run ruff check --fix` + `uv run ruff format` to the **task's changed paths** (not repo-wide) — repo-wide `--fix`/`format` during a task step modifies out-of-scope files and can introduce new errors (P-6); a repo-wide lint fix is a separate, explicit step (or the verify phase). There is **no separate ruff step** — the ruff gate is part of the step that writes the code (S4.2 implement, S4.3 refactor); a dedicated ruff subagent launch is redundant overhead (the old S4.3 ruff step was removed in the after-workflow-optimization).
 
 #### Task-Definition Contract
 
@@ -401,7 +401,7 @@ Test derivation is **per task in the DAG** (S3.1): one fresh subagent derives on
 3. Write unit tests for edge cases and error conditions.
 4. Write contract tests for NFR contract requirements.
 5. Write integration tests for multi-component interactions.
-6. **Run the test suite and confirm RED state** (tests must fail before implementation).
+6. **Validate test data, then run the test suite and confirm RED state.** The test fixtures/data MUST construct VALID model instances (pass the model's validation) — a test that fails with a `ValidationError`/`ValueError` when constructing test data (e.g., a username too short/long for the model's pattern) has **invalid test data, not a valid RED**; fix the test data (in-domain values) before confirming RED. Then confirm RED (tests must fail on behavior, before implementation).
 7. Record RED evidence in `docs/verification/[name].md`.
 8. Update the traceability matrix in `docs/verification/traceability.md` with test references.
 
@@ -419,9 +419,9 @@ All types.
 1. Pick a ready task from the task DAG.
 2. **QA Agent (Red):** Write failing tests in `allowed_files.test_files`. Run `red_command`. Confirm tests FAIL.
 3. **Record RED evidence** in `docs/verification/[name].md`.
-4. **Coder Agent (Green):** Implement logic in `allowed_files.source_files` following `implementation_steps`. Run `green_command`. Confirm tests PASS 100%.
+4. **Coder Agent (Green):** Implement logic in `allowed_files.source_files` following `implementation_steps`. Run `green_command`. Confirm tests PASS 100%. Run ruff on the changed paths (the ruff gate — no separate ruff step).
 5. **Record GREEN evidence** in `docs/verification/[name].md`.
-6. **Refactor:** Improve code without changing observable behavior. Re-run `green_command`.
+6. **Refactor:** Improve code without changing observable behavior. Re-run `green_command`. **No-op fast-path:** when S4.2's implementation is a small change or follows an established, already-clean pattern (e.g., a repeated ADR-071 enforcement wiring), confirm 'no structural changes needed' and return — the targeted `green_command` suffices; do NOT re-run the full suite (that is a Phase 5 gate).
 7. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`.
 
 **ISSUE** (after RED confirmed):
@@ -463,6 +463,9 @@ All types.
 16. Run lint and type checks where applicable; confirm no test files or behavior were touched.
 ### Phase 6: REVIEW
 All types. After verification passes:
+
+**Bounded scope (per S6.x step).** Each S6.x step is a bounded subagent with explicit, bounded inputs — the approved spec, the verification artifact, and the FINAL code state — NOT the full commit-by-commit diff. Do NOT re-run the full test suite (Phase 5 already confirmed the gate CLEAN). Review the final state of the code; an unbounded 'review the whole diff' scope loops (P-27).
+
 1. Review all code changes against the change's normative basis: the approved spec (FEATURE/CROSS-CUTTING), the triage record + affected spec IDs (ISSUE), the baseline + scope (REFACTOR), or the scope (DOCS/CHORE).
 2. Check traceability: every REQ has at least one GREEN test, every acceptance test traces back to a normative requirement.
 3. Verify feature boundaries: code lives in the correct feature directory, no cross-feature internal imports.

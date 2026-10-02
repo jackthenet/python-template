@@ -43,6 +43,7 @@ This phase runs in a **new, synchronous subagent** launched by the orchestrator 
 - **User questions (the trigger):** do NOT call `ask_user_question`. When you meet an ambiguity, missing requirement, or decision that requires user input, **record a question in `AI_Questions.md`** (step, why needed, context, question, answer, status, incorporated) and return `BLOCKED-USER`. The orchestrator presents the question to the user, records the answer in `AI_Questions.md`, and relaunches this subagent with the answer.
 - **Handoff:** end with the structured handoff required by `AGENTS.md`: `status` / `gate` / `artifacts` / `questions` / `problem` / `next`.
 - **Scope:** execute exactly this phase's atomic steps. Do not execute another phase, do not launch a subagent, do not talk to the user.
+- **Bounded scope (per S6.x step):** each S6.x step reviews with explicit, bounded inputs — the approved spec, the verification artifact, and the FINAL code state — NOT the full commit-by-commit diff. Do NOT re-run the full test suite (Phase 5 already confirmed the gate CLEAN). Review the final state of the code; an unbounded 'review the whole diff' scope loops and gets aborted (P-27).
 
 ## Todo
 
