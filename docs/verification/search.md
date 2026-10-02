@@ -744,3 +744,45 @@ Bounded boundaries + traceability check (base `origin/main` = `e8dd2bc`, HEAD `a
 - **F-16 (Info, resolved) — cross-feature dependency direction.** The only new cross-feature edges are `sessionmanagement` → `authentication` (repository ABC, additive-only per authentication NFR-003) and the three adapters → `backend.search` (public root); both target public `__all__`-exported symbols and match the spec Impact Analysis. No import cycle: `search/service.py` depends only on `backend.search.*` and `backend.shared`.
 
 **S6.2: CLEAN** (F-15 closes F-11 as accepted; no new finding).
+
+## Phase 6 S6.3 review report — rebased base (2026-10-02)
+
+This report **supersedes the pre-rebase review report of 2026-09-26** for the post-rebase state (base `origin/main` = `e8dd2bc`, version `0.6.0`). Inputs: the Phase 5 verification report, the S6.1 delta review and the S6.2 traceability + boundaries check above — no command re-run (Phase 5 is GREEN).
+
+### Findings (F-9 … F-16)
+
+| ID | Severity | Status |
+|---|---|---|
+| F-9 | Info | Resolved — the 6 dropped rebase commits are redundant (sink state, settings helpers, `# nosec` all present on `origin/main`) |
+| F-10 | Info | Resolved — no behavior beyond the spec; `src/` diff is `backend/search/` + additive `search_source.py` adapters + additive `SessionRepository.list_all` + `main.py` wiring |
+| F-11 | Minor | Accepted — closed by F-15 (adapter imports use the defining submodule, not the feature root) |
+| F-12 | Info | Resolved — no test weakened or deleted; the one removed assertion (`test_nfr_003_resource_contract`) is replaced by a strictly stronger thread-name check |
+| F-13 | Minor | Accepted with recommendation — 75 stale `RED` rows in other features' matrices flipped to GREEN with recorded evidence; splittable into a DOCS/CHORE if the reviewer prefers scoped diffs |
+| F-14 | Info | Resolved — `0.5.1 → 0.6.0` (CROSS-CUTTING minor), `uv.lock` synced, bump commit inside the PR, no tag |
+| F-15 | Minor | Accepted, no change — cross-feature import path left as-is (public `__all__`-exported ABC, the D19/REQ-022 DI seam; roots consume the adapters correctly) |
+| F-16 | Info | Resolved — cross-feature dependency direction is correct (`sessionmanagement → authentication`, adapters → `backend.search` root); no import cycle |
+
+No Blocking finding; no open finding.
+
+### Review-gate checklist (CROSS-CUTTING)
+
+- Every REQ has ≥ 1 GREEN test — 91/91 spec IDs with GREEN evidence, `scripts/verify_spec.py` exit 0 (Phase 5 report; S5.1 `7bbc05a`).
+- Every acceptance test traces to a normative requirement — 0 orphans; every `tests/acceptance/search/*` test is `test_ac_*` (S6.2).
+- Per-feature traceability rows updated for every affected feature — Search Matrix 73 rows GREEN + usermanagement/filemanagement/sessionmanagement/authentication rows (S5.3 `f262021`).
+- No behavior beyond the specification — F-10; backend-only surface asserted by `test_ac_037_backend_only_api`.
+- No acceptance test weakened or deleted — F-12 + S6.2 (search tests byte-identical to the pre-rebase state; no test file deleted).
+- Feature boundaries and architecture rules respected — S6.2 (search code only in `src/backend/search/`, adapters in owning features, `backend/shared` diff empty).
+- Reusable shared capability documented — "Using the Search Feature" in `AGENTS.md` (line 828).
+- Version bumped per type — `0.6.0` (F-14); PR opened at S6.4.
+
+**REVIEW: CLEAN**
+**Change complete: yes**
+
+### Follow-ups carried out (not fixed here)
+
+- `data/` and `logs/` are not covered by `.gitignore` (runtime artifacts of the search/file/logging features).
+- Duplicated `wait_for`/settle helpers across the search and settings test helpers — a shared helper is a DOCS/CHORE-scale cleanup.
+- `set_value_settled` reads the private `registry._event_bus` (test helper reaching into an implementation detail).
+- Repo-wide `ruff format` drift on files outside this change (the whole-repo `ruff check .` sweep is clean; reformatting unrelated files is a separate DOCS/CHORE).
+- The non-search traceability rows flipped in F-13 can be split into their own DOCS/CHORE PR if scoped diffs are preferred.
+- `tests/architecture/` does not exist in this repository, so the architecture-rule suite is not applicable (recorded pre-rebase).
