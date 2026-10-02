@@ -1610,3 +1610,24 @@ vs. pre-item-I state: the flake made 2 of 6 full-suite runs red; post-item-I bot
 (0 failed, 0 errors, 1 skipped = symlink host limitation, expected).
 
 **Verdict: PASS** — Phase 5 full-regression gate satisfied.
+
+## Phase 5 (S5.2) — lint, types, and quality gates (2026-10-02)
+
+Run in the change worktree at `8c80342`; no code was written by this step.
+
+| gate | command | verbatim summary | result |
+|---|---|---|---|
+| lint (CI) | `uv run ruff check .` | `All checks passed!` | PASS |
+| format (informational, not a CI gate) | `uv run ruff format --check .` | `72 files would be reformatted, 370 files already formatted` | INFO (pre-existing drift) |
+| format on this change's touched files | `uv run ruff format --check <16 touched .py>` | `2 files would be reformatted, 14 files already formatted` | INFO (pre-existing, see note) |
+| types (gate) | `uv run mypy src/` | `Success: no issues found in 73 source files` | PASS |
+| types (fast local tool, not a gate) | `uv run ty check src/` | `Found 134 diagnostics` (first: `error[invalid-type-form] ... src\main.py:110:36`) | INFO (pre-existing; mypy is the gate) |
+| dependencies | `uv run deptry .` | `Success! No dependency issues found.` (Scanning 78 files) | PASS |
+| vulnerabilities | `uv run pip-audit` | `No known vulnerabilities found` (own package `python-template (0.5.0)` skipped: not on PyPI) | PASS |
+| architecture rules | `uv run pytest tests/architecture/ -q` | `ERROR: file or directory not found: tests/architecture/` | N/A (no `tests/architecture/` on this branch or on `origin/main`) |
+| migrations | `ALEMBIC_DATABASE_URL=sqlite:///<temp> uv run alembic upgrade head` | `Running upgrade eace2f772150 -> d94b7f2e6a31, permissions persistence (...)` | PASS (ran against a throwaway temp DB — `alembic.ini:92` would write `./data/migrations.db` into the worktree; no worktree file created) |
+| docs (CI) | `uv run mkdocs build --strict` | `Documentation built in 1.50 seconds` (exit 0, no build warnings) | PASS |
+
+**`ruff format --check` note.** The 72-file drift is pre-existing (dependabot ruff bump; `ruff format --check` is not run by CI — `.github/workflows/lint.yml` runs `uv run ruff check .` only). Of this change's 16 touched `.py` files, 2 report drift (`src/backend/settings/repository.py`, `tests/unit/test_settings_coverage.py`); both were already unformatted on `origin/main` (verified by formatting the base copies), so the change introduces no new drift. Not fixed here: repo-wide `ruff format` would modify out-of-scope files (P-6).
+
+**S5.2 gate: PASS** (all CI-run gates green; informational items are pre-existing and out of scope).
