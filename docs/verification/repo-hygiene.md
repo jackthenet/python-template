@@ -147,3 +147,34 @@ Notes:
   drift item 2 removes by adding `[tool.ruff] extend-exclude = ["**/*.md"]`.
 - `--extend-exclude` requires the `=` form; the space form swallows the path argument.
 - One full-suite run only; no source, test, workflow, `pyproject.toml` or `.gitignore` change made in this step.
+
+## Phase 4 (S4.2) — items 1+2 (2026-10-02)
+
+Item 1: `git ls-files data logs` → empty (no tracked path becomes ignored). After the
+append: `git check-ignore -v data/files/x.png logs/app.log.2026-10-02` →
+`.gitignore:230:/data/` and `.gitignore:231:/logs/` (both matched); `git status
+--porcelain` shows no `?? data/` or `?? logs/`; `uv run deptry .` → "Success! No
+dependency issues found." (88 files scanned).
+
+Item 2: `uv run ruff format src tests scripts migrations` → **54 files reformatted,
+267 left unchanged**; `[tool.ruff] extend-exclude = ["**/*.md"]` added; `lint` job gained
+a hard-failing `Check formatting` step (`uv run ruff format --check .`, no
+`continue-on-error`); YAML validated with `yaml.safe_load` → `yaml ok`.
+
+| Gate | Command | Result |
+|---|---|---|
+| G1 lint | `uv run ruff check .` | `All checks passed!` |
+| G2 format (new CI gate) | `uv run ruff format --check .` | `322 files already formatted` (0 pending) |
+| G3 types | `uv run mypy src/` | `Success: no issues found in 83 source files` |
+| G4 suite | `uv run pytest tests/ -q --tb=line --color=no` | **727 passed, 1 skipped, 0 failed** (187.62s) — identical to the S4.1 baseline (same skip: `test_filemanagement.py:364` symlinks) |
+| G5 diff | `git diff --stat` | 57 files changed, 462 insertions(+), 421 deletions(-); `git diff --name-only \| grep -cE '\.md$'` → **0** |
+
+Formatting-only proof: 54 changed `.py` files compared against `HEAD` by AST dump —
+53 identical; the single difference (`src/backend/settings/repository.py`) is
+ruff's docstring re-indentation, and the AST is identical once docstrings are stripped.
+Self-introduced slip fixed in-step: the sweep exploded the one-line list in
+`tests/property/mail/test_secrets.py`, orphaning its single `# noqa: RUF001` (3× RUF001 +
+1× RUF100); the noqa was moved to the three flagged elements and dropped from the
+unflagged one — comment-only, no test logic changed.
+
+Commits: `583a4f7` (.gitignore), `cb287a9` (pyproject.toml, .github/workflows/lint.yml, 54 .py).
