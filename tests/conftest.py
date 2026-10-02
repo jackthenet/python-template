@@ -113,13 +113,11 @@ def _drain_event_bus() -> None:
     """
     import time
 
+    from settings_test_helpers import wait_for
+
     from backend.eventbus import get_event_bus
 
     bus = get_event_bus()
-    deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline:
-        if bus.pending_count == 0:
-            # Grace period for the worker to finish the in-flight dispatch.
-            time.sleep(0.05)
-            break
-        time.sleep(0.005)
+    if wait_for(lambda: bus.pending_count == 0):
+        # Grace period for the worker to finish the in-flight dispatch.
+        time.sleep(0.05)

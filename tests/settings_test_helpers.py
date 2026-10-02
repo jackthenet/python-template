@@ -115,9 +115,7 @@ def install_isolated_registry() -> SettingsRegistry:
     from backend.settings import YamlValueRepository
     from backend.settings import registry as _registry_module
 
-    # Save the current logging.* definitions + values (if registered) so the
-    # file sink keeps pointing at the session log file and the state stays
-    # consistent (all logging.* registered, or none).
+    # The previous registry's logging.* definitions paired with their values.
     previous = _registry_module.get_settings_registry(required=False)
     logging_settings: list[tuple[SettingDefinition, Any]] = []
     if previous is not None:
@@ -127,8 +125,7 @@ def install_isolated_registry() -> SettingsRegistry:
 
     _registry_module.reset_settings_registry()
     isolated = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-    # Restore the logging.* settings so the file sink keeps its target and the
-    # state is consistent (all logging.* registered, or none).
+    # set_value only accepts a registered key, so each definition precedes its value.
     for definition, value in logging_settings:
         isolated.register(definition)
         isolated.set_value(definition.key, value)
