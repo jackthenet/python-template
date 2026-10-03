@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/value-triage-gate.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 4 PENDING: Q-1, Q-2, Q-5, Q-7 -->
-- **Answer rounds:** 2 (2026-10-04: Q-3, Q-4; Q-7 raised from the Q-3 answer)
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 2 PENDING: Q-2, Q-5 -->
+- **Answer rounds:** 3 (2026-10-04: Q-1, Q-3, Q-4, Q-7)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -35,10 +35,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** the TODO's In-scope line commits to "One new **orchestrator** step in Phase P, working name **P.0 Value triage** … exact placement — a standalone step vs. a P.1 sub-item — is decided at P.2". The two placements differ by ~7 vs ~13 coordinated `AGENTS.md`/skill edits, and the standalone-step option collides with three existing rules (todo-set creation, the `Status:` vocabulary, the READY gate). This is a protocol-shape decision, not a wording choice, so the user makes it.
 - **Context:** the cost table is in "Placement cost analysis" below. The decisive facts: Phase P is defined **per change** (`AGENTS.md:126` "Preparation artifacts (**per change**)", `:221` "PHASE P PREPARE (**per change**, before the workflow …)"), while the rule text describes a **backlog-wide sweep** over several TODOs (`docs/todo/value-triage-gate.md:57` "one table over the backlog, one ask"); a P.0 runs **before** the TODO/question file exists (`AGENTS.md:141` P.1 creates them), so it has no record to write into, no `Status:` to set (`:157` the table starts at `P.1 Frame → PREPARING`), and no todo item ("Sets are created at **P.1**", `:418`; "**Creating the todo set (P.1).** … create one todo item per workflow step the change type executes", `:420`). All five triages that were actually performed are recorded **inside the P.1 record** — in the TODO body plus the P.1 Prep-log row (`docs/todo/docs-path-ci-trigger.md:35-39` + `:47`, `split-archived-qa.md:35-39` + `:47`, `workflow-docs-nits.md:40-44` + `:52`, `remove-spec-tdd-driver.md:39-43` + `:54`) — i.e. the practice as performed **is** a P.1 sub-item, not a separate step.
 - **Question:** which placement? **(a)** a new numbered step **P.0 Value triage** in the Phase P atomic-steps table (`AGENTS.md:139-145`) — matches the TODO's current wording, but forces ~13 coordinated edits and needs new rules for the todo set (`:418`/`:420`), the status vocabulary (`:155-162`) and possibly the READY gate (`:147`, which the TODO puts out of scope); **(b)** a mandatory **Value triage clause inside P.1 Frame** + one short "Backlog value triage" paragraph under Phase P (`AGENTS.md:177-179`) — ~6 edits, no rule collision, and it matches the five records the practice actually produced *(recommended: smallest diff, no new machinery, and it also removes the `specify/SKILL.md:45` collision with `workflow-docs-nits` — see Q-4)*; **(c)** a named pre-Phase-P gate documented in prose but outside the `P.x` numbering (a middle ground: one new subsection, no table/diagram/todo changes).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) — a mandatory Value triage clause inside P.1 Frame**, plus one short "Backlog value triage" paragraph under Phase P. No new numbered step, no Phase P table/diagram/todo-set edits, and `specify/SKILL.md:45`/`:46` are out of scope (the `workflow-docs-nits` collision dissolves).
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — the TODO's In-scope first bullet is rewritten to the P.1-clause form
 
 ## Q-2 — "Do not implement anything until I answer": does the triage stop the whole agent, or only the triaged items?
 
@@ -184,10 +184,10 @@ The `**Decision:**` bullet is the superset of the two existing shapes (3 records
 - **Why needed:** Q-3 = (a) adds the `DROPPED` status, and the user additionally wants dead items (dropped, and merged) moved out of the live backlog folder. That changes paths the live guidance names: `AGENTS.md` Phase P (`docs/todo/<name>.md`, `docs/questions/<name>.md`), the Ready-selection order ("among prepared changes"), the cleared-gate test, and `git/SKILL.md`'s status-advance rule. (`scripts/check_traceability.py` reads only `docs/specs/`, `docs/verification/traceability.md` and `tests/`, so it is unaffected.)
 - **Context:** today `docs/todo/` holds 18 live files + template and `docs/questions/` 18 + template; `track-python-skill` and `remove-spec-tdd-driver` are already `Status: MERGED` and sit in the live folder. `AGENTS.md` says a dropped item's TODO file "never enters the workflow", and the Ready-selection order reads the backlog on `main` — so a move must keep both findable, and the git skill's "commit planning artifacts" step names the two paths explicitly.
 - **Question:** which layout, and when does the move happen? **(i)** `docs/todo/archive/<name>.md` + `docs/questions/archive/<name>.md`, moved by the orchestrator at the drop decision and at post-merge cleanup (S7.1); **(ii)** one shared `docs/archive/<type>/<name>.md`; **(iii)** keep them in place and rely on the `DROPPED`/`MERGED` status only (Q-3 (a) without the move). Sub-part: does the question file move with the TODO file (recommended: yes — they are one change's record)?
-- **Answer:** **PENDING**
+- **Answer:** **(i)** — `docs/todo/archive/<name>.md` and `docs/questions/archive/<name>.md`. The orchestrator moves both **at the drop decision** and **at post-merge cleanup (S7.1)**; the question file always moves with its TODO file. The live guidance that names the two paths must be updated in the same change: the Phase P preparation-artifacts table, the "Planning records (owner: the orchestrator)" section, the Ready-selection order, the cleared-gate test, and `git/SKILL.md`'s planning-commit and post-merge-cleanup steps.
 - **Date:** 2026-10-04
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — added to the TODO's In scope; the two items dropped on 2026-10-04 and the two `MERGED` items are the first files to move once this change merges
 
 ## Late questions (Phases 2–6)
 

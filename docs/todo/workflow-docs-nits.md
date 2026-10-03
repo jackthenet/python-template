@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- all 3 questions ANSWERED 2026-10-04; P.4 (worktree + scope record) still to run -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/workflow-docs-nits.md`
@@ -20,10 +20,13 @@ Apply the four cosmetic wording/consistency fixes that `prepared-workflow` accep
 The Phase 6 review of `prepared-workflow` closed every finding and listed four accepted follow-ups, each adjudicated "cosmetic; blocks no gate": leaving them scattered means the next reader of the templates and the `specify` skill still meets step lists that read as if P.5 applied to every change type.
 
 ## In scope
+**Narrowed to two edits on 2026-10-04 (Q-1 = (a), Q-2 = (a)):**
 - `docs/todo/template.md:44` — qualify the Prep-log row as `P.5 Self-consistency (FEATURE/CROSS-CUTTING)` so it matches the already-qualified `Spec:` row at `:11`.
 - `.agents/skills/specify/SKILL.md:14`, `:45`, `:46` — add the "(FEATURE/CROSS-CUTTING)" qualifier where P.5 (and S1.4) are listed without their types, so they read like `AGENTS.md:175`.
-- `docs/questions/template.md:9` — keep the header `Status:` producer in sync with the F-5 ownership table (add the row there).
-- `docs/verification/prepared-workflow.md` (S6.9 sweep table) — correct the hit counts (24 / 42 → 25 / 43) or add the missing `PROBLEMS.md:377` row.
+
+**Dropped from scope (recorded so the follow-up list is not silently truncated):**
+- ~~`docs/questions/template.md:9` — keep the header `Status:` producer in sync with the F-5 ownership table~~ — **dropped (Q-1 = (a))**: the line is already correct; the real edit would be a row in the `AGENTS.md:155-162` table, which the follow-up itself conditions on that table being touched and this change does not touch it.
+- ~~`docs/verification/prepared-workflow.md` (S6.9 sweep table) — correct the hit counts or add the missing `PROBLEMS.md:377` row~~ — **dropped (Q-2 = (a))**: a merged, CLEAN-verdict verification record; the counts are point-in-time (47/63 today), the arithmetic is already reconciled in its "Sweep arithmetic" paragraph, and repo precedent (`split-archived-qa`, 1/5) is not to churn frozen records.
 
 ## Out of scope
 - Any change to what a gate requires — the READY gate, the Phase Matrix, and the atomic-step tables stay byte-identical in meaning.
@@ -52,5 +55,6 @@ Every place that lists P.5 or S1.4 names the types it applies to; the `prepared-
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; **value triage 2/5, bundle-then-implement** |
 | P.2 Interrogate (3 questions) | 2026-10-03 | **BLOCKED-USER** — 3 questions needing user input, 9 points closed from evidence. All four In-scope items verified against the tree; two of them are partly no-ops as written: item (c)'s fix actually lives in `AGENTS.md:155-162` (which this TODO excludes from scope) and item (d) edits a frozen merged record. Re-measured sweep counts: 25/43 at `4b42c58` (the claim is true; the gap is exactly `PROBLEMS.md:377`), 47/63 on today's `main`. Real collision found with `value-triage-gate` (same `specify/SKILL.md:45` line + `docs/todo/template.md`) |
 | P.3 Answer (round 1: Q-3) | 2026-10-04 | **WAITING** — **Q-3 = (a)**: this change **lands first** of the three `AGENTS.md`/`specify`-skill editors (`workflow-docs-nits` → `value-triage-gate` → `spec-interview-protocol`); items (a)+(b) are not folded into `value-triage-gate`, which now depends on this change. Still open: **Q-1** (item (c) — drop it, or bring `AGENTS.md:155-162` into scope for one row) and **Q-2** (item (d) — touch the frozen `prepared-workflow.md` record or not). Because this change is now first in the queue, those two answers are the critical path for all three |
+| P.3 Answer (round 1 cont.: Q-1, Q-2) | 2026-10-04 | **DONE — all 3 questions ANSWERED.** **Q-1 = (a)** drop item (c) (already correct at `docs/questions/template.md:9`; the real edit would be an `AGENTS.md:155-162` row this change does not qualify for). **Q-2 = (a)** drop item (d) (frozen merged record; counts point-in-time; arithmetic already reconciled). **Scope is now 2 edits**: `docs/todo/template.md:44` + `specify/SKILL.md:14/45/46`. Next: **P.4** — create `chore/workflow-docs-nits` worktree + scope record → READY |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |

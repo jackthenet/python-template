@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/workflow-docs-nits.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 1 (2026-10-04: Q-3) — 2 PENDING: Q-1, Q-2
+- **Status:** ALL ANSWERED  <!-- 0 PENDING -->
+- **Answer rounds:** 1 (2026-10-04: Q-1, Q-2, Q-3)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -34,20 +34,20 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** the TODO's third In-scope item names `docs/questions/template.md:9`, but the actual fix per the follow-up is a row in the **F-5 ownership table in `AGENTS.md`** — and the TODO's Out-of-scope list says "`AGENTS.md` … out of scope". The scope as written is self-contradictory; only the user can settle it.
 - **Context:** verified: `docs/questions/template.md:9` **already names the producer on the header line** — `- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the QUESTIONS-ANSWERED TODO advance) -->` — because F-14 was closed exactly that way (`prepared-workflow.md:489`). There is **nothing left to add at `:9`**. Follow-up 4 (`prepared-workflow.md:588`) reads: "F-14's producer is named on the header line itself; **if the F-5 ownership table is next touched**, adding the row there keeps both places in sync (S6.8 noted this)." The F-5 table is `AGENTS.md:155-162` ("Planning records (owner: the orchestrator)", `| When | Status |` at `:155`) and covers only the TODO `Status:`. F-14 was accepted because "nothing reads the header; the READY gate and the cleared-gate test read the entry-level `ANSWERED` / `PENDING` values" (`prepared-workflow.md:440`). The follow-up is **conditional** — nothing today schedules touching that table.
 - **Question:** item (c) as written is a no-op on `docs/questions/template.md:9`; the real edit is one row in the `AGENTS.md:155-162` table, which the TODO excludes. Which: **(a)** drop item (c) — the condition ("if the F-5 table is next touched") is not met and nothing reads the header *(recommended; keeps the change inside its declared scope)*; **(b)** bring `AGENTS.md` into scope for exactly one row (e.g. a row `question file header → OPEN at P.1 / ALL ANSWERED with the QUESTIONS-ANSWERED advance` — still DOCS/CHORE, same kind as `value-triage-gate`'s AGENTS.md text edits); or **(c)** something else?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — drop item (c).** The follow-up's own condition ("if the F-5 ownership table is next touched") is not met, `docs/questions/template.md:9` already names the producer inline, and nothing reads the header. The change stays inside its declared scope (no `AGENTS.md`).
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — item (c) removed from the TODO's In scope
 
 ## Q-2 — is editing the frozen merged record `prepared-workflow.md` (item d) legitimate at all?
 - **Step:** P.2 Interrogate
 - **Why needed:** the fourth item edits a merged, CLEAN-verdict verification record. The repo's precedents cut against editing frozen records, and the TODO's acceptance signal ("the `prepared-workflow.md` sweep counts match the tree") is unachievable as literally written. The user decides whether the record gets touched.
 - **Context (re-measured with the sweep's own commands, `grep -rn "P\.5" AGENTS.md .agents/skills docs/workflow docs/todo docs/questions/template.md` and the same for `READY`):** at the merge commit `4b42c58` the counts are **25 / 43** — exactly the record's "final state" claim (`prepared-workflow.md:563`), and the difference vs the table's 24 / 42 (`:509`) is **exactly `docs/workflow/PROBLEMS.md:377`** (the P-39 recipe sub-bullet the same S6.9 commit `6807d38` added; it contains both "P.5" and "READY"; the table lists only `:372`). So the follow-up's factual claim is **confirmed**. Which alternative is factually right: **add the missing `PROBLEMS.md:377` row** (class (c)) — "correct the counts" would misreport the measurement, because 24 / 42 is what the command printed when the sweep ran, before the same commit added `:377`, and the record already reconciles both numbers in its "Sweep arithmetic" paragraph (`:563`, "record nit, not a document defect … the sweep's conclusion is unaffected"). Frozen-record precedents **against** the edit: `prepared-workflow.md:53` (its own scope rule: "historical records (ADRs, old verification files) are NOT rewritten"); `docs/todo/remove-spec-tdd-driver.md:29` (the in-flight change explicitly puts rewriting `prepared-workflow.md:80/:347/:383` out of scope); `docs/todo/split-archived-qa.md:38` scored a frozen-record edit **1/5 — "it churns a frozen historical record for a nicety nothing consumes"** and was recommended dropped; the traceability convention (`AGENTS.md`) treats dated gate records as historical and never refreshes them. **For** the edit: follow-up 3 itself pre-authorizes it — "correct the count or add the row **if the record is next edited**" — and the TODO's constraint already fixes the manner (PR only, no finding rewrites). Also measured: on today's `main` the same commands give **47 / 63** (16 backlog TODO files added after the merge each carry `P.5`/`READY` lines), so any "corrected" count is a point-in-time snapshot that is already stale — the acceptance-signal wording cannot be satisfied literally.
 - **Question:** keep item (d) or drop it? **(a)** drop item (d) — the record already discloses the arithmetic, the counts are point-in-time, and the repo's precedents (`remove-spec-tdd-driver` out-of-scope, `split-archived-qa` 1/5) treat frozen-record churn as not worth a change *(recommended)*; **(b)** keep it, scoped to **adding the missing `PROBLEMS.md:377` row** to the S6.9 table (NOT re-numbering 24/42 — that would misstate the measurement), via PR, and reword the acceptance signal to "the S6.9 table lists every hit at the merge state"; or **(c)** keep it and also correct the counts to 25/43 despite the misreporting problem?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — drop item (d).** The record already reconciles the arithmetic in its "Sweep arithmetic" paragraph, the counts are point-in-time (the same commands print 47/63 on today's `main`), and repo precedent (`split-archived-qa` scored 1/5 for exactly this kind of frozen-record churn) treats it as not worth a change.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — item (d) removed from the TODO's In scope; the change is now items (a)+(b) only
 
 ## Q-3 — collision with `value-triage-gate` on `specify/SKILL.md:45` and `docs/todo/template.md`: sequence or fold?
 - **Step:** P.2 Interrogate
