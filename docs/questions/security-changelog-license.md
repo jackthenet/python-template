@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/security-changelog-license.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Status:** ALL ANSWERED  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
+- **Answer rounds:** 2
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -39,20 +39,20 @@ DOCS/CHORE → no ≥ 20 floor (AGENTS.md / specify skill). 10 questions: every 
   - **BSD-3-Clause** — MIT-like plus the no-endorsement clause.
   - **ISC** — functionally MIT, shorter, less familiar to readers.
   - **Recommendation: MIT** — the template's whole point is being copied; MIT is the least frictional grant and the least text to keep correct. Choose Apache-2.0 only if patent protection matters to the holder.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** MIT (user's own choice, not the recommendation's default push - same outcome). Full MIT text with the Q-2 holder line.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-1
 
 ## Q-2 — Exact copyright holder + year line
 - **Step:** P.2 Interrogate
 - **Why needed:** The `LICENSE` first line (`Copyright (c) <year> <holder>`) names the legal entity granting the rights; a wrong holder is a defective grant. `pyproject.toml` declares no `authors` field, so nothing in the repo states it.
 - **Context:** `git log --format='%an <%ae>'` → `jackthenet <dominik.wolff.85@gmail.com>` 535 commits, `jackthenet <75568988+jackthenet@users.noreply.github.com>` 67, `dependabot[bot]` 14. First commit 2026-08-16 (`git log --reverse`); latest bump 2026-10-02.
 - **Question:** What exact line goes in `LICENSE`? Options: (a) `Copyright (c) 2026 Dominik Wolff` (personal legal name); (b) `Copyright (c) 2026 jackthenet` (GitHub handle as-is); (c) a company/legal entity name (please give it); (d) a year range `2026-2026`→`2026`. **Recommendation: (a) `Copyright (c) 2026 Dominik Wolff`** — a legal name, not a handle; single year 2026 (the repo's first year; a range is not required and goes stale).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** `Copyright (c) 2026 jackthenet` - the GitHub handle, NOT the legal name. The user chose option (b) over the recommended (a); recorded as their explicit decision, since a handle is not a legal entity. Single year 2026.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-2
 
 ## Q-3 — Vulnerability disclosure channel + policy for SECURITY.md
 - **Step:** P.2 Interrogate
@@ -64,10 +64,10 @@ DOCS/CHORE → no ≥ 20 floor (AGENTS.md / specify skill). 10 questions: every 
   - **Response promise:** (a) acknowledge within 14 days, no fix SLA; (b) 7 days; (c) no promise at all.
   - **Scope statement:** confirm SECURITY.md says this is a **template/library scaffold, not a hosted service** — reports about code a downstream user forked, or about the example wiring, are out of scope.
   - **Recommendation: (a) GitHub private vulnerability reporting + no email; latest release only; acknowledge ≤ 14 days, no fix SLA; explicit template-scope paragraph.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Channel: **GitHub private vulnerability reporting**, no published email (the user must enable the repo setting - outside the PR). Supported versions: **latest release only** (single 0.x line, `version = "0.6.0"`). Response promise: **acknowledge within 14 days, no fix SLA**. Scope paragraph: template/library scaffold, not a hosted service; forked code and example wiring are out of scope. Posture stated as fact: `pip-audit` + `bandit -r src/` (quality.yml:28-43) and `dependency-review` (:61).
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-3
 
 ## Q-4 — Does the change also update `pyproject.toml` metadata (license field / authors)?
 - **Step:** P.2 Interrogate
@@ -77,10 +77,10 @@ DOCS/CHORE → no ≥ 20 floor (AGENTS.md / specify skill). 10 questions: every 
   - (a) **Yes** — add `license = "MIT"` (PEP 639 SPDX string, matching Q-1) and `authors = [{ name = "Dominik Wolff" }]` to `[project]`; skip the deprecated `License :: OSI Approved :: ...` classifier.
   - (b) **No** — `LICENSE` file only; metadata goes to `pyproject-tooling-gaps`.
   - **Recommendation: (a)** — it is 2 lines, it is the half of the license decision that makes it machine-visible, and it is still DOCS/CHORE (no behavior delta: no build backend, no published artifact). If chosen, this change must merge **before** `pyproject-tooling-gaps` to avoid a `pyproject.toml` conflict.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes** - add `license = "MIT"` (PEP 639 SPDX string) and `authors = [{ name = "jackthenet" }]` to `[project]`; no deprecated `License :: OSI Approved ::` classifier. Still DOCS/CHORE (no `[build-system]`, no artifact). **Merge order consequence: this change merges BEFORE `pyproject-tooling-gaps`**, which also owns `pyproject.toml`.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-4 + TODO Depends on
 
 ## Q-5 — CHANGELOG format and how far back it goes
 - **Step:** P.2 Interrogate
@@ -90,60 +90,60 @@ DOCS/CHORE → no ≥ 20 floor (AGENTS.md / specify skill). 10 questions: every 
   - **Format:** (a) Keep a Changelog (`### Added / Changed / Fixed / Removed`) + SemVer + `## [Unreleased]`; (b) free-form list; (c) generated from `git log` at release time.
   - **Depth:** (a) backfill **all 10** releases (0.1.0 … 0.6.0) using bump-commit dates and the merged PR/spec titles between them; (b) backfill only the last 3 (0.4.0, 0.5.0, 0.6.0); (c) start at 0.6.0 with `Unreleased`.
   - **Recommendation: (a) Keep a Changelog + SemVer, backfill all 10**, each entry traceable to a merge commit/PR title; any version whose content cannot be traced gets a one-line "see `<range>`" pointer rather than invented prose.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Keep a Changelog + SemVer + `## [Unreleased]`, backfilling all 10 releases** (0.1.0 ... 0.6.0), each entry traceable to a bump commit / merged PR / spec title; anything not traceable gets a `see <range>` pointer, never invented prose. No git tags exist, so dates come from the 10 dated bump commits (`31d2a1a` ... `3c90e6f`).
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-5 + TODO In scope
 
 ## Q-6 — Should `bump-my-version` maintain `CHANGELOG.md`?
 - **Step:** P.2 Interrogate
 - **Why needed:** The TODO lists this as an option; it changes the bump contract, and a wrong choice makes the changelog silently wrong on every bump.
 - **Context:** `[tool.bumpversion]` currently has exactly **one** file entry (`pyproject.toml:87-90`: `filename = "pyproject.toml"`, `search = 'version = "{current_version}"'`, `replace = 'version = "{new_version}"'`). bump-my-version only does literal search/replace — it cannot insert a dated section; the usual trick (`## [Unreleased]` → `## [X.Y.Z] - {new_version}`) requires the search string to exist verbatim and adds a brittle contract to every future release.
 - **Question:** Add a `[[tool.bumpversion.files]]` entry for `CHANGELOG.md`, or keep the changelog maintained by hand (the Phase 6 agent appends the release section next to the bump commit)? **Recommendation: hand-maintained — no bumpversion entry.** The version source of truth stays `pyproject.toml` (`AGENTS.md`, "Versioning"); a search/replace entry buys nothing here and can break the bump if the heading text drifts.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Hand-maintained** - no `[[tool.bumpversion.files]]` entry. The Phase 6 agent appends the release section next to the bump commit; `pyproject.toml` stays the version source of truth.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-6 + TODO Out of scope
 
 ## Q-7 — Changelog drift: add the process rule, or accept drift?
 - **Step:** P.2 Interrogate
 - **Why needed:** A hand-maintained changelog goes stale immediately unless something feeds it. The TODO puts the rule **out of scope** ("Making 'every change must add a CHANGELOG entry' a workflow rule … would be its own change"), which means the user must say what happens instead.
 - **Context:** `rg -n CHANGELOG AGENTS.md .agents/skills/*/SKILL.md` → **no match**: no phase, gate or skill step mentions a changelog today. Adding the rule inside this change would edit `AGENTS.md` + skill files (still DOCS/CHORE, but a much wider diff touching the workflow contract).
 - **Question:** (a) file only, accept drift; (b) add the rule in this same change (`AGENTS.md` Phase 5/6 + skills); (c) file only here **and** the orchestrator frames a separate TODO for the rule. **Recommendation: (c)** — keeps this change a clean 3-file docs diff and records the follow-up instead of silently dropping it.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) Add the process rule in this same change** - `AGENTS.md` (Phase 5/6 + the Versioning section) and the affected skills gain a 'every change adds a CHANGELOG entry' step. This **widens the diff beyond 3 files** and makes `AGENTS.md` + `.agents/skills/` in scope, so the change now collides with the other backlog changes that edit those files (see the TODO's Depends on).
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-7 + TODO In scope / Depends on
 
 ## Q-8 — Are the three files surfaced on the mkdocs site?
 - **Step:** P.2 Interrogate
 - **Why needed:** `mkdocs.yml:6` sets `docs_dir: userdocs`, and AGENTS.md:66 ("MkDocs site note") forbids publishing from `docs/`; a link from a `userdocs/` page to a **root** file (outside `docs_dir`) is a warning, and the build gate is `uv run mkdocs build --strict` (AGENTS.md:66; pre-push hook `mkdocs-build` in `.pre-commit-config.yaml`) — a warning becomes a failed push.
 - **Context:** `mkdocs.yml` has **no `nav:`** key, so anything added under `userdocs/` is auto-published (currently only `userdocs/index.md` and `userdocs/api.md`). Duplicating LICENSE/SECURITY/CHANGELOG under `userdocs/` creates two copies that drift.
 - **Question:** (a) root files only, **no** site presence (GitHub renders them natively on the repo front page); (b) mirror copies under `userdocs/`; (c) root files only + an **external** link to the GitHub-hosted files from `userdocs/index.md` (external links do not break `--strict`). **Recommendation: (a)** — GitHub already surfaces all three; (c) only if the user wants them in the site navigation, and then as an external link, never a copy.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Root files only, no site presence.** GitHub renders `LICENSE`, `SECURITY.md` and `CHANGELOG.md` on the repo front page; nothing is added under `userdocs/` and no nav entry is created, so `mkdocs build --strict` is untouched.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-8 + TODO Out of scope
 
 ## Q-9 — Who owns the README License/Security section? (collision)
 - **Step:** P.2 Interrogate
 - **Why needed:** Two planned DOCS/CHORE changes both want `README.md`; editing it in both produces a merge conflict and duplicated prose.
 - **Context:** `docs/todo/update-readme.md` already owns the README rewrite — its 8-section structure includes "License" (`:41`, `:58`), it notes "No `LICENSE` file exists → the skill's own rule ('only badges backed by something real') forbids a license badge" (`:84`), and it explicitly defers "Adding a `LICENSE` file … a `CONTRIBUTING.md`" to a **separate** change (`:87`). So this change unblocks `update-readme`'s license badge but must not write the README itself.
 - **Question:** (a) this change does **not** touch `README.md`; `update-readme` adds the License/Security section and the license badge afterwards (this change merges first); (b) this change adds a minimal 3-line "License / Security / Changelog" section and `update-readme` reconciles it. **Recommendation: (a)** — single owner per file, no conflict, and `update-readme` is the change designed to write README prose and badges.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Settled by `update-readme` Q-2 = (a) (2026-10-04), not re-asked.** `update-readme` lands first and ships no License badge (its skill rule forbids a badge with nothing behind it). Once `LICENSE` exists, **this** change adds the License badge to the badge row `update-readme` created, so the P.2 note 'this change must not write README' is **reversed**: a badge-row edit is in scope here, and it must re-read the row rather than assume its text.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-9 + TODO In scope
 
 ## Q-10 — Confirm the DOCS/CHORE workflow runs (not fast-path)
 - **Step:** P.2 Interrogate
 - **Why needed:** The user may reasonably expect three markdown files to skip the process; the rule says otherwise, and the choice changes the phase count and the PR requirement.
 - **Context:** AGENTS.md:1077-1083 ("Emergency / Fast-Path Exception"): "The spec-and-task workflow is bypassed **ONLY** for: Changes that do not alter observable behavior and touch ≤ 2 lines … One-line bug fixes … Direct user commands explicitly containing the keyword `--skip-spec`." and "if the change alters externally observable behavior, the full workflow for the change's type applies regardless of how small the change appears."
 - **Question:** Proceed with the normal DOCS/CHORE workflow (Phase P → Phase 4 → light Phase 5 → light review → PR → human merge), or is there an explicit `--skip-spec` instruction? **Recommendation: run the workflow** — the change is far over the ≤ 2-line fast-path bound (three new files, ~200+ lines) and it edits `pyproject.toml` if Q-4(a) is chosen; the DOCS/CHORE path is already the cheapest full path (no spec, no task DAG, no test phase, light Phase 5).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Run the DOCS/CHORE workflow** - no `--skip-spec` was given, and the change is far over the <= 2-line fast-path bound (three new files plus `AGENTS.md`/skills under Q-7). Phase P -> Phase 4 -> light Phase 5 (lint/types, `mkdocs build --strict`, `check_traceability.py`) -> light review -> PR -> human merge; no version bump.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — decision Q-10
 
 ---
 
