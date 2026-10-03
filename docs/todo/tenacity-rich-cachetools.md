@@ -67,7 +67,7 @@ For each dependency that ends up adopted: it is imported by at least one module 
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE (per dependency, once a consumer exists); premises verified — **httpx has zero call sites in `src/`** (DEP002 already records it as declared-but-unused), **no cache layer exists**, **no CLI exists**, pytest already renders assertion diffs; mechanical blocker recorded: an unused dependency fails the `deptry` CI gate (`quality.yml:94`); **value triage 2/5 — decline now, re-open per consuming feature** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate | 2026-10-03 | **not run — recommended DROPPED, awaiting the user's decision.** The Why section already closes every interrogation point from repository evidence (zero httpx call sites, no cache layer, no CLI, `deptry` DEP002 blocker, template-inheritance cost), so a P.2 subagent would be ceremony. P.2 runs only if the user decides to adopt one of the three, and then as one line inside the consuming feature's spec |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |

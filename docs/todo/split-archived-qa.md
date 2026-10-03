@@ -45,7 +45,7 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; **value triage 1/5, recommended drop** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate | 2026-10-03 | **not run — recommended DROPPED (1/5), awaiting the user's decision.** The drop is already recorded in the merged `remove-spec-tdd-driver` scope record as one of the prepared-workflow follow-ups closed as dropped; P.2 would be ceremony unless the user decides to implement it |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |
