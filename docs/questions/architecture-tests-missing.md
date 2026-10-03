@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from the template.
 - **TODO file:** `docs/todo/architecture-tests-missing.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
-- **Answer rounds:** 0
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 4 PENDING: Q-3, Q-4, Q-5 + the (a1)/(a2) sub-variant of Q-1 -->
+- **Answer rounds:** 1 (2026-10-04: Q-1; Q-2 closed as moot)
 
 ## Preparation questions (P.2)
 
@@ -16,20 +16,20 @@ One question file per change, created at **P.1 Frame** from the template.
 - **Why needed:** the change type — and therefore the whole workflow shape — depends on it. DOCS/CHORE (3-line text fix, no spec, no bump) vs FEATURE (a new test capability: spec + approval PR + `minor` bump + Phase 3 RED).
 - **Context:** `tests/architecture/` does not exist, yet `AGENTS.md:579` and `verify/SKILL.md:88,103` make `uv run pytest tests/architecture/ -v` a Phase 5 gate for REFACTOR (and `AGENTS.md:212` promises it in the Phase Matrix). No spec requires such tests, so this is not a defect against an approved spec.
 - **Question:** (a) delete/qualify the three references so the process stops citing a directory that does not exist, or (b) create `tests/architecture/` with executable rules for the boundaries the text already names (`model/` holds domain concepts, `services/` holds use cases, `shared/` stays small, no cross-feature internal imports)?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — remove/qualify the references.** No `tests/architecture/` directory is created by this change; the change stays DOCS/CHORE (4 line edits in 2 files, no bump). The (a1)/(a2) sub-variant (delete the words entirely vs. re-point the check at the manual boundary review) is asked as **Q-6**.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — fixes the change type (DOCS/CHORE, confirmed against the P.2 classification verdict) and the scope (the four citations at E-1; no `tests/`, no `src/` in this change)
 
 ## Q-2 — if (b): which rules are actually checkable, and against what?
 - **Step:** P.1 Frame
 - **Why needed:** a gate that fails on day one blocks every REFACTOR change; a gate that duplicates `ruff`/`deptry` is dead weight.
 - **Context:** the import direction between features is already partly enforced by `deptry` and ruff's isort settings; the "model/ has no infrastructure imports" and "shared/ is small" rules are not checkable by those tools.
 - **Question:** which rules should the first version enforce — (i) no cross-feature internal imports (features import each other's public `__init__` only), (ii) `shared/` file-count/dependency ceiling, (iii) `model/` modules must not import persistence/IO libraries, or a minimal (i) only?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **n/a — moot.** Q-1 chose (a), so no `tests/architecture/` suite is created by this change. If a gate is ever wanted, E-7's measurement (rule (ii) no-private-imports = 4 violations, rule (i) = 21 day-one violations) is the starting point, and it would be its own change.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded as closed-by-Q-1
 
 ## Q-3 — sequencing against the other two `AGENTS.md` editors
 - **Step:** P.1 Frame
@@ -112,6 +112,16 @@ If the user does want the gate (option b), the honest sequence is: (1) fix the 4
 - **Question:** fold these 4 one-line fixes into this change (making it docs + 4 lines of `src/`), or leave them as a separate ISSUE/REFACTOR and keep this change to the prose only?
 - **Answer:** **PENDING**
 - **Date:** 2026-10-03
+- **Status:** PENDING
+- **Incorporated:** no
+
+## Q-6 — within option (a): delete the wording entirely (a1), or re-point it at the manual boundary check (a2)?
+- **Step:** P.3 Answer round 1 (raised by the P.2 evidence update to Q-1)
+- **Why needed:** Q-1 chose (a), but (a) has two sub-variants with different text and different consequences for the REFACTOR Phase 5 gate: (a1) leaves no architecture check in the gate list at all, (a2) keeps the check but stops naming a directory that does not exist.
+- **Context:** P.2 recommends **(a2)** — `AGENTS.md:592-593` ("no cross-feature internal imports", "`model/` domain concepts, `services/` use cases, `shared/` small") is a real check the reviewer performs and `:624` makes respecting it a clean-review condition; only the executable citation is false. The measured cost of either variant is the same 4 line edits in 2 files (`AGENTS.md:212`, `:579`; `verify/SKILL.md:88`, `:103`), no bump, no CI change.
+- **Question:** (a1) delete the four citations and leave no architecture gate wording, or (a2) keep the architecture check in the gate list but phrase it as the manual review/verification check recorded in `docs/verification/<name>.md`?
+- **Answer:** **PENDING**
+- **Date:** 2026-10-04
 - **Status:** PENDING
 - **Incorporated:** no
 

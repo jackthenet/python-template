@@ -53,7 +53,7 @@ Running the REFACTOR Phase 5 instruction from `AGENTS.md` no longer errors: eith
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type provisionally **DOCS/CHORE** (no spec requires the directory, so this is not a defect against an approved spec; the "build the tests" alternative would be a FEATURE → Q-1 decides). Evidence verified on `main`: `tests/architecture/` absent; cited by `AGENTS.md:212`, `:579` and `verify/SKILL.md:88`, `:103`. Discovered during the `structure-map` P.2 interrogation |
-| P.2 Interrogate (<n> questions) | | |
-| P.3 Answer (<n> answered) | | |
+| P.2 Interrogate (5 questions) | 2026-10-04 | **DONE** — Q-1/Q-2/Q-3 narrowed by evidence (E-1…E-12): the dangling citation count is **4 in 2 files** (`AGENTS.md:212`, `:579`; `verify/SKILL.md:88`, `:103`), CI never runs the command (so the gate was enforced by nobody), option (a) costs 4 line edits with no bump, option (b) costs ~60–90 lines of stdlib `ast` tests but has **21 day-one violations** under the strict import rule and 4 under the no-private-import rule, and the `model/`/`services/` rule is untestable (those directories do not exist). Classification verdict: **DOCS/CHORE for both options** |
+| P.3 Answer (round 1: Q-1 answered, Q-2 closed) | 2026-10-04 | **WAITING** — **Q-1 = (a) remove/qualify the references** (no `tests/architecture/` in this change; DOCS/CHORE confirmed). **Q-2 closed as moot** (it was conditional on (b)). Still open: the (a1)/(a2) sub-variant → **Q-6**, plus **Q-3** (landing order), **Q-4** (CI-enforced vs agent-only), **Q-5** (the 4 private-module imports) |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |
