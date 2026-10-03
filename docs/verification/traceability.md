@@ -750,6 +750,16 @@ The change wires the shared `PermissionChecker` into six features via the ADR-07
 | mail | `test_mail_enforcement_wiring` (REQ-024; 3 methods, all enforced) | GREEN |
 | sessionmanagement | `test_sessionmanagement_enforcement_wiring` (REQ-024; 6 methods, all enforced) | GREEN |
 
+## Issue: session-lookup-unwired (composition-root session lookup — S5.3, 2026-10-04)
+
+Issue `session-lookup-unwired` (type **ISSUE, light tier**; triage + RED/GREEN evidence: `docs/verification/session-lookup-unwired.md`; spec `docs/specs/user-roles-permissions.md`). **Defect:** the composition root built `PermissionService` without a session lookup, so in the composed application every check carrying a session token denied with `storage_error` — REQ-017's validation path never ran and AC-020's positive branch was reachable only in tests that inject a **fake** lookup. **Fix** (`src/main.py`, commit `f85deba`): the session repository is constructed above the `PermissionService` and passed as `session_lookup=`; no `src/backend/permissions/` line changed, so the fail-closed branches (EDGE-007, INV-002) are untouched.
+
+The reproduction test is the first permissions test that exercises the **real** composition root (`import main` in a fresh interpreter), which is why it is a new row rather than a refreshed one. **No existing row is rewritten or refreshed** (decision **Q-02**, convention B): the `GREEN` rows above — `test_session_validation_in_check` (AC-020), `test_session_validation_skipped_when_token_none` (AC-021), `test_unavailable_session_lookup_denied` (EDGE-007), `test_revoked_expired_token_denied` / `test_mismatched_token_denied` (EDGE-005/006) — stay as the **service-level** record written by the change that observed them; they were re-run GREEN at S5.1 (`tests/acceptance/permissions tests/unit/permissions tests/property/permissions` → `64 passed`) but not edited. The spec's own §11 matrix rows for REQ-017/AC-020 and REQ-017/AC-021 stay `PENDING` (Q-02: no Spec Amendment).
+
+| Feature | Requirement | Acceptance Criterion | Test | Status |
+|---------|-------------|---------------------|------|--------|
+| permissions (composition root, `src/main.py`) | REQ-017 | AC-020 | `test_ac_020_composition_root_validates_session_token` (new, `tests/acceptance/permissions/test_composition_wiring.py` — `import main` in a fresh interpreter, then `main._permission_service.has_permission(alice.id, "usermanagement.get_user", session_token=…)` → `[True, False, False, False]`: valid token proceeds, revoked / another user's / unknown still deny) | GREEN (session-lookup-unwired S5.3, 2026-10-04, commit `f85deba`) |
+
 ## Issue: main-ci-green (nine items — Phase 3 S3.1 → Phase 5 S5.3, 2026-10-02)
 
 Issue `main-ci-green` (type ISSUE; triage, RED and GREEN evidence: `docs/verification/main-ci-green.md` §1 scope table, §7, and the Phase 3/4/5 sections). Every affected spec ID below points at an executable test that is GREEN on the branch.

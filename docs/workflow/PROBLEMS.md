@@ -377,3 +377,19 @@ A step MUST log a problem when it:
   - when narrowing a step id or a producer clause, grep that id across **all** live-guidance files, not only the file being edited; the S6.7 fix narrowed P.5 in AGENTS.md but left three READY clauses in the same-named skill pointing at it (F-15, round 4).
 - **Date:** 2026-10-03
 - **Status:** Solved (2026-10-03) — recipe noted in this entry.
+
+## P-40 — `bump-my-version bump --dry-run` prints nothing on success; 3 invocations to get usable evidence (S6.4)
+- **Problem:** `uv tool run bump-my-version bump patch --dry-run` exits 0 with **empty stdout**, so a successful dry run is indistinguishable from a no-op — the S6.4 bump gate had no before/after evidence. Adding `-v 1` broke differently: `--verbose` is a **count** flag, so the `1` was parsed as a FILE argument and the run died with `FileNotFoundError: File not found: '1'`.
+- **Step / Phase:** S6.4 Bump version + open PR — Phase 6 (change session-lookup-unwired)
+- **Change:** session-lookup-unwired / ISSUE
+- **Duration / iterations:** 3 invocations (~2 min).
+- **Resolution:** run `bump-my-version bump <level> --dry-run -v` (bare `-v`, no count argument) — the verbose output carries the before/after diff. Then the real bump with a clean tree.
+- **Date:** 2026-10-04
+
+## P-41 — a light-tier ISSUE's Phase 5 + Phase 6 cost 4 subagent launches (~25 min) for a 10-line fix (S5.x, S6.x)
+- **Problem:** For a light-tier ISSUE whose whole fix is 2 moved lines + 1 keyword, the atomic-step breakdown (S5.1, S5.2, S5.3, S5.4, then S6.1, S6.2, S6.3, S6.4) meant 8 launches, each re-reading the skill file, the triage record and the verification artifact from scratch (~150–500k tokens each). The step overhead dominated the work; the objective was met by the first launch's evidence.
+- **Step / Phase:** S5.1–S5.4 (Phase 5) + S6.1–S6.4 (Phase 6) — light-tier ISSUE
+- **Change:** session-lookup-unwired / ISSUE
+- **Duration / iterations:** 8 launches, ~45 min of step time for a 10-line diff (no failures, no re-launches).
+- **Resolution (what was actually done):** the read-only gate runs were executed as **S5.1+S5.2** in one subagent and the record writes as **S5.3+S5.4** in one, and the bounded review as **S6.1–S6.3** in one — each combination is recorded in the verification artifact. Suggestion for the after-workflow-optimization: make the light-tier ISSUE Phase 5/6 step set explicitly coalescible (gates-in-one, records-in-one, review-in-one, S6.4 always separate because it bumps and opens the PR).
+- **Date:** 2026-10-04
