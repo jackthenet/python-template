@@ -5,6 +5,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
 - **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Disposition:** **KEPT** — user decision, 2026-10-04: the item stays in the backlog despite the 2/5 recommendation to decline. **P.2 Interrogate has not run and must run** before any drafting. Note: the same answer round also selected "drop all three"; the specific keep-selection is taken as the operative answer — correct it here if that was not the intent.
 - **Change type:** FEATURE  <!-- each dependency only delivers externally observable behavior once something consumes it; adding the packages alone is not a change the repo can accept (see Why) -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/tenacity-rich-cachetools.md`
@@ -68,6 +69,6 @@ For each dependency that ends up adopted: it is imported by at least one module 
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE (per dependency, once a consumer exists); premises verified — **httpx has zero call sites in `src/`** (DEP002 already records it as declared-but-unused), **no cache layer exists**, **no CLI exists**, pytest already renders assertion diffs; mechanical blocker recorded: an unused dependency fails the `deptry` CI gate (`quality.yml:94`); **value triage 2/5 — decline now, re-open per consuming feature** |
 | P.2 Interrogate | 2026-10-03 | **not run — recommended DROPPED, awaiting the user's decision.** The Why section already closes every interrogation point from repository evidence (zero httpx call sites, no cache layer, no CLI, `deptry` DEP002 blocker, template-inheritance cost), so a P.2 subagent would be ceremony. P.2 runs only if the user decides to adopt one of the three, and then as one line inside the consuming feature's spec |
-| P.3 Answer (<n> answered) | | |
+| P.3 Answer (drop decision) | 2026-10-04 | **KEPT by the user** — the drop recommendation (2/5, decline all three) was not accepted as final. Next: **P.2 Interrogate** (the P.1 Why section already closes most premises — zero `httpx` call sites in `src/`, no cache layer, no CLI, the `deptry` DEP002 blocker, template-inheritance cost, and the `cachetools` revocation-latency risk — so P.2 must interrogate what a real consumer would need, not whether a consumer exists today) |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |

@@ -5,6 +5,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
 - **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Disposition:** **DROPPED** — user decision, 2026-10-04 (value triage 1/5). The `Status:` vocabulary has no value for a dead item; adding one is `value-triage-gate` Q-3, still unanswered, so the status line stays as-is and this line is the record.
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/split-archived-qa.md`
@@ -46,6 +47,6 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; **value triage 1/5, recommended drop** |
 | P.2 Interrogate | 2026-10-03 | **not run — recommended DROPPED (1/5), awaiting the user's decision.** The drop is already recorded in the merged `remove-spec-tdd-driver` scope record as one of the prepared-workflow follow-ups closed as dropped; P.2 would be ceremony unless the user decides to implement it |
-| P.3 Answer (<n> answered) | | |
+| P.3 Answer (drop decision) | 2026-10-04 | **CLOSED AS DROPPED** — the user confirmed the drop (the alternative was to keep it and run P.2). `docs/questions/archive-AI_Questions.md` stays a single frozen archive, as `AGENTS.md` already requires |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |
