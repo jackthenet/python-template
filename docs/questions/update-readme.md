@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/update-readme.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 5 PENDING: Q-2…Q-6 -->
-- **Answer rounds:** 1  <!-- P.2 recorded 6 questions needing user input; 12 interrogation points closed from repository evidence; Q-1 answered 2026-10-04 -->
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 1 PENDING: Q-6 -->
+- **Answer rounds:** 2  <!-- P.2 recorded 6 questions; 12 interrogation points closed from evidence; Q-1…Q-5 answered 2026-10-04 -->
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -71,40 +71,40 @@ P.2 ran 2026-10-03 in the primary worktree. Result: **6 questions need user inpu
 - **Why needed:** A License badge is impossible today (no `LICENSE` file — E-11), and the skill forbids inventing one. But `security-changelog-license` (WAITING) is the change that would add `LICENSE`, and it has already ceded `README.md` to this change ("this change must not write README", `docs/todo/security-changelog-license.md:58`). So the two changes are mutually blocking in one direction: whoever writes README first owns it, and the license badge can only exist after the other lands.
 - **Context:** `docs/todo/security-changelog-license.md:24` (LICENSE in scope, choice is the user's), `:58` (collision note). `docs/todo/update-readme.md:86-88` puts adding a LICENSE out of scope here.
 - **Question:** Do you want (a) **this change now, no License badge** (README gets CI/Python/tooling badges; the License badge is added by `security-changelog-license` later — that change then needs a small README edit, reversing its own "must not write README" note); (b) **wait** — land `security-changelog-license` first (LICENSE + SECURITY + CHANGELOG), then this change adds the full badge row including License; or (c) **this change now and you accept** that the License badge is permanently a follow-up?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — this change now, License badge later.** `security-changelog-license` keeps its own queue position and, when it lands, adds the License badge to `README.md` — so that change must update its own "must not write `README.md`" out-of-scope note (recorded there as a consequence of this answer).
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — no `Depends on:` added to this change; the consequence is recorded in `docs/todo/security-changelog-license.md`
 
 ## Q-3 — Coverage badge: static, workflow-linked, or omitted?
 - **Step:** P.2 Interrogate
 - **Why needed:** Flagged as "the one genuinely ambiguous case" in the TODO (`docs/todo/update-readme.md:99`) and explicitly assigned to P.2. Coverage *is* configured (`pytest-cov`, `pyproject.toml:105` `fail_under = 92`, the `coverage` job in `quality.yml:45-59`) but **no coverage service** (Codecov etc.) exists, so a shields.io coverage badge has no live data source.
 - **Context:** The skill's rule is "Never invent URLs or badges for services the project doesn't use" (`docs/todo/update-readme.md:47`) and "Badge honesty is the whole point" (`:98`). A static `?message=92%25` badge is a hand-maintained number that drifts the moment coverage moves — the TODO calls that a defect, not polish.
 - **Question:** (a) **No coverage badge** — the CI badge already links the `Quality` run that enforces the gate (strictly honest, nothing to maintain); (b) **static badge** pinned to the current `fail_under` threshold (e.g. "coverage ≥ 92%") worded as a *gate*, not a measurement — needs no maintenance but reads like a metric; (c) **static measured value** (drifts — the TODO's stated defect); (d) add a Codecov/upload step (out of scope here — it is a `.github/workflows/` change, i.e. a separate change).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(d) — add Codecov, as a separate change.** A new backlog item **`codecov-coverage-badge`** is framed at P.1 on 2026-10-04 (`docs/todo/codecov-coverage-badge.md`): the upload step in the `coverage` job of `quality.yml` plus the badge. Consequence for this change: it ships **no** coverage badge (the skill's "only badges backed by something real" rule); the coverage badge is added by/after the Codecov change — an assumption the user can correct.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — the TODO's Out of scope now names the new change instead of leaving it unowned
 
 ## Q-4 — Fix the wrong `Structure` tree here, or leave it to `structure-map`?
 - **Step:** P.2 Interrogate
 - **Why needed:** The README's `Structure` section is factually wrong (E-2: no `features/` level, `src/frontend/` has 0 tracked files, `scripts/` list incomplete, `userdocs/`/`migrations/`/`alembic.ini`/`.agents/` missing). The TODO's acceptance signal says the current tree must stay "accurate" (`docs/todo/update-readme.md:107`) — which can be read as *preserve as-is* or *correct it*. The two readings produce different diffs, and a third change plans to own structure maps.
 - **Context:** `structure-map` (WAITING) would add `.agents/skills/code-structure-map/SKILL.md` + a generated `STRUCTURE.md` (`docs/questions/structure-map.md:215`). `AGENTS.md` "Project Structure" already documents the correct layout, so a corrected README tree duplicates it by hand — and hand-maintained trees are exactly what drifted here.
 - **Question:** (a) **Correct the tree by hand in this change** (fix `features/`, drop the empty frontend or mark it "not yet implemented", list the real root paths) — biggest diff, and it will drift again; (b) **Trim it** — replace the tree with a 4-line summary plus a relative link to `AGENTS.md` "Project Structure" (smallest honest diff, single source of truth); (c) **Leave it untouched** and let `structure-map` fix it (this change then ships a README that is still wrong in the one section it preserved).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) — trim it.** Replace the tree with a short summary plus a relative link to `AGENTS.md` "Project Structure" — smallest honest diff, single source of truth, no drift. `structure-map` may still deepen it later.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded in the TODO's In scope
 
 ## Q-5 — Verbatim skill body only, or verbatim + a short repo-protocol note?
 - **Step:** P.2 Interrogate
 - **Why needed:** The TODO says "verbatim, no editorial rewrite" (`docs/todo/update-readme.md:77`) and "the skill file is committed as supplied; content edits beyond a recorded conflict fix exceed the no-behavior-delta scope" (`:100`). The supplied §5 ("Edit `README.md` in place. Afterwards, list what changed") is silent on this repo's PR-only rule and its evidence trail — silence, not contradiction (E-6), and the TODO already reconciles it in prose (`:71-74`). Whether that reconciliation lives *outside* the skill (TODO only) or *inside* it (a 2–3 line note) is a content decision only you can make, and it decides whether P.4's file is byte-identical to `docs/todo/update-readme.md:28-70`.
 - **Context:** The skill is generic (it says "`pyproject.toml` / `package.json` (or equivalent)"), so a repo-specific note would make it less reusable across projects — the stated rationale for tracking it at all (`docs/todo/update-readme.md:22`).
 - **Question:** (a) **Strictly verbatim** — the skill body is exactly the recorded text; the repo reconciliation stays in the TODO/verification record only (an agent reading just the skill could edit `README.md` directly on `main`); (b) **Verbatim + a 2–3 line "Repo protocol" note** appended, pointing at the change-worktree/PR rule and `docs/verification/<name>.md`; (c) **Verbatim + the note phrased generically** ("respect the repository's own contribution workflow and record its evidence") to keep the skill portable.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) — verbatim + a 2–3 line "Repo protocol" note** pointing at the change-worktree/PR rule and `docs/verification/<name>.md`. The skill lives in this repo's `.agents/skills/`, so repo-specific protocol belongs in it.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded in the TODO's In scope
 
 ## Q-6 — Should the new skill be listed anywhere for discoverability?
 - **Step:** P.2 Interrogate

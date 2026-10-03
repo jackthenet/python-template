@@ -76,6 +76,9 @@ Use this order, skipping sections that don't apply:
 ## In scope
 - Create `.agents/skills/update-readme/SKILL.md` from the verbatim instruction set recorded above (frontmatter `name: update-readme` + a short description + sections 1–5) — verbatim, no editorial rewrite.
 - Rewrite `README.md` in place per that skill: badge row under the single H1, the 8-section structure (skipping what does not apply), copy-pasteable commands matching this repo's real tooling (`uv run ...`), relative links that resolve.
+- **Decided 2026-10-04 (Q-4 = (b)):** the `Structure` section is **trimmed** to a short summary plus a relative link to `AGENTS.md` "Project Structure" — the wrong `features/` tree (`README.md:24`, `:27`) is deleted, not hand-corrected.
+- **Decided 2026-10-04 (Q-5 = (b)):** the skill body stays verbatim **plus** a 2–3 line "Repo protocol" note pointing at the change-worktree/PR rule and `docs/verification/<name>.md`.
+- **Decided 2026-10-04 (Q-2 = (a)):** no `Depends on: security-changelog-license` — this change lands without a License badge; that change adds it later and updates its own "must not write `README.md`" note.
 - Facts already verified at P.1 (so P.4 does not re-guess them):
   - `owner/repo` = `jackthenet/python-template` (`git remote get-url origin`).
   - Workflows: `.github/workflows/lint.yml` (`Lint`), `quality.yml` (`Quality`), `spec-validation.yml` (`Spec Validation`).
@@ -84,7 +87,8 @@ Use this order, skipping sections that don't apply:
   - **No `LICENSE` file exists** → the skill's own rule ("only badges backed by something real") forbids a license badge.
 
 ## Out of scope
-- Adding a `LICENSE` file, a `CONTRIBUTING.md`, a PyPI publish workflow, or a coverage service (Codecov) — the skill explicitly forbids inventing what is not there; each is a **separate** change if wanted, and P.4's report lists them as optional improvements.
+- Adding a `LICENSE` file, a `CONTRIBUTING.md`, or a PyPI publish workflow — the skill explicitly forbids inventing what is not there; each is a **separate** change if wanted, and P.4's report lists them as optional improvements.
+- **Coverage upload (Codecov) — Q-3 = (d), owned elsewhere:** framed as the separate backlog change **`codecov-coverage-badge`** (`docs/todo/codecov-coverage-badge.md`, 2026-10-04). This change therefore ships **no** coverage badge; the badge comes with/after that change.
 - Any change to `AGENTS.md`, the other skills, `docs/specs/`, `userdocs/`, `mkdocs.yml`, `src/`, `tests/`, `.github/workflows/`, or any config file.
 - Editing the skill's supplied wording beyond what P.2's conflict check requires (see Constraints).
 
@@ -114,5 +118,6 @@ None — no `src/backend/` or `src/frontend/` path is touched. Files: `README.md
 | P.1 duplicate check | 2026-10-03 | User re-supplied the instruction set (`#TODO3`). Overlap check → this file **is** the change; no second TODO created. Scope confirmed as the README + skill bundle; verbatim instruction text recorded above; `SK.md` path typo in the Acceptance signal corrected to `SKILL.md`. Still `PREPARING` — P.2 has not run. |
 | P.2 Interrogate (6 questions) | 2026-10-04 | **DONE** (question file written; this Prep-log row was missing and is filled in now) — Q-1…Q-6 recorded, 12 interrogation points closed from repository evidence. Verified facts: `README.md` has **no** badges and its `Structure` tree is wrong (it lists `features/` at `:24` and `:27`, which does not exist); the badgeable CI is `.github/workflows/lint.yml`, `quality.yml` (which carries the `docs` and `migrations` jobs) and `spec-validation.yml`; no coverage upload step exists; the skill precedent is `python-best-practices` (a `.agents/skills/` skill listed nowhere in `AGENTS.md` or `userdocs/`) |
 | P.3 Answer (round 1: Q-1) | 2026-10-04 | **WAITING** — **Q-1 = (a) Both**: the change ships `.agents/skills/update-readme/SKILL.md` **and** the `README.md` rewrite in one PR (the TODO's original scope). Still open: **Q-2** (sequence vs `security-changelog-license`), **Q-3** (coverage badge), **Q-4** (who fixes the `Structure` tree), **Q-5** (verbatim skill body vs +repo-protocol note), **Q-6** (listing the skill for discoverability) |
+| P.3 Answer (round 2: Q-2, Q-3, Q-4, Q-5) | 2026-10-04 | **WAITING** — **Q-2 = (a)** land now, License badge later (no dependency; `security-changelog-license` must update its own README out-of-scope note). **Q-3 = (d)** Codecov is added by a **new separate change**, framed at P.1 as `codecov-coverage-badge`; this change ships no coverage badge. **Q-4 = (b)** trim the `Structure` tree + link to `AGENTS.md`. **Q-5 = (b)** verbatim skill body + a 2–3 line repo-protocol note. Only **Q-6** (listing the skill) stays open |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
