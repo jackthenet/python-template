@@ -133,3 +133,19 @@ It exercises the **real composition root**: `import main` in a fresh interpreter
 - **commit:** this commit (`issue(session-lookup-unwired): S3.1 reproduction test (composition-root session lookup)`).
 
 **Deferred by design:** the RED *gate* record (S3.2) and the `docs/verification/traceability.md` row (S5.3; decision **Q-02** — the spec §11 rows stay as the historical record, no Spec Amendment).
+
+### Phase 3 gate — RED CONFIRMED (S3.2, 2026-10-03)
+
+Independent re-run of the S3.1 test at commit `94d5b59` (no source change, no test change).
+
+| Gate | Command | Result |
+|---|---|---|
+| pre-flight collection | `uv run pytest --collect-only tests/acceptance/permissions/test_composition_wiring.py -q` | `1 test collected in 0.12s` — clean, no import/collection error |
+| **RED** | `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -v` | **`1 failed in 1.42s`** — `FAILED ...::test_ac_020_composition_root_validates_session_token` |
+| ruff (changed paths only) | `uv run ruff check tests/acceptance/permissions/test_composition_wiring.py` | `All checks passed!` (repo-wide sweep stays a Phase 5 gate) |
+
+**Failure mode = assertion on behavior (valid RED).** `AssertionError: [False, False, False, False]` — `assert False` + `where False = str.endswith('[True, False, False, False]')`. The subprocess exited `0` (the `returncode == 0` guard passed), so the composition root imported and ran; only the outcome assertion fails. The subprocess log confirms the defect path four times: `backend.permissions.service:_deny:422 - permission check denied: user_id=… permission=usermanagement.get_user reason=storage_error` — i.e. `_validate_session` short-circuits on the `None` lookup (`src/backend/permissions/service.py:407-408`), exactly §3. No setup/fixture/collection error, no `ValidationError`/`ValueError` from test data → the test-contract sanity check passes.
+
+**Path-portability check (S3.1 flag, resolved — no fix needed).** The test derives the subprocess `sys.path` entry from its own file location: `_REPO_ROOT = Path(__file__).resolve().parents[3]` / `_SRC = _REPO_ROOT / "src"` (`tests/acceptance/permissions/test_composition_wiring.py:24-25`), interpolated into the subprocess code as `sys.path.insert(0, {str(_SRC)!r})` (`:35`). `grep -n "C:/workspace" tests/acceptance/permissions/test_composition_wiring.py` → no match, so there is **no hard-coded absolute worktree path** and the test resolves correctly wherever the branch is checked out. The absolute path visible in the pytest output is the *runtime* value of `_SRC`, not a literal in the file.
+
+**Gate: RED CONFIRMED.** Phase 3 exit criterion met; the change may enter Phase 4 (S4.1/S4.2 minimal fix, `green_command` per §5). Traceability row remains deferred to S5.3 (Q-02).
