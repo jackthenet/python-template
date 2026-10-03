@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from the template.
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE  <!-- provisional: the type question (remove the reference vs. build the tests) is Q-1 in the question file -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/architecture-tests-missing.md`
