@@ -1,0 +1,56 @@
+# TODO: session-lookup-unwired
+
+Backlog item for one planned change, created at **P.1 Frame** from the template.
+
+This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
+
+- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Change type:** ISSUE
+- **Created:** 2026-10-03
+- **Question file:** `docs/questions/session-lookup-unwired.md`
+- **Spec:** n/a (defect against the approved `docs/specs/user-roles-permissions.md`)
+- **Worktree:** <created at P.4> `../python-template_kopie-worktrees/issue/session-lookup-unwired`
+- **Depends on:** none
+- **Related specs:** `docs/specs/user-roles-permissions.md` (REQ-017, AC-020, AC-021, EDGE-007), `docs/specs/session-management.md` (the session repository's `get_by_token_hash`)
+
+## Goal (one line)
+Wire the session lookup into the composition root so a session-token-bearing permission check actually validates the session instead of always denying.
+
+## Why
+Found during the `api-keys` P.2 interrogation, not by a user report. `src/main.py:145-153` constructs `PermissionService` **without** `session_lookup=`, and `src/backend/permissions/service.py:407` returns `"storage_error"` whenever `self._session_lookup is None` (fail-closed, EDGE-007). No production call site passes the argument — `rg -n "session_lookup\s*=" src tests` finds it only in `tests/unit/permissions/test_edge_cases.py` and `tests/acceptance/permissions/test_check_api.py`. Consequence: in the composed application, **every** check that supplies a `session_token` is denied, so the positive branch of **AC-020** ("a valid, unrevoked, unexpired session token … the check proceeds") is unachievable outside tests, and **REQ-017**'s validation path never runs. The spec treats the wiring as real: `docs/specs/user-roles-permissions.md:827` states "The session repository (`get_by_token_hash`) is used by the check for session validation (REQ-017)". Fail-closed means it is safe, but it silently disables a specified capability — and the traceability row for REQ-017/AC-020 is still recorded `PENDING` (`docs/specs/user-roles-permissions.md:786`).
+
+## In scope
+- Reproduce the defect with a failing test that exercises the **composition root** (not a hand-built `PermissionService`), asserting that a valid session token is accepted.
+- Pass the session lookup (the session repository's `get_by_token_hash`, per ADR-073's structural `SessionLookup` seam) when constructing `PermissionService` in `src/main.py`.
+- Confirm no other composition-root wiring is missing on the same construction path (the same call passes `catalog`, `event_bus`, `settings_registry` — check each is wired, not defaulted).
+
+## Out of scope
+- Any change to `PermissionService`'s check logic, the `SessionLookup` protocol, or the fail-closed behaviour for a genuinely unavailable lookup (EDGE-007 stays as specified).
+- New session or permission behaviour (that would be a FEATURE / spec amendment, not this ISSUE).
+- The `api-keys` credential type (separate change; it does not depend on this path).
+
+## Affected features
+`src/main.py` (composition root); behaviour observed through `src/backend/permissions/` and `src/backend/sessionmanagement/`.
+
+## Constraints and risks
+- The construction order in `src/main.py` is deliberate (the lazy `UserManager` proxy breaks a cycle); the session repository must be available at that point, or the lookup must be a lazy proxy like the user lookup — decide at triage, do not reorder startup wiring blindly.
+- Fail-closed is a hard invariant of the permissions spec (`user-roles-permissions.md:19`): the fix must not turn a storage failure into an allow.
+- A test that only builds its own `PermissionService` cannot catch this class of defect — the reproduction test must go through the real composition root.
+
+## Acceptance signal (plain language)
+A test that starts the application's real wiring and calls a permission check with a valid, unrevoked, unexpired session token passes; the same check with a revoked or another user's token still denies; the full suite and the `EDGE-007` fail-closed tests stay green.
+
+## Value triage
+- **Overlap:** none — no existing test or script covers composition-root wiring (`rg -ln "main.py|composition root" tests` returns only feature wiring tests, none for the permission service's session lookup).
+- **Beneficiary:** every caller that passes a session token (and the future `api-keys` / HTTP surface, which would otherwise inherit a check path that cannot validate sessions).
+- **Score:** 4/5 — a specified capability is silently dead; the fix is small and localized.
+- **Recommendation:** implement as its own ISSUE (light tier likely: 1 file + 1 test, single feature area, existing tests cover the check path).
+
+## Prep log
+| Step | Date | Result |
+|---|---|---|
+| P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type **ISSUE** (deviation from approved REQ-017/AC-020, no new behaviour); discovered during the `api-keys` P.2 interrogation. Evidence verified on `main`: `src/main.py:145-153` (no `session_lookup=`), `src/backend/permissions/service.py:407` (`"storage_error"` when the lookup is `None`), `rg` shows the argument passed only in tests |
+| P.2 Interrogate (<n> questions) | | |
+| P.3 Answer (<n> answered) | | |
+| P.4 Draft spec / triage / baseline / scope | | |
+| P.5 Self-consistency | | n/a (ISSUE) |
