@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE  <!-- configuration, CI wiring and explanatory comments; no externally observable behavior delta. Escalate if any item turns out to change behavior (see Constraints). -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/pyproject-tooling-gaps.md`
@@ -71,7 +71,7 @@ Every tool with a config block in `pyproject.toml` is either run by a named CI j
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; **review claims verified**: coverage gate (`quality.yml:59`) and deptry gate (`quality.yml:94` + pre-commit hook) already exist — both headline findings are false; new finding: complexipy is in no CI job, its pre-commit pin (v5.1.0) and dev pin (8.x) differ, and the tree already exceeds the configured 30 (47, 38); measured costs recorded (156/515 public defs lack docstrings; `DTZ` near-free); **value triage 3/5** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (10 questions) | 2026-10-03 | **BLOCKED-USER** — 10 questions, 7 points closed from evidence; every claim re-measured against `main`. **Corrections to the P.1 framing:** (1) the threshold-30 claim is **engine-dependent** — the pinned hook (v5.1.0) scores `test_inv_003_last_admin_invariant` **20 PASSED**, the dev pin (8.0.1) scores it **38 FAILED**, so the version gap is measurable; the hook **does fail today** (exit 1) on `is_valid_value` (47). (2) **Complexity is already CI-gated** — `PL` is in ruff's `select` and `ruff check --select PLR0911,PLR0912,PLR0915 .` passes with two documented `noqa`s (the strongest argument for dropping complexipy). (3) `DTZ` is not free: 1 violation (`tests/tooling_test_helpers.py:53`) and `lint.yml:37` lints the whole repo. (4) `py-webauthn` is undeclared while `docs/specs/authentication.md:21` and `ADR-031:48` list it as a dependency — verified deliberate: the import is deferred (`src/backend/authentication/webauthn.py:21-27`) with `DEP001` + `allowed-unresolved-imports` configured, so an *extra* would need a Spec Amendment. Measured costs: docs-group split touches **11** CI lines (not 8), ruff `D` = **379** errors (not 156), mypy strictness = 8 + 20 errors. **No-op verdicts:** quality_check extension, comments, and dropping complexipy are safe; a complexipy CI job at 30 is red on day one; aligning the pins flips a gate outcome (20→38); `DTZ` is red without the 1-line tz fix; mypy flags are REFACTOR-sized. **Sequencing:** land this **before** `python-3.15` (WAITING, hard-blocked on pydantic-core cp315 wheels) — both edit the same 11 job blocks; append any new job block rather than editing existing ones |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency | n/a (DOCS/CHORE) | |
