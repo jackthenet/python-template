@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** FEATURE  <!-- new capability (a generator + a CLI + a CI gate); see the classification note below -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/structure-map.md`
@@ -124,7 +124,7 @@ None under `src/backend/` or `src/frontend/`. New tooling surfaces: `scripts/mak
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE; todo set #1–#8 created; **value triage 4/5, implement**. Change left **PREPARING** at the user's instruction — not interrogated, not drafted. Q-1/Q-2/Q-3 (skill path, check-only hook, root `STRUCTURE.md`) answered at P.1 and incorporated above |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (27 questions) | 2026-10-03 | **BLOCKED-USER** — 27 new questions (Q-4…Q-30), 9 points closed from evidence. **Two premises in the P.1 framing were wrong** (raised as questions, not silently fixed): (1) `tests/architecture/` **does not exist** — verified on `main` — yet `AGENTS.md:579` and `verify/SKILL.md:88,103` make `uv run pytest tests/architecture/ -v` a gate (tracked as a separate finding); (2) the generator's placement is `scripts/make_map.py`, not `src/backend/shared/` (which holds only `principal.py`) — placement decides whether the 92 % coverage floor and `mypy src/` apply (Q-12). **The 400-line budget is already blown by the tree alone**: 548 tracked paths ≈ 548 lines, `src/` modules ≈ 820, `tests/` ≈ 1386 — Q-7/Q-8/Q-9 are the blocking design decisions. **"Does something already do this?" verdict:** nothing generates a codebase overview, but a `git ls-files` + `rg '^(class|def) '` one-liner covers ~80 % of the value with zero new code (it cannot give docstring summaries, base classes, determinism, or one cached file) — that trade-off is Q-5, not a silent spec decision |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec + create branch/worktree | | |
 | P.5 Self-consistency | | |

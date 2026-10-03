@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-^- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+^- **Status:** MERGED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/remove-spec-tdd-driver.md`
@@ -57,4 +57,4 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 | Phase 4 (S4, make the change) | 2026-10-03 | **DONE** — `git rm .pi/workflows/spec-tdd.workflow.ts` (commit `a7a6b04`); scope proof vs merge-base `c2342b6` = exactly `D` the `.ts` + `A` the scope record; `git ls-files .pi` empty |
 | Phase 5 (S5, light gate set) | 2026-10-03 | **PASS** (commit `b8f88c6`) — ruff clean, `ruff format --check` 323 files already formatted, `mypy src/` Success (83 files), `check_traceability.py` PASS (746 rows / 129 IDs / 713 test functions), `mkdocs build --strict` exit 0; no full-suite run (no Python/test path touched — CI runs it on the PR) |
 | Phase 6 (S6, review + PR) | 2026-10-03 | **CLEAN, 0 open findings** (report commit `4bd9247`); no version bump (DOCS/CHORE, stays `0.6.0`); **PR #62** open → https://github.com/jackthenet/python-template/pull/62 |
-| Post-merge cleanup (S7.1) | | waiting for the human merge of PR #62 |
+| Post-merge cleanup (S7.1) | 2026-10-03 | **DONE** — **PR #62 merged on `main`** (`a2000c2`, verified reachable via `git merge-base --is-ancestor a2000c2 origin/main`; `.pi/workflows/` no longer exists, `git ls-files .pi` empty). Worktree `python-template_kopie-worktrees/chore/remove-spec-tdd-driver` removed, local branch deleted (`git branch -d`, merged), remote branch `origin/chore/remove-spec-tdd-driver` deleted. `git worktree list` → primary only |
