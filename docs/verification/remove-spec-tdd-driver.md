@@ -103,3 +103,20 @@ Per the Phase Matrix (DOCS/CHORE → "Light: lint/types where applicable") and P
 | the only remaining mentions of `spec-tdd.workflow` are inside historical verification records | gate 2 |
 | `git diff --name-status` scope proof: exactly one deleted `.ts` path, no `src/`/`tests/`/`pyproject.toml`/`.github/`/config path | gate 1 |
 | lint and type checks where applicable; no full-suite run required | gates 3–4 + the reasoning above |
+
+## Phase 4 evidence (S4, make the scoped change) — 2026-10-03
+
+Pre-state: `git ls-files .pi` → `.pi/workflows/spec-tdd.workflow.ts` (exactly one path); `git status --porcelain` → empty; HEAD `de57618`.
+
+Change made: `git rm .pi/workflows/spec-tdd.workflow.ts` — the only action in the scope table (§"Scope"). Nothing else was written.
+
+| Check | Command | Observed |
+|---|---|---|
+| Scope proof (staged) | `git diff --cached --name-status` | **`D  .pi/workflows/spec-tdd.workflow.ts`** (one entry; the separator is a tab) |
+| No out-of-scope path | `git diff --cached --name-only \| grep -E "^(src/\|tests/\|docs/specs/\|scripts/\|\.github/\|migrations/\|userdocs/\|pyproject\.toml\|uv\.lock\|\.pre-commit-config\.yaml\|mkdocs\.yml\|\.editorconfig\|\.gitignore\|\.vscode/\|docs/decisions/\|docs/tasks/)"` | **no match** |
+| Tracked `.pi` tree now empty | `git ls-files .pi` | **empty**; `.pi/` no longer exists on disk (git does not track empty directories — as scoped) |
+| No dangling reference | `git grep -n "spec-tdd"` / `git grep -n "pi-workflows"` | hits only in `docs/verification/` (historical records + this record) and the planning records `docs/todo/`, `docs/questions/`; the driver itself no longer appears — expected and in scope |
+| Lint (no-change sanity check; the repo-wide sweep stays the Phase 5 gate) | `uv run ruff check .` | **`All checks passed!`** — no Python path was touched; `ruff check --fix` / `ruff format` deliberately **not** run (AGENTS.md P-6) |
+| No test / behavior touched | `git status --porcelain` | only the staged deletion (plus this record edit); no `tests/` path, no `src/` path |
+
+Commit: this change's single Phase 4 commit (see `git log` — message `chore(remove-spec-tdd-driver): delete the unused spec-tdd workflow driver`). **Phase 5 gate 1 note:** run the scope proof against the merge-base, not the `main` tip — `git diff $(git merge-base main HEAD) --name-status -M` → exactly `D .pi/workflows/spec-tdd.workflow.ts` + `A docs/verification/remove-spec-tdd-driver.md` (the PR diff). `git diff main --name-status` additionally lists `M docs/todo/remove-spec-tdd-driver.md` only because `main` advanced after this branch was cut at `c2342b6` with the orchestrator's planning-record commits (`144a652` READY, `bd038e6` IN-WORKFLOW) — this change never writes that path (planning records are `main`-only).
