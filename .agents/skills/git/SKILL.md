@@ -62,7 +62,7 @@ The git skill's phase steps are decomposed into two atomic steps (S6.4 Create PR
 
 ### Commit planning artifacts and status advances (orchestrator, `main`)
 
-`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`**, always from the **primary worktree**. This operation covers **every** write to those two files: P.1 creates them, P.3 records the answers, and the orchestrator then commits **every `Status:` advance** — `PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED` — plus any late (`Phases 2–6`) question a step returned in its handoff (AGENTS.md, "Planning records (owner: the orchestrator)"):
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`**, always from the **primary worktree**. This operation covers **every commit of** those two files: P.1 creates them, **P.2 records the questions (written by the P.2 step subagent in the primary worktree)**, P.3 records the answers, and the orchestrator then commits **every `Status:` advance** — `PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED` — plus any late (`Phases 2–6`) question a step returned in its handoff (AGENTS.md, "Planning records (owner: the orchestrator)"):
 
 ```bash
 git add docs/todo/<name>.md docs/questions/<name>.md
@@ -71,7 +71,7 @@ git commit -m "chore(<name>): status <STATUS>"  # every later Status: advance
 ```
 
 - They are the **only** files the workflow may commit directly to `main`. NOTHING else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
-- **A change branch and its PR must never contain `docs/todo/` or `docs/questions/` paths.** Only the orchestrator edits them, and only in the primary worktree; step subagents never do (they report the gate / the late question in their handoff). Because the change branch never touches those paths, a direct-to-`main` status update made while the change is in flight is never reverted when its PR merges.
+- **Both paths are written only in the primary worktree**: P.1–P.3 and every `Status:` advance by the **orchestrator**, and **P.2 by its step subagent** (which runs in the primary worktree because no change worktree exists yet, and writes only the question file). **No write to them may happen inside a change worktree** (a later step reports the gate / the late question in its handoff instead), and a change branch and its PR therefore never contain them (the branch carries the P.1–P.3 copies inherited at P.4 but never modifies them). Because the change branch never modifies those paths, a direct-to-`main` status update made while the change is in flight is never reverted when its PR merges.
 - The change worktree is created afterwards, at **P.4**, from `main` — so the change branch already carries the TODO file and the answered questions **as they were at P.3**; its copy is never updated afterwards.
 
 ### Create change worktree (P.4)
@@ -153,7 +153,7 @@ After the human merges the PR:
 
 - Never check out a change branch in the primary worktree.
 - Commit **directly to `main`** only for the planning records under `docs/todo/` and `docs/questions/` — their creation at P.1–P.3 and every `Status:` advance through `MERGED` — and only from the primary worktree. Everything else reaches `main` only through a merged PR.
-- Never edit `docs/todo/` or `docs/questions/` on a change branch: a change branch and its PR must never contain those paths.
+- Never write `docs/todo/` or `docs/questions/` inside a change worktree: those paths are written only in the primary worktree — P.1–P.3 and every `Status:` advance by the orchestrator, and P.2 by its step subagent — so a change branch and its PR never contain them.
 - Never create two worktrees for the same change branch.
 - Do NOT merge PRs (human governance).
 - Do NOT force-remove worktrees (`git worktree remove --force`) or force-delete branches (`git branch -D`) on unmerged changes.

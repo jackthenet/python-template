@@ -142,13 +142,13 @@ All **scheduled** human interaction happens **before** the workflow runs. Phase 
 | **P.2 Interrogate** | subagent (specify skill) | adversarially interrogate the idea; record every question in `docs/questions/<name>.md` | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch; overlap checked against `docs/specs/` **and** every TODO in `docs/todo/` |
 | **P.3 Answer** | orchestrator ⏸ | present the batch (≤ 4 per `ask_user_question` round, most blocking first) and record the answers | every question `ANSWERED` + incorporated; the orchestrator sets TODO `Status: QUESTIONS-ANSWERED` |
 | **P.4 Draft** | subagent (specify skill) | create the change branch + worktree from `main` (so the branch carries the TODO and the answers), then write the type's Phase 1 output: draft spec (FEATURE/CROSS-CUTTING), triage (ISSUE), GREEN baseline (REFACTOR), scope (DOCS/CHORE) | the artifact exists in the worktree and is committed |
-| **P.5 Verify self-consistency** | subagent (specify skill) | run the Self-Consistency Checklist + the Dependency Smoke-Test; fix the Phase 1 output itself | the Phase 1 output passes the Self-Consistency Checklist and the Dependency Smoke-Test; the orchestrator sets the TODO `Status: READY` |
+| **P.5 Verify self-consistency** | subagent (specify skill) — **FEATURE/CROSS-CUTTING only** | run the Self-Consistency Checklist + the Dependency Smoke-Test against the draft specification; fix the specification itself | the specification passes the Self-Consistency Checklist and the Dependency Smoke-Test; the orchestrator sets the TODO `Status: READY` |
 
 **Prep gate ◆ READY.** A change is **READY** when its TODO file says `Status: READY`, **every** question in its question file is `ANSWERED`, and the P.4 artifact exists. Only a READY change may enter the normal workflow.
 
 ### Planning records (owner: the orchestrator)
 
-`docs/todo/<name>.md` and `docs/questions/<name>.md` are **orchestrator-owned records that live only on `main`**: the orchestrator writes and updates them **from the primary worktree** and commits each change directly to `main` (git skill: "Commit planning artifacts and status advances (orchestrator, `main`)"). A change branch **never edits them** and a change PR **never contains them** — because the branch does not touch those paths, a later direct-to-`main` status update is never reverted by the merge.
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **orchestrator-owned records that live only on `main`**. Both paths are written **only in the primary worktree**: P.1–P.3 and every `Status:` advance by the **orchestrator** — which commits each change directly to `main` (git skill: "Commit planning artifacts and status advances (orchestrator, `main`)") — and **P.2 by its step subagent** (which runs in the primary worktree because no change worktree exists yet, and writes only the question file). **No write to them may happen inside a change worktree**, and a change branch and its PR therefore never contain them — because the branch does not modify those paths, a later direct-to-`main` status update is never reverted by the merge.
 
 The orchestrator advances the TODO `Status:` on `main` at each of these moments, and commits each advance:
 
@@ -156,7 +156,7 @@ The orchestrator advances the TODO `Status:` on `main` at each of these moments,
 |---|---|
 | P.1 Frame | `PREPARING` |
 | after P.3 Answer (every question `ANSWERED`) | `QUESTIONS-ANSWERED` |
-| after the P.5 handoff is verified (the type's Phase 1 output exists) | `READY` |
+| after the P.5 handoff is verified (**FEATURE/CROSS-CUTTING**) or after the P.4 artifact is verified (**ISSUE / REFACTOR / DOCS/CHORE**) | `READY` |
 | when the change enters the normal workflow (S1.4 / Phase 3 / Phase 4) | `IN-WORKFLOW` |
 | when the change reaches a human gate (`S1.4` approval, `S6.4` merge, `BLOCKED-USER`, `BLOCKED-HUMAN`) | `WAITING` |
 | after post-merge cleanup | `MERGED` |
@@ -172,7 +172,7 @@ Step subagents never write the `Status:` field: they report the gate in their ha
 | REFACTOR | TODO + answered questions + GREEN baseline + refactor scope | **Phase 4** |
 | DOCS/CHORE | TODO + answered questions + no-behavior scope | **Phase 4** |
 
-The former steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5** — same content, run during preparation. **S1.4** keeps its number and stays in the normal workflow.
+The former specification steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5** (FEATURE/CROSS-CUTTING) — same content, run during preparation. **S1.4** keeps its number and stays in the normal workflow.
 
 ### Preparing many changes
 
@@ -232,7 +232,7 @@ PHASE P   PREPARE (per change, before the workflow — all scheduled human input
   P.4    [S] Create worktree + draft spec / triage / baseline / scope
              │
              ▼
-  P.5    [S] Verify self-consistency ◆ ──► READY ◆
+  P.5    [S] Verify self-consistency (FEATURE/CROSS-CUTTING only) ◆ ──► READY ◆
              │
              ▼
 PHASE 1   [S] SPECIFY (specify skill)
@@ -336,7 +336,7 @@ Phase P plus the six phases are the **gates** (entry/exit criteria per the Phase
 
 | Phase | Atomic steps (one subagent each, in order) |
 |-------|-------------------------------------------|
-| **P Prepare** | **P.1 Frame** (orchestrator) → **P.2 Interrogate** → **P.3 Answer** (orchestrator ⏸) → **P.4 Draft** → **P.5 Verify self-consistency** ◆ READY |
+| **P Prepare** | **P.1 Frame** (orchestrator) → **P.2 Interrogate** → **P.3 Answer** (orchestrator ⏸) → **P.4 Draft** → **P.5 Verify self-consistency** (FEATURE/CROSS-CUTTING only) ◆ READY |
 | **1 Specify** | **S1.4 Present for approval** (commit + PR) |
 | **2 Decompose** | **S2.1 Create ADRs** → **S2.2 Decompose into task DAG** |
 | **3 Test & RED** | **S3.1 Derive tests (per task: one fresh subagent derives one DAG task's `tests_to_create`)** → **S3.2 Ruff + confirm RED** |
@@ -460,7 +460,7 @@ The agent MUST track every in-flight change with the `todo` tool. The todo list 
 ```
 
 ### Phase P + Phase 1: PREPARE & SPECIFY
-Single entry point for all change types (specify skill). The procedure below is unchanged and normative; what changed is **where each part runs**: the **Phase 0 — Classify** items run at **P.1 Frame**, the FEATURE / ISSUE / CROSS-CUTTING / REFACTOR / DOCS-CHORE items run at **P.2–P.5** (interrogate → answer → draft → self-consistency), and only **S1.4 Present for approval** (FEATURE/CROSS-CUTTING) runs inside the normal workflow.
+Single entry point for all change types (specify skill). The procedure below is unchanged and normative; what changed is **where each part runs**: the **Phase 0 — Classify** items run at **P.1 Frame**, the FEATURE / ISSUE / CROSS-CUTTING / REFACTOR / DOCS-CHORE items run at **P.2–P.4** (interrogate → answer → draft), with **P.5** self-consistency for **FEATURE/CROSS-CUTTING only**, and only **S1.4 Present for approval** (FEATURE/CROSS-CUTTING) runs inside the normal workflow.
 
 **Phase 0 — Classify (all types, at P.1):**
 1. Create the change branch **and its worktree** from `main` per the "Git Worktrees" section — at **P.4**, after the answers are recorded, so the branch carries the TODO file and the answered questions. Branch: `<type>/<name>` (`feature/`, `issue/`, `crosscut/`, `refactor/`, `chore/`).
@@ -476,7 +476,7 @@ Single entry point for all change types (specify skill). The procedure below is 
 9. Define the test strategy mapping each AC/INV/EDGE to a test category and test function.
 10. **STOP and present the spec for human approval via Git PR** — this is **S1.4**, the only item of this list that runs inside the normal workflow.
 
-**ISSUE** (triage — no spec, no PR) (at **P.2–P.5**):
+**ISSUE** (triage — no spec, no PR) (at **P.2–P.4**):
 11. Identify the affected requirements (`REQ-XXX`) and acceptance criteria (`AC-XXX`) from the **existing approved specs** in `docs/specs/`; cite the spec files and IDs.
 12. Confirm the defect: the observed behavior deviates from what the spec requires (cite the spec ID and state the observed vs. required behavior).
 13. If the fix requires behavior the spec does not state, STOP: open a Spec Amendment PR (Spec Amendment Workflow) or reclassify as FEATURE.
@@ -489,11 +489,11 @@ Single entry point for all change types (specify skill). The procedure below is 
 18. Assign stable IDs (`REQ-XXX`, `AC-XXX`, `INV-XXX`, `EDGE-XXX`, `NFR-XXX`) and define the test strategy as for FEATURE.
 19. **STOP and present the spec for human approval via Git PR** — **S1.4**, inside the normal workflow.
 
-**REFACTOR** (baseline — no spec, no PR) (at **P.2–P.5**):
+**REFACTOR** (baseline — no spec, no PR) (at **P.2–P.4**):
 20. Run the full suite (`uv run pytest tests/ -v`) and confirm it is GREEN. Record the baseline in `docs/verification/[name].md`.
 21. Define the refactor scope: which code moves/renames/simplifies, and the invariants that MUST hold (no observable behavior change, no test changes).
 
-**DOCS/CHORE** (scope — no spec, no PR) (at **P.2–P.5**):
+**DOCS/CHORE** (scope — no spec, no PR) (at **P.2–P.4**):
 22. Define the exact non-behavior changes (files, content) and confirm they do not alter externally observable behavior. Record the scope in `docs/verification/[name].md`.
 
 ### Phase 2: DECOMPOSE (`docs/decisions/`, `docs/tasks/`)
@@ -698,7 +698,7 @@ An agent MUST:
 14. Record every `BLOCKED-USER` question in the change's question file `docs/questions/<name>.md` (step, why needed, context, question, answer, status, incorporated) and present it to the user before that change proceeds.
 15. Run **ruff** after each implementation or test step and require it to be clean before the step's other gates.
 16. Log friction (failed/relaunched/iterating/blocked steps) in `docs/workflow/PROBLEMS.md` so the after-workflow-optimization can read it.
-17. Prepare every change before running its workflow (Phase P): TODO file, ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING, all answers recorded, draft spec / triage / baseline / scope, self-consistency check.
+17. Prepare every change before running its workflow (Phase P): TODO file, ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING, all answers recorded, draft spec / triage / baseline / scope, self-consistency check (FEATURE/CROSS-CUTTING).
 18. Keep the workflow moving: when a change reaches a human gate, mark it WAITING and continue with the next READY change; resume it with a fresh subagent when its gate clears.
 
 ---

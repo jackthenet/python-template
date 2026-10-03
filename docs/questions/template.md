@@ -6,7 +6,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/<change-name>.md`
 - **Spec:** `docs/specs/<change-name>.md`  <!-- or n/a -->
 - **Opened:** <YYYY-MM-DD>
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
 - **Answer rounds:** <n>
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.

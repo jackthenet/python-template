@@ -367,3 +367,12 @@ A step MUST log a problem when it:
 - **Resolution:** wrote the report to a temp file and appended with `cat >>`; use a temp file (or `write` + `edit`) instead of large here-docs in this harness.
 - **Date:** 2026-10-03
 - **Status:** Solved (2026-10-03) — recipe noted in this entry.
+
+## P-39 — three documentation fix rounds each closed findings while introducing new ones of the same class (gate signal with no reachable producer / ownership sentence that over-widened)
+- **Problem:** Three consecutive documentation fix rounds (**S5.5 → S6.5 → S6.7**) each closed findings while introducing new ones of the same class: a gate signal with **no reachable producer** (F-1/F-4, then F-5/F-6, then F-11 — `Status: READY` required a P.5 handoff that never runs for ISSUE / REFACTOR / DOCS/CHORE), or an **ownership sentence that over-widened and forbade a step's own required write** (F-12 — "only the orchestrator edits them; step subagents never do" forbade the P.2 question write the same protocol mandates, and "a change branch must never **contain** those paths" contradicted the branch carrying the P.1–P.3 copies inherited at P.4).
+- **Step / Phase:** S6.5 + S6.7 — Phase 6 review loop (change prepared-workflow)
+- **Change:** prepared-workflow / DOCS/CHORE
+- **Duration / iterations:** 3 fix rounds, ~2 review rounds.
+- **Resolution:** state each new/changed gate signal with its **type applicability** (which change types it applies to) and its **producer** (who writes it, from which worktree) in the same sentence, and re-check the step that must perform the write before declaring the rule done.
+- **Date:** 2026-10-03
+- **Status:** Solved (2026-10-03) — recipe noted in this entry.

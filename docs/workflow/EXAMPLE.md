@@ -60,7 +60,7 @@ REQUIRED HANDOFF:
 
 ## 4. Phase P example (a prepared change)
 
-Phase P front-loads ALL human interaction: the TODO file, the answered questions, and the draft spec exist before the workflow starts, so the workflow then runs without waiting for a human (see "Phase P: PREPARE" in `AGENTS.md`).
+Phase P front-loads all **scheduled** human interaction: the TODO file, the answered questions, and the draft spec exist before the workflow starts, so the workflow then runs without waiting for a human **on the change it is working on** (see "Phase P: PREPARE" in `AGENTS.md`). What remains is the two PR merges (S1.4 spec approval, S6.4 change PR) and any **late** question a step raises — a late question puts that change in WAITING while another prepared change runs.
 
 ### 4a. Filled TODO file — `docs/todo/session-audit-log.md`
 
