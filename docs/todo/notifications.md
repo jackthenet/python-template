@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** FEATURE  <!-- escalation candidate → CROSS-CUTTING if P.2 impact analysis shows it changes existing features' interfaces -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/notifications.md`
@@ -61,7 +61,7 @@ A domain event (e.g. a user is created) results in a notification record for the
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE (escalation candidate CROSS-CUTTING); todo set created; **value triage 4/5, implement** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (30 questions) | 2026-10-03 | **BLOCKED-USER** — 30 questions in one batch (FEATURE floor ≥ 20 met), all with evidence, options and a recommendation. Interrogation found the bus's real limits (bounded single-worker queue, drop-on-full, swallowed handler errors) and verified the settings registry has **no** user scope (`registry.py:130`), so preferences need a notifications-owned table. **Classification finding:** the TODO's claim that adding `notifications.*` catalog actions forces CROSS-CUTTING is contradicted by ADR-079 (`search.search` was added via a feature-owned `feature_actions.py` with no permissions change) — with the recommended answers the change stays **FEATURE**; the real escalation triggers are Q-02/Q-06/Q-07/Q-10/Q-13 |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec + create branch/worktree | | |
 | P.5 Self-consistency | | |
