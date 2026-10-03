@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE  <!-- codifies process guidance; no externally observable behavior delta -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/value-triage-gate.md`
@@ -71,6 +71,30 @@ None — process documentation and skill text only; no `src/backend/` or `src/fr
 - **Beneficiary:** whoever owns the backlog (the user, and the orchestrator picking the next READY change). Measured, not guessed: the five 2026-10-03 triages dropped 2 items, bundled 1, and re-scoped 1 — work that would otherwise have been spent on `docs-path-ci-trigger` and `split-archived-qa` alone.
 - **Score: 5/5** — clear value (it demonstrably prevents work), new to the protocol, and a small doc-only diff in files that already describe Phase P.
 - **Recommendation: implement** as one bundle (not split into per-file changes).
+
+## Backlog value triage sweep (2026-10-03, produced during this change's P.2)
+
+The table the codified step would produce, run over all 16 backlog items — recorded here so the
+decision is in one place (the step itself is not yet normative; this change is what would make it so).
+
+| ID | TODO | score | recommendation | reason |
+|---|---|---|---|---|
+| 1 | value-triage-gate | 5/5 | implement (one bundle) | codifies a practice already used in 5 TODOs; 3 `.md` files, no gate changed |
+| 2 | api-keys | 5/5 | implement | clear user value, new capability; the enforcement half already exists |
+| 3 | notifications | 4/5 | implement | new capability; reuses mail + eventbus; part of the value waits on an API surface |
+| 4 | security-changelog-license | 4/5 | implement | the missing LICENSE is a legal gap, not cosmetic |
+| 5 | spec-interview-protocol | 4/5 | implement **after** #1 | same P.2/P.3 surface; its own TODO declares the order |
+| 6 | structure-map | 4/5 | implement | one capability, self-contained; touches `AGENTS.md` in one line only |
+| 7 | remove-spec-tdd-driver | 4/5 | decided — **WAITING**, PR #62 | user chose implement |
+| 8 | pyproject-tooling-gaps | 3/5 | implement the cheap items only | the complexipy gate/version gap is real; two headline review claims were false |
+| 9 | python-3.15 | 3/5 | implement Option A, defer Option B | future-proofing; blocked on 3.15 final wheels |
+| 10 | structlog-logging | 3/5 | decide at P.3 first | total overlap with the existing logging feature; cost disproportionate to a dependency swap |
+| 11 | update-readme | 3/5 | implement | real gap (30-line README), low value per unit effort |
+| 12 | workflow-docs-nits | 2/5 | merge into #1 or drop | overlaps #1's files (`template.md`, `specify/SKILL.md:45`) — see its Q-3 |
+| 13 | tenacity-rich-cachetools | 2/5 | decline | no consumer; an unused dependency fails the `deptry` gate |
+| 14 | docs-path-ci-trigger | 1/5 | drop | the job asserts nothing about planning records |
+| 15 | split-archived-qa | 1/5 | drop | churns a frozen record for a nicety nothing reads |
+| 16 | track-python-skill | 4/5 | done — `MERGED` (`c2342b6`) | landed directly on `main`; deviation recorded in its TODO |
 
 ## Acceptance signal (plain language)
 `AGENTS.md`, the `specify` skill and `docs/todo/template.md` all name the triage step, its four checks, its 1–5 anchors, the required table, and the "ask before implementing" rule — and cross-reference the Ponytail ladder instead of restating it. A backlog item framed **after** the merge gets a filled-in Value triage section without the user having to ask, and a dropped item is left on disk with its reason. `git diff --name-status` shows only `.md` paths; `mkdocs build --strict` and the traceability check still pass.
