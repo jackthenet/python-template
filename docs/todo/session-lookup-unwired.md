@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from the template.
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** ISSUE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/session-lookup-unwired.md`
@@ -50,7 +50,7 @@ A test that starts the application's real wiring and calls a permission check wi
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type **ISSUE** (deviation from approved REQ-017/AC-020, no new behaviour); discovered during the `api-keys` P.2 interrogation. Evidence verified on `main`: `src/main.py:145-153` (no `session_lookup=`), `src/backend/permissions/service.py:407` (`"storage_error"` when the lookup is `None`), `rg` shows the argument passed only in tests |
-| P.2 Interrogate (<n> questions) | | |
-| P.3 Answer (<n> answered) | | |
+| P.2 Interrogate (0 questions) | 2026-10-03 | **DONE** — **defect confirmed** against REQ-017 (`user-roles-permissions.md:513`), AC-020 (`:552`), AC-021 (`:553`), EDGE-007 (`:597`) and the Impact-Analysis claim at `:827`; reachable through `@requires_permission` → `principal.session_token` (`src/backend/shared/principal.py:74`), latent today only because no in-repo caller sets a token. Traceability: spec matrix `:786` `PENDING`, `docs/verification/traceability.md:680` `GREEN` — the GREEN test injects a fake lookup, so the **composition root is uncovered**. **Fix shape settled from code:** `SqliteSessionRepository.get_by_token_hash` (`src/backend/authentication/repository.py:92-94`) structurally satisfies `SessionLookup` (`models.py:78-81`); the repo is built later (`main.py:177-178` vs `:145`) but has **no cycle**, so moving those two lines above `:144` and passing `session_lookup=_session_repository` is the whole fix — **no lazy proxy** (larger than the problem). **Reproduction plan:** new `tests/acceptance/permissions/test_composition_wiring.py::test_ac_020_composition_root_validates_session_token`, reusing the subprocess + `import main` + temp-registry pattern of `tests/acceptance/settings_coverage/test_wiring.py:12-31`. **Light-tier ISSUE: qualifies** (1 file, no new dependency/interface, covering tests named). `api-keys` Q-03 explicitly **not** pre-decided |
+| P.3 Answer (0 answered) | 2026-10-03 | **no-op** — 0 questions to present, 0 rounds; question file header is `ALL ANSWERED` |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (ISSUE) |
