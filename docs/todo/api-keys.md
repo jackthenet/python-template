@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** FEATURE  <!-- strong escalation candidate → CROSS-CUTTING: it introduces the first runtime boundary and spans authentication + permissions + every enforced feature -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/api-keys.md`
@@ -61,7 +61,7 @@ A key created for a user scoped to `usermanagement.list_users` can perform that 
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE (escalation candidate CROSS-CUTTING); todo set created; **value triage 5/5, implement** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (31 questions) | 2026-10-03 | **BLOCKED-USER** — 31 questions in one batch (FEATURE floor ≥ 20 met), 16 points closed from evidence, 14 categories covered / 3 skipped with reason, Impact Analysis over 13 components. **Classification verdict: FEATURE → CROSS-CUTTING** (new shared capability + new cross-feature interface `resolve_key -> Principal` / `describe_actions` over the closed catalog; all touches additive on the `search.md` §12 model, so the cost is spec shape + per-feature DAG grouping + ADRs from **ADR-081** + `minor` bump). Only Q-03=B (extend `Principal`) or Q-08=B (shared audit) would additionally force a spec amendment. **Dependency verdict: none in either direction** — `notifications` should not take `Depends on: api-keys` (answers its Q-11; the user still decides). **Side finding (separate ISSUE, not a blocker):** `src/main.py:145-153` builds `PermissionService` with no `session_lookup`, so every `Principal(session_token=…)` in the composition root currently denies with `storage_error` (fail-closed) — dead wiring, latent defect |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec + create branch/worktree | | |
 | P.5 Self-consistency | | |
