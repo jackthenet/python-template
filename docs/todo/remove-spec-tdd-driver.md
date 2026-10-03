@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** READY  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/remove-spec-tdd-driver.md`
@@ -52,5 +52,5 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 | P.2 Interrogate (0 questions) | 2026-10-03 | **DONE** — no question needs user input; overlap check (`docs/specs/` 13 files, `docs/todo/`, in-flight worktrees) clean; every raised point closed from evidence (the driver is the only tracked `.pi` path; no CI/test/config/dependency reference to it) |
 | P.3 Answer (0 answered) | 2026-10-03 | **no-op** — 0 questions to present, 0 rounds; question file header set to `ALL ANSWERED` |
 | Value triage (pre-workflow) | 2026-10-03 | **4/5 — implement as logged** (scope unchanged); user decision recorded above. Not yet started: held at P.4, planning-record logging only |
-| P.4 Draft scope + create branch/worktree | | |
+| P.4 Draft scope + create branch/worktree | 2026-10-03 | **DONE** — branch `chore/remove-spec-tdd-driver` + worktree created from `main` (`c2342b6`); `docs/verification/remove-spec-tdd-driver.md` scope record committed (`de57618`) with the exact one-path scope, the follow-up closures (split-archived-qa DROPPED 1/5, docs-path-ci-trigger DROPPED 1/5, driver update CLOSED BY THIS DELETION, shared-cache-dirs DROPPED) and a 9-check independently re-verified no-behavior-delta proof |
 | P.5 Self-consistency (n/a — DOCS/CHORE) | | n/a |
