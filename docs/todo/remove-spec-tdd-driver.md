@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-^- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+^- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/remove-spec-tdd-driver.md`
@@ -54,3 +54,7 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 | Value triage (pre-workflow) | 2026-10-03 | **4/5 — implement as logged** (scope unchanged); user decision recorded above. Not yet started: held at P.4, planning-record logging only |
 | P.4 Draft scope + create branch/worktree | 2026-10-03 | **DONE** — branch `chore/remove-spec-tdd-driver` + worktree created from `main` (`c2342b6`); `docs/verification/remove-spec-tdd-driver.md` scope record committed (`de57618`) with the exact one-path scope, the follow-up closures (split-archived-qa DROPPED 1/5, docs-path-ci-trigger DROPPED 1/5, driver update CLOSED BY THIS DELETION, shared-cache-dirs DROPPED) and a 9-check independently re-verified no-behavior-delta proof |
 | P.5 Self-consistency (n/a — DOCS/CHORE) | | n/a |
+| Phase 4 (S4, make the change) | 2026-10-03 | **DONE** — `git rm .pi/workflows/spec-tdd.workflow.ts` (commit `a7a6b04`); scope proof vs merge-base `c2342b6` = exactly `D` the `.ts` + `A` the scope record; `git ls-files .pi` empty |
+| Phase 5 (S5, light gate set) | 2026-10-03 | **PASS** (commit `b8f88c6`) — ruff clean, `ruff format --check` 323 files already formatted, `mypy src/` Success (83 files), `check_traceability.py` PASS (746 rows / 129 IDs / 713 test functions), `mkdocs build --strict` exit 0; no full-suite run (no Python/test path touched — CI runs it on the PR) |
+| Phase 6 (S6, review + PR) | 2026-10-03 | **CLEAN, 0 open findings** (report commit `4bd9247`); no version bump (DOCS/CHORE, stays `0.6.0`); **PR #62** open → https://github.com/jackthenet/python-template/pull/62 |
+| Post-merge cleanup (S7.1) | | waiting for the human merge of PR #62 |

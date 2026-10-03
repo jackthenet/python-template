@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** MERGED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/track-python-skill.md`
@@ -49,6 +49,7 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; todo set created |
+| Delivered | 2026-10-03 | **Landed on `main` as direct commit `c2342b6`** — `git ls-files .agents/skills/python-best-practices` lists 8 paths, `git status` clean, acceptance signal met. **Process deviation recorded:** the content reached `main` without a change branch/PR, which `AGENTS.md` (“Git Worktrees”, “Agent Prohibitions”) permits only for `docs/todo/` + `docs/questions/`. P.2–P.6 were therefore not run; no worktree exists. Recorded here so the deviation is visible rather than hidden. |
 | P.2 Interrogate (<n> questions) | | |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec / triage / baseline / scope | | |
