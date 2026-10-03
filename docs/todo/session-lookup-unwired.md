@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from the template.
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** READY  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** ISSUE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/session-lookup-unwired.md`
@@ -55,3 +55,4 @@ A test that starts the application's real wiring and calls a permission check wi
 | P.3 Answer (2 pending) | 2026-10-04 | **DONE — both answered, `Status: READY`.** **Q-01 = A (composition root only)** — `get_permission_service()`'s fallback stays unwired (no caller in `src/`; wiring it would add a cross-feature import inside `backend/permissions/`); the light-tier 1-file claim stands. **Q-02 = B (leave the spec §11 rows)** — no Spec Amendment, no Changelog; Phase 5 adds only the new composition-root evidence row to `docs/verification/traceability.md`. Both answers match the already-drafted triage (`e522dee`), so P.4 needs no rework; the record's stale "P.2 DONE — 0 questions / P.3 no-op" row is the only thing to correct on resumption. Next: **Phase 3** (reproduction test → RED) |
 | P.4 Draft triage + worktree | 2026-10-03 | **already done, out of order** — the first P.2 subagent also created the branch `issue/session-lookup-unwired` + worktree `../python-template_kopie-worktrees/issue/session-lookup-unwired` and wrote `docs/verification/session-lookup-unwired.md` (commit `e522dee`, triage quality is high: defect confirmed, reproduction plan, light-tier qualifies, fix = 2 lines moved + 1 keyword in `src/main.py`). Two things to fix on resumption: the record's Phase P table still claims "P.2 DONE — 0 questions / P.3 no-op" (superseded by the second pass's Q-01/Q-02), and its §6/§3 already match the recommended answers (composition root only; spec §11 rows left as the historical record) |
 | P.5 Self-consistency | | n/a (ISSUE) |
+| Phase 3 (S3.1 + S3.2) | 2026-10-04 | **RED CONFIRMED** — new `tests/acceptance/permissions/test_composition_wiring.py::test_ac_020_composition_root_validates_session_token` drives the real composition root (`import main` in a subprocess, `cwd=tmp_path`, src path derived from `__file__`); fails with `AssertionError: [False, False, False, False]` and `reason=storage_error` in the subprocess log — the `session_lookup is None` short-circuit. Commits `94d5b59`, `7ec4284`; evidence in `docs/verification/session-lookup-unwired.md`. Traceability row deferred to S5.3 per **Q-02** |
