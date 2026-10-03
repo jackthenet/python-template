@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from the template.
 - **TODO file:** `docs/todo/session-lookup-unwired.md`
 - **Spec:** n/a (defect against `docs/specs/user-roles-permissions.md`)
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 2 PENDING: Q-01, Q-02 (added by the P.2 second pass) -->
-- **Answer rounds:** 0
+- **Status:** ALL ANSWERED  <!-- OPEN | ALL ANSWERED -->
+- **Answer rounds:** 1 (2026-10-04: Q-01, Q-02)
 
 ## Preparation questions (P.2)
 
@@ -121,20 +121,20 @@ One question file per change, created at **P.1 Frame** from the template.
 - **Why needed:** scope decision. There is a **second** `PermissionService(...)` construction in `src/` that also omits `session_lookup`, so the same defect exists there. Whether the ISSUE fixes both sites or only the composition root changes the file count and the light-tier claim.
 - **Context:** `get_permission_service()` (`src/backend/permissions/service.py:497-514`) builds a default singleton with the three permissions repositories and no `session_lookup`. `grep -rn "get_permission_service()" src` → the definition only, **no caller in `src/`**; its only users are `tests/integration/permissions/test_persistence.py`. Wiring it would mean the permissions feature constructing an **authentication** repository (a cross-feature import inside a feature, against the boundary rule), or a new lazy/optional seam — i.e. more code than the one-line composition-root fix.
 - **Question:** Should this ISSUE wire only the composition root (`src/main.py`, 1 file), or also wire `get_permission_service()`'s fallback (2 files, cross-feature import inside `backend/permissions/`)? Recommended: **A — composition root only** (no production path reaches the fallback; wiring it would be behaviour nobody calls, and it would add a cross-feature import).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A — composition root only.** `src/main.py` is the single wiring site; `get_permission_service()`'s fallback stays as it is (no caller in `src/`, and wiring it would put a cross-feature import inside `backend/permissions/`).
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — confirms the drafted triage scope (C-5 in this file and in `docs/verification/session-lookup-unwired.md` already record the fallback as out of scope); the light-tier claim (1 file) stands
 
 ## Q-02 — close the `PENDING` REQ-017/AC-020 rows inside the approved spec's §11 matrix?
 - **Step:** P.2 Interrogate — Phase P
 - **Why needed:** governance. The `PENDING` rows are inside an **approved spec file**, and AGENTS.md forbids editing an approved spec outside the Spec Amendment Workflow. The change type does not depend on the answer (ISSUE either way), but the PR content does (one extra spec touch + changelog, or none).
 - **Context:** `docs/specs/user-roles-permissions.md:786-787` record REQ-017/AC-020 and REQ-017/AC-021 as `PENDING`; `docs/verification/traceability.md:680-681` record the same pairs as `GREEN` via the fake-lookup tests. CI (`scripts/check_traceability.py:129`) validates only `docs/verification/traceability.md`, so nothing fails either way. AGENTS.md: "A later change adds or updates rows only for the REQs/ACs it actually touches; a dated `RED`/`PENDING` row is a legal record of a past gate."
 - **Question:** Does this change close those two spec-internal rows (→ a Spec Amendment touch to `docs/specs/user-roles-permissions.md` §11 + a Changelog entry in the same PR), or leave them as the historical gate record and add only the new evidence row to `docs/verification/traceability.md` at Phase 5? Recommended: **B — leave the spec §11 rows untouched** (convention B; the spec-internal table is the spec's own pre-implementation plan, and a spec edit for a matrix cell would need its own amendment PR for no CI or traceability gain).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **B — leave the spec §11 rows untouched.** No Spec Amendment, no Changelog entry. Phase 5 adds only the new composition-root evidence row to `docs/verification/traceability.md`; the existing GREEN rows (`:680-681`) are not refreshed.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — Phase 5 obligation for this change is the single new traceability row (REQ-017 / AC-020, composition-root test); `docs/specs/user-roles-permissions.md` is not touched by the PR
 
 ### Category coverage (ISSUE — no ≥ 20 floor)
 
