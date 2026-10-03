@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** CROSS-CUTTING  <!-- shared infrastructure consumed by all six backend features; requires a spec amendment + a superseding ADR -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/structlog-logging.md`
@@ -67,7 +67,7 @@ Owner: `src/backend/logging/`. Direct code changes: `src/backend/eventbus/`, `sr
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type CROSS-CUTTING (spec amendment + superseding ADR required); todo set created; **value triage 3/5 — decide swap vs. correcting the skill text at P.3** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (25 questions) | 2026-10-03 | **BLOCKED-USER** — 25 questions, 15 points closed from evidence, 21 categories covered / 3 skipped with reason. **The TODO's framing ("the fix is one deliberate, spec-amended swap") is not supported by the evidence.** Re-measured cost of each option: **Option A** — correct the 2 skill lines to name loguru (DOCS/CHORE, no spec touched, no bump, unblocks `tenacity-rich-cachetools` immediately) vs **Option B** — 7 source files / 606 LOC in the logging feature, 39 direct backend calls in 3 other features, 17 test files / 43 refs / 2 390 LOC / 75 test functions, 4 specs to amend across ~20 IDs, a superseding ADR for ADR-002, 2 re-measured NFR budgets, per-feature traceability rows. The structlog text entered the repo **by accident** as third-party skill boilerplate in `chore(track-python-skill)` (`c2342b6`) — nobody ever decided it — and **no consumer of structured records exists** (no HTTP layer, `src/frontend` empty, no log parser in `src/`). ADR-002's own rejection of structlog rests on a false premise ("second dependency" — structlog is a pipeline over stdlib handlers, not a backend) and mis-cites NFR-002. **Recommendation: Option A**; if structured output is actually wanted, go stdlib-only behind the unchanged public API rather than adding structlog. Note: ADR-081 is already claimed by `api-keys` (Q-16) |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec + create branch/worktree | | |
 | P.5 Self-consistency | | |
