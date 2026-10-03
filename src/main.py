@@ -136,6 +136,13 @@ _user_manager_proxy = _LazyUserManager()
 _settings_registry = SettingsRegistry(permission_service=_permission_service_proxy)
 _settings_registry_singleton[0] = _settings_registry
 
+# --- The session repository (the check's session lookup: REQ-017, ADR-073) ---
+# Built before the shared PermissionService, which takes it as ``session_lookup``.
+# It depends on nothing but its database URL, so (unlike the UserManager and the
+# settings registry) there is no cycle here to break with a lazy proxy.
+_AUTH_DB = "sqlite:///./data/authentication.db"
+_session_repository = SqliteSessionRepository(_AUTH_DB)
+
 # --- The shared PermissionService (the composition-root wiring) ---
 # Its user lookup goes through the lazy UserManager proxy (set to the real
 # UserManager below), breaking the PermissionService <-> UserManager cycle.
@@ -147,6 +154,7 @@ _permission_service = PermissionService(
     SqliteGrantRepository(_PERMISSION_DB),
     SqliteSystemPrincipalRepository(_PERMISSION_DB),
     _user_manager_proxy,  # type: ignore[arg-type]  # the lazy proxy resolves to the real UserManager
+    session_lookup=_session_repository,  # validates a provided session token (REQ-017, AC-020)
     catalog=_catalog,
     event_bus=get_event_bus(),  # activates the SettingChanged subscription (REQ-019, D16)
     settings_registry=_settings_registry,
@@ -174,8 +182,6 @@ _user_manager = UserManager(_user_repository, permission_service=_permission_ser
 _user_manager_proxy.set_manager(_user_manager)
 
 # --- The remaining five services (wired with the shared PermissionService) ---
-_AUTH_DB = "sqlite:///./data/authentication.db"
-_session_repository = SqliteSessionRepository(_AUTH_DB)
 _auth_service = AuthService(
     _user_manager,
     _user_repository,

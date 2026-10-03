@@ -149,3 +149,39 @@ Independent re-run of the S3.1 test at commit `94d5b59` (no source change, no te
 **Path-portability check (S3.1 flag, resolved — no fix needed).** The test derives the subprocess `sys.path` entry from its own file location: `_REPO_ROOT = Path(__file__).resolve().parents[3]` / `_SRC = _REPO_ROOT / "src"` (`tests/acceptance/permissions/test_composition_wiring.py:24-25`), interpolated into the subprocess code as `sys.path.insert(0, {str(_SRC)!r})` (`:35`). `grep -n "C:/workspace" tests/acceptance/permissions/test_composition_wiring.py` → no match, so there is **no hard-coded absolute worktree path** and the test resolves correctly wherever the branch is checked out. The absolute path visible in the pytest output is the *runtime* value of `_SRC`, not a literal in the file.
 
 **Gate: RED CONFIRMED.** Phase 3 exit criterion met; the change may enter Phase 4 (S4.1/S4.2 minimal fix, `green_command` per §5). Traceability row remains deferred to S5.3 (Q-02).
+
+---
+
+## Phase 4 / GREEN evidence (S4.2, 2026-10-03)
+
+**Minimal fix, exactly the §6 fix scope — `src/main.py` only.** `git diff --stat` → `1 file changed, 8 insertions(+), 2 deletions(-)` (2 moved lines + 1 keyword + 4 comment lines). No test file, no other `src/` file, no spec file touched.
+
+### Diff summary
+
+| Location | Change |
+|---|---|
+| `src/main.py` (new block above `_PERMISSION_DB`) | `_AUTH_DB = "sqlite:///./data/authentication.db"` and `_session_repository = SqliteSessionRepository(_AUTH_DB)` **moved** from the "remaining five services" block to just above the `PermissionService` construction, with a 4-line comment recording why no lazy proxy is needed (the repository depends only on its database URL — §6) |
+| `src/main.py` (`PermissionService(...)` call) | `session_lookup=_session_repository,` added as the 5th argument (its declared position in the constructor, `src/backend/permissions/service.py:134`) |
+| `src/main.py` (old location) | the two lines removed; `_auth_service = AuthService(...)` still receives the same `_session_repository` instance and `_AUTH_DB` — the same objects, constructed earlier |
+
+**Wiring order otherwise unchanged (constraint 1).** The deliberate cycle-avoidance is intact and untouched by the diff: `_permission_service_proxy` / `_user_manager_proxy` are still created before the registry, `PermissionService` still receives `_user_manager_proxy` (not the real manager), `_permission_service_proxy.set_service(...)` still runs before the settings registration, and `_user_manager_proxy.set_manager(_user_manager)` still runs after `UserManager` is built. The only reordering is the two session-repository lines (§6). `SqliteSessionRepository.__init__` touches no settings, no permissions and no other service (`src/backend/authentication/repository.py`: mkdir parent → `create_engine` → `SQLModel.metadata.create_all`), so constructing it earlier has no side effect on the rest of the composition root.
+
+**Fail-closed untouched (hard invariant, §8).** No line of `src/backend/permissions/` changed: the `self._session_lookup is None → "storage_error"` branch (`service.py:407-408`) and the `except Exception → "storage_error"` branch (`:412-413`) are unchanged; the fix only supplies a lookup in the composition root.
+
+### Commands and results (targeted — the full suite is the Phase 5 gate / Phase 6 pre-merge gate)
+
+| Gate | Command | Result |
+|---|---|---|
+| **GREEN (the §5 `green_command`)** | `uv run pytest tests/acceptance/permissions/test_composition_wiring.py tests/acceptance/permissions/test_check_api.py tests/unit/permissions/test_edge_cases.py -v` | **`45 passed in 3.36s`** |
+| **GREEN (the reproduction test, done-criterion 2)** | `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -v` | **`1 passed in 1.55s`** — `test_ac_020_composition_root_validates_session_token PASSED`; the composed check now yields `[True, False, False, False]` (valid token proceeds; revoked / another user's / unknown still deny) |
+| **EDGE-007 fail-closed (done-criterion 3)** — every test file `rg -l "storage_error" tests` finds, plus the INV-002 property | `uv run pytest tests/unit/permissions/test_edge_cases.py tests/acceptance/permissions/test_check_api.py "tests/property/permissions/test_invariants.py::test_undeterminable_never_true" -q` | **`45 passed in 2.70s`** — incl. `test_unavailable_session_lookup_denied` (EDGE-007, `test_edge_cases.py:307`), `test_lookup_raises_denied` (`:383`), `test_storage_error_denied_fail_closed` (`test_check_api.py:264`), `test_revoked_expired_token_denied` / `test_mismatched_token_denied` (REQ-017 negative branches), INV-002 `test_undeterminable_never_true` over the `lookup_none` / `lookup_raises_session` scenarios |
+| **Affected-feature smoke (done-criterion 4)** | `uv run pytest tests/acceptance/permissions tests/unit/permissions -q` | **`59 passed in 3.91s`** — no new failures |
+| Composition-root guard (extra, cheap) | `uv run pytest tests/acceptance/settings_coverage/test_wiring.py -q` | `1 passed in 1.27s` — the reordered composition root still wires all features |
+| **ruff (changed paths only)** | `uv run ruff check src/main.py` | **`All checks passed!`** |
+| ruff format (changed path) | `uv run ruff format src/main.py` | `1 file left unchanged` |
+
+**No test was weakened, changed or deleted** — `git diff --stat` shows only `src/main.py`; the reproduction test is byte-identical to the S3.1/S3.2 RED version, and it flipped from `1 failed` to `1 passed` on the source change alone.
+
+**Not run here by design:** the full suite (Phase 5 S5.1 / Phase 6 pre-merge gate), the repo-wide `ruff check .` (Phase 5 S5.2), and `mypy src/` (Phase 5 S5.2). No untyped code was introduced (the change is one keyword argument on an existing typed parameter and two already-typed module-level assignments).
+
+**Gate: GREEN CONFIRMED.** AC-020's positive branch is now reachable in the composed application; REQ-017's validation path runs; EDGE-007 and INV-002 fail-closed behavior is unchanged. Traceability row still deferred to S5.3 (Q-02).
