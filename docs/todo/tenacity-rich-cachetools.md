@@ -11,7 +11,7 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 - **Question file:** `docs/questions/tenacity-rich-cachetools.md`
 - **Spec:** `docs/specs/tenacity-rich-cachetools.md` — **only if** an item is adopted; the spec would be the consuming feature's spec, not a "add three packages" spec
 - **Worktree:** <created at P.4> `../python-template_kopie-worktrees/feature/tenacity-rich-cachetools`
-- **Depends on:** decision on `docs/todo/structlog-logging.md` (loguru → structlog) for the `rich` item
+- **Depends on:** ~~decision on `docs/todo/structlog-logging.md` (loguru → structlog) for the `rich` item~~ — **cleared 2026-10-04 (structlog-logging Q-01 = B)**: the swap is accepted, so `rich.traceback` work would target the structlog/stdlib backend, not loguru. No dependency remains on that decision.
 - **Related specs:** `docs/specs/authentication.md` (session TTL/revocation, lockout — the caching target), `docs/specs/session-management.md`, `docs/specs/mail-service.md` (the only external-service integration, currently SMTP via `smtplib`, not httpx)
 
 ## Goal (one line)

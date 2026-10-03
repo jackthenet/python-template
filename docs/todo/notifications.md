@@ -10,7 +10,7 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 - **Question file:** `docs/questions/notifications.md`
 - **Spec:** `docs/specs/notifications.md`
 - **Worktree:** <created at P.4> `../python-template_kopie-worktrees/feature/notifications`
-- **Depends on:** none
+- **Depends on:** `docs/todo/structlog-logging.md` **must land first** (its Q-20, decided 2026-10-04: the loguru → structlog swap is accepted, so this change's new code uses the winning backend from day one). `docs/todo/api-keys.md` is a possible predecessor, not a required one.
 - **Related specs:** `docs/specs/mail-service.md` (sending), `docs/specs/event-bus.md` (dispatch), `docs/specs/settings.md` (global prefs), `docs/specs/user-management.md` (recipients), `docs/specs/user-roles-permissions.md` (enforcement + catalog actions), `docs/specs/logging.md` (tracing)
 
 ## Goal (one line)

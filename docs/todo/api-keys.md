@@ -10,7 +10,7 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 - **Question file:** `docs/questions/api-keys.md`
 - **Spec:** `docs/specs/api-keys.md`
 - **Worktree:** <created at P.4> `../python-template_kopie-worktrees/feature/api-keys`
-- **Depends on:** none (may be depended on by `docs/todo/notifications.md`)
+- **Depends on:** `docs/todo/structlog-logging.md` **must land first** (its Q-20, decided 2026-10-04: the loguru → structlog swap is accepted, so this change's new code uses the winning backend from day one). Otherwise none (may be depended on by `docs/todo/notifications.md`). ADR numbering is **by merge order**, not pre-reserved — `structlog-logging` Q-16 also wants the next free number after ADR-080.
 - **Related specs:** `docs/specs/authentication.md` (opaque-token pattern, sessions), `docs/specs/session-management.md` (list/revoke analogue), `docs/specs/user-roles-permissions.md` (catalog, checker, `Principal`), `docs/specs/user-management.md`, `docs/specs/search.md` (pagination conventions to mirror)
 
 ## Goal (one line)
