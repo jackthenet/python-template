@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/remove-spec-tdd-driver.md`
@@ -37,13 +37,13 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 - No externally observable behavior delta: the driver is an optional pi workflow entry point, not the normative protocol (`AGENTS.md` + the skills carry Phase P).
 
 ## Acceptance signal (plain language)
-`git ls-files .pi` lists no workflow script, the only remaining mentions of `spec-tdd.workflow` are inside historical verification records, and lint, types and the test suite are unchanged from `main`.
+`git ls-files .pi` lists no workflow script, the only remaining mentions of `spec-tdd.workflow` are inside historical verification records, and the DOCS/CHORE light gate passes: a `git diff --name-status` scope proof showing exactly one deleted `.ts` path (no `src/`, `tests/`, `pyproject.toml`, `.github/` or config path touched) plus lint and type checks where applicable — no Python path is touched, so no full-suite run is required by this change's gate set.
 
 ## Prep log
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; todo set #9–#13 |
-| P.2 Interrogate (n questions) | | |
-| P.3 Answer (n answered) | | |
+| P.2 Interrogate (0 questions) | 2026-10-03 | **DONE** — no question needs user input; overlap check (`docs/specs/` 13 files, `docs/todo/`, in-flight worktrees) clean; every raised point closed from evidence (the driver is the only tracked `.pi` path; no CI/test/config/dependency reference to it) |
+| P.3 Answer (0 answered) | 2026-10-03 | **no-op** — 0 questions to present, 0 rounds; question file header set to `ALL ANSWERED` |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency (n/a — DOCS/CHORE) | | n/a |
