@@ -493,3 +493,44 @@ Against `AGENTS.md:159` (quoted above) and the skill's own paths B/D/E, which ru
 **Verdict (S6.8).** F-12, F-13 and F-14 are closed and their fixes contradict nothing. F-11 is closed in `AGENTS.md` but its defect class persists in `.agents/skills/specify/SKILL.md:169`, `:196`, `:211` (F-15): the READY gate is unreachable for ISSUE / REFACTOR / DOCS/CHORE under the skill's own READY checklist, which is exactly the finding class F-11 was raised for. Three clauses in one file close it.
 
 REVIEW REPORT: NOT CLEAN (findings: F-11 open in part → F-15 at `.agents/skills/specify/SKILL.md:169`, `:196`, `:211`; F-12, F-13, F-14 closed)
+
+### Finding F-15 — resolved (S6.9, 2026-10-03)
+
+**One rule, applied to every clause that names the READY producer** (identical to `AGENTS.md:159`): the orchestrator sets and commits `Status: READY` on `main` after it verifies **the P.5 handoff (FEATURE / CROSS-CUTTING)** or **the P.4 artifact (ISSUE / REFACTOR / DOCS/CHORE)**. Three clauses, one file; nothing else was reworded, and no rule was weakened — each change only names the types a gate signal applies to.
+
+| Location | Before | After |
+|---|---|---|
+| `.agents/skills/specify/SKILL.md:169` (Rules) | "…**READY** (P.5 gate) → **IN-WORKFLOW**…" | "…**READY** (after the verified **P.5 handoff** — FEATURE/CROSS-CUTTING — or the verified **P.4 artifact** — ISSUE/REFACTOR/DOCS/CHORE) → **IN-WORKFLOW**…" |
+| `.agents/skills/specify/SKILL.md:196` (Outputs) | "…advanced to **READY** by the **orchestrator** (on `main`, after it verifies the P.5 handoff)." | "…advanced to **READY** by the **orchestrator** (on `main`, after it verifies the **P.5 handoff** (FEATURE/CROSS-CUTTING) or the **P.4 artifact** (ISSUE/REFACTOR/DOCS/CHORE))." |
+| `.agents/skills/specify/SKILL.md:211` (Definition of Done, under the `:209` header "**Phase P — the READY gate (all types):**") | "…`Status: READY` — set and committed by the **orchestrator** on `main` after it verifies the P.5 handoff — and the question file exists…" | "…`Status: READY` — set and committed by the **orchestrator** on `main` after it verifies the **P.5 handoff** (FEATURE/CROSS-CUTTING) or the **P.4 artifact** (ISSUE/REFACTOR/DOCS/CHORE) — and the question file exists…" |
+
+The `:209` "(all types)" header stays: the per-type clause is what makes the checklist true for all five types, and the per-type bullets below it (`:214` FEATURE/CROSS-CUTTING, `:221` ISSUE, `:222` REFACTOR, `:223` DOCS/CHORE) already name each type's Phase 1 output.
+
+**Repo-wide sweep (the point of this step — the id, not the edited file).** `grep -rn "P\.5" AGENTS.md .agents/skills docs/workflow docs/todo docs/questions/template.md` → 24 hits (AGENTS.md 9, `specify` 12, `EXAMPLE.md` 1, `docs/todo/template.md` 1, `PROBLEMS.md` 1); `grep -rn "READY" …same paths` → 42 hits (AGENTS.md 16, `specify` 11, `implement`/`test`/`git` 2 each, `decompose`/`review`/`verify` 1 each, `EXAMPLE.md` 4, `docs/todo/template.md` 1, `PROBLEMS.md` 1, `docs/questions/template.md` 0). Every hit that names the READY producer or requires P.5, classified as (a) marked FEATURE/CROSS-CUTTING-only, (b) per-type, or (c) irrelevant to the gate:
+
+| Hit | Class — why it is correct |
+|---|---|
+| `AGENTS.md:159` | (b) per-type — the reference wording `4b45bdd` already fixed ("after the P.5 handoff is verified (**FEATURE/CROSS-CUTTING**) or after the P.4 artifact is verified (**ISSUE / REFACTOR / DOCS/CHORE**)") |
+| `AGENTS.md:145` | (a) the P.5 step row is marked "**FEATURE/CROSS-CUTTING only**"; its READY clause is that step's own gate |
+| `AGENTS.md:147`, `:429`, `:640` | (b) per-type — READY defined as TODO `Status: READY` + every question `ANSWERED` + **the type's** Phase 1 output / the P.4 artifact; no P.5 requirement |
+| `AGENTS.md:235`, `:339` | (a) P.5 marked "(FEATURE/CROSS-CUTTING only)" in the diagram and the Phase Matrix row |
+| `AGENTS.md:132`, `:175`, `:463`, `:469`, `:486` | (a)/(c) spec-worded artifacts and the FEATURE / CROSS-CUTTING step ranges (`:175` carries the "(FEATURE/CROSS-CUTTING)" qualifier; `:469`/`:486` are the FEATURE and CROSS-CUTTING headers) |
+| `AGENTS.md:305`, `:363`, `:370`, `:386`, `:408`, `:409`, `:673`, `:674`, `:702` | (c) scheduling/"never idle" and prohibition wording — they consume an already-READY change, they never produce it |
+| `specify:169`, `:196`, `:211` | (b) **fixed by this step** — all three now name both producers per type |
+| `specify:170` | (b) already per-type (fixed at S6.7): "the P.4 artifact exists … and — for **FEATURE/CROSS-CUTTING** — passed P.5" |
+| `specify:56` | (b) per-type — the Phase P todo is `completed` at READY "(TODO `Status: READY`, every question `ANSWERED`, **the type's** Phase 1 output recorded)" |
+| `specify:89`, `:90` (P.5 Outputs / Done-criteria: "the **READY gate**", "the **orchestrator** sets `Status: READY`") | (a) both sit inside `### P.5 Verify self-consistency` (`:85`), itself inside `## Atomic Steps (FEATURE / CROSS-CUTTING)` (`:58`) — a step that only exists for the spec types, so its READY signal is scoped by its section |
+| `specify:28`, `:50` | (c) "a prepared (READY) change needs its spec committed … (S1.4)" and the WAITING/not-idle rule — consumers of READY, not producers |
+| `specify:14`, `:45`, `:46` | (c) unqualified **restatements of the step mapping** (S1.1/S1.2/S1.3 → P.2/P.4/P.5; the subagent step list), not gate clauses: they neither set nor gate READY, the cited source (`AGENTS.md:235`) marks P.5 FEATURE/CROSS-CUTTING-only, and the per-type Phase P list (`:18-21`) plus the per-type paths A–E (`:115`, `:121`, `:129`, `:133`, `:139`) govern which steps a change runs — the same classification S6.8 gave `:14`. Untouched to keep the diff minimal |
+| `specify:115`, `:117`, `:129`, `:131` | (a) the FEATURE and CROSS-CUTTING path headers and their step lists |
+| `implement:34`, `test:33` | (b) per-type — "Phase 4/3 runs only for a change that passed the Phase P **READY** gate (TODO `Status: READY`, every question … `ANSWERED`)"; no P.5 requirement, and both files are outside this step's allowed set |
+| `decompose:32`, `implement:36`, `review:44`, `test:35`, `verify:34`, `git:104`, `specify:50` | (c) the WAITING/not-idle rule — READY as a scheduling input |
+| `git:65` | (c) the commit-planning-artifacts operation: it lists which commit each `Status:` advance belongs to (P.1/P.2/P.3 + "the orchestrator commits every `Status:` advance") without naming a step the advance must follow |
+| `docs/workflow/EXAMPLE.md:70`, `:113`, `:211`, `:213` | (a)/(c) the worked example is a **FEATURE** change (`session-audit-log`), so its "P.5 Self-consistency … TODO → `READY`" prep-log row and its READY scheduling snapshot are correct for that type; outside this step's allowed set |
+| `docs/todo/template.md:7`, `:44` | (c) the `Status:` value list and the Prep-log **table row** "P.5 Self-consistency" — a log row, not a gate: a non-spec type leaves it blank/n-a and still reaches READY via `AGENTS.md:159`. **Observation (not fixed — outside this step's allowed set):** the row is unqualified, so a reader could think it must be filled for every type; a one-word "(FEATURE/CROSS-CUTTING)" qualifier on that row would make the template match `:11`'s already-qualified "**Spec:** … FEATURE/CROSS-CUTTING only" row. Carried as a cosmetic follow-up, not a finding: it blocks no gate |
+| `docs/workflow/PROBLEMS.md:372` (P-39) | (c) the problem record itself — it *describes* the F-11 defect class; extended by this step |
+| `docs/questions/template.md` | no `P.5` and no READY-producer hit (only the entry-level `ANSWERED` gate) |
+
+**No remaining hit makes READY unreachable for any type.** `grep -n "P.5 handoff" .agents/skills/specify/SKILL.md` → 3 hits (`:169`, `:196`, `:211`), every one now per-type; `grep -rn "P\.5" AGENTS.md .agents/skills docs/workflow docs/todo docs/questions/template.md` → 24 hits, none requiring P.5 for ISSUE / REFACTOR / DOCS/CHORE. READY is reachable for all five types in both the protocol (`AGENTS.md:159`) and the skill the agent uses to confirm the gate (`specify:169`, `:170`, `:196`, `:211`).
+
+**Gates (S6.9).** `grep -n "P.5 handoff" .agents/skills/specify/SKILL.md` → 3 hits, all per-type (quoted above); `uv run ruff check .` → `All checks passed!`; `git diff main --name-only` → 3 paths, all `.md` (`.agents/skills/specify/SKILL.md`, `docs/verification/prepared-workflow.md`, `docs/workflow/PROBLEMS.md`) — exactly this step's allowed files. Friction recipe added to **P-39** (grep the id across all live-guidance files, not only the file being edited).

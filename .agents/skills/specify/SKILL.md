@@ -166,7 +166,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 - A change branch **and its worktree** MUST be created at **P.4**, before any normative artifact is written (all types); before P.4 the work happens in the primary worktree and touches only `docs/todo/` and `docs/questions/`.
 - The change type MUST be classified (**P.1**) before any other work, and recorded in the TODO file and in `docs/verification/<name>.md`.
-- The TODO file's `Status:` field MUST be updated at each Phase P step: **PREPARING** (P.1) → **QUESTIONS-ANSWERED** (P.3) → **READY** (P.5 gate) → **IN-WORKFLOW** / **WAITING** / **MERGED**. The **orchestrator** owns that write: it sets each status in the **primary worktree** and commits it to `main`; step subagents never edit the TODO file — they report the gate in their handoff (AGENTS.md, "Planning records (owner: the orchestrator)").
+- The TODO file's `Status:` field MUST be updated at each Phase P step: **PREPARING** (P.1) → **QUESTIONS-ANSWERED** (P.3) → **READY** (after the verified **P.5 handoff** — FEATURE/CROSS-CUTTING — or the verified **P.4 artifact** — ISSUE/REFACTOR/DOCS/CHORE) → **IN-WORKFLOW** / **WAITING** / **MERGED**. The **orchestrator** owns that write: it sets each status in the **primary worktree** and commits it to `main`; step subagents never edit the TODO file — they report the gate in their handoff (AGENTS.md, "Planning records (owner: the orchestrator)").
 - A change is **READY** only when **every** question in its question file is `ANSWERED` **and** the P.4 artifact exists (draft spec / triage / baseline / scope) and — for **FEATURE/CROSS-CUTTING** — passed P.5. Only a READY change may enter the normal workflow.
 - `docs/todo/` and `docs/questions/` are the **only** files committed directly to `main`, and only by the **orchestrator** from the primary worktree; everything normative reaches `main` through a merged PR from the change worktree. A change branch never edits those two files and its PR never contains them.
 - Stay strictly on the change's branch/worktree. Do not modify unrelated changes, branches, or worktrees. Keep all changes isolated to this change.
@@ -193,7 +193,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 **Phase P (the prepared change):**
 
-- `docs/todo/<name>.md` (from `docs/todo/template.md`), committed to `main`, its `Status:` advanced to **READY** by the **orchestrator** (on `main`, after it verifies the P.5 handoff).
+- `docs/todo/<name>.md` (from `docs/todo/template.md`), committed to `main`, its `Status:` advanced to **READY** by the **orchestrator** (on `main`, after it verifies the **P.5 handoff** (FEATURE/CROSS-CUTTING) or the **P.4 artifact** (ISSUE/REFACTOR/DOCS/CHORE)).
 - `docs/questions/<name>.md` (from `docs/questions/template.md`), committed to `main`, **every** entry `ANSWERED` and incorporated.
 - A change branch `<type>/<name>` and its worktree at `<repo-name>-worktrees/<type>/<name>`, created at **P.4** from `main` (so the branch carries the TODO file and the answered questions).
 - A recorded change type in the TODO file and in `docs/verification/<name>.md`.
@@ -208,7 +208,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 **Phase P — the READY gate (all types):**
 
-- The TODO file exists on `main` with `Status: READY` — set and committed by the **orchestrator** on `main` after it verifies the P.5 handoff — and the question file exists with **every** question `ANSWERED` and incorporated.
+- The TODO file exists on `main` with `Status: READY` — set and committed by the **orchestrator** on `main` after it verifies the **P.5 handoff** (FEATURE/CROSS-CUTTING) or the **P.4 artifact** (ISSUE/REFACTOR/DOCS/CHORE) — and the question file exists with **every** question `ANSWERED` and incorporated.
 - The change branch and its worktree exist (created at P.4).
 - The change type is classified and recorded in the TODO file and in `docs/verification/<name>.md`.
 - FEATURE/CROSS-CUTTING:

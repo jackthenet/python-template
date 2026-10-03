@@ -374,5 +374,6 @@ A step MUST log a problem when it:
 - **Change:** prepared-workflow / DOCS/CHORE
 - **Duration / iterations:** 3 fix rounds, ~2 review rounds.
 - **Resolution:** state each new/changed gate signal with its **type applicability** (which change types it applies to) and its **producer** (who writes it, from which worktree) in the same sentence, and re-check the step that must perform the write before declaring the rule done.
+  - when narrowing a step id or a producer clause, grep that id across **all** live-guidance files, not only the file being edited; the S6.7 fix narrowed P.5 in AGENTS.md but left three READY clauses in the same-named skill pointing at it (F-15, round 4).
 - **Date:** 2026-10-03
 - **Status:** Solved (2026-10-03) — recipe noted in this entry.
