@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE  <!-- config/tooling only; escalates to REFACTOR if 3.15-only features are adopted in src/, or to ISSUE if an upgrade exposes a defect -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/python-3.15.md`
@@ -61,7 +61,7 @@ CI is green on 3.15 (matrix entry under Option A, sole version under Option B), 
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE (escalation candidates REFACTOR/ISSUE); todo set created; **value triage 3/5, implement Option A, defer Option B** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (6 questions) | 2026-10-03 | **BLOCKED-USER** — 6 questions, 7 points closed from evidence, all facts **re-measured today**. 3.15 is still beta-only (`uv python list 3.15` → `cpython-3.15.0b1` only). **The hard blocker is pydantic, not the interpreter:** `uv pip install --python <3.15> --dry-run --no-build -r pyproject.toml` fails — `pydantic-core==2.46.5` has no cp315 wheel and `pydantic==2.13.5` pins it; with `--prerelease=allow` it resolves only to `pydantic==2.14.0b2`. Every other compiled dep already has a cp315 wheel (orjson, pillow, argon2-cffi-bindings, cffi, sqlalchemy, greenlet, pydantic-core 2.49.0). The code is clean on 3.15: the removal checklist scores **0** against `src/`, and PEP 758 (`src/backend/shared/principal.py:96`) **parses on 3.15.0b1**. Pin inventory re-counted: **14 pins + 1 comment** (`pyproject.toml:7,132,143`; `quality.yml:19,37,54,75,90,105,120`; `lint.yml:33`; `spec-validation.yml:35,64,78`) + `uv.lock:3`. **Reframe:** `requires-python >= 3.14` already permits 3.15 — the gap is CI *evidence*, not permission; and **no CI matrix exists** (11 jobs hard-pin the literal), so "add 3.15 to the matrix" is structural. **Collision:** `pyproject-tooling-gaps` edits the same 8 workflow job blocks (`quality.yml:19,37,…`) and `pyproject.toml:132` — sequence after it, or take Option C (defer) so the two never touch the same lines |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
