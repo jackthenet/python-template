@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE  <!-- config/tooling only; escalates to REFACTOR if 3.15-only features are adopted in src/, or to ISSUE if an upgrade exposes a defect -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/python-3.15.md`
@@ -22,18 +22,22 @@ The template is pinned to 3.14 in five places: `requires-python = ">=3.14"` (`py
 **Reality check (measured 2026-10-03):** `uv python list` offers only `cpython-3.15.0b1` (plus `+freethreaded`) — no final 3.15.0 build is installed or downloadable through uv on this machine. Pinning CI to a beta would make every failure ambiguous.
 
 ## In scope
-Two options; P.3 picks one (they differ in risk, not in kind):
-- **Option A — compatibility (recommended default):** keep `requires-python >=3.14`, add **3.15 to the CI matrix** (or a single 3.15 job) and run the upgrade check, so the project is *known* to work on 3.15 without adopting 3.15 syntax.
-- **Option B — raise the floor:** `requires-python >=3.15`, CI on 3.15 only, mypy/ty pins to 3.15, and fix the 3.15 behavior changes.
-- The upgrade check the skill already prescribes: `uv run --isolated --python 3.15 pytest -W error::DeprecationWarning`.
+**Decided at P.3 (2026-10-04): Option C — defer.** Nothing is pinned and no CI job changes.
+- Record the **measured blocker** in `docs/verification/python-3.15.md`: only `3.15.0b1` exists, and the project has **no wheel-only solution on 3.15** — `pydantic==2.13.5` pins `pydantic-core==2.46.5`, which has no cp315 wheel; only the pre-release `pydantic 2.14.0b2` resolves. The code itself scores **0** against the 3.15 removal checklist.
+- Record the **re-check trigger**: 3.15 final **and** a final `pydantic` shipping a cp315 wheel.
+- Record the project's **support window**: the **latest two CPython versions** (Q-4) — with `requires-python >=3.14`, that is 3.14 + 3.15 once 3.15 is final.
+- Point at the follow-up backlog item **`docs/todo/python-3.15-upgrade.md`** (framed 2026-10-04), which carries the trigger and inherits the checklist below — so the re-check is a scheduled change, not a note only findable in a closed record.
+- The upgrade check the skill already prescribes (for that follow-up): `uv run --isolated --python 3.15 pytest -W error::DeprecationWarning`.
 - The 3.15 behavior-change checklist applied to this repo (from `references/python-3.15.md`): `@contextmanager` now keeps the context open while the generator runs; `sqlite3.connect()` keyword-only arguments (the repo is SQLite-heavy via SQLModel — user-management, authentication, session-management, file-management, permissions, settings); `datetime.strptime` day-without-year → `ValueError`; `argparse` dest change; removals (`sre_*`, `http.server` CGI handler, `platform.java_ver()`, keyword-argument `NamedTuple`); `typing.ByteString` deprecation; UTF-8 default encoding (PEP 686) — but keep passing `encoding="utf-8"` explicitly.
 - The concrete 3.15-era idiom hits in this repo: `re.match` → `re.prefixmatch` at `src/backend/filemanagement/service.py:366,370`, `src/backend/filemanagement/storage.py:103`, `src/backend/search/service.py:84,88` (5 sites; `re.match` is soft-deprecated, never removed — so this is optional and only under Option B).
 - Dependency wheel availability for 3.15 before anything is pinned: `pydantic-core`, `pillow`, `argon2-cffi(-ffi)`, `sqlalchemy/sqlmodel`, `ruamel-yaml`, `httpx`, plus the dev tools (ruff, mypy, ty, pytest).
 - Docs touch-ups where the version is stated (`README.md`, `userdocs/`, `AGENTS.md` "Python 3.14+" line) — text only.
 
 ## Out of scope
-- Adopting 3.15-only **features** in `src/` (lazy imports, `frozendict`, `sentinel`, Tachyon instead of `py-spy`) — that is a REFACTOR follow-up, deliberately not bundled here.
-- Free-threaded (`+freethreaded`) builds / PEP 703 support unless the user explicitly asks.
+- Any pin change at all — `requires-python`, mypy/ty, the 11 CI `python-version` literals, `uv.lock` (Q-1 = C).
+- Consolidating the 11 CI `python-version` literals into one `strategy.env`/matrix value — follow-up for `python-3.15-upgrade`.
+- `re.match` → `re.prefixmatch` (5 sites) — the skill's version gate forbids 3.15-only features until `requires-python >=3.15` **and** CI runs 3.15; follow-up for `python-3.15-upgrade`.
+- Free-threaded (`+freethreaded`) builds / PEP 703 support (Q-5, moot).
 - Dropping Windows/Linux parity, changing `uv` configuration, or re-pinning unrelated dependencies.
 - The JIT (`PYTHON_JIT=1`) — measure first, decide later; not part of this change.
 
@@ -62,6 +66,6 @@ CI is green on 3.15 (matrix entry under Option A, sole version under Option B), 
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE (escalation candidates REFACTOR/ISSUE); todo set created; **value triage 3/5, implement Option A, defer Option B** |
 | P.2 Interrogate (6 questions) | 2026-10-03 | **BLOCKED-USER** — 6 questions, 7 points closed from evidence, all facts **re-measured today**. 3.15 is still beta-only (`uv python list 3.15` → `cpython-3.15.0b1` only). **The hard blocker is pydantic, not the interpreter:** `uv pip install --python <3.15> --dry-run --no-build -r pyproject.toml` fails — `pydantic-core==2.46.5` has no cp315 wheel and `pydantic==2.13.5` pins it; with `--prerelease=allow` it resolves only to `pydantic==2.14.0b2`. Every other compiled dep already has a cp315 wheel (orjson, pillow, argon2-cffi-bindings, cffi, sqlalchemy, greenlet, pydantic-core 2.49.0). The code is clean on 3.15: the removal checklist scores **0** against `src/`, and PEP 758 (`src/backend/shared/principal.py:96`) **parses on 3.15.0b1**. Pin inventory re-counted: **14 pins + 1 comment** (`pyproject.toml:7,132,143`; `quality.yml:19,37,54,75,90,105,120`; `lint.yml:33`; `spec-validation.yml:35,64,78`) + `uv.lock:3`. **Reframe:** `requires-python >= 3.14` already permits 3.15 — the gap is CI *evidence*, not permission; and **no CI matrix exists** (11 jobs hard-pin the literal), so "add 3.15 to the matrix" is structural. **Collision:** `pyproject-tooling-gaps` edits the same 8 workflow job blocks (`quality.yml:19,37,…`) and `pyproject.toml:132` — sequence after it, or take Option C (defer) so the two never touch the same lines |
-| P.3 Answer (<n> answered) | | |
+| P.3 Answer (7 answered) | 2026-10-04 | **RESOLVED** — Q-1 = **(C) defer**; Q-4 = **latest two CPython versions**; Q-2, Q-3, Q-5, Q-6 **closed as moot** by Q-1 = (C). Follow-up backlog item `python-3.15-upgrade` framed to carry the trigger |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |

@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/python-3.15.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Status:** ALL ANSWERED  <!-- ALL ANSWERED | OPEN -->  <!-- 0 PENDING; Q-2, Q-3, Q-5, Q-6 closed as moot by Q-1 = (C) -->
+- **Answer rounds:** 1 (2026-10-04: Q-1; Q-2/Q-3/Q-5/Q-6 closed as moot)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -65,60 +65,60 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **A — dual-version CI:** keep `requires-python >=3.14`, add 3.15 to CI. Keeps the compatibility promise; costs CI minutes (see Q-3); cannot run today without a beta interpreter and a pydantic pre-release (F1/F6).
   - **B — raise the floor to `>=3.15`:** single version; drops 3.14, forces the local venv (currently 3.14.5, F4), all 14 pins, and `uv.lock` regeneration (F14). Blocked today by F1/F6.
   - **C — defer (recommended):** record the measured blocker, add a *documented* re-check trigger (3.15 final **and** a final pydantic with a cp315 wheel), change nothing else. Cheapest, honest, and today A and B are both unrunnable without pinning CI to a beta interpreter + a pydantic pre-release — which makes every future CI failure ambiguous.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **C — defer.** Record the measured blocker and add a **documented re-check trigger**: 3.15 final **and** a final `pydantic` with a cp315 wheel. Nothing else changes: `requires-python` stays `>=3.14`, the 14 pins and 11 CI literals stay as they are.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — the P.4 scope is now "record the blocker + the trigger" only; see the TODO's In scope
 
 **Q-2 — Is a dependency bump in scope for a DOCS/CHORE change?**
 - **Step:** P.2 Interrogate
 - **Why needed:** this is the classification question. DOCS/CHORE requires a confirmed **no-behavior-delta** scope; bumping `pydantic` is a dependency change that can change validation behavior.
 - **Context:** F6/F7 — 3.15 support requires `pydantic>=2.14` (currently only `2.14.0b2`) because `pydantic-core 2.46.5` has no cp315 wheel. `pyproject.toml:10` pins `pydantic>=2.13.5`. Every other compiled dep already has a cp315 wheel (F8), so pydantic is the **single** blocker.
 - **Question:** if we move to 3.15, do you accept a `pydantic`/`pydantic-core` bump inside this change, or must it be a separate change (and this one stays pure config/CI)? If it is inside, this change is arguably no longer DOCS/CHORE — do you want it reclassified?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Closed as moot by Q-1 = (C)** — no dependency bump happens in this change, so the classification question does not arise. The change stays **DOCS/CHORE**. If the re-check trigger ever fires, the `pydantic` bump is its own change (and would be reclassified then).
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — no bump in scope; DOCS/CHORE confirmed
 
 **Q-3 — If Option A: what CI shape, and how many jobs?**
 - **Step:** P.2 Interrogate
 - **Why needed:** there is **no matrix in this repo** (F12) — "add 3.15 to the CI matrix" is not a one-line change; it means either introducing `strategy.matrix` across 11 jobs or duplicating a subset.
 - **Context:** F12 — 11 jobs hard-pin `python-version: '3.14'` (`quality.yml` 7: type-check, security, coverage, dependency-review, dependencies, docs, migrations; `lint.yml` 1: lint; `spec-validation.yml` 3: spec-validation, traceability, tests). Full duplication ≈ 2× CI minutes.
 - **Question:** (a) matrix all 11 jobs on `[3.14, 3.15]` (strongest signal, ~2× cost), or (b) one dedicated 3.15 job — recommended: the `tests` job in `spec-validation.yml` plus `coverage` in `quality.yml` (the two that actually execute the suite; the rest are lint/docs/dependency gates whose interpreter is irrelevant)?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Closed as moot by Q-1 = (C)** — Option A was not chosen, so no CI job shape is decided. The `pyproject-tooling-gaps` collision on the same 8 workflow job blocks therefore never materialises for this change.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — no workflow edit in scope
 
 **Q-4 — Python support window: keep 3.14 forever, or track "latest two"?**
 - **Step:** P.2 Interrogate
 - **Why needed:** it decides whether the 11 CI pins become a single reusable variable/matrix (a policy that recurs every release) or stay per-job literals that get hand-edited again next year.
 - **Context:** F5 — 11 duplicated literals is why this change exists at all; the same edit recurs annually. PEP 790 gives a fixed ~2-year cadence.
 - **Question:** what is the project's stated support window — "latest CPython only", "latest two" (recommended), or "everything `requires-python` permits"? And should the pins be consolidated into one `strategy.env`/matrix value so the next bump is one line?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Latest two CPython versions.** With `requires-python >=3.14` that means 3.14 + 3.15 once 3.15 is final — exactly what Q-1's trigger then delivers. "Latest only" (floor moves, 3.14 support ends) and "everything the floor permits" (CI cost grows every year) were rejected. Pin consolidation is **not** pulled into this change — Q-1 = (C) left the 11 literals alone — so the annual one-line-pin problem is recorded as a follow-up for the upgrade change.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — the support window is now part of the P.4 scope; see the TODO's In scope
 
 **Q-5 — Test the free-threaded build (`3.15t`) at all?**
 - **Step:** P.2 Interrogate
 - **Why needed:** it is a separate CI axis with its own cost, and the repo makes thread-safety claims in its specs.
 - **Context:** F2 — `cpython-3.15.0b1+freethreaded` is downloadable. `AGENTS.md` claims the logging setup is "idempotent and thread-safe" and the event bus runs background workers; the event bus and settings registry are module singletons.
 - **Question:** do you want a free-threaded CI job (recommended: **no** — free-threaded cp315 wheels for `pydantic-core`/`argon2-cffi-bindings`/`greenlet` are a separate availability question, and a free-threaded failure would be indistinguishable from a 3.15 failure while both are pre-release)?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Closed as moot by Q-1 = (C)** — no 3.15 CI job exists to add a `3.15t` axis to. Revisit only if the re-check trigger fires; the thread-safety claims (`logging` setup, event-bus worker, module singletons) then get their own question.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — out of scope
 
 **Q-6 — Is the `re.match` → `re.prefixmatch` modernization part of this change?**
 - **Step:** P.2 Interrogate
 - **Why needed:** it is a `src/` edit. Under DOCS/CHORE the scope must be confirmed no-behavior-delta; touching 5 service/storage sites makes it a REFACTOR (GREEN baseline required), which changes the todo set.
 - **Context:** 5 sites: `src/backend/search/service.py:84,88`, `src/backend/filemanagement/service.py:366,370`, `src/backend/filemanagement/storage.py:103`. `re.match` is soft-deprecated and never removed, so nothing breaks if it is left alone. The skill's version gate (`.agents/skills/python-best-practices/references/python-3.15.md:7`) forbids 3.15-only features unless `requires-python >=3.15` **and** CI runs 3.15 — so under Option A/C this edit is **not yet permitted**.
 - **Question:** include it (→ reclassify REFACTOR), or leave it out of scope?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Leave it out of scope** — a consequence of Q-1 = (C): the skill's version gate (`python-best-practices/references/python-3.15.md:7`) forbids 3.15-only features unless `requires-python >=3.15` **and** CI runs 3.15, neither of which holds. The change stays DOCS/CHORE, no `src/` edit, no REFACTOR reclassification. The 5 sites are recorded as a follow-up for whenever the trigger fires.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded in the TODO's Out of scope
 
 ## Overlap check (P.2)
 
@@ -138,7 +138,7 @@ Every question that needs user input is recorded HERE — never in a central fil
 - `quality.yml:19,37,54,75,90,105,120`; `lint.yml:33`; `spec-validation.yml:35,64,78`.
 - `uv.lock:3` regenerated (F14); local venv recreated on 3.15 (F4: currently 3.14.5); `pydantic` floor raised per Q-2.
 
-**Option C (defer, recommended).** No pin changes. Scope = record the measured blocker (F1, F6, F7) plus a re-check trigger and the check command (`uv run --isolated --python 3.15 pytest -W error::DeprecationWarning`) in the verification record; optionally one backlog line. Zero CI cost, zero behavior delta — the only option that is honestly DOCS/CHORE today.
+**Option C (defer, chosen).** No pin changes. Scope = record the measured blocker (F1, F6, F7), the **support window (latest two CPython versions)**, the re-check trigger (3.15 final **and** a final `pydantic` with a cp315 wheel) and the check command (`uv run --isolated --python 3.15 pytest -W error::DeprecationWarning`), and open a **backlog TODO** (`python-3.15-upgrade`) carrying that trigger so the re-check is a visible scheduled change rather than a note only findable in a closed record. Zero CI cost, zero behavior delta — the only option that is honestly DOCS/CHORE today.
 
 ## Late questions (Phases 2–6)
 
