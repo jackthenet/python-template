@@ -249,3 +249,73 @@ A	docs/verification/workflow-docs-nits.md
 | `mkdocs build --strict` | skipped — no `userdocs/` path touched |
 | Verification section appended | this section |
 | Working tree clean after the S5.x commit | yes |
+
+---
+
+## Phase 6 review (S6.1–S6.3) — 2026-10-04
+
+**Coalescing note (P-41, continued):** S6.1 + S6.2 + S6.3 + S6.4 ran in **one** subagent execution — a 4-line Markdown change has one reviewable final state and one gate (the PR), so four launches over the same 4 lines would be pure launch overhead. Each atomic step is still recorded separately below.
+
+**Bounded inputs used (per the review skill, P-27):** the scope record (this file, P.4 + Phase 4/5 sections) as the normative basis, and the FINAL state via `git diff main...HEAD` (merge base `5c7d1e0`). NOT commit-by-commit. The full test suite was **not** re-run (Phase 5 confirmed the DOCS/CHORE gate; the type has no suite gate).
+
+### S6.1 Review vs. normative basis (DOCS/CHORE: no behavior delta, no more / no less)
+
+| Check | Command | Result |
+|---|---|---|
+| Diff is exactly the two scoped edits + this record | `git diff --name-status main...HEAD` | `M .agents/skills/specify/SKILL.md`, `M docs/todo/template.md`, `A docs/verification/workflow-docs-nits.md` — **3 paths, nothing else** |
+| Size matches the scope | `git diff --stat main...HEAD -- <the two files>` | `2 files changed, 4 insertions(+), 4 deletions(-)` — the four lines named in the Scope section, byte-for-byte the recorded "after" text |
+| The two **dropped** items were not touched | `git diff --name-only main...HEAD \| grep -E 'docs/questions/template.md\|docs/verification/prepared-workflow.md'` | **no match** (exit 1) — `docs/questions/template.md` (Q-1) and `docs/verification/prepared-workflow.md` (Q-2) are absent from the diff; no work was invented for them |
+| No behavior / test / source / config path | `git diff --name-only main...HEAD \| grep -E '^(src/\|tests/\|pyproject\.toml\|\.github/workflows/\|docs/specs/\|userdocs/\|AGENTS\.md\|docs/questions/)'` | **no match** (exit 1) |
+| No test added, removed, weakened or re-worded | same diff | no `tests/` path exists in the diff — nothing to weaken |
+| No whitespace/EOL damage in the changed lines | `git diff --check main...HEAD` | clean (exit 0) |
+| Branch still applies to current `main` | `git log --oneline 5c7d1e0..main -- docs/todo/template.md .agents/skills/specify/SKILL.md` | **empty** — no commit on `main` (now `8212c18`) has touched either file since the merge base, so all four target lines are still un-qualified on `main` and the PR applies without conflict |
+
+**Wording correctness — the four changed lines read in their final file context:**
+
+| Line | Final text (abridged) | Accurate against `AGENTS.md`? | Reads naturally? |
+|---|---|---|---|
+| `docs/todo/template.md:44` | `\| P.5 Self-consistency (FEATURE/CROSS-CUTTING) \| \| \|` | **yes** — `AGENTS.md:145` "**P.5 Verify self-consistency** \| subagent (specify skill) — **FEATURE/CROSS-CUTTING only**" | yes — last row of the Prep-log table; matches the already-qualified `Spec:` row at `:11` (`<!-- FEATURE/CROSS-CUTTING only; n/a for the other types -->`), so the template is now internally consistent |
+| `.agents/skills/specify/SKILL.md:14` | "The former steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5** (FEATURE/CROSS-CUTTING) — …" | **yes** — mirrors `AGENTS.md:175` verbatim (see finding F-1 on the qualifier's scope) | yes — same sentence, one inserted parenthetical; the "Phase P per change type" list at `:16-21` immediately below states what each type actually runs |
+| `.agents/skills/specify/SKILL.md:45` | "… **P.5 Verify self-consistency** (FEATURE/CROSS-CUTTING only) → **S1.4 Present for approval** (FEATURE/CROSS-CUTTING only) …" | **yes** — P.5: `AGENTS.md:145/:235/:339` all carry "(FEATURE/CROSS-CUTTING only)"; S1.4: the Phase Matrix `:208` gives Phase 1 only for FEATURE and CROSS-CUTTING ("— (done in Phase P)" for the other three) and the Skill-to-Phase Mapping `:313` lists "FEATURE, CROSS-CUTTING" | yes — matches `AGENTS.md:339` phrasing exactly; the arrow chain is unchanged in order |
+| `.agents/skills/specify/SKILL.md:46` | "P.2, P.4, P.5 and S1.4 (the latter two FEATURE/CROSS-CUTTING only) each run in their own subagent …" | **yes** — "the latter two" unambiguously = P.5 and S1.4, both FEATURE/CROSS-CUTTING-only; P.2/P.4 stay unqualified, which is correct (they run for every type, `AGENTS.md:143-144`) | yes — one qualifier per bullet, on the first mention; the second mention ("P.5 and S1.4 run inside it") inherits it |
+
+**No line in the diff is now wrong or misleading** (see F-1, an accepted observation on a pre-existing wording pattern copied verbatim from the normative source). No rule text, gate, owner, done-criterion or step was added, removed or reworded — only parenthetical qualifiers, exactly as the scope record's "wording trap" requires.
+
+### S6.2 Traceability + boundaries
+
+- **Traceability:** the change touches no `docs/specs/` file, so no `REQ-XXX`/`AC-XXX`/`INV`/`EDGE`/`NFR` ID is added, amended or referenced, and `docs/verification/traceability.md` is not in the diff (correct — nothing to update). Re-ran the CI referential-integrity gate: `uv run python scripts/check_traceability.py` → **`Traceability: PASS (746 matrix rows, 129 spec IDs, 713 test functions)`**, exit 0. No orphaned tests, no missing links introduced.
+- **Boundaries / architecture:** no `src/` path, so no feature directory, cross-feature import, or `model/`-`services/`-`shared/` rule is involved — the architecture checks are **n/a** for this diff. The two edited files are process guidance (`.agents/skills/`) and a planning template (`docs/todo/template.md`), each owned by the workflow layer, not by a feature.
+- **Planning-record ownership rule respected:** the branch does **not** modify `docs/todo/workflow-docs-nits.md` or `docs/questions/workflow-docs-nits.md` (orchestrator-owned, `main`-only). It edits `docs/todo/template.md`, the template — not a planning record. Confirmed by the name-status table above.
+- **Observability:** n/a — no runtime code, no logging surface.
+
+### S6.3 Review report
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| F-1 | `specify/SKILL.md:14` puts `(FEATURE/CROSS-CUTTING)` after "**P.2 / P.4 / P.5**", and read strictly the parenthetical could be taken to restrict P.2 and P.4 too — but P.2 and P.4 run for **every** type (`AGENTS.md:143-144`) | Observation — **accepted, no edit** | The sentence is a verbatim copy of the normative source `AGENTS.md:175`, which carries the qualifier in exactly that position; the scope record's "wording trap" requires mirroring `AGENTS.md` verbatim so the edit cannot read as a new rule. Rewriting it here would (a) invent wording that diverges from the normative source and (b) exceed the declared scope. The ambiguity is already closed in context: the per-type Phase P list at `:16-21` and `AGENTS.md:143-144` state P.2/P.4 for all types, and the sibling line `:46` (this same diff) qualifies only "the latter two". If the wording is ever tightened, it is an `AGENTS.md` edit — a separate change |
+| F-2 | `uv run mkdocs build --strict` (a TODO acceptance-signal item) was skipped at Phase 5 and not re-run here | Observation — **accepted** | The diff contains no `userdocs/` path and the site's `docs_dir` is `userdocs` (Phase 5 record); `docs/todo/` and `.agents/` are not part of the published site, so the CI `docs` job outcome cannot change. Re-running Phase 5 gates outside the named checks is out of the Phase 6 bounded scope; the CI `docs` job is the authoritative check |
+| F-3 | The branch base (`5c7d1e0`) lags current `main` (`8212c18`) | Observation — **resolved** | `git log 5c7d1e0..main -- <the two files>` is empty: no merged change has touched either file since, so the four target lines are still un-qualified on `main` and the PR applies cleanly. The `value-triage-gate` change is sequenced **after** this one (Q-3 = (a)), so it will rebase onto the qualified text rather than collide with it |
+| F-4 | `AGENTS.md` "how to use this" note (review skill, reusable-shared-capability step) | Skipped — **by rule** | This change adds no reusable shared capability (it qualifies two existing step lists); `AGENTS.md` is also explicitly outside the declared scope ("no `AGENTS.md`", Q-1). The skill's own condition — "if the change is a reusable shared capability" — is not met |
+
+**No acceptance test was weakened, modified or deleted; no behavior, test, source, config or spec file changed beyond the scoped non-behavior edits** — the DOCS/CHORE clean-review criterion in `AGENTS.md` ("Review Gate (Phase 6)") is satisfied.
+
+**Verdict: CLEAN** (no open finding; F-1/F-2 accepted with the reasons above, F-3 resolved, F-4 skipped by rule).
+
+### S6.4 Bump version + open PR
+
+- **Version bump: none** — `AGENTS.md` → Versioning → Bump mapping: `REFACTOR / DOCS-CHORE → none`. `bump-my-version` was **not** run; `pyproject.toml` `[project] version` is untouched (it is not in the diff).
+- **PR:** opened for `chore/workflow-docs-nits` → `main` via `gh pr create`; presented for human review/merge. **Not merged by the agent** (human governance).
+
+### Phase 6 done-criteria checklist
+
+| Criterion | Result |
+|---|---|
+| Diff = the two scoped edits (4 lines) + the verification record, nothing else | yes — 3 paths, 4 insertions / 4 deletions |
+| Dropped items (Q-1 `docs/questions/template.md:9`, Q-2 `prepared-workflow.md` sweep counts) untouched | yes — absent from `git diff --name-only main...HEAD` |
+| No `src/`, `tests/`, `pyproject.toml`, `.github/workflows/`, `docs/specs/` path | yes — grep no match |
+| Four changed lines accurate against `AGENTS.md` and readable in context | yes — table above (F-1 accepted) |
+| `uv run python scripts/check_traceability.py` exit 0 | yes — PASS (746 rows / 129 IDs / 713 test functions) |
+| Review report written, verdict CLEAN | yes — this section |
+| Review-report commit | `chore(workflow-docs-nits): S6.1-S6.3 review report` |
+| No version bump (DOCS/CHORE) | yes — `bump-my-version` not run |
+| PR open, not merged | yes — see the handoff / PR URL |
