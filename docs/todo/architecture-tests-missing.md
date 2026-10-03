@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from the template.
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- all 6 questions ANSWERED 2026-10-04; P.4 (worktree + scope record) still to run -->
 - **Change type:** DOCS/CHORE  <!-- provisional: the type question (remove the reference vs. build the tests) is Q-1 in the question file -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/architecture-tests-missing.md`
@@ -58,5 +58,6 @@ Running the REFACTOR Phase 5 instruction from `AGENTS.md` no longer errors: eith
 | P.2 Interrogate (5 questions) | 2026-10-04 | **DONE** — Q-1/Q-2/Q-3 narrowed by evidence (E-1…E-12): the dangling citation count is **4 in 2 files** (`AGENTS.md:212`, `:579`; `verify/SKILL.md:88`, `:103`), CI never runs the command (so the gate was enforced by nobody), option (a) costs 4 line edits with no bump, option (b) costs ~60–90 lines of stdlib `ast` tests but has **21 day-one violations** under the strict import rule and 4 under the no-private-import rule, and the `model/`/`services/` rule is untestable (those directories do not exist). Classification verdict: **DOCS/CHORE for both options** |
 | P.3 Answer (round 1: Q-1 answered, Q-2 closed) | 2026-10-04 | **WAITING** — **Q-1 = (a) remove/qualify the references** (no `tests/architecture/` in this change; DOCS/CHORE confirmed). **Q-2 closed as moot** (it was conditional on (b)). Still open: the (a1)/(a2) sub-variant → **Q-6**, plus **Q-3** (landing order), **Q-4** (CI-enforced vs agent-only), **Q-5** (the 4 private-module imports) |
 | P.3 Answer (round 2: Q-3, Q-5, Q-6) | 2026-10-04 | **DONE except Q-4.** **Q-6 = (a2)** — re-point the four citations at the manual boundary check (`AGENTS.md:592-593`), no directory named. **Q-5 = fold in** — the 4 private-module import fixes join the scope, so `src/` is touched and Phase 5 runs the full regression suite + ruff + mypy (not the docs-only light gate). **Q-3 = land independently** — the three colliding items land `workflow-docs-nits` → `value-triage-gate` → `spec-interview-protocol`; this one edits different lines. Only **Q-4** (should a boundary rule be CI-enforced at all) stays open — it is a backlog question, not a blocker for P.4 |
+| P.3 Answer (round 3: Q-4) | 2026-10-04 | **DONE — all 6 questions ANSWERED.** **Q-4 = (a) manual only, no follow-up**: no `tests/architecture/` suite and no CI boundary rule; the ruff `TID251` banned-api option was offered and not taken, so the 4 import fixes are made but not guarded. Next: **P.4** — create `chore/architecture-tests-missing` worktree + scope record → READY |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |

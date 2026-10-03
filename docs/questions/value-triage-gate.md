@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/value-triage-gate.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 2 PENDING: Q-2, Q-5 -->
-- **Answer rounds:** 3 (2026-10-04: Q-1, Q-3, Q-4, Q-7)
+- **Status:** ALL ANSWERED  <!-- 0 PENDING -->
+- **Answer rounds:** 4 (2026-10-04: Q-1, Q-2, Q-3, Q-4, Q-5, Q-7)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -46,10 +46,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** the verbatim rule text ends "Do not implement anything until I answer." Read literally that is a global stop, which contradicts five live rules that the TODO explicitly keeps out of scope. The wording decides whether this change silently inverts the scheduling protocol — the TODO's own "Constraints and risks" flags it as "a wording trap to catch in review".
 - **Context:** `AGENTS.md:124` "**None of them stops the agent** — a late question puts the change in WAITING and the agent switches to another prepared change"; `:219` legend "**⏸** = user input (the **change** stops until answered)"; `:305` "**Non-blocking:** a change that reaches a ⏸ gate goes **WAITING** and the orchestrator immediately works on another READY change … the workflow never idles"; `:386` "**Change stop, not workflow stop**"; `:406` "**Never idle.** … It stops only when every in-flight change is WAITING **and** no prepared change is READY"; Prohibition `:674` "**Idle or wait in place** on a human gate … while another change is READY". Today 2 of 16 backlog items are WAITING and 13 are PREPARING — a literal global stop would forbid exactly the work the backlog needs.
 - **Question:** scope the hard rule to the triaged items or to the agent? **(a)** per-item: no TODO may pass **P.4** (create its branch/worktree) until *its own* Value triage decision is recorded; already-decided and READY changes keep running, so "never idle" is untouched *(recommended — consistent with `:124`/`:305`/`:386`/`:406`/`:674`, and it still guarantees nothing is implemented before the user answers **that** item)*; **(b)** literal global stop — then this change must also amend `AGENTS.md:305`, `:406` and `:674`, which its Out-of-scope currently forbids (that would be a scheduling-protocol change, i.e. a reclassification trigger); **(c)** another formulation.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — per-item stop at P.4.** No TODO may pass **P.4** (create its branch/worktree) until its own Value triage decision is recorded; already-decided and READY changes keep running, so "never idle" (`AGENTS.md:406`), the WAITING rules (`:124`, `:305`, `:386`) and the Prohibition at `:674` stay untouched — no reclassification trigger. It still guarantees nothing is implemented before the user answers **that** item.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — the hard rule in the TODO's In scope is reworded to the P.4 gate
 
 ## Q-3 — how is a **dropped** TODO recorded: a new `DROPPED` status, or the TODO body only?
 
@@ -79,10 +79,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** the rule text says "Present the results as a table (ID | TODO | score | recommendation | reason), then ask me which to implement, merge, or drop" — a table implies a multi-item sweep, but TODOs are framed one at a time (P.1), and the repo has two contradictory precedents for where the ask/decision is recorded. Without a rule, the next agent either adds a new ⏸ round-trip per change or silently skips the ask.
 - **Context:** the batching rule already allows many rounds — `AGENTS.md:143` "present the batch (**≤ 4 per `ask_user_question` round**, most blocking first)", and `docs/workflow/PROBLEMS.md:96` (P-1) records the observed cost of one batch: "28 questions … 7 batches + 1 re-ask". So "one batched ask" = one **batch**, not one round: 16 backlog rows → up to 4 rounds, legal today (closed point 6). Recording, however, is contradictory: Obligation 14 (`AGENTS.md:698") says "Record **every** `BLOCKED-USER` question in the change's question file", but the two dropped items' question files are **untouched templates** (`docs/questions/docs-path-ci-trigger.md` and `docs/questions/split-archived-qa.md` still carry the literal `<the interrogation batch — at least 20 questions for FEATURE/CROSS-CUTTING>` placeholder) while the decision lives only in the TODO body; the two items the user did decide record it in the TODO's Value triage section (`track-python-skill.md:43` "**Decision:** user chose **implement**", `remove-spec-tdd-driver.md:43` + Prep-log row `:54`).
 - **Question:** two parts. **(i) Packaging:** when a single TODO is framed outside a sweep, is the ask issued **immediately** as a one-row table riding the change's existing P.3 round-trip (no extra ⏸, recommended), or **deferred** to the next backlog sweep (the item waits, one round-trip per sweep)? **(ii) Recording:** is the triage ask + decision recorded **only in the TODO's `## Value triage` section** (the precedent for all five items, and it keeps a dropped item's question file clean), or **also as a question-file entry** per Obligation 14 (protocol-consistent, but then a dropped item has a question file with an `ANSWERED` entry for a change that will never run)?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **immediate + TODO section only.** (i) A single TODO framed outside a sweep gets its ask **immediately**, as a one-row table riding that change's existing P.3 round-trip — no extra ⏸. (ii) The ask and the decision are recorded **only in the TODO's `## Value triage` section** (the precedent of all five items); no question-file entry, so a dropped item's question file stays clean.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded in the TODO's In scope; the protocol-consistency concern is closed by the Q-2 (a) per-item gate
 
 ### Placement cost analysis (the evidence behind Q-1)
 

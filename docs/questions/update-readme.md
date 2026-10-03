@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/update-readme.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
-- **Answer rounds:** 0  <!-- P.2 recorded 6 questions needing user input; 12 interrogation points closed from repository evidence -->
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 5 PENDING: Q-2…Q-6 -->
+- **Answer rounds:** 1  <!-- P.2 recorded 6 questions needing user input; 12 interrogation points closed from repository evidence; Q-1 answered 2026-10-04 -->
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -61,10 +61,10 @@ P.2 ran 2026-10-03 in the primary worktree. Result: **6 questions need user inpu
 - **Why needed:** The TODO scopes **two** deliverables (skill + rewritten `README.md`, `docs/todo/update-readme.md:76-80`) but its own value triage defers the go/no-go to P.3 ("Decision: user asked for the TODO file; implementation decision pending at P.3", `:105`). The two halves have very different cost and different collision surfaces: the skill alone is a 1-file addition with zero collisions; the README rewrite collides with three other backlog changes (E: Overlap check).
 - **Context:** README is 35 lines with no badges/links and three factual errors (E-1, E-2). Backlog score is 3/5 "implement" (`docs/questions/value-triage-gate.md:92`).
 - **Question:** Which scope do you want? (a) **Both** — add the skill and apply it to `README.md` in this one change (the TODO's current scope, one PR, 2 files); (b) **Skill only** — commit `.agents/skills/update-readme/SKILL.md` now and run it as a separate change later; (c) **README only** — apply the procedure without tracking a skill (then the "reusable procedure" rationale in `docs/todo/update-readme.md:22` is not delivered); (d) **Drop** — the skill is guidance nothing consumes until a README change actually runs.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Both** — add the skill and apply it to `README.md` in this one change (the TODO's current scope: `.agents/skills/update-readme/SKILL.md` + `README.md`, one PR).
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — scope confirmed; the remaining questions (Q-2…Q-6) now set the content of both files
 
 ## Q-2 — Sequence this change before or after `security-changelog-license` (the License badge)?
 - **Step:** P.2 Interrogate

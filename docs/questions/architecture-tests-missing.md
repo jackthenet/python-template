@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from the template.
 - **TODO file:** `docs/todo/architecture-tests-missing.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 1 PENDING: Q-4 (CI-enforced vs agent-only, for any future gate) -->
-- **Answer rounds:** 2 (2026-10-04: Q-1, Q-2 (moot), Q-3, Q-5, Q-6)
+- **Status:** ALL ANSWERED  <!-- 0 PENDING -->
+- **Answer rounds:** 3 (2026-10-04: Q-1, Q-2 (moot), Q-3, Q-4, Q-5, Q-6)
 
 ## Preparation questions (P.2)
 
@@ -100,10 +100,10 @@ If the user does want the gate (option b), the honest sequence is: (1) fix the 4
 - **Why needed:** it decides whether option (b) is worth the test file at all, and whether option (a) should leave any gate wording behind. Evidence shows the current gate is **unenforced**: no CI job names `tests/architecture/` (E-2), which is exactly why a citation to a non-existent directory survived across 10 verification records and 3 changes without ever failing a build.
 - **Context:** `quality.yml:59` (`pytest tests/ --cov`) and `spec-validation.yml:84` (`pytest tests/ -v`) already run everything under `tests/`, so a `tests/architecture/` directory would be CI-enforced **for free** — no new job, no new dependency (E-9). Conversely, if the user prefers agent-only manual checks, then `AGENTS.md:579` should stop naming a command and the manual check at `AGENTS.md:592-593` becomes the whole gate.
 - **Question:** should the architecture rule be enforced by CI (a real gate that fails the build), or stay a manual review/verification step the agent records in `docs/verification/<name>.md`?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — manual only, no follow-up.** Consistent with Q-6 = (a2): the architecture check stays a recorded manual boundary review; no `tests/architecture/` suite and no CI boundary rule is planned. The ruff `TID251` banned-api idea was offered and **not** taken, so the 4 private-import fixes are fixed by this change but not guarded against regression.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — closes the last open question; recorded in the TODO as the reason no follow-up change is opened
 
 ## Q-5 — fix the 4 private-module imports in this change, or keep them out of scope?
 - **Step:** P.2 Interrogate

@@ -112,7 +112,7 @@ None — no `src/backend/` or `src/frontend/` path is touched. Files: `README.md
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; todo set created; repo facts (remote, workflows, manifest, pre-commit, no LICENSE) verified |
 | P.1 duplicate check | 2026-10-03 | User re-supplied the instruction set (`#TODO3`). Overlap check → this file **is** the change; no second TODO created. Scope confirmed as the README + skill bundle; verbatim instruction text recorded above; `SK.md` path typo in the Acceptance signal corrected to `SKILL.md`. Still `PREPARING` — P.2 has not run. |
-| P.2 Interrogate (<n> questions) | | |
-| P.3 Answer (<n> answered) | | |
+| P.2 Interrogate (6 questions) | 2026-10-04 | **DONE** (question file written; this Prep-log row was missing and is filled in now) — Q-1…Q-6 recorded, 12 interrogation points closed from repository evidence. Verified facts: `README.md` has **no** badges and its `Structure` tree is wrong (it lists `features/` at `:24` and `:27`, which does not exist); the badgeable CI is `.github/workflows/lint.yml`, `quality.yml` (which carries the `docs` and `migrations` jobs) and `spec-validation.yml`; no coverage upload step exists; the skill precedent is `python-best-practices` (a `.agents/skills/` skill listed nowhere in `AGENTS.md` or `userdocs/`) |
+| P.3 Answer (round 1: Q-1) | 2026-10-04 | **WAITING** — **Q-1 = (a) Both**: the change ships `.agents/skills/update-readme/SKILL.md` **and** the `README.md` rewrite in one PR (the TODO's original scope). Still open: **Q-2** (sequence vs `security-changelog-license`), **Q-3** (coverage badge), **Q-4** (who fixes the `Structure` tree), **Q-5** (verbatim skill body vs +repo-protocol note), **Q-6** (listing the skill for discoverability) |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
