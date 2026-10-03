@@ -7,7 +7,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **Spec:** `docs/specs/structure-map.md`
 - **Opened:** 2026-10-03
 - **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Answer rounds:** 2
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -105,10 +105,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
   - A. FEATURE (as classified) — the new capability + failing-able gate is externally observable tooling behavior.
   - B. DOCS/CHORE — cheaper, but loses the spec and the 100%-spec-coverage evidence trail for ~27 decisions.
   - **Recommendation: A (FEATURE)** — first-match rule #2 applies; the `--check` exit code is observable behavior, not "no behavior change".
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A — FEATURE** (as classified). Spec + approval PR + `minor` bump, Phases 1-6.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — TODO type; spec to be drafted at P.4
 
 ## Q-5 — Is the generator worth building at all (vs. a one-liner)?
 - **Step:** P.2 Interrogate
@@ -119,10 +119,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
   - B. Script + skill, **no committed map, no hook** (generate on demand — see Q-6).
   - C. Skill + one-liner only (no script).
   - **Recommendation: A** if the map is committed and kept fresh (the value is one cheap read per task); otherwise B.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A — full deliverable**: `scripts/make_map.py` + committed `STRUCTURE.md` + skill + check-only hook. The one-liner option was rejected.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — TODO In scope
 
 ## Q-6 — Is `STRUCTURE.md` committed to git, or generated on demand?
 - **Step:** P.2 Interrogate
@@ -132,10 +132,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
   - A. Committed + check-only hook (instruction-faithful; the map is always readable without running anything).
   - B. Gitignored + generated on demand (zero PR noise, no hook friction, but an agent may read a stale/absent map).
   - **Recommendation: A**, with the regeneration duty stated in the skill and in the AGENTS.md line, and the map section kept small (Q-7…Q-9) so the diff stays readable.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A — committed + check-only hook.** The map is readable without running anything; regeneration duty is stated in the skill and the AGENTS.md line, and the map is kept small (Q-7/Q-8/Q-9).
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — TODO In scope + Q-15 policy
 
 ## Q-7 — The 400-line budget: exact truncation policy
 - **Step:** P.2 Interrogate
@@ -147,10 +147,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
   - C. **Keep 400**: drop whole low-value packages (`tests/`, `migrations/`) from the Modules section and cap per-class methods.
   - D. Two artifacts: a small always-committed `STRUCTURE.md` (tree + package summaries) and an optional `--full` run.
   - **Recommendation: A with a hard cap per class (B's cap as a safety valve)** — elision rules are the part most likely to silently hide the file an agent needs; a 900-line file is still ~15k tokens, well inside budget for the payoff.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A — raise the budget to ~900-1000 lines**, covering `src/` + `scripts/` + `migrations/` fully (tree limited to code dirs), with a hard per-class cap as the safety valve. No elision that can silently hide a module.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — spec size policy (P.4)
 
 ## Q-8 — Does the Modules section cover `tests/`?
 - **Step:** P.2 Interrogate
@@ -158,10 +158,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** 42 of 233 test modules have no module docstring (empty summary lines); test files are mostly `def test_*` (944 top-level defs) whose names are already greppable; `tests/*_test_helpers.py` are the shared fixtures an agent does need to discover.
 - **Question:** Include `tests/` in the Modules section, list only `tests/*_test_helpers.py` + `conftest.py`, or keep tests in the directory tree only?
   - **Recommendation: helpers + `conftest.py` only** (that is the discovery value; test-function lists are cheaper via `rg`).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Helpers + `conftest.py` only** in the Modules section (`tests/*_test_helpers.py`, `conftest.py`); test-function lists stay greppable via `rg`. Consistent with the ~900-line budget — all 233 test modules would exceed it alone.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — spec Modules scope
 
 ## Q-9 — Directory-tree scope
 - **Step:** P.2 Interrogate
@@ -169,10 +169,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** Tracked files by top dir: `tests` 238, `docs` 179, `src` 84, `.agents` 15, `.github` 9, `migrations` 6, `scripts` 3, `userdocs` 2, plus root config files.
 - **Question:** Which trees appear — all tracked paths, or code dirs (`src/ tests/ scripts/ migrations/`) with a one-line count for the rest (`docs/`, `userdocs/`, `.github/`, `.agents/`)? Any depth cap on the tree itself (distinct from `--max-depth`, Q-16)?
   - **Recommendation: code dirs in full, everything else as a one-line summary** (`docs/ — 179 files (process record)`).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Code dirs in full, everything else as a one-line count**: `src/ tests/ scripts/ migrations/` rendered; `docs/` (179), `userdocs/`, `.github/`, `.agents/` as e.g. `docs/ — 179 files (process record)`.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — spec tree scope
 
 ## Q-10 — Test strategy: where do the FEATURE's acceptance tests live?
 - **Step:** P.2 Interrogate
@@ -202,10 +202,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** `src/backend/shared/` today = `__init__.py` + `principal.py` (the D14 authorization plumbing, `docs/specs/user-roles-permissions.md:34`). AGENTS.md: "`shared/` is deliberately small … only when genuinely shared by multiple features and contains no feature-specific business logic."
 - **Question:** Confirm placement: everything in `scripts/` (generator + CLI), nothing under `src/`? Or a `src/backend/shared/structure_map/` module with a thin `scripts/` CLI wrapper (then coverage/mypy apply and the map maps itself)?
   - **Recommendation: all in `scripts/`** — a repo-map generator is not domain plumbing and must not become product code.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **All in `scripts/`** — generator + CLI, nothing under `src/`. The `src/backend/shared/structure_map/` placement and the CROSS-CUTTING reclassification were both rejected, so the 92% coverage floor and `mypy src/` do not apply to the generator.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — TODO In scope; type stays FEATURE
 
 ## Q-13 — Where the "read the map first" hook lives (and whether the map is a workflow prerequisite)
 - **Step:** P.2 Interrogate
@@ -216,10 +216,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
   - B. A + a sentence in the `specify` skill's P.1 ("if `STRUCTURE.md` exists, read it before walking the tree") — advisory, never blocking.
   - C. Make it a prerequisite: P.1/Phase 5 must cite/regenerate the map (hard gate, collides with `value-triage-gate`, adds a regeneration duty to every change).
   - **Recommendation: B** — advisory keeps the value without a new gate; keeps the PR mergeable with `value-triage-gate`.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **B — advisory.** Skill + one line in AGENTS.md 'Tooling & Execution Environment' + one advisory sentence in the `specify` skill's P.1 ('if `STRUCTURE.md` exists, read it before walking the tree'). Never a prerequisite or hard gate, so it stays mergeable with `value-triage-gate`.
+- **Date:** 2026-10-04 (rounds 1-2)
+- **Status:** ANSWERED
+- **Incorporated:** yes — TODO In scope; AGENTS.md + specify skill edits
 
 ## Q-14 — Register the new skill in AGENTS.md's Skill-to-Phase Mapping?
 - **Step:** P.2 Interrogate
