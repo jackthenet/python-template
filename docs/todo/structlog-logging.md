@@ -1,0 +1,73 @@
+# TODO: structlog-logging
+
+Backlog item for one planned change, created at **P.1 Frame** from this template and named `structlog-logging.md`. One file per change.
+
+This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
+
+- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Change type:** CROSS-CUTTING  <!-- shared infrastructure consumed by all six backend features; requires a spec amendment + a superseding ADR -->
+- **Created:** 2026-10-03
+- **Question file:** `docs/questions/structlog-logging.md`
+- **Spec:** `docs/specs/structlog-logging.md` (new) + amendments to `docs/specs/logging.md` and `docs/specs/logging-coverage.md`
+- **Worktree:** <created at P.4> `../python-template_kopie-worktrees/crosscut/structlog-logging`
+- **Depends on:** none
+- **Related specs:** `docs/specs/logging.md` (REQ-001, REQ-003, AC-001, AC-004, INV-001, EDGE-005, NFR-001, NFR-002), `docs/specs/logging-coverage.md`, `docs/specs/settings.md` (log settings keys), `docs/specs/event-bus.md` (direct loguru use)
+
+## Goal (one line)
+Replace **loguru** with **structlog** as the logging backend behind the existing public API (`setup_logger()`, `@logged`, `@logged_class`), so the code, the spec and the project's own guidance agree and log records are structured key/value events.
+
+## Why
+The project's guidance and its implementation currently contradict each other:
+
+- **Code + spec say loguru.** `docs/specs/logging.md` names loguru normatively — REQ-001 (loguru console + rotating file sinks), REQ-003 (`_InterceptHandler` routes stdlib records *into loguru*), AC-001, AC-004, INV-001 ("the number of **loguru** sinks added is exactly one console + one file"), EDGE-005, and NFR-002 constrains the feature to loguru + stdlib. `docs/decisions/ADR-002-loguru-logging-backend.md` records the decision and explicitly rejected structlog: *"rejected because it adds a second dependency and its output format does not match the spec's console/file sink requirements."*
+- **The skill says structlog.** `.agents/skills/python-best-practices/SKILL.md:16` — *"Use the project logger (structlog) instead of `print`"* — and `references/modern-python.md:85` — *"Logging: structlog events, not f-string messages and not `print`"*, with structlog examples in `references/errors-and-resources.md:17,43`. The agent is told to write structlog against a codebase that has none.
+- **The blast radius is measured, not guessed:** 7 source files reference loguru — `src/backend/logging/_setup.py` (12 refs), `_decorator.py`, `feature_settings.py`, plus **direct** calls outside the feature in `src/backend/eventbus/eventbus.py`, `src/backend/permissions/service.py`, `src/backend/settings/registry.py`, `src/backend/settings/repository.py` — and **17 test files** assert loguru-specific behavior, including `tests/acceptance/logging_coverage/test_direct_loguru_kept.py`, whose whole purpose is to keep direct loguru usage in place.
+
+Left alone, every future logging task picks a side of the contradiction; the fix is one deliberate, spec-amended swap.
+
+## In scope
+- **Spec amendment first** (Spec Amendment Workflow, PR merged before implementation): `docs/specs/logging.md` v3 re-stating REQ-001, REQ-003, AC-001, AC-004, INV-001, EDGE-005 and NFR-002 in **capability** terms (console + rotating file sinks, UTF-8, rotation size/backup count, stdlib interception, idempotent setup, no local-variable leakage) rather than loguru-API terms; `docs/specs/logging-coverage.md` updated where it mandates *direct loguru* usage.
+- **ADR superseding ADR-002** (dependency decision: structlog + stdlib `logging`, processor chain, renderer, logger factory, why the earlier rejection no longer holds), with ADR-002's Status set to *Superseded by ADR-0xx*.
+- **Implementation behind an unchanged public API**: `src/backend/logging/_setup.py` (stdlib `RotatingFileHandler` + console handler, structlog processors/config, `setup_logger()` still idempotent and thread-safe), `_decorator.py` (entry / exit-with-elapsed-ms / exception records as structured events), `feature_settings.py` (same keys: `log_level`, `log_file`, `log_max_bytes`, `log_backup_count`, `profiling_include_arguments`).
+- **Migrate the 4 direct-call sites** (eventbus, permissions, settings ×2) to the feature's public API — the swap is the right moment to retire the "direct loguru is allowed" policy.
+- **Dependency swap**: `loguru>=0.7.3` → `structlog` in `pyproject.toml` (+ `uv.lock`), `deptry` config if needed; comment updated.
+- **Test migration**: the 17 test files re-derived from the amended spec — including renaming/re-deriving `test_direct_loguru_kept.py` into the equivalent policy for the new backend. Tests are **re-derived, never weakened** (AGENTS.md: "Tests are the contract").
+- **Per-feature traceability updates** for every affected feature row (CROSS-CUTTING Phase 5 requirement).
+
+## Out of scope
+- Changing **what** is traced: the tracing policy (`@logged_class` on public service/registry/repository classes, `@logged` on module functions), levels, `slow_threshold_ms` semantics, `include_args=False` for secrets — all unchanged.
+- New sinks/exporters (JSON to stdout as a product feature, Loki/OTLP export, log aggregation).
+- Migrating or rotating the existing `logs/app.log` history.
+- Removing the stdlib interception requirement (third-party library records must still be captured).
+- Any feature's business logic.
+
+## Affected features
+Owner: `src/backend/logging/`. Direct code changes: `src/backend/eventbus/`, `src/backend/permissions/`, `src/backend/settings/`. Consumers with **no** code change (public API unchanged): `authentication`, `usermanagement`, `sessionmanagement`, `filemanagement`, `mail`, `search`, `src/main.py`. Tests: `tests/{acceptance,unit,integration,contract,property}/{logging,logging_coverage,settings_coverage}` + `tests/conftest.py` + `tests/logging_test_helpers.py`, `tests/logging_coverage_test_helpers.py`, `tests/settings_test_helpers.py`.
+
+## Constraints and risks
+- **This is not a REFACTOR.** Log line format is externally observable (people grep and read `logs/app.log`), so "no observable behavior change" does not hold → CROSS-CUTTING with a spec amendment, per the Escalation Rules.
+- **Spec-amendment gate before code.** `docs/specs/logging.md` is approved; it may only change through its own PR, merged before implementation resumes. The amendment must not be smuggled into the implementation PR.
+- **"Tests are the contract" cuts against us here.** Existing acceptance tests encode loguru specifics (sink counts, `_InterceptHandler`, `diagnose=False`). They must be re-derived from the amended spec — never edited to fit the new implementation. Expect a Phase 3 re-derivation, not a Phase 4 tweak.
+- **No 1:1 feature mapping.** loguru's `enqueue`, `backtrace`, `colorize`, `diagnose=False`, and `{}`-style lazy formatting have no structlog equivalents. The spec must be rewritten in capability terms, and the missing capabilities decided (e.g. exception rendering via structlog's processor chain + stdlib `exc_info`; color via a formatter) — otherwise INV-001 and EDGE-005 become untestable.
+- **NFR-001 must be re-measured.** The setup budget was relaxed once *because of loguru sink setup cost* (changelog v2: < 10 ms → < 50 ms, CI observed 15.55 ms). The new backend gets its own measured number, not the inherited one.
+- **Secret policy is non-negotiable.** No local-variable leakage (the `diagnose=False` equivalent), `include_args=False` preserved, no passwords/tokens in records (authentication NFR-002, mail's secret-free events).
+- **Frame-depth logic moves.** REQ-003's call-frame depth computation (correct file/line for intercepted stdlib records) and the importlib-bootstrap skip must survive; structlog's stdlib integration changes where that work happens.
+- **The cheaper alternative must be priced at P.3.** If structured output is *not* actually wanted, the honest fix is a 2-line DOCS/CHORE correcting the skill text to name loguru — that option should be decided, not assumed away.
+
+## Value triage (2026-10-03, pre-workflow)
+- **Overlap:** the logging feature already provides everything except the backend choice — setup, sinks, interception, decorators, settings keys, tracing policy, coverage spec. Nothing new is added; one dependency is swapped behind a stable API. The overlap is therefore total, and the *only* genuinely new thing is structured key/value records.
+- **Beneficiary:** whoever reads or filters logs in production (structured records are machine-queryable without regex), and anyone following the repo's own skill guidance (currently wrong).
+- **Score: 3/5** — real consistency and observability value, but no user-facing capability, and the cost is disproportionate to a dependency swap: a spec amendment, a superseding ADR, 7 source files, 17 test files, and a re-measured NFR.
+- **Recommendation: decide at P.3, then implement.** If structured log output is wanted → implement as CROSS-CUTTING (spec amendment + ADR + re-derived tests). If it is not → **merge into the existing logging feature** by correcting the two skill lines to say loguru (2-line DOCS/CHORE, score 5/5 for its size) and drop this TODO. Do not start the swap before that decision.
+
+## Acceptance signal (plain language)
+`grep -rn loguru src tests` returns nothing; `pyproject.toml` lists structlog and not loguru; the public API (`setup_logger`, `logged`, `logged_class`, `Settings`, `get_settings`) and the settings keys are unchanged, so no consumer feature was edited; a traced call still produces entry / exit-with-elapsed-ms / exception records with level, logger name and message, and never local variables, passwords or tokens; third-party stdlib log records still land in the same console + rotating file sinks with correct file/line; `docs/specs/logging.md` v3 describes the capability (not loguru), ADR-002 is marked superseded by the new ADR, and the full suite is green with tests re-derived from the amended spec rather than weakened.
+
+## Prep log
+| Step | Date | Result |
+|---|---|---|
+| P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type CROSS-CUTTING (spec amendment + superseding ADR required); todo set created; **value triage 3/5 — decide swap vs. correcting the skill text at P.3** |
+| P.2 Interrogate (<n> questions) | | |
+| P.3 Answer (<n> answered) | | |
+| P.4 Draft spec + create branch/worktree | | |
+| P.5 Self-consistency | | |
