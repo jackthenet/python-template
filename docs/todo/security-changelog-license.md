@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/security-changelog-license.md`
@@ -55,7 +55,7 @@ None — root documentation only (`LICENSE`, `CHANGELOG.md`, `SECURITY.md`, opti
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; todo set created; **value triage 4/5, implement** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (10 questions) | 2026-10-03 | **BLOCKED-USER** — 10 questions needing user input, 9 points closed from evidence. **Not fast-path** (verified against `AGENTS.md:1078`/`:1083`: three new files ≈ 200+ lines is far over the ≤ 2-line bound), so the DOCS/CHORE path runs: Phase P → Phase 4 → Phase 5 lint/types → light review → PR, no version bump. Evidence: `pyproject.toml:3-7` has no `license`, no authors, no classifiers (GitHub shows "No license"); `[tool.bumpversion]` has exactly one `files` entry (`pyproject.toml:87-90`); `mkdocs.yml` has no `nav`, so a relative link from `userdocs/` to a root file would break `--strict`; 10 releases exist in bump commits (`31d2a1a`…`3c90e6f`, 2026-09-12…2026-10-02) but `git tag` is empty. **Collisions:** `update-readme` already owns `README.md` incl. its License section (`update-readme.md:41,58,84,87`) — this change must not write README; `pyproject-tooling-gaps` lists `pyproject.toml` + `README.md` (`pyproject-tooling-gaps.md:51`) — collides only if the pyproject-metadata option is taken. **Note:** Q-3's GitHub private-vulnerability-reporting toggle is a repo setting only the user can enable (outside the PR) |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
