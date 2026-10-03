@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/update-readme.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 1 PENDING: Q-6 -->
-- **Answer rounds:** 2  <!-- P.2 recorded 6 questions; 12 interrogation points closed from evidence; Q-1…Q-5 answered 2026-10-04 -->
+- **Status:** ALL ANSWERED  <!-- 0 PENDING -->
+- **Answer rounds:** 3  <!-- P.2 recorded 6 questions; 12 interrogation points closed from evidence; Q-1…Q-6 answered 2026-10-04 -->
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -111,10 +111,10 @@ P.2 ran 2026-10-03 in the primary worktree. Result: **6 questions need user inpu
 - **Why needed:** Nothing *must* be registered for the skill to load (E-7: auto-discovery, no manifest, no CI/script check, mkdocs unaffected). But `AGENTS.md:308-319` "Skill-to-Phase Mapping" is the only human-facing index, and `python-best-practices` — the closest precedent, a non-phase how-to skill — is deliberately **not** in it. Whether a README-refresh procedure should be findable from `AGENTS.md` is a documentation decision, and editing `AGENTS.md` widens the diff and collides with `value-triage-gate` / `workflow-docs-nits` (both edit `AGENTS.md`).
 - **Context:** `docs/todo/track-python-skill.md:28` set the precedent (skill tracked, `AGENTS.md` explicitly out of scope). `AGENTS.md` Phase 6 item 9 tells agents to document reusable shared capabilities in `AGENTS.md` — but that obligation is scoped to FEATURE/CROSS-CUTTING, so it does not apply to this DOCS/CHORE change.
 - **Question:** (a) **No listing** — follow the `python-best-practices` precedent; the harness surfaces the skill by description (recommended by evidence); (b) **One line in `AGENTS.md`** (e.g. a "non-phase skills" note) — discoverable for humans, but a second file in the diff and a possible conflict with two WAITING changes; (c) **A line in `userdocs/`** — publishes it, but the docs site is user-facing product docs, not agent tooling.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) — one line in `AGENTS.md`** (a "non-phase skills" note naming the skill). Consequence recorded: this change now touches `AGENTS.md`, which `workflow-docs-nits`, `value-triage-gate` and `spec-interview-protocol` also edit — different sections, so no `Depends on:` is added, but whichever change lands second must re-read the file before editing.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — added to the TODO's In scope with the collision constraint
 
 ### Category coverage
 

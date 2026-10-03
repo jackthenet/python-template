@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- all 6 questions ANSWERED 2026-10-04; P.4 (worktree + scope record) still to run -->
 - **Change type:** DOCS/CHORE  <!-- docs + agent tooling; no externally observable behavior delta -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/update-readme.md`
@@ -78,6 +78,8 @@ Use this order, skipping sections that don't apply:
 - Rewrite `README.md` in place per that skill: badge row under the single H1, the 8-section structure (skipping what does not apply), copy-pasteable commands matching this repo's real tooling (`uv run ...`), relative links that resolve.
 - **Decided 2026-10-04 (Q-4 = (b)):** the `Structure` section is **trimmed** to a short summary plus a relative link to `AGENTS.md` "Project Structure" — the wrong `features/` tree (`README.md:24`, `:27`) is deleted, not hand-corrected.
 - **Decided 2026-10-04 (Q-5 = (b)):** the skill body stays verbatim **plus** a 2–3 line "Repo protocol" note pointing at the change-worktree/PR rule and `docs/verification/<name>.md`.
+- **Decided 2026-10-04 (Q-6 = (b)):** add **one line to `AGENTS.md`** — a "non-phase skills" note naming `.agents/skills/update-readme/` for discoverability.
+- **Decided 2026-10-04 (Q-3 = (d) → elsewhere):** no coverage badge in this change (Codecov is the separate `codecov-coverage-badge` change).
 - **Decided 2026-10-04 (Q-2 = (a)):** no `Depends on: security-changelog-license` — this change lands without a License badge; that change adds it later and updates its own "must not write `README.md`" note.
 - Facts already verified at P.1 (so P.4 does not re-guess them):
   - `owner/repo` = `jackthenet/python-template` (`git remote get-url origin`).
@@ -119,5 +121,6 @@ None — no `src/backend/` or `src/frontend/` path is touched. Files: `README.md
 | P.2 Interrogate (6 questions) | 2026-10-04 | **DONE** (question file written; this Prep-log row was missing and is filled in now) — Q-1…Q-6 recorded, 12 interrogation points closed from repository evidence. Verified facts: `README.md` has **no** badges and its `Structure` tree is wrong (it lists `features/` at `:24` and `:27`, which does not exist); the badgeable CI is `.github/workflows/lint.yml`, `quality.yml` (which carries the `docs` and `migrations` jobs) and `spec-validation.yml`; no coverage upload step exists; the skill precedent is `python-best-practices` (a `.agents/skills/` skill listed nowhere in `AGENTS.md` or `userdocs/`) |
 | P.3 Answer (round 1: Q-1) | 2026-10-04 | **WAITING** — **Q-1 = (a) Both**: the change ships `.agents/skills/update-readme/SKILL.md` **and** the `README.md` rewrite in one PR (the TODO's original scope). Still open: **Q-2** (sequence vs `security-changelog-license`), **Q-3** (coverage badge), **Q-4** (who fixes the `Structure` tree), **Q-5** (verbatim skill body vs +repo-protocol note), **Q-6** (listing the skill for discoverability) |
 | P.3 Answer (round 2: Q-2, Q-3, Q-4, Q-5) | 2026-10-04 | **WAITING** — **Q-2 = (a)** land now, License badge later (no dependency; `security-changelog-license` must update its own README out-of-scope note). **Q-3 = (d)** Codecov is added by a **new separate change**, framed at P.1 as `codecov-coverage-badge`; this change ships no coverage badge. **Q-4 = (b)** trim the `Structure` tree + link to `AGENTS.md`. **Q-5 = (b)** verbatim skill body + a 2–3 line repo-protocol note. Only **Q-6** (listing the skill) stays open |
+| P.3 Answer (round 3: Q-6) | 2026-10-04 | **DONE — all 6 questions ANSWERED.** **Q-6 = (b)**: add one "non-phase skills" line to `AGENTS.md` naming the skill. This change therefore touches `AGENTS.md` too — same file as `workflow-docs-nits` / `value-triage-gate` / `spec-interview-protocol` but a different section, so no `Depends on:`; whoever lands second re-reads the file. Next: **P.4** — create `chore/update-readme` worktree + scope record → READY |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |

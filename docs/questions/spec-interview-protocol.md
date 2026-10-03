@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/spec-interview-protocol.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 3 PENDING: Q-4, Q-5, Q-6 -->
+- **Answer rounds:** 1 (2026-10-04: Q-1, Q-2, Q-3)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -76,10 +76,10 @@ The P.1 value triage claimed "~80 % already normative, 4 deltas". **P.2 confirms
 - **Why needed:** it decides whether the change touches `docs/questions/template.md` at all, and whether the field is enforceable at the P.2 gate or is advice. A MUST makes the P.2 handoff verifiable ("every entry has a recommendation"); a SHOULD keeps the template informative but changes nothing checkable.
 - **Context:** E-1 — zero normative occurrences today, but 8 of the recent question files already carry per-question recommendations (api-keys 32, notifications 30, structure-map 27). The recommendation is not decorative: P.4's declared inputs are "the answered `docs/questions/<name>.md`" (`specify/SKILL.md:80`), so a recorded recommendation is the only way the drafting subagent inherits the interrogating subagent's judgement. Cost: one line in the Entry format (`docs/questions/template.md:21`, between `Question:` and `Answer:`) + one clause in `specify/SKILL.md:74` (and `AGENTS.md:142` if MUST).
 - **Question:** **(A)** add `- **Recommended:** <the step's proposed answer + one-line reason>` to the Entry format and make it a **MUST** in P.2's done-criteria (recommended — it codifies a practice that already has ~100 % adoption, and it is the delta with the highest payoff per line: P-1's 7-batch round-trip collapses to "ok / ok / no, B because…"); **(B)** same field, phrased **SHOULD** (template guidance, no gate change); **(C)** no template change — leave it as convention (zero diff, but the next agent is not obliged to do it).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(A) — the `Recommended:` field is a MUST.** Add `- **Recommended:** <the step's proposed answer + one-line reason>` to the Entry format and require it in P.2's done-criteria. It codifies a practice already at ~100% adoption in the five precedent batches and is the highest-payoff-per-line delta.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.2 done-criteria gains the field; `docs/questions/template.md` Entry format gains the line
 
 ## Q-2 — category coverage: which category list, and where is it recorded?
 
@@ -87,10 +87,10 @@ The P.1 value triage claimed "~80 % already normative, 4 deltas". **P.2 confirms
 - **Why needed:** delta (b) is meaningless without a named list — "report which categories were covered" requires an authority for what the categories are. The TODO's seven names are the proposed protocol's, not the repo's (E-2), and adopting them verbatim would make the five existing coverage tables non-conformant vocabulary-wise.
 - **Context:** five files already do this with **ad-hoc, change-specific** categories (`structlog-logging.md:51`, `api-keys.md:700`, `structure-map.md:34`, `update-readme.md:119`, `session-lookup-unwired.md:139-141` — the last has five explicit "Skipped: …" rows with reasons, i.e. the skip rule is already in practice). The repo's only fixed category vocabulary is the **test** hierarchy (`AGENTS.md:706-712`), a different axis. Recording location options: the P.2 handoff only (transient), or a `### Category coverage` block in the question file (matching the five precedents, durable, reviewable in Phase 6).
 - **Question:** **(A)** require a `### Category coverage` table in the question file, each row `covered (Q-nn / E-nn)` or `skipped — <reason>`, using **the change's own dimensions** (the five precedents' style), with the seven proposed categories named in the skill as a *starting checklist, not a closed set* (recommended — checkable, matches existing practice, no vocabulary break); **(B)** mandate the **seven** proposed categories verbatim as a closed set (uniform and comparable, but it rewrites the vocabulary the five existing records use and fits ISSUE/DOCS-CHORE changes badly); **(C)** no requirement — convention only. If A or B: **MUST** (part of P.2's done-criteria) or **SHOULD**?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(A) with MUST** — a `### Category coverage` table in the question file, rows `covered (Q-nn / E-nn)` or `skipped — <reason>`, using **the change's own dimensions**, with the seven proposed categories named in the skill as a *starting checklist, not a closed set*. It is part of P.2's done-criteria.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.2 done-criteria + the skill's checklist wording; the seven categories are not a closed vocabulary
 
 ## Q-3 — the ≥ 20 question floor: keep both, replace with the coverage gate, or soften it?
 
@@ -98,10 +98,10 @@ The P.1 value triage claimed "~80 % already normative, 4 deltas". **P.2 confirms
 - **Why needed:** this is the only delta that **changes a gate**, and it touches five normative sites (E-14). The TODO flags the floor as load-bearing but a proxy; the coverage checklist is only a safe replacement if it is genuinely checkable, otherwise the step becomes easier to pass — the opposite of why the floor exists.
 - **Context:** the floor is FEATURE/CROSS-CUTTING-only (`AGENTS.md:142,:701`; `specify/SKILL.md:74,:173-174,:216`) and already produces real friction: P-1 (`docs/workflow/PROBLEMS.md:96`) records 28 questions → 7 user batches + 1 re-ask. Observed adoption of the coverage table is high (5 files) **alongside** the floor — those batches carried 25/27/31 questions — i.e. in practice the two coexist and neither replaced the other. Replacing the floor means editing all five sites consistently (P-39's failure class).
 - **Question:** **(A)** **keep ≥ 20 and add the coverage requirement on top** (recommended — matches what the five batches actually did; the floor prevents the three-vague-questions failure, the checklist prevents the twenty-filler-questions failure); **(B)** replace the floor with "every category covered or explicitly skipped, and no question answerable from the repo" (fewer user round-trips, weaker anti-filler guard, five-site edit — if chosen, state the exact replacement wording for `AGENTS.md:142` and Obligation 17 `AGENTS.md:701`); **(C)** keep the floor and add an explicit stop rule ("stop when a question would be filler") as a SHOULD — softens P-1's cost without removing the gate.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(A) — keep the ≥ 20 floor and add the coverage requirement on top.** The floor prevents the three-vague-questions failure; the coverage table prevents the twenty-filler-questions failure. Both are gates, neither replaces the other.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — `AGENTS.md:142` and Obligation 17 keep their wording; the coverage table is added alongside
 
 ## Q-4 — non-goals: a mandatory P.2 question, a `docs/specs/template.md` §1 slot, and backfill?
 
