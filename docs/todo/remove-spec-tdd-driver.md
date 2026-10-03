@@ -36,6 +36,12 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 - `.pi/workflows/` becomes empty and therefore stops existing in the tree (git does not track empty directories).
 - No externally observable behavior delta: the driver is an optional pi workflow entry point, not the normative protocol (`AGENTS.md` + the skills carry Phase P).
 
+## Value triage (2026-10-03, pre-workflow)
+- **Overlap:** the live protocol already exists in `AGENTS.md` ("Phase P: PREPARE") and `.agents/skills/specify/SKILL.md`; the driver duplicates it and is adjudicated stale as F-10 (`docs/verification/prepared-workflow.md:383`). The alternative — *update* the driver (the original follow-up #3) — was rejected: it keeps a second copy of the protocol that must track `AGENTS.md` forever.
+- **Beneficiary:** anyone (agent or human) who could invoke `.pi/workflows/spec-tdd.workflow.ts` and be told to create the branch, interrogate and write the spec inside Phase 1 (`:65`) — the exact work Phase P front-loads.
+- **Score: 4/5** — a one-path deletion of a 187-line file with **zero consumers** (`git ls-files .pi` lists exactly this path; no CI job, test, `package.json`/`tsconfig`, pre-commit hook or config references it) removes the last artifact describing the pre-Phase-P protocol; it is not a 5 because the payoff is hygiene, not new capability.
+- **Decision:** user chose **implement as logged** — scope unchanged (delete the driver **and** record the three `prepared-workflow` follow-ups as dropped with reasons).
+
 ## Acceptance signal (plain language)
 `git ls-files .pi` lists no workflow script, the only remaining mentions of `spec-tdd.workflow` are inside historical verification records, and the DOCS/CHORE light gate passes: a `git diff --name-status` scope proof showing exactly one deleted `.ts` path (no `src/`, `tests/`, `pyproject.toml`, `.github/` or config path touched) plus lint and type checks where applicable — no Python path is touched, so no full-suite run is required by this change's gate set.
 
@@ -45,5 +51,6 @@ None — no `src/backend/` or `src/frontend/` path is touched.
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; todo set #9–#13 |
 | P.2 Interrogate (0 questions) | 2026-10-03 | **DONE** — no question needs user input; overlap check (`docs/specs/` 13 files, `docs/todo/`, in-flight worktrees) clean; every raised point closed from evidence (the driver is the only tracked `.pi` path; no CI/test/config/dependency reference to it) |
 | P.3 Answer (0 answered) | 2026-10-03 | **no-op** — 0 questions to present, 0 rounds; question file header set to `ALL ANSWERED` |
+| Value triage (pre-workflow) | 2026-10-03 | **4/5 — implement as logged** (scope unchanged); user decision recorded above. Not yet started: held at P.4, planning-record logging only |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency (n/a — DOCS/CHORE) | | n/a |
