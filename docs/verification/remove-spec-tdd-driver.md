@@ -120,3 +120,46 @@ Change made: `git rm .pi/workflows/spec-tdd.workflow.ts` — the only action in 
 | No test / behavior touched | `git status --porcelain` | only the staged deletion (plus this record edit); no `tests/` path, no `src/` path |
 
 Commit: this change's single Phase 4 commit (see `git log` — message `chore(remove-spec-tdd-driver): delete the unused spec-tdd workflow driver`). **Phase 5 gate 1 note:** run the scope proof against the merge-base, not the `main` tip — `git diff $(git merge-base main HEAD) --name-status -M` → exactly `D .pi/workflows/spec-tdd.workflow.ts` + `A docs/verification/remove-spec-tdd-driver.md` (the PR diff). `git diff main --name-status` additionally lists `M docs/todo/remove-spec-tdd-driver.md` only because `main` advanced after this branch was cut at `c2342b6` with the orchestrator's planning-record commits (`144a652` READY, `bd038e6` IN-WORKFLOW) — this change never writes that path (planning records are `main`-only).
+
+---
+
+## Phase 5 verification (S5.1–S5.4, DOCS/CHORE light gate set) — 2026-10-03
+
+**Gate set actually run** (AGENTS.md Phase Matrix, DOCS/CHORE → "Light: lint/types where applicable"; Phase 5 item 16 → "Run lint and type checks where applicable; confirm no test files or behavior were touched"; verify skill "MUST → DOCS/CHORE"). S5.1 for this type is the **scope proof**, not a full-suite run — see "Why no full-suite run" below.
+
+Pre-state (verify skill, Entry Conditions + Git Responsibilities): HEAD `a7a6b04` (Phase 4 change made), `git status --porcelain` → empty (clean tree), `git merge-base main HEAD` → `c2342b61c300242659e0f0476858c4e1975685a0`.
+
+| # | Step | Check | Command (run in this worktree) | Observed output | Verdict |
+|---|---|---|---|---|---|
+| 1 | S5.1 | Scope proof vs merge-base | `git diff --name-status $(git merge-base main HEAD) HEAD` | **exactly two entries**: `D\t.pi/workflows/spec-tdd.workflow.ts` and `A\tdocs/verification/remove-spec-tdd-driver.md` (`git diff --name-only … \| wc -l` → **2**) | **PASS** |
+| 2 | S5.1 | No out-of-scope path | `git diff --name-only $(git merge-base main HEAD) HEAD \| grep -E "^(src/\|tests/\|migrations/\|docs/specs/\|\.github/\|pyproject\.toml\|uv\.lock\|\.pre-commit-config\.yaml\|mkdocs\.yml\|userdocs/\|scripts/\|\.editorconfig\|\.gitignore\|\.vscode/\|docs/decisions/\|docs/tasks/\|docs/todo/\|docs/questions/)"` | **no match** (grep exit 1) — no source, test, migration, spec, CI, project-config, docs-site, script or planning-record path is touched | **PASS** |
+| 3 | S5.1 | Consumer sweep: tracked `.pi` tree empty | `git ls-files .pi` | **empty** — no workflow script (or any other tracked `.pi` path) remains | **PASS** |
+| 4 | S5.1 | No orphaned reference | `git grep -n "spec-tdd"` / `git grep -n "pi-workflows"` (at HEAD) | hits **only** in historical verification records (`docs/verification/prepared-workflow.md:81`, `:347`, `:383`, `:567`), this change's own record, this change's planning records (`docs/todo/`, `docs/questions/`), and two unrelated TODOs that name *this change* (`docs/todo/value-triage-gate.md:20`, `docs/todo/workflow-docs-nits.md:37`). The deleted file itself no longer appears anywhere | **PASS** |
+| 5 | S5.2 | Lint, whole repo (= CI `lint` job, the one full-repo sweep) | `uv run ruff check .` | **`All checks passed!`** (exit 0) — identical to the `main` baseline recorded in §"Phase 5 gate set" | **PASS** |
+| 6 | S5.2 | Formatting (report-only) | `uv run ruff format --check .` | **`323 files already formatted`** (exit 0). `ruff format` / `ruff check --fix` deliberately **not** run — they would modify out-of-scope files (AGENTS.md P-6) | **PASS** |
+| 7 | S5.2 | Types | `uv run mypy src/` | **`Success: no issues found in 83 source files`** (exit 0) — byte-identical to the `main` baseline in §"Phase 5 gate set". No Python path is touched (check 2), so this is the no-regression check, run once as the gate | **PASS** |
+| 8 | S5.3 | Traceability referential integrity (CI `traceability` job) | `uv run python scripts/check_traceability.py` | **`Traceability: PASS (746 matrix rows, 129 spec IDs, 713 test functions)`** (exit 0) | **PASS** |
+| 9 | S5.4 | Docs site build (CI `docs` job gate) | `uv run mkdocs build --strict` | built to `site/` in **2.78 s**, **exit 0**, **no strict warnings** — the only stderr is the vendor's pre-existing MkDocs 2.0 advisory banner, not a build warning. `site/` is gitignored (`.gitignore:155:/site`), so the worktree stays clean (`git status --porcelain` → empty after the build) | **PASS** |
+
+### Why no full-suite run (stated, not silently skipped)
+
+The Phase Matrix gives DOCS/CHORE the light gate and Phase 5 item 16 asks only for lint/types "where applicable" plus confirmation that **no test file or behavior was touched**. That confirmation is checks 1–2: the diff is one deleted `.ts` file plus this record — **no `src/`, no `tests/`, no `migrations/`, no config path**. There is therefore no Python for a test to exercise differently than it did on `main`, and a local `uv run pytest tests/` would add no evidence for this change's gate set. Independent confirmation still happens upstream: `quality.yml` has **no** `paths:` filter (P.4 no-behavior-delta proof, check 9), so CI runs `uv run pytest tests/ --cov` (plus the `architecture`/`migrations`/`docs` jobs) on this PR regardless — the full suite is verified by CI, not duplicated locally.
+
+Also deliberately not run, with reason: `uv run pytest tests/ --cov` / `tests/architecture/` (no Python or test path touched — see above); `scripts/verify_spec.py` (FEATURE/CROSS-CUTTING only, and this change has no spec); `uv run deptry .` (Python-dependency analysis; no dependency manifest is touched — `pyproject.toml`/`uv.lock` are outside the diff per check 2, and the deleted file is TypeScript with no project manifest of its own).
+
+### S5.3 traceability — n/a, no normative ID touched
+
+The change touches **no** `docs/specs/` file, **no** code, and **no** test, so it defines no `REQ-XXX`/`AC-XXX`/`INV-XXX`/`EDGE-XXX`/`NFR-XXX` and invalidates none: `git diff --name-only $(git merge-base main HEAD) HEAD \| grep -E "docs/specs/\|docs/verification/traceability.md"` → **no match** (exit 1). The matrix therefore needs **no** new row (a DOCS/CHORE change produces no test evidence row) and no existing row is orphaned — evidenced by check 8: `scripts/check_traceability.py` still exits 0 over **746 rows / 129 spec IDs / 713 test functions**, i.e. the deletion broke neither the spec-validation job nor any row's cited test. **Recorded as: n/a — no normative ID touched; traceability gate proven by the script passing.**
+
+### Verdict against the TODO acceptance signal
+
+| TODO acceptance signal (`docs/todo/remove-spec-tdd-driver.md:46`) | Check | Satisfied |
+|---|---|---|
+| `git ls-files .pi` lists no workflow script | 3 | **yes** — output empty |
+| the only remaining mentions of `spec-tdd.workflow` are inside historical verification records | 4 | **yes** — historical verification records + this change's own planning/verification records + two TODOs naming this change; the TODO's Constraints section already accounts for the planning-record mentions |
+| `git diff --name-status` scope proof: exactly one deleted `.ts` path, no `src/`/`tests/`/`pyproject.toml`/`.github/`/config path | 1, 2 | **yes** — 2 paths total (`D` the `.ts`, `A` this record) |
+| lint and type checks where applicable; no full-suite run required | 5, 6, 7 + §"Why no full-suite run" | **yes** — ruff clean, format clean, mypy clean on 83 files |
+
+**Phase 5 verdict: PASS.** Every gate in this change's DOCS/CHORE gate set has a recorded command and result; no test file or behavior was touched; the additional repo-wide `.md`/tooling gates (`check_traceability.py`, `mkdocs build --strict`) also pass, so the deletion broke neither the spec-validation job nor the docs build. The change is verified at its type's light gate. No version bump (DOCS/CHORE → none); `pyproject.toml:4` stays `0.6.0`.
+
+Commit: `docs(remove-spec-tdd-driver): S5 verification report` (this section).
