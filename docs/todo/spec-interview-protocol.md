@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE  <!-- process guidance only; no externally observable behavior delta. Same classification as `value-triage-gate` and `workflow-docs-nits`. -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/spec-interview-protocol.md`
@@ -39,8 +39,8 @@ So the real decision is not "adopt the protocol?" — it is "which four lines to
 ## In scope
 - **`Recommended:` field in `docs/questions/template.md`** — one line per entry: the step's proposed answer + a one-line reason. Cheap, and it makes the recommendation survive into the P.4 draft subagent's inputs.
 - **Category coverage checklist in the `specify` skill's P.2** — the seven categories (Scope & Goals, Data & State, Behavior & Edge Cases, Interfaces, Constraints, Testing & Acceptance, Architecture & Conventions), each marked covered / skipped-with-reason, reported in the P.2 handoff. This is what "no meaningful ambiguity remains" actually means in a checkable form.
-- **A mandatory non-goals question** in P.2, and a **Non-goals / Out of scope subsection in `docs/specs/template.md` §1** so the answer has a home. (Today the answer exists in the feature brief, which AGENTS.md says is *not* saved as a separate file — so it currently evaporates.)
-- **A per-round recap line** in P.3 ("what is decided now") — a one-sentence orchestrator convention, not a new artifact.
+- **A mandatory non-goals question** in P.2 (one clause in `specify/SKILL.md:71` + `AGENTS.md:142`), and an **`- **Out of Scope / Non-goals:**` bullet in `docs/specs/template.md` §1** — §1 bullet, **not** a numbered section, and it **must stay ID-free** so `check_traceability.py:105` does not demand a matrix row for it. (Today the answer exists in the feature brief, which AGENTS.md says is *not* saved as a separate file — so it currently evaporates.) **No backfill** of `logging.md`, `logging-coverage.md`, `session-management.md` — the template binds new specs only.
+- ~~**A per-round recap line** in P.3 ("what is decided now")~~ — **dropped at Q-5 = (C)**, see Out of scope.
 - **Decide the ≥ 20 question floor** (see Constraints): keep it, or replace it with the coverage checklist as the FEATURE/CROSS-CUTTING done-criterion. This is the one item that changes a gate, so it needs an explicit answer.
 
 ## Out of scope
@@ -49,6 +49,8 @@ So the real decision is not "adopt the protocol?" — it is "which four lines to
 - **Changing the ≤ 4-per-round batching, the single `BLOCKED-USER` batch rule, or the Spec Approval Gate** — already correct, already enforced.
 - **Anything about implementation.** The protocol's "no code during this phase" is already structural (worktree created at P.4).
 - Value triage placement (owned by `docs/todo/value-triage-gate.md`).
+- **The per-round "now decided" recap** — dropped at **Q-5 = (C)**: it has no artifact, no producer and no evidence path, so a MUST would be a gate signal nothing can verify (the P-39 class, `docs/workflow/PROBLEMS.md:371-377`). The question file plus the recorded `Recommended:` field already carry the same information durably.
+- **Backfilling non-goals into the three approved specs** that lack one (`logging.md`, `logging-coverage.md`, `session-management.md`) — **Q-4 = (3) no backfill**; each would need its own Spec Amendment PR and the template binds new specs only.
 
 ## Affected features
 No `src/` code. Files: `.agents/skills/specify/SKILL.md` (P.2 / P.3 sections), `docs/questions/template.md`, `docs/specs/template.md` (§1), and — only if the ≥ 20 floor changes — `AGENTS.md` (P.2 done-criteria) and the `specify` skill's done-criteria/checklist lines.
@@ -74,6 +76,7 @@ No `src/` code. Files: `.agents/skills/specify/SKILL.md` (P.2 / P.3 sections), `
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; protocol compared line-by-line against `AGENTS.md` Phase P and `.agents/skills/specify/SKILL.md` — **~80 % already normative** (explore-first, ≤4/round, impact ranking, no-code, durable Q&A, approval gate); 4 genuine deltas found (recommended answer per question, category coverage, non-goals question + spec subsection, per-round recap); 2 conflicts flagged (≥ 20 question floor; spec layout vs. REQ/AC IDs enforced by `scripts/check_traceability.py`); **value triage 4/5 — fold into P.2/P.3, do not add a parallel protocol** |
 | P.2 Interrogate (6 questions) | 2026-10-04 | **DONE** (question file written; this Prep-log row was missing and is filled in now) — Q-1…Q-6 recorded: the `Recommended:` field, category coverage (which list + MUST/SHOULD), the ≥ 20 floor, non-goals (mandatory P.2 question + `docs/specs/template.md` §1 slot + backfill), the per-round recap, and the landing order against `value-triage-gate` / `workflow-docs-nits` |
-| P.3 Answer (round 1: Q-1, Q-2, Q-3) | 2026-10-04 | **WAITING** — **Q-1 = (A) MUST**: `- **Recommended:** <answer + one-line reason>` joins the Entry format and P.2's done-criteria. **Q-2 = (A) MUST**: a `### Category coverage` table (own dimensions; the seven categories are a starting checklist, not a closed set) in P.2's done-criteria. **Q-3 = (A)**: keep the ≥ 20 floor **and** add the coverage gate — neither replaces the other. Still open: **Q-4** (non-goals question + spec-template slot + backfill), **Q-5** (per-round recap), **Q-6** (landing order — the user has already fixed the backlog order as `workflow-docs-nits` → `value-triage-gate` → this change, which matches its (A)) |
+| P.3 Answer (round 1: Q-1, Q-2, Q-3) | 2026-10-04 | **WAITING** — **Q-1 = (A) MUST**: `- **Recommended:** <answer + one-line reason>` joins the Entry format and P.2's done-criteria. **Q-2 = (A) MUST**: a `### Category coverage` table (own dimensions; the seven categories are a starting checklist, not a closed set) in P.2's done-criteria. **Q-3 = (A)**: keep the ≥ 20 floor **and** add the coverage gate — neither replaces the other. (Q-4/Q-5/Q-6 resolved in round 2 below) |
 | P.4 Draft scope + create branch/worktree | | |
+| P.3 Answer (round 2: Q-4, Q-5, Q-6) | 2026-10-04 | **RESOLVED — all 6 ANSWERED.** **Q-4 = all three recs**: mandatory P.2 non-goals question + an **ID-free** `- **Out of Scope / Non-goals:**` bullet in `docs/specs/template.md` §1 (not a numbered section) + **no backfill** of the three approved specs. **Q-5 = (C) drop the recap** — a MUST would be a gate signal with no reachable producer (P-39). **Q-6 = (A)** `workflow-docs-nits` → `value-triage-gate` → this change last; single answer for both this change and `value-triage-gate` Q-4 |
 | P.5 Self-consistency | n/a (DOCS/CHORE) | |

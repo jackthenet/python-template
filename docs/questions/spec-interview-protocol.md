@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/spec-interview-protocol.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 3 PENDING: Q-4, Q-5, Q-6 -->
-- **Answer rounds:** 1 (2026-10-04: Q-1, Q-2, Q-3)
+- **Status:** ALL ANSWERED  <!-- OPEN | ALL ANSWERED -->  <!-- 0 PENDING -->
+- **Answer rounds:** 2 (2026-10-04: round 1 Q-1, Q-2, Q-3; round 2 Q-4, Q-5, Q-6)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -109,10 +109,10 @@ The P.1 value triage claimed "~80 % already normative, 4 deltas". **P.2 confirms
 - **Why needed:** three separable decisions with different blast radii: a mandatory question (skill/AGENTS text only), a template slot (the only edit that touches `docs/specs/` and therefore the only one that makes the Spec Validation workflow run at all, E-12), and any obligation on the three approved specs that lack the line (a governance act against the Spec Amendment Workflow, E-8).
 - **Context:** E-3/E-6/E-7/E-8. The out-of-scope answer is already required in the feature brief (`specify/SKILL.md:74,:176,:215`; `AGENTS.md:470`) and P.5 checks scope consistency (`specify/SKILL.md:154`), but the brief is explicitly **not saved** (`AGENTS.md:470` "do **not** save it as a separate `.brief.md`"), so today the answer survives only if the drafter happens to put it somewhere — and 8 of 12 specs show that it usually does, in an ad-hoc §1 bullet. A template slot makes it a required field instead of luck. Constraint from E-7: the bullet must stay **ID-free**, or `check_traceability.py:105` demands a matrix row for it.
 - **Question:** **(1)** Does P.2 get a **mandatory** non-goals / scope-boundary question (recommended: yes — one clause in `specify/SKILL.md:71` + `AGENTS.md:142`), or is "the brief MUST capture out-of-scope" enough? **(2)** Does `docs/specs/template.md` §1 gain an `- **Out of Scope / Non-goals:**` bullet (recommended: yes — one line, matches 8/12 specs and `search.md:615`, zero CI effect if ID-free) — and if so, §1-only or a numbered section like `search.md`'s §13? **(3)** Must the three specs without one (`logging.md`, `logging-coverage.md`, `session-management.md`) backfill it? Recommended: **no backfill** — they are approved specs and each would need its own Spec Amendment PR; the template binds new specs only.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **All three recommendations.** **(1)** P.2 gets a **mandatory** non-goals / scope-boundary question — one clause in `specify/SKILL.md:71` + `AGENTS.md:142`. **(2)** `docs/specs/template.md` §1 gains an `- **Out of Scope / Non-goals:**` bullet — **§1 bullet, not a numbered section**, and it **must stay ID-free** so `check_traceability.py:105` does not demand a matrix row for it. **(3)** **No backfill** — `logging.md`, `logging-coverage.md` and `session-management.md` are approved specs and each would need its own Spec Amendment PR; the template binds new specs only.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — fixes the In scope bullet on non-goals; see the TODO's In scope
 
 ## Q-5 — the per-round "now decided" recap: MUST, SHOULD, or drop?
 
@@ -120,10 +120,10 @@ The P.1 value triage claimed "~80 % already normative, 4 deltas". **P.2 confirms
 - **Why needed:** it is the only delta with **no artifact, no producer and no evidence path** (E-4) — a one-sentence chat convention. Making it a MUST creates an obligation nothing in the handoff or the question file can verify, which is exactly the "gate signal with no reachable producer" class this repo was burned by three times (P-39, `docs/workflow/PROBLEMS.md:371-377`).
 - **Context:** P.3 is an orchestrator step (`AGENTS.md:143`, `:303`); its done-criteria is "every question `ANSWERED` + incorporated". The recap would sit in the P.3 row and/or the Batching rule (`AGENTS.md:385`). Counter-argument: with Q-1 = A (recommendations recorded), the recap's value largely disappears — the user already sees the step's judgement per question, and the recorded answers are themselves the record of what is decided.
 - **Question:** **(A)** add it as a **SHOULD** sentence to the P.3 row ("state in 1–2 lines what the answers so far decide") — cheap, no gate, no artifact; **(B)** add it as a **MUST** in P.3's done-criteria (then where is it evidenced — the question file's `Answer rounds:` line, or nothing?); **(C)** drop it as YAGNI — the question file plus the recorded recommendations already carry the same information durably (recommended).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(C) drop it.** The question file plus the recorded answers — and, from Q-1 = (A), the recorded `Recommended:` field — already carry the same information durably. A MUST would be a gate signal with no reachable producer (the P-39 class, `docs/workflow/PROBLEMS.md:371-377`), and a SHOULD would add unverifiable prose to P.3's done-criteria. The "per-round recap" line is removed from this change's scope.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recap item dropped from scope; see the TODO's Out of scope
 
 ## Q-6 — landing order against `value-triage-gate` and `workflow-docs-nits` (reciprocal of their Q-4 / Q-3)
 
@@ -131,10 +131,7 @@ The P.1 value triage claimed "~80 % already normative, 4 deltas". **P.2 confirms
 - **Why needed:** all three changes edit the same guidance surface, and two of them are WAITING on their own P.3 batches, so the order decides whether this change's diff is written against settled text or re-based twice. `value-triage-gate`'s Q-4 (`docs/questions/value-triage-gate.md:65`) already asks the same question from its side and asks that it be answered **once** for both changes.
 - **Context:** E-9/E-10. Overlap matrix: `AGENTS.md:142-143` (this change + `value-triage-gate`) — **same lines**; `specify/SKILL.md:71-75` (this change + `value-triage-gate`'s P.1/P.2 area) — **same section**; `specify/SKILL.md:14,:45,:46` (`workflow-docs-nits` only — this change adds no step, so it does not touch them); `docs/questions/template.md:9` (`workflow-docs-nits`) vs `:16-26,:28-30` (this change) — **same file, different lines, mergeable**; `docs/todo/template.md` (`value-triage-gate` + `workflow-docs-nits` only — this change needs no TODO-template edit unless Q-2 adds a coverage row to the Prep log). Both predecessors are `Status: WAITING` (`docs/todo/value-triage-gate.md:7`, `docs/todo/workflow-docs-nits.md:7`); no PRs are open.
 - **Question:** **(A)** `workflow-docs-nits` (4 cosmetic lines) → `value-triage-gate` (structural, inserts the triage step) → **this change** last, so every edit lands on settled text (recommended; matches this change's own `Depends on:` at `docs/todo/spec-interview-protocol.md:13` and "easiest first", `AGENTS.md:422`); **(B)** this change first with its scope narrowed so it never touches `AGENTS.md:142-143` or `specify/SKILL.md:71-75` (i.e. template-only deltas: the Q-1 field + the spec-template §1 bullet), with the P.2/P.3 wording edits deferred to a follow-up; **(C)** fold all three into one DOCS/CHORE change (one PR, no conflicts, but it merges three unanswered question sets and delays the two cheap ones). Also confirm: this change must **not** re-open the value-triage placement (owned by `docs/todo/value-triage-gate.md`, per `docs/todo/spec-interview-protocol.md:51`).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(A)** — `workflow-docs-nits` (4 cosmetic lines) → `value-triage-gate` (structural) → **this change last**, so every edit lands on settled text. This is the single answer for both this change and `value-triage-gate` Q-4 (asked reciprocally from its side). Confirmed: this change does **not** re-open the value-triage placement (owned by `docs/todo/value-triage-gate.md`), and it adds no step, so it does not touch `specify/SKILL.md:14,:45,:46`.
 
 ### Category coverage (DOCS/CHORE — no ≥ 20 floor)
 
