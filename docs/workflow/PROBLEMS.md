@@ -357,3 +357,23 @@ A step MUST log a problem when it:
 - **Resolution:** merged `origin/main` into `crosscut/search` (normal push, no rebase/force-push); the single conflict (`docs/workflow/PROBLEMS.md`) was resolved as a **union** — `P-36` (branch) and main's `## After-workflow-optimization — user-roles-permissions` section both kept, no entry dropped; `AGENTS.md` auto-merged with both sides' content intact. Main's delta was docs/skills-only (no `src/`/`tests/`), so the Phase 5 evidence stays valid.
 - **Durable lesson:** check `gh pr view --json mergeable` **before** polling, and use `gh api repos/<repo>/actions/runs?head_sha=<sha> --jq .total_count` to tell "not triggered" (0) from "pending" (>0). A CONFLICTING PR runs no CI — poll `mergeable` first, then checks.
 - **Date:** 2026-10-02
+
+## P-38 — a ~200-line report appended with a bash here-doc was silently truncated by the shell; the append had to be redone (S5.4)
+- **Problem:** The Phase 5 verification report (~200 lines) was appended to `docs/verification/prepared-workflow.md` with a bash here-doc (`cat >> file <<'EOF' … EOF`). The shell truncated the payload silently — the command exited 0, and only a follow-up read of the file showed the append was incomplete, so the whole append had to be redone.
+- **Related:** recurrence of **P-31** (same friction class — a large here-doc append; there the tool reported the command-size limit, here the truncation was silent).
+- **Step / Phase:** S5.4 Verification report — Phase 5 (change prepared-workflow)
+- **Change:** prepared-workflow / DOCS/CHORE
+- **Duration / iterations:** 1 extra iteration.
+- **Resolution:** wrote the report to a temp file and appended with `cat >>`; use a temp file (or `write` + `edit`) instead of large here-docs in this harness.
+- **Date:** 2026-10-03
+- **Status:** Solved (2026-10-03) — recipe noted in this entry.
+
+## P-39 — three documentation fix rounds each closed findings while introducing new ones of the same class (gate signal with no reachable producer / ownership sentence that over-widened)
+- **Problem:** Three consecutive documentation fix rounds (**S5.5 → S6.5 → S6.7**) each closed findings while introducing new ones of the same class: a gate signal with **no reachable producer** (F-1/F-4, then F-5/F-6, then F-11 — `Status: READY` required a P.5 handoff that never runs for ISSUE / REFACTOR / DOCS/CHORE), or an **ownership sentence that over-widened and forbade a step's own required write** (F-12 — "only the orchestrator edits them; step subagents never do" forbade the P.2 question write the same protocol mandates, and "a change branch must never **contain** those paths" contradicted the branch carrying the P.1–P.3 copies inherited at P.4).
+- **Step / Phase:** S6.5 + S6.7 — Phase 6 review loop (change prepared-workflow)
+- **Change:** prepared-workflow / DOCS/CHORE
+- **Duration / iterations:** 3 fix rounds, ~2 review rounds.
+- **Resolution:** state each new/changed gate signal with its **type applicability** (which change types it applies to) and its **producer** (who writes it, from which worktree) in the same sentence, and re-check the step that must perform the write before declaring the rule done.
+  - when narrowing a step id or a producer clause, grep that id across **all** live-guidance files, not only the file being edited; the S6.7 fix narrowed P.5 in AGENTS.md but left three READY clauses in the same-named skill pointing at it (F-15, round 4).
+- **Date:** 2026-10-03
+- **Status:** Solved (2026-10-03) — recipe noted in this entry.
