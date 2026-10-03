@@ -98,7 +98,7 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Answer:** **Latest two CPython versions.** With `requires-python >=3.14` that means 3.14 + 3.15 once 3.15 is final — exactly what Q-1's trigger then delivers. "Latest only" (floor moves, 3.14 support ends) and "everything the floor permits" (CI cost grows every year) were rejected. Pin consolidation is **not** pulled into this change — Q-1 = (C) left the 11 literals alone — so the annual one-line-pin problem is recorded as a follow-up for the upgrade change.
 - **Date:** 2026-10-04
 - **Status:** ANSWERED
-- **Incorporated:** yes — the support window is now part of the P.4 scope; see the TODO's In scope
+- **Incorporated:** yes — the support window is part of the scope; the change was then **DROPPED as satisfied** (2026-10-04) and the window + trigger now live in `docs/todo/python-3.15-upgrade.md`
 
 **Q-5 — Test the free-threaded build (`3.15t`) at all?**
 - **Step:** P.2 Interrogate
