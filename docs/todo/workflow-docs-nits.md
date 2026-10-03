@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/workflow-docs-nits.md`
@@ -50,7 +50,7 @@ Every place that lists P.5 or S1.4 names the types it applies to; the `prepared-
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; **value triage 2/5, bundle-then-implement** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (3 questions) | 2026-10-03 | **BLOCKED-USER** — 3 questions needing user input, 9 points closed from evidence. All four In-scope items verified against the tree; two of them are partly no-ops as written: item (c)'s fix actually lives in `AGENTS.md:155-162` (which this TODO excludes from scope) and item (d) edits a frozen merged record. Re-measured sweep counts: 25/43 at `4b42c58` (the claim is true; the gap is exactly `PROBLEMS.md:377`), 47/63 on today's `main`. Real collision found with `value-triage-gate` (same `specify/SKILL.md:45` line + `docs/todo/template.md`) |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
