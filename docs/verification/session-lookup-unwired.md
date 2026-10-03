@@ -212,3 +212,49 @@ Smoke directory set was adjusted to the directories that actually exist (`ls tes
 **Change diff at this point** (`git diff --stat ab4b4f8 HEAD`): `src/main.py` `10 +-` (8 insertions, 2 deletions), `tests/acceptance/permissions/test_composition_wiring.py` `+105`, `docs/verification/session-lookup-unwired.md`. One source file — consistent with the §7 light-tier criterion.
 
 **Phase 5 gate: PASS (light tier).** Reproduction test GREEN, covering tests GREEN (EDGE-007 / INV-002 fail-closed intact), smoke GREEN, ruff clean repo-wide, mypy clean. Deferred by design: the full regression suite (S6.4 pre-merge gate). Remaining Phase 5 steps: **S5.3** traceability row (Q-02), **S5.4** verification report / spec-coverage statement for the issue's affected IDs.
+
+---
+
+## Phase 5 report (S5.3 + S5.4)
+
+**Change type: ISSUE, light tier** (§7 qualification; AGENTS.md "Light ISSUE tier"). Combined execution (recorded per the task-definition): S5.3 (traceability) and S5.4 (verification report) are the two record-writing steps of Phase 5 and share one execution; **no implementation, test or spec file was touched** — the only writes are the traceability row and this section.
+
+### S5.3 — traceability matrix updated
+
+`docs/verification/traceability.md`: new section **"Issue: session-lookup-unwired (composition-root session lookup — S5.3, 2026-10-04)"** with one evidence row:
+
+> `| permissions (composition root, src/main.py) | REQ-017 | AC-020 | test_ac_020_composition_root_validates_session_token (new, tests/acceptance/permissions/test_composition_wiring.py — import main in a fresh interpreter, then main._permission_service.has_permission(alice.id, "usermanagement.get_user", session_token=…) → [True, False, False, False]: valid token proceeds, revoked / another user's / unknown still deny) | GREEN (session-lookup-unwired S5.3, 2026-10-04, commit f85deba) |`
+
+Why a **new row** and not an added reference in the existing REQ-017 / AC-020 / AC-021 / EDGE-007 rows: those rows are the **service-level** record written by the change that observed them (convention B, Q-129), and their tests inject a **fake** lookup (`tests/acceptance/permissions/test_check_api.py:398`, `:459`, `:494`) — which is exactly why the composition root was uncovered. Refreshing them would erase that record and would still leave the composition-root coverage uncited. **No existing row was rewritten or refreshed**, and the spec's own §11 `PENDING` rows for REQ-017/AC-020 and REQ-017/AC-021 (`docs/specs/user-roles-permissions.md:786-787`) stay untouched — **decision Q-02**: no Spec Amendment, no Changelog entry; only `docs/verification/traceability.md` gains the evidence row.
+
+**Referential-integrity gate (the CI `traceability` job):** `uv run python scripts/check_traceability.py` → **`Traceability: PASS (747 matrix rows, 129 spec IDs, 714 test functions)`**, exit `0` — the new row's IDs are defined in `docs/specs/`, its cited test function exists under `tests/`, and its Status cell uses a declared value.
+
+### S5.4 — verification report (spec coverage for the affected IDs = 100%)
+
+**Affected IDs** — all from the existing approved spec **`docs/specs/user-roles-permissions.md`** (§2); this ISSUE has no spec of its own:
+
+| ID | Required behaviour | GREEN test(s) (named) | Evidence |
+|---|---|---|---|
+| **REQ-017** | a provided session token is validated via the session lookup; unknown / revoked / expired / mismatched → deny | `test_ac_020_composition_root_validates_session_token` (`tests/acceptance/permissions/test_composition_wiring.py`, **composition root**, new); `test_session_validation_in_check` (`tests/acceptance/permissions/test_check_api.py:351`); `test_revoked_expired_token_denied` (`tests/unit/permissions/test_edge_cases.py:232`); `test_mismatched_token_denied` (`:272`); `test_undeterminable_never_true` (`tests/property/permissions/test_invariants.py:297`, INV-002) | S5.1 gates 1 + 2 (`1 passed`, `64 passed`) |
+| **AC-020** | valid session token → the check **proceeds**; revoked → `False`; another user's token → `False` | `test_ac_020_composition_root_validates_session_token` — the only test that reaches AC-020's positive branch **in the composed application** (`[True, False, False, False]`); plus the service-level `test_session_validation_in_check` | S5.1 gate 1 (`1 passed in 1.33s`); RED at S3.2 (`1 failed`) → GREEN at S4.2 (`1 passed`) |
+| **AC-021** | `session_token=None` → validation skipped, evaluation proceeds | `test_session_validation_skipped_when_token_none` (`tests/acceptance/permissions/test_check_api.py:433`) | S5.1 gate 2 (`64 passed`) — unchanged by the fix, re-run GREEN, row not refreshed |
+| **EDGE-007** | lookup unavailable (`None` or raising) → deny (`storage_error`) | `test_unavailable_session_lookup_denied` (`tests/unit/permissions/test_edge_cases.py:307`); supporting: `test_lookup_raises_denied` (`:383`), `test_storage_error_denied_fail_closed` (`test_check_api.py:264`), INV-002 `test_undeterminable_never_true` | S5.1 gate 2 (`64 passed`) — the fail-closed branches (`src/backend/permissions/service.py:407-408`, `:412-413`) are untouched by the diff |
+
+**Spec coverage for the affected IDs = 100%** — **4/4** (REQ-017, AC-020, AC-021, EDGE-007) each have at least one GREEN test; REQ-017 and AC-020 additionally have a test that exercises the real composition root, which is the coverage the defect was missing. (Full-spec coverage of `user-roles-permissions.md` is not this change's gate — an ISSUE verifies its affected IDs, not the whole spec; the spec's own §11 matrix stays as the historical record per Q-02.)
+
+**No test was weakened, changed or deleted.** `git diff --stat ab4b4f8 HEAD -- tests/ src/` → `src/main.py 10 +-` and `tests/acceptance/permissions/test_composition_wiring.py +105` (the new reproduction test, added at S3.1 and byte-identical since); **no pre-existing test file appears in the diff**. The reproduction test flipped from `1 failed` (S3.2) to `1 passed` (S4.2) on the source change alone, and its three negative guards (revoked / another user's / unknown token) are GREEN before and after — the fix is not a blanket allow.
+
+**Check summary (Phase 5, light tier).**
+
+| Check | Result |
+|---|---|
+| Reproduction test GREEN (AC-020 / REQ-017) | **PASS** — `1 passed` |
+| Covering tests + affected feature directories | **PASS** — `64 passed` (permissions acceptance/unit/property) |
+| Smoke (composition-root wiring + session-management + authentication) | **PASS** — `126 passed` |
+| Lint, whole repo (`uv run ruff check .`, matches CI) | **PASS** — `All checks passed!` |
+| Types (`uv run mypy src/`) | **PASS** — `Success: no issues found in 83 source files` |
+| Traceability referential integrity (`uv run python scripts/check_traceability.py`) | **PASS** — exit `0`, `747 matrix rows` |
+| Full regression suite | **Deferred by design to the Phase 6 pre-merge gate (S6.4)** — light tier; must pass there and the result is recorded in the review report (the change is in the composition root, so the full suite is the real safety net) |
+| `verify_spec.py` | n/a — FEATURE/CROSS-CUTTING only (this change has no spec file) |
+
+**Phase 5 gate: PASS (final, light tier).** Every affected ID has GREEN evidence, the traceability matrix carries the composition-root row, lint and types are clean, and no test was weakened. Phase 5 is closed; the change may enter **Phase 6 (S6.1 review)**, with the full regression suite as the S6.4 pre-merge gate and a `patch` version bump (AGENTS.md Versioning: `ISSUE → patch`).
