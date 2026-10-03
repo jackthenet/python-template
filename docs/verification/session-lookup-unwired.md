@@ -323,3 +323,19 @@ Why a **new row** and not an added reference in the existing REQ-017 / AC-020 / 
 **REVIEW: CLEAN.** The fix is minimal (one source file: one keyword + a two-line move); it restores exactly the REQ-017 / AC-020 behaviour the approved spec already requires at `:827`; it introduces no behaviour beyond the affected spec IDs; it leaves the fail-closed invariant (EDGE-007 / INV-002) byte-for-byte untouched (`git diff main...HEAD -- src/backend` empty); it keeps the composition root's deliberate cycle-avoidance and single-instance sharing intact and wires no other dependency by accident (all 8 constructor dependencies supplied, the `get_permission_service()` fallback left unwired per Q-01/C-5); it adds the first composition-root-level GREEN test for AC-020 with a positive **and** three negative guards; it modifies, weakens or deletes **no** test; and the traceability chain is complete and referentially valid (`check_traceability.py` exit `0`).
 
 **Phase 6 gate: PASS (S6.1–S6.3).** Next: **S6.4** — run the **full regression suite** (the light-tier pre-merge gate; it must pass and its result must be recorded in this file, since the change is in the composition root), bump the version `patch` (`pyproject.toml:4`, `0.6.0` → `0.6.1`, `bump-my-version bump patch` with a clean tree), and open the PR to `main` for human review/merge — the agent must not merge it.
+
+---
+
+## Phase 6 pre-merge gate (S6.4, 2026-10-04)
+
+The light-tier deferral (§7, Phase 5) is discharged here: the **full regression suite** is the Phase 6 pre-merge gate and must pass before the version bump and the PR.
+
+| Gate | Command | Result |
+|---|---|---|
+| **Full regression suite (pre-merge gate)** | `uv run pytest tests/ -q` (change worktree, `issue/session-lookup-unwired` @ `8a67bc3`) | **`728 passed, 1 skipped in 202.11s (0:03:22)`** — **0 failed, 0 errors** |
+
+**Skip is pre-existing and environmental, not a regression:** `SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host` — the same single skip recorded by every prior full-suite run (e.g. `docs/verification/traceability.md:420`, `hanging-observability-test` Phase 5).
+
+**Delta vs. the `main` baseline (regression check):** the most recent full-suite baseline on `main` is **`727 passed, 1 skipped`** (search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`; cited at `docs/verification/traceability.md:420` and in the Search Matrix). This branch: **`728 passed, 1 skipped`** — exactly **+1 test, +0 failures, +0 skips**, and the +1 is this change's new reproduction test `test_ac_020_composition_root_validates_session_token`. No pre-existing test changed status, none was weakened or deleted, and nothing regressed — the composition-root reordering is safe across the whole suite.
+
+**Gate: PASS.** Full regression GREEN → the version bump (`patch`, `0.6.0` → `0.6.1`, per AGENTS.md Versioning `ISSUE → patch`) and the PR to `main` follow in this same step. The PR is opened for human review/merge; the agent does not merge it (human governance).
