@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from the template.
 - **TODO file:** `docs/todo/architecture-tests-missing.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 4 PENDING: Q-3, Q-4, Q-5 + the (a1)/(a2) sub-variant of Q-1 -->
-- **Answer rounds:** 1 (2026-10-04: Q-1; Q-2 closed as moot)
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 1 PENDING: Q-4 (CI-enforced vs agent-only, for any future gate) -->
+- **Answer rounds:** 2 (2026-10-04: Q-1, Q-2 (moot), Q-3, Q-5, Q-6)
 
 ## Preparation questions (P.2)
 
@@ -36,10 +36,10 @@ One question file per change, created at **P.1 Frame** from the template.
 - **Why needed:** three backlog changes edit `AGENTS.md` (this one at `:212`/`:579`, `value-triage-gate` at the Phase P table/Obligations, `workflow-docs-nits` at the `specify` skill). `value-triage-gate`'s own Q-4 asks the reciprocal question.
 - **Context:** `value-triage-gate` and `workflow-docs-nits` are both WAITING on user answers; this change is PREPARING.
 - **Question:** land this one first, last, or fold its (a) variant into `value-triage-gate`'s PR (it already rewrites the same Phase 5 / Phase Matrix wording)?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Land independently — no ordering constraint.** The user chose the landing order for the three colliding items (`workflow-docs-nits` → `value-triage-gate` → `spec-interview-protocol`); this change edits different lines (`AGENTS.md:212`, `:579`, `verify/SKILL.md:88`, `:103`) and may land in any order relative to them. If `value-triage-gate` lands first, re-check the Phase Matrix cell wording before editing.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded in the TODO's Constraints; no `Depends on:` entry needed
 
 ### P.2 evidence update to Q-1 / Q-2 / Q-3 (they stay open; the evidence narrows them)
 
@@ -110,20 +110,20 @@ If the user does want the gate (option b), the honest sequence is: (1) fix the 4
 - **Why needed:** it decides whether this change touches `src/` (and therefore whether it is still a 2-file DOCS/CHORE or a mixed docs+code change with a regression run), and it is the prerequisite for the only boundary rule that has teeth.
 - **Context:** `AGENTS.md:768` already forbids importing `backend.logging._setup`/`_decorator`, yet three features do it (`src/backend/authentication/feature_settings.py:7`, `src/backend/eventbus/feature_settings.py:7`, `src/backend/usermanagement/feature_settings.py:7`), plus `src/main.py:67` imports the private `_registry`. `logged` is exported by `backend.logging.__init__`, so each fix is a one-line import rewrite. The TODO currently puts `src/` changes out of scope (`docs/todo/architecture-tests-missing.md:33`).
 - **Question:** fold these 4 one-line fixes into this change (making it docs + 4 lines of `src/`), or leave them as a separate ISSUE/REFACTOR and keep this change to the prose only?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Fold them into this change.** Scope is now the 4 prose edits **plus** 4 one-line import rewrites in `src/` (`authentication/feature_settings.py:7`, `eventbus/feature_settings.py:7`, `usermanagement/feature_settings.py:7` → import `logged` from `backend.logging`; `main.py:67` → use the public settings-registry accessor instead of `_registry`). Consequences recorded for P.4/Phase 5: the change is still **DOCS/CHORE** (no observable behavior change — same objects, public import path), but because `src/` is touched the Phase 5 gate is **the full regression suite GREEN** (that is the no-behavior-delta proof) **plus** `uv run ruff check <changed-paths>` and `uv run mypy src/` — not the docs-only light gate. `tests/contract/*/test_public_api.py` must stay GREEN (they pin the public names being switched to).
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — TODO "In scope" and the Phase 5 gate note updated; the TODO's earlier "no `src/`" constraint is lifted by this answer
 
 ## Q-6 — within option (a): delete the wording entirely (a1), or re-point it at the manual boundary check (a2)?
 - **Step:** P.3 Answer round 1 (raised by the P.2 evidence update to Q-1)
 - **Why needed:** Q-1 chose (a), but (a) has two sub-variants with different text and different consequences for the REFACTOR Phase 5 gate: (a1) leaves no architecture check in the gate list at all, (a2) keeps the check but stops naming a directory that does not exist.
 - **Context:** P.2 recommends **(a2)** — `AGENTS.md:592-593` ("no cross-feature internal imports", "`model/` domain concepts, `services/` use cases, `shared/` small") is a real check the reviewer performs and `:624` makes respecting it a clean-review condition; only the executable citation is false. The measured cost of either variant is the same 4 line edits in 2 files (`AGENTS.md:212`, `:579`; `verify/SKILL.md:88`, `:103`), no bump, no CI change.
 - **Question:** (a1) delete the four citations and leave no architecture gate wording, or (a2) keep the architecture check in the gate list but phrase it as the manual review/verification check recorded in `docs/verification/<name>.md`?
-- **Answer:** **PENDING**
+- **Answer:** **(a2) — re-point at the manual check.** The architecture check stays in the Phase Matrix cell, the Phase 5 REFACTOR step and both `verify/SKILL.md` gate lists, phrased as the manual boundary review `AGENTS.md:592-593` already defines (recorded in `docs/verification/<name>.md`); the `uv run pytest tests/architecture/ -v` citation is removed from all four places. Wording must mirror `AGENTS.md:592-593` so it does not read as a new rule.
 - **Date:** 2026-10-04
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — fixes the exact P.4 edit shape; Q-4 (whether a CI-enforced boundary test should exist at all) stays open as a backlog question
 
 ## Late questions (Phases 2–6)
 

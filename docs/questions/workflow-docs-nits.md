@@ -7,7 +7,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **Spec:** n/a
 - **Opened:** 2026-10-03
 - **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Answer rounds:** 1 (2026-10-04: Q-3) — 2 PENDING: Q-1, Q-2
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -54,10 +54,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** two PREPARING backlog items plan edits to the same lines of the same files; running both without an order/ownership decision risks a merge conflict or a lost qualifier. The order is a backlog decision (the value-triage recommendations are presented to the user), not something P.2 can settle from the tree.
 - **Context:** `docs/todo/value-triage-gate.md:51` (PREPARING, 5/5 implement) scopes edits to "`AGENTS.md` — Phase P atomic-steps table, the Phase Matrix …, `docs/todo/template.md` — a `## Value triage` section …, `.agents/skills/specify/SKILL.md` — the P.1/P.2 area and its Outputs/Done sections". Inserting a value-triage step will almost certainly rewrite the step-order list at `specify/SKILL.md:45` — **the exact line item (b) qualifies** — and both items touch `docs/todo/template.md` (item (a) at `:44`; value-triage-gate adds a section around `:33-35` — different lines, mergeable but line-shifted). `spec-interview-protocol` (PREPARING, depends on value-triage-gate) also edits `docs/questions/template.md` (entry format `:18-25`) and the `specify` P.2/P.3 sections — different lines from items (a)-(c), mergeable; its own TODO flags "both edit the same P.2/P.3 guidance surface … land it second". `workflow-docs-nits` records `Depends on: prepared-workflow` only — no dependency between it and the other two.
 - **Question:** how to defuse the collision? **(a)** land `workflow-docs-nits` (items a+b) **first** — a two-line qualifier diff that `value-triage-gate` then builds on *(recommended: smallest diff first, matches the easiest-first rule)*; **(b)** drop this change and **fold items (a)+(b) into `value-triage-gate`'s PR** (it already edits both files — one change instead of two touching the same lines); or **(c)** another order/ownership?
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — this change lands first.** Confirmed landing order for the three colliding items: `workflow-docs-nits` → `value-triage-gate` → `spec-interview-protocol`. Items (a)+(b) are **not** folded into `value-triage-gate`; it gains `Depends on: workflow-docs-nits` and builds on the qualifiers. `architecture-tests-missing` edits different lines and is unconstrained.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded in the TODO's Constraints; this change is now the first of the three to run, so its two remaining questions (Q-1, Q-2) are the critical path
 
 ### Verification of the four In-scope items (current tree `main` @ `b68b93a`, for P.4)
 

@@ -51,6 +51,6 @@ Every place that lists P.5 or S1.4 names the types it applies to; the `prepared-
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; **value triage 2/5, bundle-then-implement** |
 | P.2 Interrogate (3 questions) | 2026-10-03 | **BLOCKED-USER** — 3 questions needing user input, 9 points closed from evidence. All four In-scope items verified against the tree; two of them are partly no-ops as written: item (c)'s fix actually lives in `AGENTS.md:155-162` (which this TODO excludes from scope) and item (d) edits a frozen merged record. Re-measured sweep counts: 25/43 at `4b42c58` (the claim is true; the gap is exactly `PROBLEMS.md:377`), 47/63 on today's `main`. Real collision found with `value-triage-gate` (same `specify/SKILL.md:45` line + `docs/todo/template.md`) |
-| P.3 Answer (<n> answered) | | |
+| P.3 Answer (round 1: Q-3) | 2026-10-04 | **WAITING** — **Q-3 = (a)**: this change **lands first** of the three `AGENTS.md`/`specify`-skill editors (`workflow-docs-nits` → `value-triage-gate` → `spec-interview-protocol`); items (a)+(b) are not folded into `value-triage-gate`, which now depends on this change. Still open: **Q-1** (item (c) — drop it, or bring `AGENTS.md:155-162` into scope for one row) and **Q-2** (item (d) — touch the frozen `prepared-workflow.md` record or not). Because this change is now first in the queue, those two answers are the critical path for all three |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |

@@ -26,19 +26,21 @@ Found during the `structure-map` P.2 interrogation. Three places make `uv run py
 `AGENTS.md:593` and `:624` additionally require reviewing "architecture rules: `model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small" and treat respecting them as a clean-review condition — with nothing executable behind them. A REFACTOR change that reaches Phase 5 today is instructed to run a command that errors (`no tests ran`), so its gate can only be satisfied by ignoring the instruction or by inventing the directory mid-change.
 
 ## In scope
-- One of the two resolutions in Q-1 of the question file: (a) remove/qualify the three dangling references, or (b) create `tests/architecture/` with executable rules for the boundaries the process text already names.
-- Whatever the resolution, keep `AGENTS.md`, the `verify` skill and the Phase Matrix mutually consistent (they currently promise the same gate in three different words).
+- **Decided 2026-10-04 (Q-1 = (a), Q-6 = (a2)):** remove the four dangling `uv run pytest tests/architecture/ -v` citations — `AGENTS.md:212` (Phase Matrix REFACTOR cell), `AGENTS.md:579` (Phase 5 step 13), `.agents/skills/verify/SKILL.md:88` and `:103` — and re-point the architecture check at the **manual** boundary review `AGENTS.md:592-593` already defines, recorded in `docs/verification/<name>.md`. No `tests/architecture/` directory is created.
+- **Decided 2026-10-04 (Q-5 = fold in):** the 4 private-module import fixes — `src/backend/authentication/feature_settings.py:7`, `src/backend/eventbus/feature_settings.py:7`, `src/backend/usermanagement/feature_settings.py:7` (import `logged` from `backend.logging`, as `AGENTS.md:768` requires) and `src/main.py:67` (stop importing the private `_registry`). Four one-line import rewrites.
+- Keep `AGENTS.md`, the `verify` skill and the Phase Matrix mutually consistent (they currently promise the same gate in three different words), and mirror the `AGENTS.md:592-593` wording so the re-point does not read as a new rule.
 
 ## Out of scope
 - Changing the project-structure rules themselves (`AGENTS.md` "Project Structure" stays as it is).
-- Any `src/` move that architecture tests might reveal — that would be a separate REFACTOR/ISSUE.
+- Any `src/` **move** that architecture tests might reveal — that would be a separate REFACTOR/ISSUE. (The 4 import rewrites are in scope per Q-5; no code moves.)
+- Creating `tests/architecture/` or any CI-enforced boundary rule — see Q-4, still open as a backlog question.
 
 ## Affected features
-None (process guidance and/or `tests/architecture/`).
+Process guidance (`AGENTS.md`, `.agents/skills/verify/SKILL.md`) plus four `src/` import sites: `backend/authentication/`, `backend/eventbus/`, `backend/usermanagement/` (one line each) and the composition root `src/main.py`. No `tests/` change.
 
 ## Constraints and risks
-- If the tests are created, they must pass on the current tree (a gate that fails on day one blocks every REFACTOR change), and they must not duplicate the import rules `ruff`/`deptry` already enforce.
-- `AGENTS.md` is also being edited by `value-triage-gate` (WAITING) and `workflow-docs-nits` (WAITING) — three changes touching the same file means the sequencing question is real (see its Q-4/Q-3).
+- **`src/` is now touched, so the light docs-only Phase 5 gate does not apply.** The no-behavior-delta proof is the **full regression suite GREEN** (`uv run pytest tests/`), plus `uv run ruff check <changed-paths>` and `uv run mypy src/`; the public-API contract suites (`tests/contract/*/test_public_api.py`) pin the names being switched to and must stay GREEN.
+- Landing order (Q-3, answered): this change edits **different lines** from `workflow-docs-nits`, `value-triage-gate` and `spec-interview-protocol` (which land in that order), so it has no `Depends on:` — but if `value-triage-gate` lands first, re-read the Phase Matrix cell before editing it.
 
 ## Acceptance signal (plain language)
 Running the REFACTOR Phase 5 instruction from `AGENTS.md` no longer errors: either the command finds tests and passes, or the text no longer cites a directory that does not exist.
@@ -55,5 +57,6 @@ Running the REFACTOR Phase 5 instruction from `AGENTS.md` no longer errors: eith
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type provisionally **DOCS/CHORE** (no spec requires the directory, so this is not a defect against an approved spec; the "build the tests" alternative would be a FEATURE → Q-1 decides). Evidence verified on `main`: `tests/architecture/` absent; cited by `AGENTS.md:212`, `:579` and `verify/SKILL.md:88`, `:103`. Discovered during the `structure-map` P.2 interrogation |
 | P.2 Interrogate (5 questions) | 2026-10-04 | **DONE** — Q-1/Q-2/Q-3 narrowed by evidence (E-1…E-12): the dangling citation count is **4 in 2 files** (`AGENTS.md:212`, `:579`; `verify/SKILL.md:88`, `:103`), CI never runs the command (so the gate was enforced by nobody), option (a) costs 4 line edits with no bump, option (b) costs ~60–90 lines of stdlib `ast` tests but has **21 day-one violations** under the strict import rule and 4 under the no-private-import rule, and the `model/`/`services/` rule is untestable (those directories do not exist). Classification verdict: **DOCS/CHORE for both options** |
 | P.3 Answer (round 1: Q-1 answered, Q-2 closed) | 2026-10-04 | **WAITING** — **Q-1 = (a) remove/qualify the references** (no `tests/architecture/` in this change; DOCS/CHORE confirmed). **Q-2 closed as moot** (it was conditional on (b)). Still open: the (a1)/(a2) sub-variant → **Q-6**, plus **Q-3** (landing order), **Q-4** (CI-enforced vs agent-only), **Q-5** (the 4 private-module imports) |
+| P.3 Answer (round 2: Q-3, Q-5, Q-6) | 2026-10-04 | **DONE except Q-4.** **Q-6 = (a2)** — re-point the four citations at the manual boundary check (`AGENTS.md:592-593`), no directory named. **Q-5 = fold in** — the 4 private-module import fixes join the scope, so `src/` is touched and Phase 5 runs the full regression suite + ruff + mypy (not the docs-only light gate). **Q-3 = land independently** — the three colliding items land `workflow-docs-nits` → `value-triage-gate` → `spec-interview-protocol`; this one edits different lines. Only **Q-4** (should a boundary rule be CI-enforced at all) stays open — it is a backlog question, not a blocker for P.4 |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |

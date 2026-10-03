@@ -10,7 +10,7 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 - **Question file:** `docs/questions/value-triage-gate.md`
 - **Spec:** n/a  <!-- DOCS/CHORE: no spec -->
 - **Worktree:** <created at P.4> `../python-template_kopie-worktrees/chore/value-triage-gate`
-- **Depends on:** prepared-workflow (merged: `4b42c58`)
+- **Depends on:** prepared-workflow (merged: `4b42c58`); **workflow-docs-nits** (landing order decided 2026-10-04 — it lands first, this change builds on its `specify/SKILL.md:45/46` qualifiers)
 - **Related specs:** none (no `docs/specs/` file is touched)
 
 ## Goal (one line)
@@ -103,7 +103,7 @@ decision is in one place (the step itself is not yet normative; this change is w
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type DOCS/CHORE; todo set for this change; **value triage 5/5, implement as one bundle** |
-| P.2 Interrogate (<n> questions) | | |
-| P.3 Answer (<n> answered) | | |
+| P.2 Interrogate (5 questions) | 2026-10-04 | **DONE** (the question file was written; this Prep-log row was missing and is filled in now) — Q-1…Q-5 recorded, with the **placement cost analysis** (a numbered P.0 forces ~13 coordinated `AGENTS.md`/skill edits and collides with the todo-set, status-vocabulary and READY rules) and the finding that **all five triages actually performed are recorded inside the P.1 record**, i.e. the practice as run is already a P.1 sub-item |
+| P.3 Answer (round 1: Q-3, Q-4) | 2026-10-04 | **WAITING** — **Q-4 = (a)**: landing order fixed as `workflow-docs-nits` → **this change** → `spec-interview-protocol`, so `workflow-docs-nits` items (a)+(b) are not folded here and this change gains `Depends on: workflow-docs-nits`. **Q-3 = (a)**: add `DROPPED` to the `Status:` vocabulary — **plus the user's addition** that dropped **and merged** records should move to a different folder, which is a new question, **Q-7** (layout + when the move happens + whether `docs/questions/<name>.md` moves too). Still open: **Q-1** (P.0 step vs P.1 clause), **Q-2** (per-item vs global stop), **Q-5** (packaging + recording), **Q-7** |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |

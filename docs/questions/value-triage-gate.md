@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/value-triage-gate.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
-- **Answer rounds:** 0
+- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->  <!-- 4 PENDING: Q-1, Q-2, Q-5, Q-7 -->
+- **Answer rounds:** 2 (2026-10-04: Q-3, Q-4; Q-7 raised from the Q-3 answer)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -57,10 +57,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** the TODO's In scope says the drop decision "stays in the TODO file, like the two 1/5 records do today", but the `Status:` vocabulary has no value for a dead item, so after this change a dropped backlog item is indistinguishable from a live one to anything that scans the backlog — including the orchestrator's own "Ready selection order".
 - **Context:** the vocabulary is `PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED` (`AGENTS.md:155-162`, `docs/todo/template.md:7`, `specify/SKILL.md:169`, `.agents/skills/git/SKILL.md:65`). **Nothing machine-reads it**: `grep -rn "PREPARING|QUESTIONS-ANSWERED" scripts/ .github/workflows/` → no match, and `scripts/check_traceability.py` scans only `docs/specs/`, `docs/verification/traceability.md` and `tests/`. Observed state today: the two 1/5 items are still `Status: PREPARING` (`docs/todo/docs-path-ci-trigger.md:7`, `docs/todo/split-archived-qa.md:7`) with their drop recorded only in the body (`:35-39` in both) and the P.1 Prep-log row (`:47` in both); 13 of 16 backlog TODOs are `PREPARING`; "DROPPED" appears in the repo only as prose in `docs/todo/remove-spec-tdd-driver.md:55` ("split-archived-qa DROPPED 1/5, docs-path-ci-trigger DROPPED 1/5 …").
 - **Question:** **(a)** add `DROPPED` to the vocabulary — one row in the `AGENTS.md:155-162` table ("when the user's value-triage decision is **drop**"), one value in the `docs/todo/template.md:7` comment, one mention in `git/SKILL.md:65`; a dropped item stays on disk with its reason and its TODO file never enters the workflow *(recommended: 3 small edits, no machine reader to break, and it makes the backlog scannable)*; **(b)** body-only, exactly as the two 1/5 records do today (smallest diff, but a dead item keeps `Status: PREPARING` forever and the orchestrator must read every body to find it); **(c)** body-only plus a `DROPPED` marker inside the `## Value triage` section only (no vocabulary change).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — add `DROPPED` to the vocabulary**, plus the user's addition: *"how about we also move them to a different folder, same for merged"* — a dead item (dropped, or merged) should leave the live backlog folder rather than sit in it with a status flag. The folder layout, the moment of the move, and whether `docs/questions/<name>.md` moves with it are **Q-7**.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — scope grows from 3 edits to 3 edits + the archive-location rule (Q-7); the two items dropped on 2026-10-04 (`docs-path-ci-trigger`, `split-archived-qa`) are the first candidates for the move
 
 ## Q-4 — sequencing/ownership against `workflow-docs-nits` (its Q-3 is the same decision) and `spec-interview-protocol`
 
@@ -68,10 +68,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** two other backlog items plan edits to the same files, and one of them (`workflow-docs-nits`, now **WAITING** with 3 open questions) already asks the user the reciprocal question — `docs/questions/workflow-docs-nits.md` Q-3: "collision with `value-triage-gate` on `specify/SKILL.md:45` and `docs/todo/template.md`: sequence or fold?" The answer decides whether **this** change's scope grows (it absorbs their items (a)+(b)) or stays as drafted, so it must be answered for this change too. The orchestrator should ask it **once** and record it in both files.
 - **Context:** `workflow-docs-nits` In scope (`docs/todo/workflow-docs-nits.md:23-24`): `docs/todo/template.md:44` (the Prep-log `P.5 Self-consistency` row) and `specify/SKILL.md:14`, `:45`, `:46`. This change touches `docs/todo/template.md` (new `## Value triage` section between `:32` and `:34` — a **different line**, mergeable) and, **if Q-1 = (a)**, `specify/SKILL.md:45`/`:46` (the step-order and ownership lists) — **the same lines** as their item (b) → a real conflict. **If Q-1 = (b) or (c), this change does not touch `:45`/`:46` at all** (P.1 is not in those two lists; `:46` names P.1 only as an orchestrator step), which dissolves the collision. Second collision surface: if Q-3 = (a), this change adds a row to the `AGENTS.md:155-162` status table — the exact table `workflow-docs-nits` Q-1 (b) might also add a row to. Third: `spec-interview-protocol` declares the order itself — `docs/todo/spec-interview-protocol.md:13` "**Depends on:** `value-triage-gate` (recommended: land **after** it — both edit the same P.2/P.3 guidance surface, and the value-triage step is inserted before interrogation)", `:60` "land it second, or land them as one change", `:51` "Value triage placement (owned by `docs/todo/value-triage-gate.md`)".
 - **Question:** how do the three land? **(a)** `workflow-docs-nits` first (its guaranteed core is a 4-line qualifier diff in the same two files), then this change builds on it *(matches "easiest first", `AGENTS.md:422`)*; **(b)** drop `workflow-docs-nits` items (a)+(b) and **fold them into this change's PR** — one change instead of two touching the same lines, so this change's scope grows by the two qualifier edits (still DOCS/CHORE); **(c)** this change first with Q-1 = (b)/(c) so it never touches `specify/SKILL.md:45`/`:46`, leaving `workflow-docs-nits` conflict-free *(note: `workflow-docs-nits` is WAITING on its own 3 questions, so (a) cannot run before those are answered)*. Also confirm: `spec-interview-protocol` stays **after** this change (its own TODO says so) and must not re-open the value-triage placement.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) — `workflow-docs-nits` first, then this change, then `spec-interview-protocol`** (confirmed as the backlog-wide landing order, 2026-10-04). `workflow-docs-nits` items (a)+(b) are **not** folded here; this change builds on their qualifiers, so it gains `Depends on: workflow-docs-nits`. `spec-interview-protocol` stays after this change and must not re-open the value-triage placement.
+- **Date:** 2026-10-04
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded as `Depends on: workflow-docs-nits` in the TODO; the collision note is settled (this change lands second)
 
 ## Q-5 — how is the triage ask packaged and where is it recorded?
 
@@ -178,6 +178,16 @@ The `**Decision:**` bullet is the superset of the two existing shapes (3 records
 **Not in scope for P.4:** `docs/questions/template.md`, `docs/specs/template.md`, `AGENTS.md:19-51` (Ponytail — reference only), any script/CI change, any version bump.
 
 **Nothing else blocks the change:** with Q-1..Q-5 answered, P.4 can draft the scope record directly from this file.
+
+## Q-7 — where do DROPPED and MERGED planning records live: a separate folder?
+- **Step:** P.3 Answer round 2 (raised by the user's Q-3 answer)
+- **Why needed:** Q-3 = (a) adds the `DROPPED` status, and the user additionally wants dead items (dropped, and merged) moved out of the live backlog folder. That changes paths the live guidance names: `AGENTS.md` Phase P (`docs/todo/<name>.md`, `docs/questions/<name>.md`), the Ready-selection order ("among prepared changes"), the cleared-gate test, and `git/SKILL.md`'s status-advance rule. (`scripts/check_traceability.py` reads only `docs/specs/`, `docs/verification/traceability.md` and `tests/`, so it is unaffected.)
+- **Context:** today `docs/todo/` holds 18 live files + template and `docs/questions/` 18 + template; `track-python-skill` and `remove-spec-tdd-driver` are already `Status: MERGED` and sit in the live folder. `AGENTS.md` says a dropped item's TODO file "never enters the workflow", and the Ready-selection order reads the backlog on `main` — so a move must keep both findable, and the git skill's "commit planning artifacts" step names the two paths explicitly.
+- **Question:** which layout, and when does the move happen? **(i)** `docs/todo/archive/<name>.md` + `docs/questions/archive/<name>.md`, moved by the orchestrator at the drop decision and at post-merge cleanup (S7.1); **(ii)** one shared `docs/archive/<type>/<name>.md`; **(iii)** keep them in place and rely on the `DROPPED`/`MERGED` status only (Q-3 (a) without the move). Sub-part: does the question file move with the TODO file (recommended: yes — they are one change's record)?
+- **Answer:** **PENDING**
+- **Date:** 2026-10-04
+- **Status:** PENDING
+- **Incorporated:** no
 
 ## Late questions (Phases 2–6)
 
