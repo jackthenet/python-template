@@ -185,3 +185,30 @@ Independent re-run of the S3.1 test at commit `94d5b59` (no source change, no te
 **Not run here by design:** the full suite (Phase 5 S5.1 / Phase 6 pre-merge gate), the repo-wide `ruff check .` (Phase 5 S5.2), and `mypy src/` (Phase 5 S5.2). No untyped code was introduced (the change is one keyword argument on an existing typed parameter and two already-typed module-level assignments).
 
 **Gate: GREEN CONFIRMED.** AC-020's positive branch is now reachable in the composed application; REQ-017's validation path runs; EDGE-007 and INV-002 fail-closed behavior is unchanged. Traceability row still deferred to S5.3 (Q-02).
+
+---
+
+## Phase 5 / verification (S5.1 + S5.2, light tier, 2026-10-03)
+
+**Combined execution (recorded per the task-definition).** S5.1 (test gates) and S5.2 (lint + types) were run in **one** subagent execution. Both are read-only gate runs with no artifact dependency between them, and for a **light-tier ISSUE** S5.1 is not the full-suite run the standard step prescribes — it is the targeted + smoke set the triage §7 defines — so the two gate runs share one worktree warm-up (`uv` env, ruff/mypy caches) and produce one evidence section. No implementation, test, spec or traceability file was modified in this step; the only write is this section.
+
+**Light-tier statement.** Per §7 (all four criteria hold: 1 source file, no new dependency, no new public interface / cross-feature change, existing suite covers the area), Phase 5 runs **targeted + smoke instead of the full regression suite**. The **full regression suite is deferred to the Phase 6 pre-merge gate (S6.4)** and must pass there, with the result recorded in the review report — because the change is in the composition root, the full suite is the real safety net and must not be skipped at S6.4.
+
+### Gate results
+
+| # | Gate | Command | Result |
+|---|---|---|---|
+| 1 | **Reproduction test GREEN** (AC-020 / REQ-017) | `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -v` | **`1 passed in 1.33s`** — `test_ac_020_composition_root_validates_session_token PASSED` (composed check yields `[True, False, False, False]`) |
+| 2 | **Covering tests named in the triage §7 + affected feature's test directories** (AC-020/AC-021 `test_check_api.py`, EDGE-007 `test_edge_cases.py`, INV-002 fail-closed property) | `uv run pytest tests/acceptance/permissions tests/unit/permissions tests/property/permissions -v` | **`64 passed in 7.69s`** — incl. `test_session_validation_in_check`, `test_session_validation_skipped_when_token_none`, `test_unavailable_session_lookup_denied` (EDGE-007), `test_lookup_raises_denied`, `test_storage_error_denied_fail_closed`, `test_undeterminable_never_true` (INV-002) |
+| 3a | **Smoke — composition-root wiring** | `uv run pytest tests/acceptance/settings_coverage -v` (run inside 3b) | passed — incl. `test_main_wires_all_features` (the reordered composition root still wires all features) |
+| 3b | **Smoke — affected features (session-management + authentication, all existing test dirs)** | `uv run pytest tests/acceptance/settings_coverage tests/acceptance/sessionmanagement tests/unit/sessionmanagement tests/property/sessionmanagement tests/acceptance/authentication tests/unit/authentication tests/property/authentication -v` | **`126 passed in 27.75s`** — incl. `tests/acceptance/sessionmanagement/test_store_reuse.py::test_ac_033_same_sessions_table_as_authentication` (the reused session store) and `tests/acceptance/authentication/test_enforcement_wiring.py` |
+| 4 | **Lint — whole repo (the one Phase 5 full-repo sweep, matches CI `.github/workflows/lint.yml`)** | `uv run ruff check .` | **`All checks passed!`** (exit `0`) — **zero errors repo-wide**, therefore **zero in the change's diff**; nothing pre-existing to report or leave out of scope |
+| 5 | **Types** | `uv run mypy src/` | **`Success: no issues found in 83 source files`** |
+
+Smoke directory set was adjusted to the directories that actually exist (`ls tests/acceptance tests/unit tests/property`): the three permissions directories of gate 2 plus `settings_coverage`, `sessionmanagement` and `authentication` at acceptance/unit/property level — the features whose wiring the diff touches (the session repository construction moved above `PermissionService`; the same `_session_repository` instance and `_AUTH_DB` still feed `AuthService`).
+
+**Named-test spot re-run (evidence for the names cited above, not a separate gate):** `uv run pytest <the 9 named tests> -v` → **`9 passed in 2.18s`** — `test_session_validation_in_check`, `test_session_validation_skipped_when_token_none`, `test_storage_error_denied_fail_closed`, `test_lookup_raises_denied`, `test_unavailable_session_lookup_denied`, `test_undeterminable_never_true`, `test_main_wires_all_features`, `test_ac_033_same_sessions_table_as_authentication`, `test_authentication_enforcement_wiring`.
+
+**Change diff at this point** (`git diff --stat ab4b4f8 HEAD`): `src/main.py` `10 +-` (8 insertions, 2 deletions), `tests/acceptance/permissions/test_composition_wiring.py` `+105`, `docs/verification/session-lookup-unwired.md`. One source file — consistent with the §7 light-tier criterion.
+
+**Phase 5 gate: PASS (light tier).** Reproduction test GREEN, covering tests GREEN (EDGE-007 / INV-002 fail-closed intact), smoke GREEN, ruff clean repo-wide, mypy clean. Deferred by design: the full regression suite (S6.4 pre-merge gate). Remaining Phase 5 steps: **S5.3** traceability row (Q-02), **S5.4** verification report / spec-coverage statement for the issue's affected IDs.
