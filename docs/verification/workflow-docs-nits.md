@@ -158,3 +158,94 @@ Per `AGENTS.md` Phase 5 → **DOCS/CHORE** ("Light: lint/types where applicable"
 | No-behavior delta confirmed | yes — section above |
 | Targets re-verified against the current tree | all 4 lines still un-qualified at `5c7d1e0`; **no item is "already satisfied"** |
 | No implementation code, no tests, no scoped edit made in Phase P | confirmed — the only file this step writes is this record |
+
+---
+
+## Phase 4 + Phase 5 (S4.2, S5.1/S5.2) — 2026-10-04
+
+**Coalescing note (P-41):** Phase 4 (S4.2 make the scoped change + commit) and Phase 5 (S5.1/S5.2 light-tier no-behavior-delta check) ran in **one** subagent execution. Rationale: the change is a 4-line Markdown edit with no test, no source, and no gate that could regress between the two phases, so a separate Phase 4 commit subagent and Phase 5 verify subagent would be two launches over the same 4 lines. The atomic steps are still recorded separately below. Step mapping for this type: **S4.2** = make the scoped change (implement item 11); **S4.3** ruff = the Phase 5 whole-repo sweep (`uv run ruff check .`), no Python was written; **S4.4** refactor = **no-op** (nothing to restructure in a parenthetical-qualifier edit); **S4.5** commit = the S4.2 commit below (no task DAG / `tasks.json` exists for a DOCS/CHORE change).
+
+### Phase 4 (S4.2, DOCS/CHORE item 11: "make the scoped non-behavior changes")
+
+Applied **exactly** the two scoped edits from the Scope section above — 2 files, 4 lines, nothing else. The applied diff (verbatim, `git show aa06c56`):
+
+```diff
+diff --git a/.agents/skills/specify/SKILL.md b/.agents/skills/specify/SKILL.md
+--- a/.agents/skills/specify/SKILL.md
++++ b/.agents/skills/specify/SKILL.md
+@@ -11,7 +11,7 @@ Single entry point for all change types. Run **Phase P (PREPARE)** — classify
+-The former steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5** — same content, run during preparation. Only **S1.4** stays inside the normal workflow, and the change branch and worktree are created at **P.4**, not at classification.
++The former steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5** (FEATURE/CROSS-CUTTING) — same content, run during preparation. Only **S1.4** stays inside the normal workflow, and the change branch and worktree are created at **P.4**, not at classification.
+@@ -42,8 +42,8 @@ Phase P per change type:
+-- **Atomic steps:** execute this skill's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **P.2 Interrogate** → **P.3 Answer** (orchestrator ⏸) → **P.4 Draft** → **P.5 Verify self-consistency** → **S1.4 Present for approval**. Each has a single objective, inputs, expected outputs, and a done criterion.
+-- **Ownership:** **P.1 Frame** and **P.3 Answer** are **orchestrator** steps (no subagent); P.2, P.4, P.5 and S1.4 each run in their own subagent. P.2 and P.3 run in the **primary worktree** (no change worktree exists yet); the change branch and worktree are created at **P.4**, and P.5 and S1.4 run inside it.
++- **Atomic steps:** execute this skill's atomic steps in order (see the Workflow Diagram in `AGENTS.md`): **P.2 Interrogate** → **P.3 Answer** (orchestrator ⏸) → **P.4 Draft** → **P.5 Verify self-consistency** (FEATURE/CROSS-CUTTING only) → **S1.4 Present for approval** (FEATURE/CROSS-CUTTING only). Each has a single objective, inputs, expected outputs, and a done criterion.
++- **Ownership:** **P.1 Frame** and **P.3 Answer** are **orchestrator** steps (no subagent); P.2, P.4, P.5 and S1.4 (the latter two FEATURE/CROSS-CUTTING only) each run in their own subagent. P.2 and P.3 run in the **primary worktree** (no change worktree exists yet); the change branch and worktree are created at **P.4**, and P.5 and S1.4 run inside it.
+diff --git a/docs/todo/template.md b/docs/todo/template.md
+--- a/docs/todo/template.md
++++ b/docs/todo/template.md
+@@ -41,4 +41,4 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
+-| P.5 Self-consistency | | |
++| P.5 Self-consistency (FEATURE/CROSS-CUTTING) | | |
+```
+
+`git diff --stat`: `.agents/skills/specify/SKILL.md | 6 +++---`, `docs/todo/template.md | 2 +-` — **2 files changed, 4 insertions(+), 4 deletions(-)**. Every change is a parenthetical qualifier inserted into an existing line; no line was reflowed, reworded, reordered or deleted. The two dropped items (Q-1, Q-2) are **not** in the diff.
+
+**Commit:** `aa06c56 chore(workflow-docs-nits): S4.2 qualify P.5 as FEATURE/CROSS-CUTTING in the template and specify skill`.
+
+### S4.2 consistency check — `grep -n "P\.5"` over the four live-guidance files
+
+Reference rule: `AGENTS.md:145` — "**P.5 Verify self-consistency** | subagent (specify skill) — **FEATURE/CROSS-CUTTING only**".
+
+| File | P.5 mentions after the edit | Type-scoped? |
+|---|---|---|
+| `AGENTS.md` (untouched) | `:132` draft-spec row "fixed at P.5"; `:145` **FEATURE/CROSS-CUTTING only**; `:159` `(**FEATURE/CROSS-CUTTING**)`; `:175` `(FEATURE/CROSS-CUTTING)`; `:235` diagram `(FEATURE/CROSS-CUTTING only)`; `:339` `(FEATURE/CROSS-CUTTING only)`; `:463` "for **FEATURE/CROSS-CUTTING only**"; `:469`/`:486` inside the `**FEATURE**`/`**CROSS-CUTTING**` headings | yes — every restatement either carries the qualifier or sits under a type heading |
+| `.agents/skills/specify/SKILL.md` | `:14` `(FEATURE/CROSS-CUTTING)` **(new)**; `:45` `(FEATURE/CROSS-CUTTING only)` **(new)**; `:46` `(the latter two FEATURE/CROSS-CUTTING only)` **(new)**; `:85` heading `### P.5 Verify self-consistency` (inside `## Atomic Steps (FEATURE / CROSS-CUTTING)`, `:60`); `:115`/`:129` headings `A. FEATURE path` / `C. CROSS-CUTTING path`; `:117`/`:131` step chains inside those sections; `:169` `(FEATURE/CROSS-CUTTING — …)`; `:170` "for **FEATURE/CROSS-CUTTING**"; `:196`/`:211` `(FEATURE/CROSS-CUTTING)` | yes — the four remaining bare mentions are headings/step chains inside sections that are themselves titled FEATURE / CROSS-CUTTING (the "Not in scope" list above) |
+| `docs/todo/template.md` | `:44` `P.5 Self-consistency (FEATURE/CROSS-CUTTING)` **(new)** — the template's only P.5 mention | yes |
+| `docs/questions/template.md` | no `P.5` mention at all | n/a (dropped item Q-1 — untouched) |
+
+**Result: no contradiction.** Every live-guidance sentence that lists P.4 and P.5 as a sequence now names the types, matching `AGENTS.md:145/:175/:235/:339/:463`. The remaining unqualified `P.5` mentions are all inside a heading or section whose own title restricts it to FEATURE / CROSS-CUTTING, so none of them asserts that P.5 runs for another type. No wording fix beyond the scoped edits was needed.
+
+### Phase 5 (S5.1/S5.2, DOCS/CHORE light)
+
+**S5.1 — no behavior / no test touched.** `git diff --name-status main...HEAD` (merge base `5c7d1e0`, still an ancestor of `main` at `5c0364b`):
+
+```text
+M	.agents/skills/specify/SKILL.md
+M	docs/todo/template.md
+A	docs/verification/workflow-docs-nits.md
+```
+
+- Only `docs/` and `.agents/` paths — **no `src/`, no `tests/`, no `pyproject.toml`, no `.github/workflows/`** (verified with `git diff --name-only main...HEAD | grep -E '^(src/|tests/|pyproject\.toml|\.github/workflows/)'` → no match).
+- No `docs/specs/` file, so no REQ/AC/INV/EDGE/NFR changed and `docs/verification/traceability.md` is untouched.
+- No `userdocs/` path (`git diff --name-only main...HEAD | grep -c '^userdocs/'` → `0`).
+- Planning records (`docs/todo/workflow-docs-nits.md`, `docs/questions/workflow-docs-nits.md`) are not in this branch's diff — orchestrator-owned on `main`.
+
+**S5.2 — lint / types where applicable.**
+
+| Check | Command | Result |
+|---|---|---|
+| Lint (whole-repo sweep, the Phase 5 gate, matches CI `lint` job) | `uv run ruff check .` | **`All checks passed!`** — identical to base; the change adds no Python |
+| Types | `uv run mypy src/` | **n/a-in-effect** — no `src/` file is in the diff, so the result cannot differ from base (per the Phase 5 plan item 2 above) |
+| Docs site | `uv run mkdocs build --strict` | **skipped by the step task-definition** — the change touches no `userdocs/` path (`docs_dir: userdocs`; `docs/todo/` and `.agents/` are not part of the published site). The TODO acceptance signal still lists it; it is unchanged in outcome and can be re-run as the Phase 6 pre-merge check if the reviewer wants the evidence |
+| Spec-validation CI (TODO acceptance signal) | `uv run python scripts/check_traceability.py` | **`Traceability: PASS (746 matrix rows, 129 spec IDs, 713 test functions)`** — exit 0 |
+
+**Phase 5 gate = PASS (DOCS/CHORE light).** No behavior delta: the diff is two parenthetical qualifiers in process guidance and a planning template, plus this verification record.
+
+**Version bump: none** (`AGENTS.md` → Versioning → `REFACTOR / DOCS-CHORE → none`); `pyproject.toml` `[project] version` is not touched.
+
+**Commit:** `chore(workflow-docs-nits): S5.1/S5.2 verify no behavior delta` (this record). Working tree clean after it.
+
+### Phase 4 + Phase 5 done-criteria checklist
+
+| Criterion | Result |
+|---|---|
+| Exactly the two scoped edits, exact wording from the scope record | yes — 4 lines, byte-for-byte the "after" text; the two dropped items (Q-1, Q-2) are absent from the diff |
+| No unrelated line reformatted | yes — `git diff --stat` = 4 insertions / 4 deletions over 2 files |
+| P.5 consistency grep over the 4 guidance files | no contradiction (table above) |
+| S4.2 commit with the required message | `aa06c56` |
+| Changed paths prove no behavior file was touched | yes — 3 paths, all under `docs/` and `.agents/` |
+| `uv run ruff check .` clean | yes — `All checks passed!` |
+| `mkdocs build --strict` | skipped — no `userdocs/` path touched |
+| Verification section appended | this section |
+| Working tree clean after the S5.x commit | yes |
