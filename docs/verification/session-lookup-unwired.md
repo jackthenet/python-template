@@ -109,3 +109,27 @@ Re-verified in this worktree at `ab4b4f8`.
 ## Acceptance signal (from the TODO, `docs/todo/session-lookup-unwired.md:41`)
 
 A test that starts the application's real wiring and calls a permission check with a valid, unrevoked, unexpired session token **passes**; the same check with a revoked or another user's token still **denies**; the full suite and the EDGE-007 fail-closed tests stay green.
+
+---
+
+## Phase 3 / RED evidence (S3.1, 2026-10-03)
+
+**Reproduction test (exactly the §5 plan):** `tests/acceptance/permissions/test_composition_wiring.py::test_ac_020_composition_root_validates_session_token` — one new test module in the affected feature's acceptance directory; **no `src/` change, no existing test modified**.
+
+It exercises the **real composition root**: `import main` in a fresh interpreter (`subprocess.run([sys.executable, "-c", code], cwd=tmp_path)`), then four checks through `main._permission_service.has_permission(alice.id, "usermanagement.get_user", session_token=…)` — never a hand-built `PermissionService`. Fixture data is written through the composed stores (`main._user_repository.add(User(...))`, `main._session_repository.add(Session(...))` with the SHA-256 hash the check computes), all valid and in-domain.
+
+**Deviation from the §5 setup sketch (recorded, not a re-decision):** the subprocess inserts the **absolute** `<worktree>/src` on `sys.path` instead of the relative `'src'` used by `tests/acceptance/settings_coverage/test_wiring.py:15`, because `cwd` is `tmp_path` here (as §5 requires) so a relative entry would not resolve. With `cwd=tmp_path` the composition root's relative SQLite URLs (`sqlite:///./data/…`) and its `settings/` directory are created inside the temp dir, so the settings-registry singleton pre-replacement of that pattern is unnecessary (`src/main.py` installs its own registry into the singleton anyway) and was not copied.
+
+### AC-020 / REQ-017 — RED
+
+- **command:** `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -v`
+- **result:** `FAILED tests/acceptance/permissions/test_composition_wiring.py::test_ac_020_composition_root_validates_session_token` — `1 failed in 1.42s`
+- **failure mode:** **assertion on behavior** — `AssertionError: [False, False, False, False]` at `tests/acceptance/permissions/test_composition_wiring.py:105`. The composed service denies the valid-token check (the `session_lookup is None` → `storage_error` path, `src/backend/permissions/service.py:407-408`); the expected outcome is `[True, False, False, False]` (valid → proceeds; revoked / another user's / unknown → deny).
+- **not a valid-RED violation:** no collection, import or fixture error, no `ValidationError`/`ValueError` from test data — the subprocess exits `0` (the `returncode == 0` guard passes) and only the outcome assertion fails.
+- **pre-flight collection check:** `uv run pytest --collect-only tests/acceptance/permissions/test_composition_wiring.py -q` → `1 test collected in 0.12s` (clean, before and after deriving).
+- **satisfiability check (test-contract sanity, scratch only, not committed):** the same script with the lookup supplied (`main._permission_service._session_lookup = main._session_repository`) prints `[True, False, False, False]` — the exact GREEN the §6 fix must produce — so the RED is the missing wiring and not a broken fixture (rows, token hash, admin wildcard REQ-010 and the catalog all resolve through the composed stores).
+- **negative guards (GREEN before and after the fix — they prove the fix is not a blanket allow):** revoked token, another user's token, unknown token → `False` in both runs.
+- **ruff (changed paths):** `uv run ruff check tests/acceptance/permissions/test_composition_wiring.py` → `All checks passed!`; `uv run ruff format tests/acceptance/permissions/test_composition_wiring.py` → `1 file left unchanged`.
+- **commit:** this commit (`issue(session-lookup-unwired): S3.1 reproduction test (composition-root session lookup)`).
+
+**Deferred by design:** the RED *gate* record (S3.2) and the `docs/verification/traceability.md` row (S5.3; decision **Q-02** — the spec §11 rows stay as the historical record, no Spec Amendment).
