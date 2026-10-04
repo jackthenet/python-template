@@ -41,4 +41,4 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 | P.2 Interrogate (<n> questions) | | |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec / triage / baseline / scope | | |
-| P.5 Self-consistency | | |
+| P.5 Self-consistency (FEATURE/CROSS-CUTTING) | | |

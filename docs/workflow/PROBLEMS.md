@@ -410,3 +410,11 @@ A step MUST log a problem when it:
 - **Resolution:** recorded as **finding F-1** in `docs/verification/architecture-tests-missing.md` and left **out of scope** (the private import stays, recorded rather than hidden); the change fixes 3 of the 4 imports. Framed as a separate prepared change — `docs/todo/settings-public-registry-setter.md` (FEATURE + settings-spec REQ-014 amendment), which is also the shared fix for the 6 test files / 9 sites that write `_registry` directly.
 - **Durable lesson:** when a question folds "same-kind" fixes into a small change, verify each site has a **public equivalent** before promising it; an import rewrite is only non-behavior if the public API already exports the same object.
 - **Date:** 2026-10-04
+## P-44 — the orchestrator's P.4 launch prompt carried an invented answer set; the scope record had to be rewritten on a P.4 re-entry (P.4 Draft)
+- **Problem:** The launch prompt for **P.4 Draft** of `update-readme` restated the answers from memory instead of quoting the on-disk records, and invented decisions that no question ever asked: a `.agents/skills/docs-as-code/SKILL.md`, an 11-row README feature table, a "Project layout" section, a Status/version block, and a whole new `AGENTS.md` "Documentation & traceability" section. The question file has exactly **6** questions (Q-1…Q-6); the prompt asserted a 10-item "Q-1…Q-10" list. The result was a **246-line scope record** (`5a59bc7`) describing scope nobody approved — caught only because the P.4 re-entry re-read `docs/todo/update-readme.md` and `docs/questions/update-readme.md`.
+- **Step / Phase:** P.4 Draft — Phase P (change update-readme)
+- **Change:** update-readme / DOCS/CHORE
+- **Duration / iterations:** 1 wasted scope record + 1 full P.4 re-entry (the record rewritten as `be65b0e`).
+- **Resolution:** the on-disk planning records (`docs/todo/`, `docs/questions/`) are **authoritative** — a launch prompt must **quote** them, never restate them from memory. The rewritten record carries a "Correction" note naming the superseded commit and listing exactly what was removed, so the wrong draft stays auditable instead of being silently replaced.
+- **Date:** 2026-10-04
+- **Status:** Solved (2026-10-04) — recipe noted in this entry.
