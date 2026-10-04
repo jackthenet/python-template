@@ -393,3 +393,12 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 8 launches, ~45 min of step time for a 10-line diff (no failures, no re-launches).
 - **Resolution (what was actually done):** the read-only gate runs were executed as **S5.1+S5.2** in one subagent and the record writes as **S5.3+S5.4** in one, and the bounded review as **S6.1–S6.3** in one — each combination is recorded in the verification artifact. Suggestion for the after-workflow-optimization: make the light-tier ISSUE Phase 5/6 step set explicitly coalescible (gates-in-one, records-in-one, review-in-one, S6.4 always separate because it bumps and opens the PR).
 - **Date:** 2026-10-04
+
+## P-44 — the orchestrator's P.4 launch prompt carried an invented answer set; the scope record had to be rewritten on a P.4 re-entry (P.4 Draft)
+- **Problem:** The launch prompt for **P.4 Draft** of `update-readme` restated the answers from memory instead of quoting the on-disk records, and invented decisions that no question ever asked: a `.agents/skills/docs-as-code/SKILL.md`, an 11-row README feature table, a "Project layout" section, a Status/version block, and a whole new `AGENTS.md` "Documentation & traceability" section. The question file has exactly **6** questions (Q-1…Q-6); the prompt asserted a 10-item "Q-1…Q-10" list. The result was a **246-line scope record** (`5a59bc7`) describing scope nobody approved — caught only because the P.4 re-entry re-read `docs/todo/update-readme.md` and `docs/questions/update-readme.md`.
+- **Step / Phase:** P.4 Draft — Phase P (change update-readme)
+- **Change:** update-readme / DOCS/CHORE
+- **Duration / iterations:** 1 wasted scope record + 1 full P.4 re-entry (the record rewritten as `be65b0e`).
+- **Resolution:** the on-disk planning records (`docs/todo/`, `docs/questions/`) are **authoritative** — a launch prompt must **quote** them, never restate them from memory. The rewritten record carries a "Correction" note naming the superseded commit and listing exactly what was removed, so the wrong draft stays auditable instead of being silently replaced.
+- **Date:** 2026-10-04
+- **Status:** Solved (2026-10-04) — recipe noted in this entry.
