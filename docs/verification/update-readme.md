@@ -317,4 +317,103 @@ Exactly the scope table's four paths plus `docs/workflow/PROBLEMS.md` (the P-44 
 
 **Version bump: none** (AGENTS.md Versioning: `REFACTOR / DOCS-CHORE → none`).
 
-**Commits:** `4c20c5f` (S4.2 scoped change) · `33f04c4` (P-44 friction log) · this record.
+**Commits:** `4c20c5f` (S4.2 scoped change) · `33f04c4` (P-44 friction log) · `df1fb20` (S5.1/S5.2 record).
+
+---
+
+## Phase 6 review (S6.1–S6.3) — 2026-10-04
+
+**Coalescing (P-41):** S6.1 (normative basis) + S6.2 (traceability + boundaries) + S6.3 (report) ran in **one** subagent, and **S6.4** (no bump + open PR) in the same execution. Rationale: Problem Log **P-41** (step-launch overhead on a small Markdown diff); the inputs are bounded and identical for all four steps — the scope record, the Q-1…Q-6 answers, and the FINAL state at `df1fb20`. Per the review skill's bounded-scope rule (P-27) the review reads the **final text** (`git diff a274b6a...HEAD`), not commit-by-commit, and does **not** re-run the full test suite (Phase 5 confirmed the gate; a DOCS/CHORE change has no suite gate).
+
+**Normative basis:** this scope record (corrected P.4 scope `be65b0e` + the Phase 4/5 evidence) and the recorded answers Q-1…Q-6 in `docs/questions/update-readme.md` (all `ANSWERED`, all incorporated).
+
+### S6.1 — Review vs. the normative basis (no more, no less)
+
+**1. Scope fidelity — exact.** `git diff --name-status a274b6a...HEAD`:
+
+| Change | Path | Numstat | Scope-table item |
+|---|---|---|---|
+| A | `.agents/skills/update-readme/SKILL.md` | 51 / 0 | item 1 |
+| M | `AGENTS.md` | **2 / 0** | item 4 |
+| M | `README.md` | 81 / 20 | items 2 + 3 |
+| A | `docs/verification/update-readme.md` | 320 / 0 | item 4 (evidence) |
+| M | `docs/workflow/PROBLEMS.md` | 9 / 0 | the P-44 friction log (required by the step, not a scope item) |
+
+Out-of-scope paths in the diff: `git diff --name-only a274b6a...HEAD | grep -E "^(src/|tests/|pyproject\.toml|uv\.lock|\.github/|userdocs/|mkdocs\.yml|alembic\.ini|migrations/|\.pre-commit-config\.yaml|docs/specs/)"` → **0 matches**. No `LICENSE` and no `CONTRIBUTING.md` exists in the worktree (`ls LICENSE* CONTRIBUTING.md` → no such file), so Q-2's deny-list and the "no `CONTRIBUTING.md` invented" rule hold in the final state, not only in the plan.
+
+**`AGENTS.md` diff = one added line + its separating blank, nothing else** (`git diff a274b6a...HEAD -- AGENTS.md` → numstat `2 0`, one hunk at `@@ -318,6 +318,8 @@`): the line goes after the last Skill-to-Phase Mapping row (the `(cross-cutting)` / `git` row) and before `### Phase Execution (Atomic Steps, Synchronous Subagents)`; **zero deleted/modified lines**. Matches Q-6 = (b) and scope item 4 exactly — no other `AGENTS.md` region was touched.
+
+**2. Badge honesty (the skill's core rule) — 7 badges, every target re-confirmed in the final state.**
+
+| Badge (alt text) | Target | Fact re-verified at `df1fb20` |
+|---|---|---|
+| `Quality` | `…/actions/workflows/quality.yml` (+ its badge) | `.github/workflows/quality.yml` exists, `name: Quality`; jobs `type-check`, `security`, `coverage`, `dependency-review`, `dependencies`, `docs`, `migrations`; no path filter |
+| `Lint` | `…/workflows/lint.yml` | file exists, `name: Lint`; runs `uv run ruff check .` + `ruff format --check .` |
+| `Spec Validation` | `…/workflows/spec-validation.yml` | file exists, `name: Spec Validation`; jobs `spec-validation`, `traceability`, `tests` |
+| `Python >=3.14` | `img.shields.io/badge/python-%3E%3D3.14-blue` → links `pyproject.toml` | `requires-python = ">=3.14"` (`pyproject.toml:7`) |
+| `Ruff` | `img.shields.io/badge/lint-ruff-blue` → `docs.astral.sh/ruff/` | `ruff>=0.16.9` dev dependency (`pyproject.toml:68`) and the `lint` job runs ruff |
+| `uv` | `img.shields.io/badge/env-uv-blue` → `docs.astral.sh/uv/` | `[tool.uv]` (`pyproject.toml:75`); every documented command is `uv run …` |
+| `pre-commit` | `img.shields.io/badge/hooks-pre--commit-blue` → `pre-commit.com/` | `.pre-commit-config.yaml` exists; `pre-commit>=4.6.2` dev dependency (`pyproject.toml:54`) |
+
+The three workflow badges each name a file present in `.github/workflows/` (`lint.yml`, `quality.yml`, `spec-validation.yml` — exactly three), and each alt text equals that file's `name:`. `owner/repo` = `jackthenet/python-template` (`git remote get-url origin`). **Deny-list honoured:** `grep -niE "codecov|pypi|coverage.*badge|badge.*coverage|license.*badge|badge.*license" README.md` → **no match** — no coverage/Codecov badge (Q-3 = (d), owned by `codecov-coverage-badge`), no License badge (no `LICENSE` file, no `license` field in `pyproject.toml`; Q-2 = (a), `security-changelog-license` adds it later), no PyPI version/downloads badge (not published, no publish/release workflow), no docs-site badge (no deploy workflow → no hosted URL).
+
+**3. Command honesty — every command in the final `README.md` exists in this repo.**
+
+| Command | Verified against (re-checked at `df1fb20`) |
+|---|---|
+| `uv sync` | `[tool.uv] default-groups = ["dev"]` (`pyproject.toml:75-77`) |
+| `uv run pytest tests/` | `[tool.pytest.ini_options] testpaths = ["tests"]`; `tests` job (`spec-validation.yml:84`) |
+| `uv run pytest tests/acceptance/ -v` (+ the four named siblings) | all five directories exist: `tests/acceptance/ contract/ integration/ property/ unit/` |
+| `uv run pytest tests/ --cov --cov-report=xml` | `coverage` job (`quality.yml:59`); `[tool.coverage.report] fail_under = 92` (`pyproject.toml:105`) |
+| `uv run ruff check .` / `uv run ruff format .` | `lint` job (`lint.yml:37,39`) |
+| `uv run mypy src/` / `uv run ty check src/` | `type-check` job (`quality.yml:23` gate, `:25` informational) |
+| `uv run deptry .` | `dependencies` job (`quality.yml:94`) |
+| `uv run pip-audit` / `uv run bandit -r src/` | `security` job (`quality.yml:41,43`) |
+| `uv run mkdocs build --strict` | `docs` job (`quality.yml:109`); `mkdocs.yml:6 docs_dir: userdocs` |
+| `uv run alembic upgrade head` / `alembic revision -m "<description>"` | `alembic.ini:8 script_location = %(here)s/migrations`; `alembic>=1.20.0` (`pyproject.toml:32`); `migrations` job (`quality.yml:127`) |
+| `uv run python scripts/check_traceability.py` | `scripts/check_traceability.py` exists; `traceability` job (`spec-validation.yml:68`) |
+| `uv run python scripts/verify_spec.py docs/specs/<name>.md` | `scripts/verify_spec.py` exists; `spec-validation` job (`spec-validation.yml:48`) |
+| `uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json` | `scripts/validate_task_dag.py` exists; `spec-validation.yml:54` — and the README says **"informational in CI"**, matching the `|| true` there |
+| `uv run pre-commit install` | `.pre-commit-config.yaml` + `pre-commit>=4.6.2` (`pyproject.toml:54`) |
+
+**Quick start actually executed at HEAD** (throwaway file outside the repo, nothing committed): `uv run python /tmp/qs_check/quickstart.py` — the exact snippet printed in `README.md` — → **`QUICKSTART OK ['user']`, exit 0**, `verify_password` returned `True`. The `uv run` rewrote `uv.lock` again (P-42: the lock pins `python-template 0.6.0` vs `pyproject.toml:4 = 0.6.1`); it was reverted with `git checkout -- uv.lock` and `git status --porcelain` is **empty** — the diff still contains no `uv.lock`.
+
+Prose claims spot-checked against the code, all true: `src/main.py` is the composition root / startup wiring and there is **no** app or CLI entry point (`grep -n "__main__" src/main.py` → no match; no `[project.scripts]` in `pyproject.toml`); `SettingDefinition` (`src/backend/settings/models.py:208`) and `SettingsValidationError` (`src/backend/settings/exceptions.py:14`) exist; `log_level` / `log_file` are the settings the logging feature reads (`src/backend/logging/_settings.py:19-20,41-42`); `scripts/` holds exactly three checkers.
+
+**Nothing unverifiable is printed in the README** — the unverifiable items are in this report instead, as the skill's §5 requires (see findings F-1/F-2).
+
+**4. Skill fidelity — byte-identical body.** `diff <(sed -n '29,69p' docs/todo/update-readme.md) <(sed -n '6,46p' .agents/skills/update-readme/SKILL.md)` → **no output** (41 lines identical: `# Task: Update the GitHub README` + §1 Inspect + §2 Badges + §3 Structure and content + §4 Quality rules + §5 Output). The only content beyond the supplied text is the addition Q-5 = (b) allows — skill lines 47-51: blank, `## Repo protocol`, blank, **2 lines** (change-worktree/PR-only-to-`main`; the §5 report goes in `docs/verification/<name>.md`). Front matter is the two-key convention of the other 8 skills (`name: update-readme`, one quoted `description:` ending in a "Use when …" trigger clause) — no `version`/`license`/`allowed-tools`. No wording was rewritten: **no more, no less** than the scope's item 1.
+
+**5. No behavior delta.** No `src/`, `tests/`, `pyproject.toml`, `uv.lock`, `.github/`, `userdocs/`, `mkdocs.yml`, `alembic.ini`, `migrations/` or `.pre-commit-config.yaml` path in the diff (0 matches above); the change is Markdown only. Phase 5 evidence stands and was not contradicted: `uv run ruff check .` → `All checks passed!`; `uv run mkdocs build --strict` → exit 0; `uv run python scripts/check_traceability.py` → PASS; `uv run mypy src/` → n/a (no `.py` touched). No test was added, modified, weakened or deleted (no `tests/` path exists in the diff at all).
+
+**6. Link integrity (re-run on the final files).** Script over `README.md` + `.agents/skills/update-readme/SKILL.md`: **9 relative link targets, 0 broken** — `pyproject.toml`, `src/backend/settings/`, `docs/specs/settings.md`, `docs/specs/logging.md`, `.github/workflows/lint.yml`, `.github/workflows/quality.yml`, `.github/workflows/spec-validation.yml`, `AGENTS.md` ×2 — plus 7 external URLs (3 workflow badge SVGs, 3 shields.io endpoints, 3 tool sites; the skill file contains no Markdown link). Markdown hygiene: **one H1 per file**; 3 fenced blocks in `README.md`, every opening fence tagged (`bash`, `python`, `bash`); **0 trailing-whitespace lines**; final newline present in both files (the `trailing-whitespace` / `end-of-file-fixer` hooks apply to Markdown and do not read `.editorconfig`).
+
+### S6.2 — Traceability + boundaries
+
+- **Traceability:** DOCS/CHORE has no spec, so no `REQ-XXX`/`AC-XXX` is introduced or touched — there is nothing new to trace, and the change must not add matrix rows. Re-run at `df1fb20`: `uv run python scripts/check_traceability.py` → **`Traceability: PASS (747 matrix rows, 129 spec IDs, 714 test functions)`**, byte-identical to the P.4 and Phase 5 results → no row was added, removed, orphaned or broken. This matters because the `Spec Validation` workflow **does** run on this PR (its path filter includes `docs/verification/**`).
+- **Boundaries / architecture:** no `src/` path → no feature boundary, cross-feature import or `shared/` question arises. The new file is agent guidance under `.agents/skills/update-readme/SKILL.md` — the same auto-discovered mechanism as the 8 existing skills, no registration, no manifest, no CI/script step reads it. `README.md` and `AGENTS.md` are root-level docs; the evidence is in `docs/verification/` (the internal process record) and the friction log in `docs/workflow/PROBLEMS.md`. The published site is unaffected (`mkdocs.yml:6 docs_dir: userdocs`; `userdocs/` untouched → no nav entry needed).
+- **Observability:** n/a — no runtime code, no entry point, no logging path.
+
+### S6.3 — Findings and resolutions
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| F-1 | A workflow badge's **status colour** is GitHub run history — not observable offline, so the README cannot assert the pipelines are green. | Info | **Accepted / flagged** (already in the Phase 5 report). The badges state *which* workflow they link to, not a claimed status; nothing unverifiable is printed. |
+| F-2 | `Lint` and `Spec Validation` are **path-filtered** (`lint.yml:6-21`), so their badge can read stale/"skipped" for a doc-only PR; the ruff gate for this change is local-only. | Info | **Accepted / flagged.** The badge links the workflow, which is honest regardless; the local `ruff check .` sweep is the actual gate evidence here. |
+| F-3 | `AGENTS.md:851` still shows the stale `UserCreate(..., role="member")` example — the model takes a non-empty `roles: list[str]` and the default allowed set is `["admin", "user"]` (re-proven by running the README snippet, `user.roles == ['user']`). | **Flagged, not fixed** | Out of scope: Q-6 = (b) permits exactly **one** added `AGENTS.md` line and the scope record forbids any other edit. Needs a follow-up DOCS/CHORE (or an ISSUE against the settings/user-management docs). Listed in the PR body so the human sees it. |
+| F-4 | `uv run` rewrites `uv.lock` on every invocation (lock pins `python-template 0.6.0`, `pyproject.toml:4` says `0.6.1`) — P-42. | Info | Not this change's diff: reverted with `git checkout -- uv.lock` after each run; `git status --porcelain` empty; no `uv.lock` in the diff. Already logged as P-42. |
+| F-5 | The skill's §4 "no marketing fluff" vs the `Why this exists` closer ("Point it at a new project and the front page, the process and the checks are already in place"). | Minor | **Accepted.** It states a checkable fact (the three workflows, the pre-commit config and `AGENTS.md` ship in the template), one clause, no superlative — not filler. |
+| F-6 | `Why this exists` names "coverage" among the CI gates while Q-3 forbids a coverage badge. | Minor | **Accepted, no conflict.** The *gate* is real (`coverage` job, `fail_under = 92`); the deny-list is about **badges**, and the badge grep shows none. The Codecov badge stays owned by `codecov-coverage-badge`. |
+
+**No acceptance test was weakened, modified or deleted; no behavior beyond the scope record was introduced; every scope item is present and nothing outside it is.**
+
+### Verdict
+
+**REVIEW: CLEAN** — every finding is either resolved (none required a code change) or an explicitly accepted/flagged limitation, and the flagged F-3 is out of scope by decision, not an open defect in this change.
+
+### S6.4 — Version bump + PR
+
+- **Version bump: none.** AGENTS.md Versioning bump mapping: `REFACTOR / DOCS-CHORE → none`. `bump-my-version` was **not** run; `pyproject.toml:4` stays `0.6.1` and `pyproject.toml` is not in the diff.
+- **PR:** opened for `chore/update-readme` → `main` (`gh pr create --head chore/update-readme --base main`), presented for human review/merge. **Not merged** (human governance). Post-merge cleanup is **S7.1**.
+
+**Commits added by Phase 6:** this record (`chore(update-readme): S6.1-S6.3 review report`) — no bump commit.
