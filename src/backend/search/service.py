@@ -394,14 +394,7 @@ class SearchService:
         free text is normalized (case-folded + NFC + trimmed; empty/None = no
         constraint, REQ-012/REQ-005) before fan-out.
         """
-        with self._lock:
-            if query.feature is not None:
-                source = self._sources.get(query.feature)
-                if source is None:
-                    raise UnknownSourceError(query.feature)
-                sources = [source]
-            else:
-                sources = list(self._sources.values())
+        sources = self._select_sources(query.feature)
         _validate_pagination(query)
         # Strict validation against every source in the fan-out (D7, REQ-010,
         # EDGE-020): a field absent or non-filterable/non-sortable in any
@@ -440,6 +433,18 @@ class SearchService:
             for item in page.items:
                 items.append(SearchResultItem(feature=source.name, item_id=item.item_id, fields=item.fields))
         return SearchResult(items=items, total=total, offset=query.offset, limit=limit, failures=failures)
+
+    def _select_sources(self, feature: str | None) -> list[SearchSource]:
+        """The sources the query targets: the single ``feature`` source (an unknown
+        feature raises ``UnknownSourceError``, REQ-010/EDGE-001), or every
+        registered source when ``feature`` is omitted (REQ-004/D6)."""
+        with self._lock:
+            if feature is not None:
+                source = self._sources.get(feature)
+                if source is None:
+                    raise UnknownSourceError(feature)
+                return [source]
+            return list(self._sources.values())
 
     # -- Wiring helpers -------------------------------------------------------
 
