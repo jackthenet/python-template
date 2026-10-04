@@ -253,11 +253,19 @@ class SettingDefinition(BaseModel):
     max_value: float | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> SettingDefinition:  # noqa: PLR0912
+    def _validate(self) -> SettingDefinition:
         if not _KEY_RE.match(self.key):
             raise SettingsValidationError("setting key has an invalid format")
+        self._validate_kind_specs()
+        self._validate_kind_exclusive_constraints()
+        # Default validity.
+        if not _definition_default_valid(self):
+            raise SettingsValidationError("default is invalid for its kind")
+        return self
+
+    def _validate_kind_specs(self) -> None:
+        """Kind-specific spec presence/mismatch (one spec per kind)."""
         kind = self.kind
-        # Kind-specific parameter presence/mismatch.
         if kind is SettingKind.SLIDER:
             if self.slider is None:
                 raise SettingsValidationError("SLIDER requires a slider spec")
@@ -272,24 +280,27 @@ class SettingDefinition(BaseModel):
             # LIST always accepts: a ListSpec is optional (defaults to ListSpec()).
             pass
         else:
-            if self.slider is not None:
-                raise SettingsValidationError(f"{kind} forbids a slider spec")
-            if self.select is not None:
-                raise SettingsValidationError(f"{kind} forbids a select spec")
-            if self.list_spec is not None:
-                raise SettingsValidationError(f"{kind} forbids a list spec")
-        # TEXT-only constraints are rejected on other kinds.
+            self._validate_no_kind_specs()
+
+    def _validate_no_kind_specs(self) -> None:
+        """A kind other than SLIDER/SELECT/LIST forbids every kind-specific spec."""
+        kind = self.kind
+        if self.slider is not None:
+            raise SettingsValidationError(f"{kind} forbids a slider spec")
+        if self.select is not None:
+            raise SettingsValidationError(f"{kind} forbids a select spec")
+        if self.list_spec is not None:
+            raise SettingsValidationError(f"{kind} forbids a list spec")
+
+    def _validate_kind_exclusive_constraints(self) -> None:
+        """TEXT-only and NUMBER-only constraints are rejected on other kinds."""
+        kind = self.kind
         if kind is not SettingKind.TEXT and (
             self.pattern is not None or self.min_length is not None or self.max_length is not None
         ):
             raise SettingsValidationError(f"{kind} forbids TEXT-only constraints")
-        # NUMBER-only constraints are rejected on other kinds.
         if kind is not SettingKind.NUMBER and (self.min_value is not None or self.max_value is not None):
             raise SettingsValidationError(f"{kind} forbids NUMBER-only constraints")
-        # Default validity.
-        if not _definition_default_valid(self):
-            raise SettingsValidationError("default is invalid for its kind")
-        return self
 
 
 def value_valid_for(d: SettingDefinition, value: Any) -> bool:
