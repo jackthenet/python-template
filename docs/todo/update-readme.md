@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** READY  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- P.4 scope record be65b0e in ../python-template_kopie-worktrees/chore/update-readme -->
+- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- P.4 scope record be65b0e in ../python-template_kopie-worktrees/chore/update-readme -->
 - **Change type:** DOCS/CHORE  <!-- docs + agent tooling; no externally observable behavior delta -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/update-readme.md`
@@ -125,3 +125,4 @@ None — no `src/backend/` or `src/frontend/` path is touched. Files: `README.md
 | P.4 Draft scope + worktree | 2026-10-04 | **DONE → READY** — branch `chore/update-readme` + worktree from `main` @ `a274b6a`; scope record `docs/verification/update-readme.md`. **Re-entry needed:** the first P.4 launch (`5a59bc7`) was given a wrong answer set by the orchestrator (invented a `docs-as-code` skill, a feature table, a layout section and an AGENTS.md section); the record was rewritten to the recorded answers (`be65b0e`) — 4 scoped items: new `.agents/skills/update-readme/SKILL.md` (verbatim body + repo-protocol note, Q-5), `README.md` rewrite (7 badges, no coverage/license badge, Q-2/Q-3), `Structure` trimmed + link to `AGENTS.md` (Q-4), **one** `AGENTS.md` non-phase-skills line (Q-6). Friction logged as P-44 |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
+| Phase 4 + 5 (S4.2, S5.1/S5.2) | 2026-10-04 | **DONE / PASS (light)** — new `.agents/skills/update-readme/SKILL.md` (51 lines, body byte-identical to the supplied instruction set + 2-line repo-protocol note); `README.md` 35 → 96 lines (single H1, 7 badges backed by real workflows/tools, no coverage/license badge, License skipped, no TOC); **one** `AGENTS.md` line at `:321`; P-44 logged. Link check 22 targets / 0 broken; `ruff check .` clean; `mkdocs build --strict` exit 0; `check_traceability.py` PASS; diff = exactly the 5 allowed paths (no `src/`, `tests/`, `uv.lock`). Commits `4c20c5f`, `33f04c4`, `df1fb20` |
