@@ -141,14 +141,15 @@ Eight in-scope items, each decided at P.3 (Q-1 … Q-8). Items 1 and 8 are the c
 | `src/backend/permissions/repositories.py` | 50 | missing return type annotation `[no-untyped-def]` |
 | `src/backend/authentication/repository.py` | 37 | missing return type annotation `[no-untyped-def]` |
 
-- The fixes are **annotations only** (add parameter/return annotations; no logic change). Gate: `uv run mypy src/` → clean, and `uv run ty check src/` (`quality.yml:25`, informational) still clean.
+- The fixes are **annotations only** (add parameter/return annotations; no logic change). Gate: `uv run mypy src/` → clean, and `uv run ty check src/` (`quality.yml:25`, informational) shows **no new diagnostics** relative to the 151-diagnostic baseline (see invariant 4's correction — `ty` is not a clean gate).
 
 ## Invariants that MUST hold
 
 1. **No externally observable behavior change.** No new behavior, no removed behavior, no changed interface, model, event, error type or signature semantics. The `src/` edits are complexity restructuring and type annotations only.
 2. **The full suite result is identical to the baseline:** `uv run pytest tests/ -q` → **728 passed, 1 skipped, 0 failed** (the 1 skip is the pre-existing `tests/acceptance/filemanagement/test_filemanagement.py:364` symlink-host skip). The documented pre-existing Hypothesis flakiness (see the baseline table) may recur and is classified as environmental noise only if the node passes in isolation and is unrelated to the files this change touches.
 3. **No test is modified, weakened or deleted.** Test bodies may only be restructured for complexity (item 1, rows 6–10) while asserting exactly the same thing: same `@given` strategies and settings, same assertions, same event/record comparisons, same expected exceptions. Any assertion change is a violation and MUST stop the step (AGENTS.md Agent Prohibitions).
-4. **Every gate stays green at every step:** `uv run ruff check .` (whole repo, == CI `lint.yml:37`), `uv run ruff format --check .`, `uv run mypy src/`, `uv run ty check src/`, `uv run deptry .`, `uv run python scripts/check_traceability.py`, `uv run mkdocs build --strict`, `uv run alembic upgrade head`, and — after item 1/2 land — `uv run complexipy src tests --max-complexity-allowed 15` → exit 0.
+4. **Every gate stays green at every step:** `uv run ruff check .` (whole repo, == CI `lint.yml:37`), `uv run ruff format --check .`, `uv run mypy src/`, `uv run deptry .`, `uv run python scripts/check_traceability.py`, `uv run mkdocs build --strict`, `uv run alembic upgrade head`, and — after item 1/2 land — `uv run complexipy src tests --max-complexity-allowed 15` → exit 0.
+   **Correction to this invariant (recorded at Phase 4 step 2, 2026-10-04): `uv run ty check src/` is NOT a "stays green" gate.** It is **red at the baseline**: **151 diagnostics** at `5c589d2` and still **151** after Phase 4 steps 1–2 (`95 error[invalid-type-form]`, `23 error[unresolved-attribute]`, `18 warning[unsupported-base]`, `5 invalid-argument-type`, `3 invalid-return-type`, `3 call-non-callable`, `2 missing-argument`, `1 invalid-base`, `1 warning[deprecated]`) — e.g. `invalid-type-form` on `src/backend/authentication/feature_actions.py:20` and `unsupported-base` on `src/backend/authentication/repository.py:63`, caused by the `@logged`/`@logged_class` decorators and the SQLModel table bases, all in files this change does not touch. `ty` is **informational** in CI (`quality.yml:25`, `continue-on-error: true`); **`mypy` is the gate** (`quality.yml:23`) and is clean at every step (**Success: no issues found in 83 source files**). The ty requirement for this change is therefore **"no new diagnostics relative to the 151-diagnostic baseline"**, not "clean" — Phase 5 MUST NOT record the 151 as a regression. (Item 8's "`uv run ty check src/` … still clean" is to be read the same way: no new diagnostics.)
 5. **A new CI gate must pass on day one:** the complexipy job is added to `quality.yml` only after the 10 functions are under 15 in the same branch.
 6. **Feature boundaries respected:** each of the four touched features keeps its code inside its own feature directory; no cross-feature internal import is introduced by the extracted helpers.
 
@@ -247,3 +248,67 @@ Measured empirically (nesting costs +1 per level, `else` costs nothing): the sco
 ### Gate note: `uv run ty check src/` is red at baseline (pre-existing, informational)
 
 `uv run ty check src/` reports **151 diagnostics** (e.g. `error[invalid-type-form]` on `src/backend/authentication/feature_actions.py:20`, `warning[unsupported-base]` on `src/backend/authentication/repository.py:63`) — the `@logged`/`@logged_class` decorators and SQLModel bases are outside ty's model. None is in a file this step touched, and the P.4 baseline table records **no** clean `ty` result (only `uv run mypy src/` → Success, which is the CI gate at `quality.yml:23`; `ty` is the informational job at `quality.yml:25`). mypy stays clean (83 files) after every refactor in this step.
+
+## Phase 4 progress — step 2 (tests/ complexity)
+
+**Step:** S4.2 (Phase 4 step order item 2) — refactor the 5 `tests/` complexipy offenders to ≤ 15. **Type:** REFACTOR. **Date:** 2026-10-04. **Engine:** complexipy 8.0.1, gate `uv run complexipy src tests --max-complexity-allowed 15`.
+
+Re-measured before touching anything: the offender list is **exactly** the 5 remaining `tests/` rows of the scope table (6–10), scores unchanged (`test_inv_003_last_admin_invariant` 38, `test_last_admin_invariant` 23, `test_inv_006_event_correspondence` 22, `test_nfr_005_concurrent_threads_safe` 18, `FakeSmtpServer::_dialogue` 17). No `src/` offender (step 1 done).
+
+### Per-function before → after
+
+| # | File | Function | Before | After | Restructuring (assertions unchanged) |
+|---|---|---|---|---|---|
+| 1 | `tests/property/usermanagement/test_usermanagement_properties.py` | `test_inv_003_last_admin_invariant` | **38** | **6** | Extracted three private module-level helpers: `_admin_users` (**2**), `_mutate_first_admin` (**3**) — the "first admin that accepts the mutation" loop, shared by the delete/deactivate ops — and `_apply_inv_003_op` (**4**), the four-op dispatch. The `nonlocal counter` closure became `itertools.count(start=1)`, advanced by `next()` at the same point in each branch, so the generated usernames/emails are the same strings in the same order. The `try/except … : pass` became `with contextlib.suppress(…)` (ruff `SIM105`; identical suppression). The invariant check (`admin_users` + `assert any(u.is_active …)`) stays **inline in the test**, byte-identical. |
+| 2 | `tests/property/usermanagement/test_multi_role_invariants.py` | `test_last_admin_invariant` | **23** | **9** | Extracted `_apply_op` (**9**) — the five-branch dispatch (`create_admin` / `create_user` / `add_admin` / `_apply_admin_op`) that was inline in the loop; the pre-existing `_apply_admin_op` (**8**) is unchanged. Same `count(start=1)` substitution; same `contextlib.suppress` substitution. The initial-admin seeding line, the invariant comment and the inline `admin_users` / `assert any(u.is_active …)` check are unchanged. |
+| 3 | `tests/property/usermanagement/test_usermanagement_properties.py` | `test_inv_006_event_correspondence` | **22** | **6** | Extracted `_apply_event_op` (**11**): the non-create branch chain now **returns the event type** the op must publish, or `None` for the two idempotent no-ops (REQ-009) and for an op the sequence does not perform — the same skip decision the two inner `continue`s and the `else: continue` made. The test keeps the create branch (with its `UserCreated` count assert) inline, calls the helper under `contextlib.suppress(LastAdminError, InvalidRoleError, UserNotFoundError)` with `ev = None` pre-set (an exception leaves `ev` `None` → the same `continue` the old `except … : continue` made), then runs the two original asserts. |
+| 4 | `tests/integration/sessionmanagement/test_concurrency.py` | `test_nfr_005_concurrent_threads_safe` | **18** | **9** | The nested `worker(uid)` closure became the module-level `_nfr_005_worker(service, uid, rows, all_ids, errors)` (**5**) — the closure's captured variables are passed as arguments; `rows_by_user[uid]` is read on the submitting thread (the dict is never mutated after construction). Concurrency semantics identical: same `ThreadPoolExecutor(max_workers=8)`, same 4 submitted workers, same per-thread sequence (revoke own 10 → 5 × list-and-assert → `revoke_all_sessions` → `cleanup_expired`), same `errors` collection, same `future.result()` joins, same final per-user `list_sessions == []` asserts. |
+| 5 | `tests/mail_test_helpers.py` | `FakeSmtpServer::_dialogue` | **17** | **5** | Test **helper**, not a test: the dialogue loop now reads one line and delegates (`_handle_command` **7**, `_handle_auth` **1**, `_handle_mail_from` **1**); the helper returns `False` where the old body `return`ed (QUIT, `auth_fail`, `protocol_fail`). Same `startswith` match order (EHLO, AUTH, MAIL FROM, RCPT TO, DATA, QUIT, else), same response bytes, same `_readline`/`_read_data`/`_send` socket handling, same `_serve`/`_hold`/`close`. Verified by an ordered inventory of every `startswith("…")` command and every `"NNN …\r\n"` response literal: **identical sequence** before/after. |
+
+All five are ≤ 15. **Final gate: `uv run complexipy src tests --max-complexity-allowed 15` → exit 0 (zero offenders).** `pyproject.toml` `max-complexity-allowed` is still **30** and no `quality.yml` job exists yet — that is step 3, deliberately not done here.
+
+### Invariant 3 holds: no assertion, strategy or `@settings` value changed
+
+Per-commit `git diff | grep -cE "^[-+].*assert"` (changed lines containing an assertion):
+
+| Commit | File | Assert lines changed |
+|---|---|---|
+| `d3ff1ab` | `test_usermanagement_properties.py` (inv_003) | **0** |
+| `6db0d5f` | `test_multi_role_invariants.py` | **0** |
+| `228a20a` | `test_usermanagement_properties.py` (inv_006) | **0** |
+| `754bb6b` | `test_concurrency.py` | **2** — one line: `assert entry.session_id in all_ids` moved with the extracted worker (re-indented by 4); the diff pair is byte-identical modulo indentation |
+| `34a6f7e` | `mail_test_helpers.py` | **0** (the file contains no assertion — it is a helper) |
+
+Stronger, indentation-insensitive proof over all four files (`57d6c8e..HEAD`): the **assert inventory** — every line containing `assert`, whitespace-normalized, in order — is **identical** before/after for `test_usermanagement_properties.py`, `test_multi_role_invariants.py` and `test_concurrency.py` (`diff <(git show 57d6c8e:<f> | grep assert | sed 's/^ *//') <(grep assert <f>)` → empty). The **decorator/strategy inventory** — every line containing `@given`, `@settings`, `max_examples`, `deadline`, `sampled_from`, `min_size`, `max_size`, `HealthCheck` or `st.` — is likewise **identical** for all four files: no `@given` strategy, no `@settings` value (including the measured `deadline=1000`), no example count and no `suppress_health_check` changed; no `assume()` was added; no check was deleted or weakened. Diff stat `57d6c8e..HEAD`: **4 files, +171 / −128**, all under `tests/` — no `src/`, no `pyproject.toml`, no `.github/workflows/`, no `.pre-commit-config.yaml`.
+
+### Gates after each refactor
+
+| After | Full suite (`uv run pytest tests/ -q`) | Targeted set | ruff (changed path) | ruff format --check |
+|---|---|---|---|---|
+| `test_inv_003_last_admin_invariant` 38 → 6 | **728 passed, 1 skipped** (220.20 s) | usermanagement property+unit+acceptance **71 passed** | All checks passed | already formatted |
+| `test_last_admin_invariant` 23 → 9 | **728 passed, 1 skipped** (225.03 s) | usermanagement property+unit+acceptance+contract **76 passed** | All checks passed | already formatted |
+| `test_inv_006_event_correspondence` 22 → 6 | **728 passed, 1 skipped** (219.77 s) | usermanagement property **7 passed** | All checks passed | already formatted |
+| `test_nfr_005_concurrent_threads_safe` 18 → 9 | **728 passed, 1 skipped** (220.79 s) | sessionmanagement integration+unit+contract+acceptance+property **69 passed** | All checks passed | 1 file reformatted (the `pool.submit(…)` list comprehension reflowed to one line, 120-char limit), then already formatted |
+| `FakeSmtpServer::_dialogue` 17 → 5 | **728 passed, 1 skipped** (222.82 s) | mail unit+contract+acceptance+integration+property **40 passed** | All checks passed | already formatted |
+
+Suite result identical to the baseline at every step (**728 passed, 1 skipped, 0 failed**; the 1 skip is the pre-existing symlink-host skip). The documented flaky wall-clock node `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` did **not** recur in any of the five full-suite runs. Whole-repo sweep (extra evidence, the Phase 5 gate): `uv run ruff check .` → **All checks passed!**, `uv run ruff format --check .` → **324 files already formatted**, `uv run mypy src/` → **Success: no issues found in 83 source files**, `uv run ty check src/` → **151 diagnostics = the baseline count, no new diagnostics** (see the invariant-4 correction).
+
+### Commits (step 2)
+
+| Commit | Message |
+|---|---|
+| `d3ff1ab` | `refactor(pyproject-tooling-gaps): S4.2 reduce complexity of test_inv_003_last_admin_invariant (38 → 6)` |
+| `6db0d5f` | `refactor(pyproject-tooling-gaps): S4.2 reduce complexity of test_last_admin_invariant (23 → 9)` |
+| `228a20a` | `refactor(pyproject-tooling-gaps): S4.2 reduce complexity of test_inv_006_event_correspondence (22 → 6)` |
+| `754bb6b` | `refactor(pyproject-tooling-gaps): S4.2 reduce complexity of test_nfr_005_concurrent_threads_safe (18 → 9)` |
+| `34a6f7e` | `refactor(pyproject-tooling-gaps): S4.2 reduce complexity of FakeSmtpServer::_dialogue (17 → 5)` |
+
+`uv.lock` was `git checkout --`-reverted before every commit (P-42 drift) and is in no commit.
+
+### Friction (for the Problem Log)
+
+1. **Helper inserted between a test's decorators and its `def`** (twice: `test_inv_003_last_admin_invariant`, `test_inv_006_event_correspondence`). Anchoring an insertion at the `def` line puts the new helper *after* the `@settings`/`@given` block, so the decorators land on the helper and pytest reports `fixture 'ops' not found` (an ERROR, not a failure). Caught by the targeted run both times, fixed by moving the helper above the decorator block; the decorator inventory proof confirms the decorators themselves are untouched. **Rule for later steps: insert extracted helpers above the decorator block, never at the `def` line.**
+2. **ruff `SIM105` fires once a `try/except … : pass` is flattened** to a single statement (it did not fire on the original multi-branch bodies). The fix is `with contextlib.suppress(…)` — semantically identical, and it also removes the `try`/`except` from the cognitive score.
+3. One `ruff format` reflow was required (`test_concurrency.py`) because the extracted call fits on one 120-char line.
+
+The step-1 nesting lesson holds: flattening (early return, extracted helper, `if` instead of `if/elif` chains) is what moved these scores — e.g. `test_inv_003_last_admin_invariant` 38 → 6 by extracting the dispatch and the admin loop, not by splitting conditions.
