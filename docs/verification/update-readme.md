@@ -228,3 +228,93 @@ Nothing else in `AGENTS.md` changes — no new section, no edit to the Skill-to-
 2. `README.md` — single H1, the 7-badge row from the allow-list, the 8-section plan above (License skipped), the verified command list, the verified quick-start snippet, the trimmed `## Structure` with a relative link to `AGENTS.md`, fenced blocks with language tags, no TOC, no invented URL/badge/run command.
 3. `AGENTS.md` — the one line after `AGENTS.md:319`; nothing else.
 4. Every claim the README makes must be backed by a row above; anything unverifiable (badge status colours, the path-filtered `Lint`/`Spec Validation` badges on a doc-only PR) is listed in the Phase 5/6 report instead of printed in the README — the procedure's own §5 rule.
+
+---
+
+## Phase 4 + Phase 5 (S4.2, S5.1/S5.2) — 2026-10-04
+
+**Coalescing (P-41):** Phase 4's scoped write (S4.2 + S4.4 refactor no-op + S4.5 commit) and the light Phase 5 gate runs (S5.1/S5.2) were executed in **one** subagent, and the record writes here in the same execution. Rationale: Problem Log **P-41** (step-launch overhead dominating small diffs); the Phase 5 gates here are three read-only commands over a Markdown-only diff. Phase 6 was **not** run.
+
+### Phase 4 — what was written (S4.2, commit `4c20c5f`)
+
+**1. `.agents/skills/update-readme/SKILL.md` (new, 51 lines).** Front matter has exactly the two keys the other 8 skills use — `name: update-readme` and a single-line quoted `description:` ending in a "Use when …" trigger clause (no `version`/`license`/`allowed-tools`). Body = the **verbatim** instruction set from `docs/todo/update-readme.md:29-69`, then the only addition (Q-5 = (b)), a 2-line `## Repo protocol` note. Verified byte-for-byte: `diff <(sed -n '29,69p' docs/todo/update-readme.md) <(skill body)` → the only difference is the blank line that separates §5 from `## Repo protocol`.
+
+Skill section list (as supplied): `# Task: Update the GitHub README` → `## 1. Inspect first (don't guess)` → `## 2. Badges` → `## 3. Structure and content` → `## 4. Quality rules` → `## 5. Output` → `## Repo protocol` (the added note: edit in the change worktree, `README.md` reaches `main` only through the merged PR; the "list what changed / flag what you couldn't verify" output goes in `docs/verification/<name>.md`).
+
+**2. `README.md` rewritten in place (35 → 96 lines).** Single H1 (`# python-template`), badge row directly under it, then the section order the scope record fixes, License skipped:
+
+| # | Section | Content |
+|---|---|---|
+| 1 | `# python-template` + badge row + description | the 7-badge row below + the preserved sentence `Default template for Python projects.` (== `pyproject.toml:5`) |
+| 2 | `## Why this exists` (`:13`) | 4 lines: feature packages under `src/backend/`, the Spec-TDD workflow, the CI gates. **No feature table** (never decided) |
+| 3 | `## Installation` (`:20`) | `uv sync` — the old `## Setup` content, preserved |
+| 4 | `## Quick start` (`:26`) | the verified `UserManager` / `UserCreate(roles=["user"])` snippet + the honest note that there is **no app/CLI run command** (`src/main.py` has no `__main__` guard, `pyproject.toml` declares no `[project.scripts]` — both re-verified) |
+| 5 | `## Configuration` (`:41`) | the settings registry, links to `docs/specs/settings.md` and `docs/specs/logging.md` — links, no duplication |
+| 6 | `## Development` (`:50`) | the record's verified command list (fenced `bash`, 16 commands incl. the preserved `uv run pytest`) + which CI workflow runs each gate |
+| 7 | `## Structure` (`:80`) | 3-line summary + the relative link to `AGENTS.md` "Project Structure"; the hand-drawn tree with the wrong `features/` level is **deleted**, not hand-corrected (Q-4 = (b)) |
+| 8 | `## Contributing` (`:89`) | `AGENTS.md`, classification, worktree + PR-only-to-`main`, `docs/verification/<name>.md`. **No `CONTRIBUTING.md` invented** |
+| — | `## License` | **skipped** (Q-2 = (a): no `LICENSE` file — re-verified `ls LICENSE*` → none) |
+
+No TOC. All blocks fenced with a language tag (`bash`, `python`). No trailing whitespace, final newline present (the `trailing-whitespace` / `end-of-file-fixer` pre-commit hooks apply to Markdown and do not read `.editorconfig`).
+
+**Badge row as written** (7 badges, each with alt text and a link; consecutive lines so it renders as one row):
+
+| Alt text | Image URL | Links to |
+|---|---|---|
+| `Quality` | `github.com/jackthenet/python-template/actions/workflows/quality.yml/badge.svg` | that workflow (`name: Quality`, no path filter) |
+| `Lint` | `…/workflows/lint.yml/badge.svg` | that workflow (`name: Lint`) |
+| `Spec Validation` | `…/workflows/spec-validation.yml/badge.svg` | that workflow (`name: Spec Validation`) |
+| `Python >=3.14` | `img.shields.io/badge/python-%3E%3D3.14-blue` | `pyproject.toml` (relative) |
+| `Ruff` | `img.shields.io/badge/lint-ruff-blue` | `https://docs.astral.sh/ruff/` |
+| `uv` | `img.shields.io/badge/env-uv-blue` | `https://docs.astral.sh/uv/` |
+| `pre-commit` | `img.shields.io/badge/hooks-pre--commit-blue` | `https://pre-commit.com/` |
+
+**Deny-list honoured:** no License badge, no coverage/Codecov badge, no PyPI version/downloads badge, no docs-site badge — none of those facts exists (re-verified: no `LICENSE`, no publish/release workflow among the three files, no coverage upload step).
+
+**3. `AGENTS.md` — exactly one line** (diff: `2 ++` = the line + its separating blank line), inserted at **`AGENTS.md:321`**, immediately after the last Skill-to-Phase Mapping row (`:319`) and before `### Phase Execution (Atomic Steps, Synchronous Subagents)` (`:323`). No existing line edited:
+
+```markdown
+Non-phase skills: `.agents/skills/update-readme/` (refresh `README.md` to current GitHub front-page practice, badges backed only by facts that exist) maps to no workflow phase.
+```
+
+**S4.4 refactor:** no-op — Markdown only, nothing structural to restructure; the S4.2 state is the final state.
+
+### Link check (script over both written files, `/tmp/linkcheck2.py`)
+
+**22 link targets checked, 0 broken.** `README.md`: 14 external URLs (3 GitHub workflow badge SVGs + 3 workflow pages + 4 shields.io endpoints + `docs.astral.sh/ruff/`, `docs.astral.sh/uv/`, `pre-commit.com/`) and **8 relative paths**, all resolving in this worktree: `pyproject.toml`, `src/backend/settings/`, `docs/specs/settings.md`, `docs/specs/logging.md`, `.github/workflows/lint.yml`, `.github/workflows/quality.yml`, `.github/workflows/spec-validation.yml`, `AGENTS.md` ×2. The three badge image URLs each name a workflow file that exists under `.github/workflows/`, and each alt text equals that file's `name:` (`Lint` / `Quality` / `Spec Validation`). The skill file contains **no** Markdown link (the verbatim body has none); the paths it names are generic instructions (`pyproject.toml` / `package.json`, `LICENSE`, `.github/workflows/`) or the placeholder pattern `docs/verification/<name>.md`.
+
+### Phase 5 gate (DOCS/CHORE — light)
+
+| Gate | Command | Result |
+|---|---|---|
+| Lint | `uv run ruff check .` | **`All checks passed!`** (whole-repo sweep, once here, matching `.github/workflows/lint.yml`) |
+| Docs build | `uv run mkdocs build --strict` | **exit 0** — "Documentation built in 2.84 seconds", no warnings promoted to errors. Run although `userdocs/` is untouched, because the `docs` job in `quality.yml` has no path filter and runs on this PR |
+| Traceability / spec drift | `uv run python scripts/check_traceability.py` | **exit 0** — `Traceability: PASS (747 matrix rows, 129 spec IDs, 714 test functions)` — identical to the P.4 baseline; the `Spec Validation` workflow does run for this PR (its filter includes `docs/verification/**`) |
+| Types | `uv run mypy src/` | **n/a** — no `.py` file changed (see the changed-paths list); recorded as not applicable rather than skipped silently |
+| Full test suite | `uv run pytest tests/` | not a DOCS/CHORE gate; not run — the scope proof below shows no `src/`/`tests/` path |
+| Quick start still runs | `uv run python <snippet>` | **`verify_password` → `True`**, `user.roles == ['user']` (the snippet printed in the README) |
+
+**Changed paths — `git diff --name-only main...HEAD`** (merge base `a274b6a`):
+
+```text
+.agents/skills/update-readme/SKILL.md
+AGENTS.md
+README.md
+docs/verification/update-readme.md
+docs/workflow/PROBLEMS.md
+```
+
+Exactly the scope table's four paths plus `docs/workflow/PROBLEMS.md` (the P-44 friction log, required by the step). **No `src/`, no `tests/`, no `pyproject.toml`, no `.github/workflows/`, no `userdocs/`, no `mkdocs.yml`, no `uv.lock`.** `uv run` did rewrite `uv.lock` on every invocation (P-42: the lock pins `python-template 0.6.0` while `pyproject.toml:4` says `0.6.1`); it was reverted with `git checkout -- uv.lock` before each commit and never committed. `main` advanced by one commit since the base (`f672c34`, this change's own TODO `Status: READY`), and `git diff a274b6a..main -- AGENTS.md` is empty → the `AGENTS.md` insertion has no collision to resolve.
+
+**Flagged, not fixed (the skill's §5 "flag anything you couldn't verify"):**
+- The *status colour* each workflow badge renders is GitHub run history — not observable offline.
+- `Lint` and `Spec Validation` are **path-filtered** (`lint.yml:6-21`), so their badge can read stale/"skipped" for a doc-only PR like this one; the ruff gate for this change is local-only.
+- `AGENTS.md`'s user-management example still shows `UserCreate(..., role="member")`; the real model takes a non-empty `roles: list[str]` and the default allowed set is `["admin", "user"]` (verified by running the README snippet). Any `AGENTS.md` edit beyond the one line is out of scope here.
+
+### Verdict
+
+**Phase 5 gate = PASS (DOCS/CHORE light).** Lint clean, `mkdocs build --strict` clean, traceability PASS and unchanged from baseline, mypy n/a (no Python touched), the changed-paths list matches the approved scope exactly, and no test, source, config or workflow path was touched → **no externally observable behavior delta**.
+
+**Version bump: none** (AGENTS.md Versioning: `REFACTOR / DOCS-CHORE → none`).
+
+**Commits:** `4c20c5f` (S4.2 scoped change) · `33f04c4` (P-44 friction log) · this record.
