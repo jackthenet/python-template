@@ -1,20 +1,23 @@
 # Spec: logging-coverage
 
+## Changelog
+- v2 (2026-10-04): Amendment (change `structlog-logging`, ADR-082). REQ-010 and AC-010 restated: the "direct backend statements are kept" policy is retired — one-off statements stay, but they are written through the shared logging feature's exported logger instead of an imported backend. Goal, Design Pattern, Dependencies and D1 wording aligned with the restated IDs (no ID change). `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` is deleted by the implementation PR (it exists solely to enforce the retired wording) and its replacement is `tests/acceptance/logging_coverage/test_statements_via_feature.py`.
+
 ## 1. Overview & Objectives
 - **Feature Name:** logging-coverage
 - **Target Component:** Cross-cutting change to existing backend features (`src/backend/eventbus/`, `src/backend/settings/`, `src/backend/usermanagement/`, `src/backend/authentication/`, `src/backend/logging/`) plus the entrypoint (`src/main.py`). No new feature directory.
-- **Goal:** Apply the agreed logging policy to every existing backend class and public module function so that logging is useful for discovering issues and locating performance problems: public classes are traced by default via the shared logging feature, one-off facts stay as direct loguru, log levels reflect semantic significance, sensible slow-call thresholds are set, and `setup_logger` is wired once in the entrypoint.
+- **Goal:** Apply the agreed logging policy to every existing backend class and public module function so that logging is useful for discovering issues and locating performance problems: public classes are traced by default via the shared logging feature, one-off facts stay as direct statements written through the shared logging feature's logger, log levels reflect semantic significance, sensible slow-call thresholds are set, and `setup_logger` is wired once in the entrypoint.
 
 ## 2. Architecture & Design Decisions
-- **Design Pattern:** Cross-cutting observability. Public classes are traced with `@logged_class` (classes) or `@logged` (module functions) from the shared logging feature (`backend.logging`). Existing direct loguru statements (one-off facts) are kept unchanged. The entrypoint calls `setup_logger(Settings(...))` exactly once.
-- **Dependencies:** `backend.logging` (feature — `logged`, `logged_class`, `setup_logger`, `Settings`, `get_settings`), `loguru` (existing). No new dependencies required (allowed if needed).
+- **Design Pattern:** Cross-cutting observability. Public classes are traced with `@logged_class` (classes) or `@logged` (module functions) from the shared logging feature (`backend.logging`). Existing one-off statements are kept as statements, written through the feature's `get_logger()` export. The entrypoint calls `setup_logger(Settings(...))` exactly once.
+- **Dependencies:** `backend.logging` (feature — `logged`, `logged_class`, `get_logger`, `setup_logger`, `Settings`, `get_settings`). No new dependency is introduced by this coverage change (the logging pipeline itself is `docs/specs/structlog-logging.md`).
 - **Constraints:**
   - No new `src/` feature directory; the change is cross-cutting.
   - Tracing adds observability only — it MUST NOT change public API signatures, behavior, or business logic.
   - Tracing MUST preserve ABC abstractness where ABCs are traced.
   - No raw tokens, passwords, or hashes in any log record (hard NFR).
 - **Design Decisions:**
-  - D1: `@logged_class` is the default for public classes; `@logged` for public module functions. Direct loguru is kept for one-off statements.
+  - D1: `@logged_class` is the default for public classes; `@logged` for public module functions. One-off statements are kept, written through `get_logger()` (amended v2).
   - D2: Log levels reflect semantic significance (DEBUG for routine tracing, INFO for significant lifecycle, WARNING for recoverable issues, ERROR for failures) — not just DEBUG.
   - D3: Every traced class sets a sensible `slow_threshold_ms` for slow-call detection. Exceeding the threshold logs a WARNING and does NOT interrupt the call (observability, not enforcement).
   - D4: Secret/credential handlers use `include_args=False` so arguments never appear in log records.
@@ -115,7 +118,7 @@ lifecycle: `REQ-001 → AC-001 → test → task → implementation`.
 | REQ-007 | Every traced class and module function sets a sensible, concrete `slow_threshold_ms` (not `None`) for slow-call detection. |
 | REQ-008 | Traced classes use semantic log levels reflecting event significance (DEBUG for routine tracing, INFO for significant lifecycle, WARNING for recoverable issues, ERROR for failures), not only DEBUG. |
 | REQ-009 | Every traced class's docstring mentions that the class is traced via the shared logging feature (AuthService pattern). |
-| REQ-010 | All existing direct loguru statements are kept unchanged (one-off facts remain direct loguru). |
+| REQ-010 | All existing one-off statements are kept as statements, written through the shared logging feature's exported logger; no feature module imports a logging backend directly. |
 | REQ-011 | The entrypoint (`src/main.py`) calls `setup_logger(Settings(...))` exactly once at startup, before any feature code runs; a second call is a no-op. |
 | REQ-012 | New public classes MUST be traced by default (forward-looking policy), with `include_args=False` where secrets are handled. |
 | REQ-013 | A log sink failure MUST NOT interrupt the traced call; the call completes normally (logging is best-effort and non-blocking). |
@@ -139,7 +142,7 @@ requirement. Use Given/When/Then format.
 | AC-007 | REQ-007 | **Given** a traced class, **When** it is inspected, **Then** it has a concrete (non-`None`) `slow_threshold_ms` set. |
 | AC-008 | REQ-008 | **Given** a traced class, **When** a significant lifecycle event occurs, **Then** it is logged at a semantic level (INFO/WARNING/ERROR) appropriate to its significance, not only DEBUG. |
 | AC-009 | REQ-009 | **Given** a traced class, **When** its docstring is reviewed, **Then** it mentions that the class is traced via the shared logging feature. |
-| AC-010 | REQ-010 | **Given** the existing direct loguru statements, **When** the feature is implemented, **Then** all are kept unchanged. |
+| AC-010 | REQ-010 | **Given** the existing one-off statements, **When** the feature is implemented, **Then** all are kept, **And** each is written through the shared logging feature's exported logger, **And** no feature module imports a logging backend. |
 | AC-011 | REQ-011 | **Given** the entrypoint, **When** the application starts, **Then** `setup_logger(Settings(...))` is called exactly once before any feature code runs, **And** a second call is a no-op. |
 | AC-012 | REQ-012 | **Given** a new public class, **When** it is added, **Then** it is traced by default, **And** it uses `include_args=False` where secrets are handled. |
 | AC-013 | REQ-013 | **Given** a failing log sink, **When** a traced call is made, **Then** the call completes normally and is not interrupted by the sink failure. |
@@ -220,8 +223,8 @@ these are the sensible defaults by class type:
 ## 10. Test Strategy
 
 Map each requirement/AC to a test category. This drives the test file layout. Tests
-verify tracing by capturing log records (attach a loguru sink, call the method,
-assert the produced records).
+verify tracing by capturing log records (attach a handler to the feature's logger,
+call the method, assert the produced records).
 
 | ID | Test Category | Test File | Test Function |
 |----|---------------|-----------|---------------|
@@ -234,7 +237,7 @@ assert the produced records).
 | AC-007 | acceptance | `tests/acceptance/logging_coverage/test_slow_threshold.py` | `test_traced_classes_have_concrete_threshold` |
 | AC-008 | acceptance | `tests/acceptance/logging_coverage/test_levels.py` | `test_semantic_log_levels` |
 | AC-009 | acceptance | `tests/acceptance/logging_coverage/test_docstrings.py` | `test_traced_class_docstrings_mention_tracing` |
-| AC-010 | acceptance | `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` | `test_existing_direct_loguru_kept` |
+| AC-010 | acceptance | `tests/acceptance/logging_coverage/test_statements_via_feature.py` | `test_statements_go_through_get_logger` |
 | AC-011 | acceptance | `tests/acceptance/logging_coverage/test_setup_logger.py` | `test_entrypoint_calls_setup_logger_once` |
 | AC-012 | acceptance | `tests/acceptance/logging_coverage/test_new_classes_traced.py` | `test_new_public_classes_traced_by_default` |
 | AC-013 | acceptance | `tests/acceptance/logging_coverage/test_sink_failure.py` | `test_sink_failure_does_not_interrupt` |
@@ -273,7 +276,7 @@ have at least one executable test.
 | REQ-007 | AC-007 | `test_traced_classes_have_concrete_threshold` | PENDING |
 | REQ-008 | AC-008 | `test_semantic_log_levels` | PENDING |
 | REQ-009 | AC-009 | `test_traced_class_docstrings_mention_tracing` | PENDING |
-| REQ-010 | AC-010 | `test_existing_direct_loguru_kept` | PENDING |
+| REQ-010 | AC-010 | `test_statements_go_through_get_logger` | PENDING |
 | REQ-011 | AC-011 | `test_entrypoint_calls_setup_logger_once` | PENDING |
 | REQ-012 | AC-012 | `test_new_public_classes_traced_by_default` | PENDING |
 | REQ-013 | AC-013 | `test_sink_failure_does_not_interrupt` | PENDING |

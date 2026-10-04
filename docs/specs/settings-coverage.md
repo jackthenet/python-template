@@ -1,5 +1,8 @@
 # Spec: Settings Coverage
 
+## Changelog
+- v2 (2026-10-04): Amendment (change `structlog-logging`, ADR-082). REQ-014, REQ-015, REQ-016, AC-019, AC-020, AC-021 and EDGE-008 restated in capability terms for the new logging pipeline: `setup_logger()` stays callable with no arguments (an optional keyword-only `renderer` override is added by `docs/specs/structlog-logging.md` REQ-006), live reconfiguration keeps its observable contract but the mechanism may mutate the feature's own handlers instead of replacing sinks, and the rotation case only requires that all current `logging.*` values are re-applied. Dependencies row no longer names a logging backend.
+
 ## 1. Overview & Objectives
 - **Feature Name:** Settings Coverage
 - **Target Component:** `src/backend/settings/` (extended), `src/backend/logging/`, `src/backend/authentication/`, `src/backend/usermanagement/`, `src/backend/eventbus/`, `src/main.py`
@@ -7,7 +10,7 @@
 
 ## 2. Architecture & Design Decisions
 - **Design Pattern:** Feature-owned registration (each feature exposes a `register_settings(registry)` function), centralized wiring in the entrypoint (`src/main.py`), live reads (features call `get_value` on each use), and a value-persistence repository (single YAML file).
-- **Dependencies:** `pydantic` (existing), `pyyaml` (existing — reused for value persistence), `backend.eventbus` (feature), `backend.logging`/loguru (feature). No new third-party packages.
+- **Dependencies:** `pydantic` (existing), `pyyaml` (existing — reused for value persistence), `backend.eventbus` (feature), `backend.logging` (feature). No new third-party packages.
 - **Constraints:**
   - The settings registry is the single source of truth for configuration; no feature keeps its own configuration.
   - No environment-variable handling (the settings feature is the single source of truth; env vars are out of scope).
@@ -138,9 +141,9 @@ Each normative requirement MUST have a stable ID. These IDs propagate through th
 | REQ-011 | Persisted values take precedence over definition defaults (priority: persisted > default). A persisted value is applied to the setting at load time. |
 | REQ-012 | The registry getter supports a guarded read: `get_settings_registry(required=False) -> SettingsRegistry | None` returns the singleton if it already exists, else `None`, with **no side effect** (the singleton is never created). `required=True` (default) preserves the current create-if-missing behavior. |
 | REQ-013 | The `EventBus` constructor resolves the bootstrapping cycle with a guarded read: if the registry already exists (`get_settings_registry(required=False)` is not `None`), it reads `eventbus.max_queue_size` from the registry; otherwise it uses the hardcoded default `1000`. No infinite recursion. |
-| REQ-014 | `setup_logger()` takes no arguments and reads `logging.*` from the shared registry (falling back to the logging defaults with a warning if unregistered). It is idempotent (a second call is a no-op). |
-| REQ-015 | The logging feature subscribes to `SettingChanged` and reconfigures the sink at runtime when any `logging.*` setting changes, re-applying all current `logging.*` values. |
-| REQ-016 | The logging feature's stub `Settings` model (`src/backend/logging/settings.py`) is removed; the logging feature reads `log_*` values from the registry. |
+| REQ-014 | `setup_logger()` is callable with no arguments and reads `logging.*` from the shared registry (falling back to the logging defaults with a warning if unregistered). It is idempotent (a second call is a no-op). Any parameter it accepts is optional and keyword-only, so the no-argument call remains the specified default. |
+| REQ-015 | The logging feature subscribes to `SettingChanged` and reconfigures **its own** sinks at runtime when any `logging.*` setting changes, re-applying all current `logging.*` values, without restarting the process and without touching sinks it does not own. |
+| REQ-016 | The logging feature keeps no private configuration source: it reads `log_*` values from the registry, and its `Settings` export is a plain container of those registry values, not a settings model of its own. |
 | REQ-017 | Each feature's settings use the full feature name as the key prefix: `logging.*`, `authentication.*`, `usermanagement.*`, `eventbus.*`. |
 | REQ-018 | Each feature's settings use `category` = domain (`application`/`security`) and `group` = feature name for the views hierarchy. |
 | REQ-019 | The complete settings inventory (key, kind, default, parameters, category, group for every feature setting) is as defined in section 3.5. |
@@ -172,9 +175,9 @@ Each acceptance criterion MUST have a stable ID and MUST reference at least one 
 | AC-016 | REQ-012 | **Given** the registry does not exist, **When** `get_settings_registry(required=False)` is called, **Then** `None` is returned **And** the singleton is not created. |
 | AC-017 | REQ-013 | **Given** the registry does not exist, **When** `EventBus()` is constructed, **Then** `max_queue_size=1000` is used **And** no infinite recursion occurs. |
 | AC-018 | REQ-013 | **Given** the registry exists with `eventbus.max_queue_size=500`, **When** `EventBus()` is constructed, **Then** `max_queue_size=500` is used. |
-| AC-019 | REQ-014 | **Given** the shared registry, **When** `setup_logger()` is called, **Then** `logging.*` is read from the registry. |
-| AC-020 | REQ-015 | **Given** a configured logging sink, **When** `set_value("logging.log_level", "DEBUG")` is called, **Then** the sink is reconfigured to `DEBUG`. |
-| AC-021 | REQ-016 | **Given** the logging feature, **When** it is imported, **Then** the stub `Settings` model does not exist. |
+| AC-019 | REQ-014 | **Given** the shared registry, **When** `setup_logger()` is called with no arguments, **Then** `logging.*` is read from the registry. |
+| AC-020 | REQ-015 | **Given** the configured logging sinks, **When** `set_value("logging.log_level", "DEBUG")` is called, **Then** both sinks emit at `DEBUG` without a restart, **And** only the feature's own sinks change. |
+| AC-021 | REQ-016 | **Given** the logging feature, **When** it is imported, **Then** it owns no private settings model or hardcoded configuration source, **And** its `Settings` export carries the registry values. |
 | AC-022 | REQ-017 | **Given** a feature's settings, **When** they are registered, **Then** the keys use the full feature name as the prefix. |
 | AC-023 | REQ-018 | **Given** a feature's settings, **When** they are registered, **Then** `category` = domain **And** `group` = feature name. |
 | AC-024 | REQ-019 | **Given** the inventory, **When** all features' settings are registered, **Then** the keys, kinds, and defaults match the inventory. |
@@ -205,7 +208,7 @@ State invariants that hold over a large input space. These become Hypothesis pro
 | EDGE-005 | A `LIST` value contains an item that does not match `item_pattern` | `SettingsValidationError` is raised. |
 | EDGE-006 | A `LIST` `SettingDefinition` has `min_items > max_items` | `SettingsValidationError` is raised on construction. |
 | EDGE-007 | `setup_logger()` is called twice | The second call is a no-op (idempotent). |
-| EDGE-008 | A `logging.*` setting changes (e.g., `log_max_bytes`) | The sink is reconfigured, re-applying all current `logging.*` values (rotation parameters require sink replacement). |
+| EDGE-008 | A `logging.*` setting changes (e.g., `log_max_bytes`) | The feature's own sinks are reconfigured with all current `logging.*` values re-applied (rotation parameters take effect; replacing the sink is one allowed mechanism, not a required one). |
 | EDGE-009 | All values are persisted (including those equal to their default) | All current values are written to `values.yaml`. |
 | EDGE-010 | A live read observes a value equal to the previously observed value | No trace is logged (traced only on change). |
 | EDGE-011 | `get_settings_registry(required=False)` called when the registry does not exist | `None` is returned; the singleton is never created. |

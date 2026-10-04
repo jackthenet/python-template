@@ -1,6 +1,7 @@
 # Spec: Settings
 
 ## Changelog
+- v4 (2026-10-04): Wording amendment only (change `structlog-logging`, ADR-082) — no ID changed. The Scope row, the Dependencies row and the §9 Observability paragraph no longer name a logging backend: the feature writes one-off statements through the shared logging feature's exported logger (`get_logger()`), per `docs/specs/structlog-logging.md` REQ-005.
 - v3 (2026-09-21): NFR-001 amended — mutating-op budget made environment-aware: < 50 ms (median) locally, or < 100 ms (median) on CI (detected via the `CI` environment variable), with 1000 registered settings. Was: < 50 ms (median) for all environments. Reason: the budget is environment-sensitive (AC-013's synchronous full-value persistence is I/O-bound); a slower CI runner observed 65.4 ms, beyond the ~2× headroom the 50 ms budget had over the 28 ms CI baseline at v2. Read-only ops (< 1 ms) and all other budgets unchanged.
 - v2 (2026-09-11): NFR-001 amended — single-setting op budgets split: read-only ops (`get_value`, `to_view`, `get_status`) < 1 ms (median) with 1000 registered settings (unchanged); mutating ops (`register`, `set_value`, `reset`), which persist all current values to the value repository (AC-013), < 50 ms (median) with 1000 registered settings. Was: all six ops < 1 ms — unachievable given AC-013's synchronous full-value persistence (observed 13.6 ms local / 28.06 ms CI).
 
@@ -8,12 +9,12 @@
 - **Feature Name:** Settings
 - **Target Component:** `src/backend/settings/`
 - **Goal:** Provide a central, extensible settings/configuration management system for the backend. Features register typed settings with full metadata; the system validates values, provides sensible defaults, derives each setting's default status, and publishes value changes to the shared event bus. Named templates (value profiles scoped to a category/group) can be created, loaded, updated, and deleted; templates persist via a repository pattern (first implementation: YAML files), so later formats (JSON, etc.) can be swapped in.
-- **Scope:** In-memory settings registry with per-kind validation; category/group hierarchy; feature-scoped registration API; renderable metadata (`SettingView`) for a future frontend; template CRUD with scope-coverage save and leave-as-is load semantics; YAML template storage via the repository pattern; event-bus integration (`SettingChanged`); loguru observability.
+- **Scope:** In-memory settings registry with per-kind validation; category/group hierarchy; feature-scoped registration API; renderable metadata (`SettingView`) for a future frontend; template CRUD with scope-coverage save and leave-as-is load semantics; YAML template storage via the repository pattern; event-bus integration (`SettingChanged`); observability through the shared logging feature.
 - **Out of Scope:** Persistence of setting definitions/values (only templates persist); HTTP API; frontend rendering; environment-variable overrides; migration of the logging feature's stub `Settings` module; multi-process synchronization; template formats other than YAML (the repository pattern is the extension point); deregistration of settings.
 
 ## 2. Architecture & Design Decisions
 - **Design Pattern:** Registry with frozen Pydantic models, repository pattern for template storage, and event-bus integration.
-- **Dependencies:** `pydantic` (existing), `email-validator` (new — EMAIL validation), `pyyaml` (new — YAML template storage), `backend.eventbus` (feature), `backend.logging`/loguru (feature).
+- **Dependencies:** `pydantic` (existing), `email-validator` (new — EMAIL validation), `pyyaml` (new — YAML template storage), `backend.eventbus` (feature), `backend.logging` (feature — one-off statements through its exported logger).
 - **Constraints:** Setting definitions and values are in-memory. The registry is thread-safe. Current values are always valid for their kind. The feature creates no threads or sockets of its own (file I/O only, for templates). A template's values form a complete map of its scope at creation and update time.
 - **Design Decisions (WHAT; WHY goes to Phase 2 ADRs):**
   - D1: Six setting kinds (TEXT, NUMBER, BOOLEAN, EMAIL, SLIDER, SELECT), each with kind-specific parameters and per-kind validation.
@@ -348,7 +349,7 @@ Semantics notes:
 
 ## 9. Observability & Logging
 
-The feature uses loguru's `logger` (configured by the shared logging feature) for one-off statements.
+The feature writes one-off statements through the shared logging feature's exported logger (`get_logger()`); it does not import a logging backend itself.
 
 | Operation / Event | Level | Context |
 |-------------------|-------|---------|
