@@ -179,3 +179,82 @@ Phase 6 additionally: light review (scope respected, no test/source-behavior cha
 | 3 `feature_settings.py` really import the private module | read each file | all three: `from backend.logging._decorator import logged` |
 | `src/main.py:67` really imports a private name | read | yes — `_registry`; **no public setter exists** → F-1 |
 | Settings public API has no singleton setter | read `registry.py:361-381`, `settings/__init__.py` `__all__`, `docs/specs/settings.md:175,234` | confirmed |
+
+---
+
+# Phase 4 + Phase 5 (S4.2, S5.1/S5.2) — 2026-10-04
+
+Executed as **one coalesced subagent execution** (Phase 4's make-the-change step + the DOCS/CHORE light Phase 5 gate), recorded here per the coalescing precedent **P-41** (`docs/workflow/PROBLEMS.md`). No todo list, no Phase 6 work, no subagent launched.
+
+## Phase 4 (S4.2 + S4.4 no-op) — the applied diff
+
+Commit **`5902af4`** — `chore(architecture-tests-missing): S4.2 remove dangling architecture gate citations + public logging imports`. Applied **verbatim** from the scope text above (Items 1–5); nothing else was changed.
+
+```diff
+--- a/.agents/skills/verify/SKILL.md
++++ b/.agents/skills/verify/SKILL.md
+@@ -85,7 +85,7 @@  (MUST → FEATURE / CROSS-CUTTING gate list)
+ - Run coverage (`uv run pytest tests/ --cov`) and confirm threshold passes.
+-- Run architecture rules (`uv run pytest tests/architecture/ -v`) and confirm they pass.
++- Verify the architecture rules by inspection — feature boundaries (code lives in the correct feature directory, no cross-feature internal imports) and architecture rules (`model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small) — and record the result in `docs/verification/<name>.md`.
+ - Run `uv run python scripts/verify_spec.py docs/specs/<name>.md` and confirm it passes.
+@@ -100,7 +100,7 @@  (MUST → REFACTOR gate list)
+ - Run the full regression suite and confirm it is GREEN with zero test changes.
+-- Run architecture rules (`uv run pytest tests/architecture/ -v`) and confirm they pass.
++- Verify the architecture rules by inspection — feature boundaries (code lives in the correct feature directory, no cross-feature internal imports) and architecture rules (`model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small) — and record the result in `docs/verification/<name>.md`.
+ - Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`) and confirm they pass.
+
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -209,7 +209,7 @@  (Phase Matrix, "5 Verify" row, REFACTOR cell — the row keeps its 6 columns)
+-| **5 Verify** | Full gate set | Targeted tests + full regression + lint/types | Full gate set **+ per-feature traceability updates** | Full regression + architecture + lint/types (no spec coverage) | Light: lint/types where applicable |
++| **5 Verify** | Full gate set | Targeted tests + full regression + lint/types | Full gate set **+ per-feature traceability updates** | Full regression + architecture rules (manual, Phase 6 checks 3–4) + lint/types (no spec coverage) | Light: lint/types where applicable |
+@@ -576,7 +576,7 @@  (Phase 5: VERIFY, REFACTOR step 13)
+-13. Run the full regression suite (MUST be GREEN, zero test changes) and the architecture rules (`uv run pytest tests/architecture/ -v`).
++13. Run the full regression suite (MUST be GREEN, zero test changes) and verify the architecture rules by inspection — feature boundaries (code lives in the correct feature directory, no cross-feature internal imports) and architecture rules (`model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small) — recording the result in `docs/verification/[name].md`. These are the same checks as Phase 6 review checks 3 and 4.
+
+--- a/src/backend/authentication/feature_settings.py   (line 7)
+--- a/src/backend/eventbus/feature_settings.py          (line 7)
+--- a/src/backend/usermanagement/feature_settings.py    (line 7)
+-from backend.logging._decorator import logged
++from backend.logging import logged
+```
+
+The two `verify/SKILL.md` bullets are byte-identical, so each edit was disambiguated by its preceding bullet (as the mechanics note required). **S4.4 refactor: no structural changes needed** — the diff is 7 changed lines in 5 files, no new pattern, nothing to restructure (no-op fast-path).
+
+**Changed paths (the whole change, `git diff --name-only 99ce0b8 HEAD`):** `.agents/skills/verify/SKILL.md`, `AGENTS.md`, `src/backend/authentication/feature_settings.py`, `src/backend/eventbus/feature_settings.py`, `src/backend/usermanagement/feature_settings.py`, plus this record and `docs/workflow/PROBLEMS.md`. **`tests/` paths in the diff: 0. `src/main.py` in the diff: 0. `tests/architecture/` created: no.**
+
+## Consistency sweep — `rg -n "tests/architecture" AGENTS.md .agents docs`
+
+- **Live guidance is clean:** `rg -n "tests/architecture" AGENTS.md .agents` → **no matches** (exit 1). All 4 citations are gone.
+- `rg -n "tests/architecture" docs/decisions` → **no matches** (exit 1).
+- Remaining hits are **frozen records only** (left untouched, per the scope's "Not edited" list): `rg -c` → `docs/verification/architecture-tests-missing.md` 10 (this file — it quotes the before-text), `docs/questions/architecture-tests-missing.md` 14, `docs/todo/architecture-tests-missing.md` 9, `docs/verification/main-ci-green.md` 5, `docs/questions/structure-map.md` 5, `docs/verification/dependency-updates.md` 4, `docs/verification/search.md` 3, `docs/verification/authentication.md` 2, `docs/verification/remove-spec-tdd-driver.md` 2, `docs/verification/session-lookup-unwired.md` 2, `docs/workflow/PROBLEMS.md` 2 (P-32 + the new P-42/P-43 do not name it as a gate), `docs/questions/api-keys.md` 2, and 1 each in `docs/verification/event-bus.md`, `logging-coverage.md`, `mail-service.md`, `settings-coverage.md`, `user-management.md`, `docs/questions/session-lookup-unwired.md`, `docs/todo/structure-map.md`. Every one is a dated gate record / Q&A / TODO entry, not an instruction.
+
+## Phase 5 (DOCS/CHORE light, plus the `src/` evidence the scope requires)
+
+| # | Check | Command (run in the change worktree) | Result |
+|---|---|---|---|
+| 1 | Lint, whole repo (matches CI `lint.yml`) | `uv run ruff check .` | **PASS** — `All checks passed!` (exit 0) |
+| 2 | Lint, changed paths (S4.2 ruff gate) | `uv run ruff check src/backend/{authentication,eventbus,usermanagement}/feature_settings.py` | **PASS** — `All checks passed!` (exit 0) |
+| 3 | Types | `uv run mypy src/` | **PASS** — `Success: no issues found in 83 source files` (the import rewrites type-check) |
+| 4 | Affected features — settings + logging (the public API being imported) | `uv run pytest tests/unit/settings tests/acceptance/settings tests/acceptance/settings_coverage tests/unit/logging tests/acceptance/logging -q` | **PASS** — `102 passed in 6.81s` |
+| 5 | Affected features — the 3 changed modules + the public-API contract suites | `uv run pytest tests/{acceptance,contract,integration,property,unit}/{authentication,eventbus,usermanagement} tests/contract/logging tests/contract/settings -q` (expanded) | **PASS** — `186 passed in 106.97s` |
+| 6 | **No-behavior-delta proof — full regression suite** | `uv run pytest tests/ -q` | **PASS** — **`728 passed, 1 skipped in 251.44s`**, 0 failed / 0 errors; the 1 skip is `tests/acceptance/filemanagement/test_filemanagement.py:364` (`symlinks not available on this host`), pre-existing and environmental |
+| 7 | Same count as `main` | baseline `728 passed, 1 skipped` — the full-suite result recorded for the merged `issue/session-lookup-unwired` state (`docs/verification/session-lookup-unwired.md:335`, `8a67bc3`, an ancestor of the base `99ce0b8`) | **IDENTICAL** — `728 passed, 1 skipped` on the branch: **0 added, 0 removed, 0 weakened, 0 status changes** (`git diff --name-only 99ce0b8 HEAD -- tests/` → empty) |
+| 8 | Traceability | `uv run python scripts/check_traceability.py` | **PASS** (exit 0) — `Traceability: PASS (747 matrix rows, 129 spec IDs, 714 test functions)` |
+| 9 | Traceability matrix update | — | **No new row, by design** (scope §Phase 5 gate item 5): no REQ/AC is touched — no spec references the removed wording (P.2 E-5) and the import rewrites bind the same object. Recorded here as the reason; the script still exits 0 |
+| 10 | Architecture rules (the re-pointed manual check, verified by inspection) | (a) `rg -n "from backend\.[a-z_.]*\._\|import backend\.[a-z_.]*\._" src/ -g '!src/backend/logging/**'` → **no matches** (exit 1); (b) `rg -n "from backend\.[a-z_.]+ import .*(_[a-z_]+)" src/` → `src/main.py:67` + 2 intra-`logging` hits | **PASS for this change's scope** — (a) shows **zero cross-feature private-*module* imports left in `src/`**: the 3 fixed sites were the last (the remaining `._` imports are all inside `backend.logging` importing its own `_decorator`/`_settings`/`_setup`, which is the feature's own package and is exactly what `AGENTS.md` `__init__` re-export is for). (b) shows the only remaining cross-feature private-*symbol* import is `src/main.py:67` (**F-1**, out of scope, recorded not hidden; the 2 `backend.logging.feature_settings._read_setting` hits are intra-feature). Feature boundaries: no file moved, no new cross-feature edge — the wider import goes through `backend.logging.__init__`, whose own `backend.settings` / `backend.eventbus` imports stay function-local |
+
+**Environment note (P-42):** the first `uv run` in this worktree rewrote `uv.lock` (`version = "0.6.0" → "0.6.1"`) because `[tool.bumpversion.files]` does not list the lock. It is **out of scope** (`pyproject.toml`/`uv.lock` untouched per the scope) and was reverted with `git checkout -- uv.lock` before every commit; `git status` is clean and `uv.lock` is **not** in the diff.
+
+## Finding F-1 — restated after Phase 4
+
+Q-5 promised 4 private-import fixes; **3 of 4** are DOCS/CHORE-actionable and are fixed. `src/main.py:67` (`from backend.settings.registry import _registry as _settings_registry_singleton`) is **untouched**: the settings public API exposes no singleton setter (`get_settings_registry(required=True)` lazily creates a **default** registry with no `permission_service`; `permission_service` is constructor-only; `docs/specs/settings.md` REQ-014 specifies no setter), so any substitution is a behavior change. Fixing it needs a public `set_settings_registry()` → a settings-spec amendment, framed as the separate change **`docs/todo/settings-public-registry-setter.md`** (on `main` @ `0c583f2`; not yet in this branch, which is based on `99ce0b8`). Logged as **P-43**; **P-42** (the `uv.lock` issue) is logged in the same commit `acf846b`.
+
+## Verdict
+
+**Phase 5 gate = PASS (DOCS/CHORE light)** — lint clean (whole repo + changed paths), `mypy src/` clean, affected-feature suites GREEN (`102` + `186`), full regression suite identical to the `main` baseline (`728 passed, 1 skipped`, no test added/removed/weakened), traceability script exit 0, no behavior delta (4 prose edits + 3 import-path rewrites binding the same object).
+
+**Version bump: none** (DOCS/CHORE → no bump, `AGENTS.md` Versioning; `pyproject.toml` stays at `0.6.1`).
+
+Commits: `5902af4` (scoped edits) · `acf846b` (Problem Log P-42/P-43) · this record. Working tree clean after the Phase 5 commit.
