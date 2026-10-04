@@ -5,6 +5,11 @@ Hypothesis-based tests for the invariants INV-001 .. INV-006.
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Callable, Iterator
+from itertools import count
+from uuid import UUID
+
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
@@ -22,6 +27,7 @@ from backend.usermanagement import (
     UserManager,
     UserNotFoundError,
     UserPasswordChanged,
+    UserRead,
     UserRoleChanged,
     UserUpdate,
     UserUpdated,
@@ -106,6 +112,50 @@ def test_inv_002_password_round_trip(p1: str, p2: str) -> None:
     assert manager.verify_password(created.id, p1) is False
 
 
+def _admin_users(manager: UserManager, *, include_inactive: bool) -> list[UserRead]:
+    """The users that currently hold the ``admin`` role (in the requested active state)."""
+    return [u for u in manager.list_users(include_inactive=include_inactive) if "admin" in u.roles]
+
+
+def _mutate_first_admin(admins: list[UserRead], mutate: Callable[[UUID], object]) -> None:
+    """Apply ``mutate`` to the first admin that accepts it (a ``LastAdminError`` moves to the next)."""
+    for admin in admins:
+        try:
+            mutate(admin.id)
+        except LastAdminError:
+            continue
+        break
+
+
+def _apply_inv_003_op(manager: UserManager, op: str, counter: Iterator[int]) -> None:
+    """Apply one operation of the INV-003 sequence (the same four ops, the same arguments)."""
+    if op == "create_admin":
+        n = next(counter)
+        manager.create_user(
+            UserCreate(
+                **valid_create(
+                    username=f"a{n}x",
+                    email=f"a{n}@example.com",
+                    roles=["admin", "user"],
+                )
+            )
+        )
+    elif op == "create_member":
+        n = next(counter)
+        manager.create_user(
+            UserCreate(
+                **valid_create(
+                    username=f"m{n}x",
+                    email=f"m{n}@example.com",
+                )
+            )
+        )
+    elif op == "delete_admin":
+        _mutate_first_admin(_admin_users(manager, include_inactive=True), manager.delete_user)
+    elif op == "deactivate_admin":
+        _mutate_first_admin(_admin_users(manager, include_inactive=False), manager.deactivate_user)
+
+
 # deadline=1000 is measured, not guessed: the slowest local examples ran 258-270 ms against the
 # 200 ms default (seed 101 and the default random seed; this file is byte-identical to
 # origin/main, so the flake predates this change). The cost is argon2id password hashing
@@ -126,51 +176,11 @@ def test_inv_002_password_round_trip(p1: str, p2: str) -> None:
 )
 def test_inv_003_last_admin_invariant(ops: list[str]) -> None:
     _, manager, _ = _memory_manager()
-    counter = 0
-
-    def next_username(prefix: str) -> str:
-        nonlocal counter
-        counter += 1
-        return f"{prefix}{counter}x"
-
+    counter = count(start=1)
     for op in ops:
-        try:
-            if op == "create_admin":
-                manager.create_user(
-                    UserCreate(
-                        **valid_create(
-                            username=next_username("a"),
-                            email=f"a{counter}@example.com",
-                            roles=["admin", "user"],
-                        )
-                    )
-                )
-            elif op == "create_member":
-                manager.create_user(
-                    UserCreate(
-                        **valid_create(
-                            username=next_username("m"),
-                            email=f"m{counter}@example.com",
-                        )
-                    )
-                )
-            elif op == "delete_admin":
-                for admin in [u for u in manager.list_users(include_inactive=True) if "admin" in u.roles]:
-                    try:
-                        manager.delete_user(admin.id)
-                    except LastAdminError:
-                        continue
-                    break
-            elif op == "deactivate_admin":
-                for admin in [u for u in manager.list_users() if "admin" in u.roles]:
-                    try:
-                        manager.deactivate_user(admin.id)
-                    except LastAdminError:
-                        continue
-                    break
-        except UserAlreadyExistsError, LastAdminError, UserNotFoundError:
-            pass
-        admin_users = [u for u in manager.list_users(include_inactive=True) if "admin" in u.roles]
+        with contextlib.suppress(UserAlreadyExistsError, LastAdminError, UserNotFoundError):
+            _apply_inv_003_op(manager, op, counter)
+        admin_users = _admin_users(manager, include_inactive=True)
         if admin_users:
             assert any(u.is_active for u in admin_users)
 
