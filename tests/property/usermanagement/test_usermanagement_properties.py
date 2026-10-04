@@ -257,6 +257,33 @@ def test_inv_005_uniqueness(specs: list[UserCreate]) -> None:
             assert users[i].email != users[j].email
 
 
+def _apply_event_op(manager: UserManager, op: str, user_id: UUID, counter: int) -> type | None:
+    """Apply one non-create operation; return the event type it must publish.
+
+    ``None`` means the operation published no event and the correspondence check is skipped:
+    an idempotent no-op (REQ-009) or an operation the sequence does not perform.
+    """
+    if op == "update":
+        manager.update_user(user_id, UserUpdate(display_name=f"upd{counter}"))
+        return UserUpdated
+    if op == "password":
+        manager.change_password(user_id, f"pass{counter}-1x")
+        return UserPasswordChanged
+    if op == "role":
+        new_role = "admin" if manager.get_user(user_id).roles == ["user"] else "user"
+        manager.set_role(user_id, new_role)
+        return UserRoleChanged
+    if op == "deactivate":
+        was_active = manager.get_user(user_id).is_active
+        manager.deactivate_user(user_id)
+        return None if not was_active else UserDeactivated  # idempotent no-op: no event (REQ-009)
+    if op == "activate":
+        was_inactive = not manager.get_user(user_id).is_active
+        manager.activate_user(user_id)
+        return None if not was_inactive else UserActivated  # idempotent no-op: no event (REQ-009)
+    return None
+
+
 @settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
 @given(
     ops=st.lists(
@@ -284,32 +311,10 @@ def test_inv_006_event_correspondence(ops: list[str]) -> None:
             user_id = created.id
             assert len(collector.of_type(UserCreated)) == before + 1
             continue
-        try:
-            if op == "update":
-                manager.update_user(user_id, UserUpdate(display_name=f"upd{counter}"))
-                ev = UserUpdated
-            elif op == "password":
-                manager.change_password(user_id, f"pass{counter}-1x")
-                ev = UserPasswordChanged
-            elif op == "role":
-                new_role = "admin" if manager.get_user(user_id).roles == ["user"] else "user"
-                manager.set_role(user_id, new_role)
-                ev = UserRoleChanged
-            elif op == "deactivate":
-                was_active = manager.get_user(user_id).is_active
-                manager.deactivate_user(user_id)
-                ev = UserDeactivated
-                if not was_active:
-                    continue  # idempotent no-op: no event (REQ-009)
-            elif op == "activate":
-                was_inactive = not manager.get_user(user_id).is_active
-                manager.activate_user(user_id)
-                ev = UserActivated
-                if not was_inactive:
-                    continue  # idempotent no-op: no event (REQ-009)
-            else:
-                continue
-        except LastAdminError, InvalidRoleError, UserNotFoundError:
+        ev = None
+        with contextlib.suppress(LastAdminError, InvalidRoleError, UserNotFoundError):
+            ev = _apply_event_op(manager, op, user_id, counter)
+        if ev is None:
             continue
         events = collector.of_type(ev)
         assert len(events) >= 1
