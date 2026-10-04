@@ -258,3 +258,102 @@ Q-5 promised 4 private-import fixes; **3 of 4** are DOCS/CHORE-actionable and ar
 **Version bump: none** (DOCS/CHORE → no bump, `AGENTS.md` Versioning; `pyproject.toml` stays at `0.6.1`).
 
 Commits: `5902af4` (scoped edits) · `acf846b` (Problem Log P-42/P-43) · this record. Working tree clean after the Phase 5 commit.
+
+---
+
+# Phase 6 review (S6.1–S6.3) — 2026-10-04
+
+Executed as **one coalesced subagent execution** (**S6.1 + S6.2 + S6.3 + S6.4**) per the coalescing precedent **P-41** (the same rationale as the Phase 4/5 coalescing above: a 7-line diff does not justify four subagent launches; S6.4 stays in the same execution because for a DOCS/CHORE change there is no bump step between the clean report and the PR). Bounded inputs per the review skill: the **scope record above** (the normative basis) + the **FINAL** state `git diff 99ce0b8...HEAD` — reviewed as final text, not commit-by-commit (P-27). The full test suite was **not** re-run (Phase 5 confirmed the gate CLEAN: `728 passed, 1 skipped`).
+
+## S6.1 Review vs. the normative basis (the scope record)
+
+**`git diff --name-status 99ce0b8...HEAD` (the complete change, verbatim):**
+
+```
+M	.agents/skills/verify/SKILL.md
+M	AGENTS.md
+A	docs/verification/architecture-tests-missing.md
+M	docs/workflow/PROBLEMS.md
+M	src/backend/authentication/feature_settings.py
+M	src/backend/eventbus/feature_settings.py
+M	src/backend/usermanagement/feature_settings.py
+```
+
+7 changed lines in 5 non-record files (2 in `AGENTS.md`, 2 in `verify/SKILL.md`, 1 per `feature_settings.py`) + the scope/verification record + the P-42/P-43 Problem Log entries. **Nothing else.**
+
+| Scope item | Delivered as scoped? | Evidence |
+|---|---|---|
+| 1 — `AGENTS.md:212` Phase Matrix REFACTOR cell | **Yes** — the after-text is byte-identical to the scoped after-text; the row keeps its 6 columns | diff hunk `@@ -209,7 +209,7 @@` |
+| 2 — `AGENTS.md:579` Phase 5 REFACTOR step 13 | **Yes** — byte-identical to the scoped after-text | diff hunk `@@ -576,7 +576,7 @@` |
+| 3 — `verify/SKILL.md:88` FEATURE/CROSS-CUTTING bullet | **Yes** — byte-identical | diff hunk `@@ -85,7 +85,7 @@` |
+| 4 — `verify/SKILL.md:103` REFACTOR bullet | **Yes** — byte-identical, and identical to item 3's after-text (the two gate lists keep the same wording) | diff hunk `@@ -100,7 +100,7 @@` |
+| 5 — 3 private-module import rewrites | **Yes** — one line each, byte-identical to the scoped after-text; no other line in the three files changed (the `@logged(slow_threshold_ms=5)` usage, the `TYPE_CHECKING` guard and the bodies are untouched) | the three `@@ -4,7 +4,7 @@` hunks |
+| 6 — `src/main.py:67` | **Not touched** — as scoped (finding F-1) | `git diff --name-only 99ce0b8...HEAD -- src/main.py` → empty; `src/main.py:67` still reads `from backend.settings.registry import _registry as _settings_registry_singleton` |
+
+**Out-of-scope items confirmed untouched** (the scope's "Explicitly out of scope" list):
+
+| Forbidden by the scope | Check | Result |
+|---|---|---|
+| No `tests/architecture/` directory | `ls -d tests/architecture` | **absent** — not created |
+| No test file / no test change | `git diff --name-only 99ce0b8...HEAD -- tests/` | **0 paths** — no test added, deleted, weakened or touched |
+| No `src/main.py` change | `git diff --name-only ... -- src/main.py` | **0 paths** |
+| No CI workflow change | `git diff --name-only ... -- .github/` | **0 paths** — no new job, no ruff `TID251`/banned-api config |
+| No `docs/specs/` change | `git diff --name-only ... -- docs/specs/` | **0 paths** |
+| No `AGENTS.md` "Project Structure" rule change | `git diff ... -- AGENTS.md \| grep -c "Project Structure"` | **0** — the only `AGENTS.md` hunks are `:212` and `:579`; the Phase 6 review checks 3–4 (`:592-593`) are unchanged (they are the re-point's target, not its subject) |
+| No `pyproject.toml` / `uv.lock` / migration change, no version bump | `git diff --name-only ... -- uv.lock pyproject.toml` | **0 paths**; `pyproject.toml:4` stays `version = "0.6.1"` |
+| Frozen records not edited | diff file list | `docs/workflow/PROBLEMS.md` gains **only** P-42/P-43 appended after P-41; P-32 and every dated `docs/verification/*`, `docs/questions/*`, `docs/todo/*` record are untouched (they are not in the diff at all) |
+
+**No behavior delta (review-skill DOCS/CHORE criterion: "no behavior, test, or source-behavior changes beyond the scoped non-behavior changes").** The only `src/` change is the import path: `from backend.logging import logged` binds the **same object** as `from backend.logging._decorator import logged` — `src/backend/logging/__init__.py` re-exports the very `logged` defined in `_decorator` (no wrapper, no copy, no conditional export) and lists `"logged"` in `__all__` (re-read in the final state). The Phase 5 evidence stands: full suite **`728 passed, 1 skipped`** on the branch, **identical** to the `main` baseline (`docs/verification/session-lookup-unwired.md:335`), **0 test changes**, `ruff check .` clean, `mypy src/` clean (`Success: no issues found in 83 source files`).
+
+**S6.1 verdict: the change is exactly the scope — no more, no less. No findings.**
+
+## S6.1b Guidance consistency (the point of the change)
+
+The four re-pointed passages were read **in their final context**, not as diffs:
+
+**(a) No live guidance file still names the dangling command.** `rg -n "tests/architecture" AGENTS.md .agents` → **no matches (exit 1)**. All 4 citations are gone. The remaining hits repo-wide are frozen records only (`docs/verification/*`, `docs/questions/*`, `docs/todo/*`, `docs/workflow/PROBLEMS.md` P-32) — untouched by design (the scope's "Not edited" list; `AGENTS.md` "a dated `RED`/`PENDING` row is a legal record of a past gate").
+
+**(b) The re-pointed wording is not a new rule — it restates the manual checks that already exist.** The after-text of items 2/3/4 quotes `AGENTS.md:592-593` verbatim: check 3 = "code lives in the correct feature directory, no cross-feature internal imports", check 4 = "`model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small". Step 13 closes with "These are the same checks as Phase 6 review checks 3 and 4", and `AGENTS.md:624` already makes "feature boundaries and architecture rules are respected" a clean-review condition for **all** types — so the re-point names an obligation the process already carried, it does not add one. The Phase Matrix cell says the same in cell-length words: "architecture rules (manual, Phase 6 checks 3–4)".
+
+**(c) `AGENTS.md`, the `verify` skill and the Phase Matrix now say the same thing in the same words.** Items 3 and 4 are byte-identical to each other; item 2 differs from them only in (i) the trailing sentence naming the Phase 6 checks and (ii) the placeholder spelling — `docs/verification/[name].md` in `AGENTS.md` (its dominant convention, 16 uses) vs `docs/verification/<name>.md` in the `verify` skill (its only convention, 7 uses, 0 of `[name]`). Same sentence, each file's own placeholder style. The `verify` skill frontmatter description (line 3, "…coverage, architecture rules, and spec validation") needed no change: it names the check, never the command (verified at P.4 and re-read now).
+
+**(d) The REFACTOR Phase 5 gate is still a complete, executable instruction after removing the command.** Steps 13–15 read as a gate set: 13 = run the full regression suite (MUST be GREEN, zero test changes) **and** verify the architecture rules by inspection, recording the result in `docs/verification/[name].md`; 14 = `uv run ruff check .` + `uv run mypy src/`; 15 = confirm the suite result is identical to the baseline. Every item is still executable, and the one non-command item names its own evidence artifact, so nothing became uncheckable. The removed command was the only one in the list that **could not** run (`ERROR: file or directory not found: tests/architecture/`, exit 4) — the gate is now strictly more executable than before.
+
+**S6.1b verdict: consistent. No findings.**
+
+## S6.2 Traceability + boundaries
+
+**Traceability.** `uv run python scripts/check_traceability.py` (re-run in this step, cheap) → **exit 0**, `Traceability: PASS (747 matrix rows, 129 spec IDs, 714 test functions)`. No matrix row was added or changed, **by design** and recorded as such (scope §Phase 5 gate item 5, Phase 5 table row 9): no `REQ-XXX`/`AC-XXX` is touched — no file in `docs/specs/` references the removed wording (P.2 E-5) and the import rewrites bind the same object, so there is no requirement whose evidence changes. The script's referential-integrity gate (missing rows, dangling IDs, cited-but-absent test functions, undeclared status values) passes, so no row was orphaned by the change. No test was orphaned either: `tests/` is untouched, so no test lost its spec reference.
+
+**Boundaries (the change improves them).** `rg -n "from backend\.[a-z]+\._" src` → **8 matches, all inside `backend.logging`** (`__init__.py` ×3, `_setup.py` ×2, `_settings.py`, `_decorator.py`, `feature_settings.py`) — a feature importing its **own** private modules, which is exactly what the package's `__init__` re-export exists to hide from the outside. **Zero cross-feature private-module imports remain in `src/`**: the 3 `feature_settings.py` sites were the last, and `AGENTS.md:768` ("Import the public API only … do not import the private `_setup` / `_decorator` modules") is now satisfied by every consumer. No new cross-feature edge was introduced — the wider import goes through `backend.logging.__init__`, whose own `backend.settings` / `backend.eventbus` dependencies stay function-local (Phase 5 no-behavior-delta item 3), so no cycle and no new top-level dependency.
+
+**Known exception (recorded, not hidden): `src/main.py:67`** — `from backend.settings.registry import _registry as _settings_registry_singleton`, a cross-feature private **symbol** (not matched by the module-level grep above). Left as-is per **finding F-1**: the settings public API has no singleton setter, `get_settings_registry()` lazily creates a **default** registry with no `permission_service`, so any substitution is a behavior change; fixing it needs a public `set_settings_registry()` → a `docs/specs/settings.md` **REQ-014 amendment**, i.e. a different change type. Framed as the prepared change **`docs/todo/settings-public-registry-setter.md`** (+ `docs/questions/settings-public-registry-setter.md`), verified present on `main`; logged as **P-43**.
+
+**Observability (review-skill check 7):** the change does not touch logging behavior — the three traced `register_settings` functions keep their `@logged(slow_threshold_ms=5)` decorators and the same decorator object; the logging feature remains set up once in the entrypoint. No observability regression.
+
+**S6.2 verdict: traceability intact, boundaries improved. No findings.**
+
+## S6.3 Review report
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| F-1 | `src/main.py:67` still imports the settings feature's private `_registry` — the change does **not** make the repo free of cross-feature private imports (Q-5 promised 4 fixes, 3 are DOCS/CHORE-actionable) | **Accepted, out of scope** (not an open finding for this change) | Left untouched on purpose; recorded in this file ("Finding F-1") rather than hidden; needs a settings REQ-014 amendment → framed as `docs/todo/settings-public-registry-setter.md` on `main`; logged as **P-43** with the durable lesson (verify each site has a public equivalent before promising an "equivalent" rewrite) |
+| F-2 | The 3 import fixes are **not guarded against regression** — no CI-enforced boundary rule (no ruff `TID251` / banned-api config, no architecture test), so a future change could re-introduce a private import undetected | **Accepted, by decision** | Q-4 offered the CI guard and it was **not taken** (Q-1 = (a), Q-4 = (a): manual boundary review only). The guard is the manual Phase 6 checks 3–4, now also named in the Phase 5 REFACTOR/FEATURE gate lists. Recorded in the scope's "Explicitly out of scope" list; a CI guard would be a separate change |
+| F-3 | `verify/SKILL.md:3` (frontmatter description) still lists "architecture rules" among the things the skill runs, next to commands it runs | **No action** | Generic wording that names the check, not the dangling command — it is satisfied by the inspection bullet it now governs; changing it was outside the 4 scoped citations (verified at P.4, re-read in the final state) |
+| F-4 | `uv.lock` is rewritten by the first `uv run` in this worktree (recurrence of **P-42**, seen again during this step's traceability re-run) | **Not in scope; reverted** | `git checkout -- uv.lock` before the commit; `uv.lock` is **not** in the diff (`git diff --name-only 99ce0b8...HEAD -- uv.lock` → empty), working tree clean. Durable fix already recorded in P-42 (add `uv.lock` to `[tool.bumpversion.files]`) as a follow-up chore |
+
+**Test-integrity check (all types):** no acceptance test was weakened, modified or deleted to achieve GREEN — `tests/` is not in the diff at all, and the suite count is identical to the baseline.
+
+**Reusable shared capability note (review-skill MUST):** not applicable — the change removes a dangling citation and switches 3 imports to an API `AGENTS.md:768` **already** documents ("Import the public API only"). No new pattern, so no new `AGENTS.md` note is required; the existing logging-conventions section already tells future changes to do what this change made the code do.
+
+### Verdict: **CLEAN**
+
+Every finding is resolved or explicitly accepted with its rationale recorded; no open finding blocks the merge. Normative-basis compliance confirmed (the change is exactly the scope), traceability intact, boundaries improved, no behavior delta, no test touched.
+
+## S6.4 Bump + PR
+
+**Version bump: none** — `AGENTS.md` Versioning: DOCS/CHORE → no bump. `bump-my-version` was **not** run; `pyproject.toml:4` stays `version = "0.6.1"` (verified in the final state).
+
+**PR:** opened for `chore/architecture-tests-missing` → `main` per the git skill ("Create PR"). **Not merged** (human governance) — the change is **WAITING** on the human merge, then **S7.1** post-merge cleanup.
+
+**Phase 6 gate = PASS (light review, CLEAN report, PR open).**
