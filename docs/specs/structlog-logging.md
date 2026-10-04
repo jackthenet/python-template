@@ -33,8 +33,9 @@
 - **Design Decisions:**
   - **D1 — Handler ownership.** A dedicated, non-propagating logger owns the console handler and the rotating file handler. Third-party reconfiguration of the root logger (alembic's `migrations/env.py` calls `logging.config.fileConfig`) can therefore never remove or replace the two managed handlers (EDGE-003).
   - **D2 — Interception by forwarding, not by re-emitting.** A single forwarding handler installed on the root logger passes foreign records to the two managed handlers, so the record's own level, logger name and location survive; no call-depth arithmetic is needed (this is what replaces the deleted `AC-005`/`EDGE-005` of `docs/specs/logging.md`).
-  - **D3 — Renderer per sink.** Console: human-readable, colorized text. File: JSON objects serialized with `orjson`. `setup_logger(renderer=...)` can override the pair (REQ-006). The spec fixes the **record fields**, never the format string (the format string is an implementation detail).
-  - **D4 — Asynchronous file writes.** The file handler is fed through a queue handler with a single listener thread, replacing the backend's built-in enqueueing (REQ-010).
+  - **D3 — Renderer per sink.** Console: human-readable, colorized text. File: JSON objects serialized with `orjson`. `setup_logger(renderer=...)` can override the pair (REQ-006). The spec fixes the **record fields**, never the format string (the format string is an implementation detail). Two adapter duties follow from rendering through standard-library handlers (verified in the P.5 smoke test, ADR-082): the JSON serializer adapter must return a `str` (the JSON serializer it wraps returns bytes) and must tolerate the keyword arguments the renderer forwards to it, and the pipeline must drop the formatter's own bookkeeping keys so they never reach a rendered record.
+  - **D4 — Asynchronous file writes.** The file handler is fed through a queue handler with a single listener thread, replacing the backend's built-in enqueueing (REQ-010). The queue handler must pass the record through **unformatted** — the standard library's queue handler formats records while enqueueing, which would destroy the structured event dict the file sink renders from.
+  - **D7 — Exceptions are rendered into a field, not appended.** An exception record's traceback is rendered into the `exception` field by the pipeline, and the standard library's own exception formatting is suppressed for the managed sinks, so a record stays exactly one line in the JSON sink (REQ-009). The callsite of a record is resolved at the emitting call site, never in the listener thread (REQ-011, AC-007).
   - **D5 — One statement entry point.** `get_logger()` is the only supported way to obtain a logger for one-off statements; features stop importing a backend directly (REQ-005). This retires the "direct backend statements are kept" policy recorded in `docs/specs/logging-coverage.md` REQ-010/AC-010.
   - **D6 — Breaking surface, no shim.** `context_getter` and `depth` are removed (they existed to work around the old backend's frame arithmetic); `renderer` is added to `setup_logger()`; `get_logger()` is added. The version bump is `major` (Q-22).
 
@@ -79,7 +80,7 @@ def logged_class(
 # Unchanged exports: Settings, get_settings, register_settings, _read_setting.
 ```
 
-Record fields (the file sink serializes these as JSON object members; the console sink renders the same information as text):
+Record fields (the file sink serializes these as JSON object members; the console sink renders the same information as text). A **sink** is one managed standard-library handler together with its renderer: "the two managed sinks" (REQ-002) and "exactly one console handler and one file handler" (INV-001) name the same pair.
 
 | Field | Meaning | Present on |
 |---|---|---|
@@ -90,6 +91,8 @@ Record fields (the file sink serializes these as JSON object members; the consol
 | `elapsed_ms` | Call duration in milliseconds | traced exit records (REQ-011) |
 | `file`, `line` | Originating source file and line | every record, including forwarded third-party records |
 | `exception` | Exception type, message and traceback **frames** (never local values) | exception records (REQ-009) |
+
+The names above are the contract. The pipeline's callsite step names the two location fields `filename` and `lineno`; mapping them to `file` and `line` is part of the feature's rendering, and a rendered record MUST NOT carry the pipeline's own names (AC-003).
 
 Public API surface (REQ-015): `setup_logger`, `logged`, `logged_class`, `get_logger`, `Settings`, `get_settings`, `register_settings`, `_read_setting`. Removed from the decorator surface: `context_getter`, `depth`. Added: `get_logger`, `setup_logger(renderer=...)`.
 
@@ -110,7 +113,7 @@ Public API surface (REQ-015): `setup_logger`, `logged`, `logged_class`, `get_log
 | REQ-011 | Every record carries the level, the logger name, the message and a timestamp; a traced exit record additionally carries the elapsed milliseconds; every record carries the originating file and line. |
 | REQ-012 | A change to any `logging.*` setting reconfigures the feature's own handlers in place, re-applying all current `logging.*` values, without restarting the process. |
 | REQ-013 | The dependency set changes: `structlog` is added, `loguru` is removed, and `orjson` becomes used by the file renderer so that its unused-dependency suppression is removed. |
-| REQ-014 | The project guidance that names the removed backend is corrected to the shared logging feature's own entry points in `AGENTS.md`, `.agents/skills/python-best-practices/SKILL.md`, `.agents/skills/python-best-practices/references/modern-python.md` and `.agents/skills/python-best-practices/references/errors-and-resources.md`. |
+| REQ-014 | The project guidance that contradicts this spec is corrected to the shared logging feature's own entry points in `AGENTS.md`, `.agents/skills/python-best-practices/SKILL.md`, `.agents/skills/python-best-practices/references/modern-python.md` and `.agents/skills/python-best-practices/references/errors-and-resources.md`. Three defect classes are in scope: guidance that names the removed backend, guidance that names a decorator parameter this change removes (`context_getter`, `depth`), and guidance that shows a `setup_logger(...)` call shape the amended signature rejects (passing a `Settings` object — the entrypoint call is `setup_logger()`). |
 | REQ-015 | The feature's public API is exactly the set listed in §3; the change to the decorator parameter set is breaking, no compatibility shim is provided, and the version bump is `major`. |
 
 ### Amended requirements in approved specs (this change's amendment PR)
@@ -128,6 +131,7 @@ These IDs are restated in the amendment PR (see §10 Impact Analysis); they are 
 | `logging.md` | INV-001 | Restated: exactly one console handler and one file handler are owned by the feature logger. |
 | `logging.md` | EDGE-005 | **Deleted**; the unknown-level case is restated as `EDGE-004` of this spec in capability terms. |
 | `logging.md` | NFR-001, NFR-002, NFR-003 | Re-measured budgets and capability wording (see §9). |
+| `logging.md` | NFR-004 | Amended: the public-API contract no longer asserts the pre-change decorator parameters — it asserts the parameter set defined here (`context_getter` and `depth` removed, `get_logger()` and `setup_logger(renderer=...)` added). |
 | `logging-coverage.md` | REQ-010, AC-010 | Restated: one-off statements are kept as statements, but written through the logging feature's exported logger instead of a directly imported backend. |
 | `settings-coverage.md` | REQ-014, REQ-015, REQ-016, AC-019, AC-020, AC-021, EDGE-008 | Restated: `setup_logger()` stays callable with no arguments (the new `renderer` parameter is optional and keyword-only), live reconfiguration mutates the managed handlers, and the rotation case re-applies all current values. |
 | `settings.md` | Scope, Dependencies, observability wording | Wording only: the settings feature uses the shared logging feature's logger, not a named backend. No ID change. |
@@ -138,7 +142,7 @@ These IDs are restated in the amendment PR (see §10 Impact Analysis); they are 
 |----|-------------|---------------------|
 | AC-001 | REQ-001 | **Given** the repository after the swap, **When** `src/` and `tests/` are searched for an import of the removed logging backend, **Then** there is no match, **And** a record emitted by the feature passes through the standard-library handler chain (a handler attached to the feature logger observes it). |
 | AC-002 | REQ-002 | **Given** a fresh process, **When** `setup_logger()` is called, **Then** the feature logger owns exactly two handlers, **And** one writes colorized text to standard error, **And** the other is a rotating file handler with the configured rotation size, backup count and UTF-8 encoding. |
-| AC-003 | REQ-002 | **Given** the file sink, **When** a traced call completes, **Then** the file record parses as a JSON object containing `level`, `logger`, `event`, `timestamp`, `elapsed_ms`, `file` and `line`. |
+| AC-003 | REQ-002, REQ-011 | **Given** the file sink, **When** a traced call completes, **Then** the file record parses as a JSON object containing `level`, `logger`, `event`, `timestamp`, `elapsed_ms`, `file` and `line`, and contains neither the pipeline's own location names nor its bookkeeping keys. |
 | AC-004 | REQ-003 | **Given** a handler attached to the root logger and to another feature's logger, **When** `setup_logger()` runs and a `logging.*` setting changes, **Then** both foreign handlers are still attached and unmodified. |
 | AC-005 | REQ-003 | **Given** the feature logger, **When** it emits one record, **Then** the record appears exactly once in each managed sink (the feature logger does not propagate). |
 | AC-006 | REQ-004 | **Given** a third-party logger with no handlers of its own, **When** it emits a record at or above the configured level, **Then** the record reaches both managed sinks with its original level and message. |
@@ -154,7 +158,7 @@ These IDs are restated in the amendment PR (see §10 Impact Analysis); they are 
 | AC-016 | REQ-010 | **Given** the file sink pointed at an unwritable path or a stopped listener, **When** a traced call runs, **Then** the call returns its normal result and no exception escapes from logging. |
 | AC-017 | REQ-012 | **Given** a running process, **When** `set_value("logging.log_level", "DEBUG")` and then `set_value("logging.log_max_bytes", ...)` are called, **Then** DEBUG records reach both sinks without a restart, **And** the rotation parameters are re-applied, **And** only the feature's own handlers change. |
 | AC-018 | REQ-013 | **Given** the implemented change, **When** the dependency check runs, **Then** it reports no unused and no missing dependency, **And** the removed backend is absent from the dependency set, **And** the JSON serializer is used. |
-| AC-019 | REQ-014 | **Given** the four guidance files, **When** the change is implemented, **Then** none names the removed backend, **And** each names the shared logging feature's own entry points (`setup_logger`, `logged`, `logged_class`, `get_logger`). |
+| AC-019 | REQ-014 | **Given** the four guidance files, **When** the change is implemented, **Then** none names the removed backend and none names `context_getter` or `depth`, **And** each names the shared logging feature's own entry points (`setup_logger`, `logged`, `logged_class`, `get_logger`), **And** every `setup_logger` call they show is a call the amended signature accepts. |
 | AC-020 | REQ-015 | **Given** `backend.logging`, **When** its public exports are inspected, **Then** they are exactly the set in §3, **And** importing `context_getter`/`depth`-style parameters or a backend module through the feature fails. |
 
 ## 6. Invariants
@@ -200,13 +204,13 @@ These IDs are restated in the amendment PR (see §10 Impact Analysis); they are 
 
 | # | Affected feature / area | What changes there | Touched IDs of that feature |
 |---|---|---|---|
-| 1 | `backend.logging` (owner) | Backend swap; two standard-library managed sinks; dedicated non-propagating logger; forwarding interception; `get_logger()`; `renderer` parameter; decorators rebuilt; `context_getter`/`depth` removed. | New REQ-001…REQ-012, AC-001…AC-013, INV-001…INV-005, EDGE-001…EDGE-006, NFR-001…NFR-005. Amended in `logging.md`: REQ-001, REQ-003, REQ-005, AC-001, AC-004, AC-005 (deleted), INV-001, EDGE-005 (deleted), NFR-001, NFR-002, NFR-003. Amended in `logging-coverage.md`: REQ-010, AC-010. |
+| 1 | `backend.logging` (owner) | Backend swap; two standard-library managed sinks; dedicated non-propagating logger; forwarding interception; `get_logger()`; `renderer` parameter; decorators rebuilt; `context_getter`/`depth` removed. | New REQ-001…REQ-012, AC-001…AC-013, INV-001…INV-005, EDGE-001…EDGE-006, NFR-001…NFR-005. Amended in `logging.md`: REQ-001, REQ-003, REQ-005, AC-001, AC-004, AC-005 (deleted), INV-001, EDGE-005 (deleted), NFR-001, NFR-002, NFR-003, NFR-004. Amended in `logging-coverage.md`: REQ-010, AC-010. |
 | 2 | `backend.settings` | 28 direct statements (registry 17, repository 11) migrate to `get_logger()`; live reconfiguration mutates the managed handlers instead of replacing sinks. | Amended in `settings-coverage.md`: REQ-014, REQ-015, REQ-016, AC-019, AC-020, AC-021, EDGE-008. Wording-only in `settings.md`: Scope row, Dependencies row, observability paragraph (no ID change). |
 | 3 | `backend.eventbus` | 10 direct statements migrate to `get_logger()`. No spec ID change — `docs/specs/event-bus.md` names no backend. | none |
 | 4 | `backend.permissions` | 1 direct statement migrates to `get_logger()`. No spec ID change. | none |
 | 5 | `migrations` / alembic | No code change. The `fileConfig` interaction becomes EDGE-003; the autouse root-logging fixture in `tests/conftest.py` stays. | none (new EDGE-003 in this spec) |
 | 6 | Tooling (`pyproject.toml`) | `structlog` added, `loguru` removed, `orjson` becomes used and its unused-dependency suppression is deleted. | REQ-013, AC-018, NFR-004 |
-| 7 | Guidance (`AGENTS.md`, 3 skill reference files) | Corrected to the feature's own entry points. | REQ-014, AC-019 |
+| 7 | Guidance (`AGENTS.md`, 3 skill reference files) | Corrected to the feature's own entry points; removed parameters and the rejected `setup_logger(Settings(...))` call shape removed. | REQ-014, AC-019 |
 | 8 | Test suite | Tests re-derived from the amended IDs; `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` is deleted (it exists solely to enforce the retired REQ-010 wording); `tests/logging_test_helpers.py`, `tests/logging_coverage_test_helpers.py`, `tests/settings_test_helpers.py` and `tests/conftest.py` are adapted to the new backend; the NFR contract gates are re-measured. No test is weakened. | AC-001…AC-020 (test strategy §11) |
 
 **Sequencing (binding):** the amendment PR (4 specs + ADR-082 + ADR-002 status) merges **first**; the implementation PR follows. This change lands **after** `pyproject-tooling-gaps` (which owns `[tool.deptry]` and `quality_check`) and **before** `api-keys` and `notifications` implement; it clears `tenacity-rich-cachetools`'s `Depends on: decision on docs/todo/structlog-logging.md`.
@@ -258,7 +262,7 @@ Amended and deleted IDs from the approved specs (existing tests re-derived from 
 |---|---|---|---|
 | `logging.md` AC-001 | acceptance | `tests/acceptance/logging/test_logging.py` | `test_ac_001_setup_logger_adds_sinks` (re-derived) |
 | `logging.md` AC-004 | unit | `tests/unit/logging/test_logging.py` | `test_ac_004_intercept_handler_routes_records` (re-derived as the forwarding-handler case) |
-| `logging.md` REQ-005 | contract | `tests/contract/logging/test_logging_contracts.py` | `test_nfr_004_backward_compatible_api` (amended: asserts the reduced parameter set) |
+| `logging.md` REQ-005, NFR-004 | contract | `tests/contract/logging/test_logging_contracts.py` | `test_nfr_004_backward_compatible_api` (amended: asserts the reduced parameter set) |
 | `logging.md` INV-001 | property | `tests/property/logging/test_logging_properties.py` | `test_inv_001_concurrent_setup_logger_sinks` (re-derived) |
 | `logging.md` NFR-001 / NFR-002 | contract | `tests/contract/logging/test_logging_contracts.py` | `test_nfr_001_setup_time_budget`, `test_nfr_002_decorator_overhead_budget` (amended budgets) |
 | `logging.md` AC-005 (**deleted**) | unit | `tests/unit/logging/test_logging.py` | `test_ac_005_intercept_handler_skips_bootstrap` (deleted; replaced by this spec's AC-007) |

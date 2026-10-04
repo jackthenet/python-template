@@ -1,7 +1,7 @@
 # Spec: Logging
 
 ## Changelog
-- v3 (2026-10-04): Backend swap amendment (change `structlog-logging`, ADR-082 supersedes ADR-002). REQ-001, REQ-003, REQ-005, AC-001, AC-004, INV-001 restated in capability terms (no logging backend named, standard-library handler machinery); **AC-005 and EDGE-005 deleted** (they only existed to serve the removed backend's call-frame arithmetic — the unknown-level case is restated as `EDGE-004` of `docs/specs/structlog-logging.md`); NFR-001, NFR-002, NFR-003 re-measured/restated; Goal and Dependencies rows corrected (the Dependencies row referenced the removed backend, not an ID).
+- v3 (2026-10-04): Backend swap amendment (change `structlog-logging`, ADR-082 supersedes ADR-002). REQ-001, REQ-003, REQ-005, AC-001, AC-004, INV-001 restated in capability terms (no logging backend named, standard-library handler machinery); **AC-005 and EDGE-005 deleted** (they only existed to serve the removed backend's call-frame arithmetic — the unknown-level case is restated as `EDGE-004` of `docs/specs/structlog-logging.md`); NFR-001, NFR-002, NFR-003 re-measured/restated; NFR-004 restated (the parameter surface is the amended REQ-005 list and `setup_logger()` stays callable with no arguments — the backward-compatibility it requires is the import path, not the removed parameters); Goal and Dependencies rows corrected (the Dependencies row referenced the removed backend, not an ID). §9/§10 test-file paths and function names corrected to the tests that exist on disk (no ID change, no status change).
 - v2 (2026-09-11): NFR-001 amended — `setup_logger()` budget relaxed from < 10 ms to < 50 ms (CI observed 15.55 ms; cost is loguru sink setup + file-sink worker thread + mkdir, which 10 ms has no CI headroom for).
 
 ## 1. Overview & Objectives
@@ -121,7 +121,7 @@ State invariants that hold over a large input space. These become Hypothesis pro
 | NFR-001 | Performance | `setup_logger()` must complete in < 25 ms (median of 3 fresh processes). Re-measured for the current pipeline: 0.85 ms median on the reference machine; the previous 50 ms budget was set for the removed backend, which measured 5.18 ms locally and 15.55 ms on CI (`docs/verification/structlog-logging.md`). |
 | NFR-002 | Performance | `@logged` decorator overhead per call must be < 1 ms **measured with the two configured sinks active at the configured level** (the context the observability policy requires). Measured: 0.148 ms/call with sinks active at DEBUG, 0.006 ms/call for the tracing machinery alone. |
 | NFR-003 | Security | No record may contain local variable values: an exception record carries the exception type, its message and the traceback frames only. |
-| NFR-004 | Contract | The public API (`setup_logger`, `logged`, `logged_class`) must remain backward-compatible with the obsolete module's import paths. |
+| NFR-004 | Contract | The public API (`setup_logger`, `logged`, `logged_class`, `get_logger`) stays importable from `backend.logging`; the backward compatibility this requires is the **import path**, not the parameter surface — the parameter list is the amended REQ-005 list, and `setup_logger()` stays callable with no arguments (any parameter it accepts is optional and keyword-only). |
 
 ## 9. Test Strategy
 
@@ -129,27 +129,28 @@ Map each requirement/AC to a test category. This drives the test file layout.
 
 | ID | Test Category | Test File | Test Function |
 |----|---------------|-----------|---------------|
-| AC-001 | acceptance | `tests/acceptance/test_logging.py` | `test_setup_logger_adds_sinks` |
-| AC-002 | acceptance | `tests/acceptance/test_logging.py` | `test_setup_logger_idempotent` |
-| AC-003 | unit | `tests/unit/test_logging.py` | `test_setup_logger_thread_safe` |
-| AC-004 | unit | `tests/unit/test_logging.py` | `test_intercept_handler_routes_records` |
-| AC-006 | unit | `tests/unit/test_logging.py` | `test_logged_sync_entry_exit` |
-| AC-007 | unit | `tests/unit/test_logging.py` | `test_logged_async_entry_exit` |
-| AC-008 | unit | `tests/unit/test_logging.py` | `test_logged_exception_propagates` |
-| AC-009 | unit | `tests/unit/test_logging.py` | `test_logged_level_param` |
-| AC-010 | unit | `tests/unit/test_logging.py` | `test_logged_include_args` |
-| AC-011 | unit | `tests/unit/test_logging.py` | `test_logged_slow_threshold` |
-| AC-012 | unit | `tests/unit/test_logging.py` | `test_logged_class_public_method` |
-| AC-013 | unit | `tests/unit/test_logging.py` | `test_logged_class_private_method` |
-| AC-014 | unit | `tests/unit/test_logging.py` | `test_get_settings_defaults` |
-| AC-015 | acceptance | `tests/acceptance/test_logging.py` | `test_obsolete_module_deleted` |
-| INV-001 | property | `tests/property/test_logging.py` | `test_concurrent_setup_logger_sinks` |
-| INV-002 | property | `tests/property/test_logging.py` | `test_elapsed_time_non_negative` |
-| INV-003 | property | `tests/property/test_logging.py` | `test_exception_propagates_unchanged` |
-| EDGE-001 | unit | `tests/unit/test_logging.py` | `test_log_file_parent_created` |
-| EDGE-002 | unit | `tests/unit/test_logging.py` | `test_logged_no_args` |
-| EDGE-003 | unit | `tests/unit/test_logging.py` | `test_logged_nonexistent_setting` |
-| EDGE-004 | unit | `tests/unit/test_logging.py` | `test_logged_class_no_public_methods` |
+| AC-001 | acceptance | `tests/acceptance/logging/test_logging.py` | `test_ac_001_setup_logger_adds_sinks` |
+| AC-002 | acceptance | `tests/acceptance/logging/test_logging.py` | `test_ac_002_setup_logger_idempotent` |
+| AC-003 | unit | `tests/unit/logging/test_logging.py` | `test_ac_003_setup_logger_thread_safe` |
+| AC-004 | unit | `tests/unit/logging/test_logging.py` | `test_ac_004_intercept_handler_routes_records` |
+| AC-006 | unit | `tests/unit/logging/test_logging.py` | `test_ac_006_logged_sync_entry_exit` |
+| AC-007 | unit | `tests/unit/logging/test_logging.py` | `test_ac_007_logged_async_entry_exit` |
+| AC-008 | unit | `tests/unit/logging/test_logging.py` | `test_ac_008_logged_exception_propagates` |
+| AC-009 | unit | `tests/unit/logging/test_logging.py` | `test_ac_009_logged_level_param` |
+| AC-010 | unit | `tests/unit/logging/test_logging.py` | `test_ac_010_logged_include_args` |
+| AC-011 | unit | `tests/unit/logging/test_logging.py` | `test_ac_011_logged_slow_threshold` |
+| AC-012 | unit | `tests/unit/logging/test_logging.py` | `test_ac_012_logged_class_public_method` |
+| AC-013 | unit | `tests/unit/logging/test_logging.py` | `test_ac_013_logged_class_private_method` |
+| AC-014 | unit | `tests/unit/logging/test_logging.py` | `test_ac_014_get_settings_defaults` |
+| AC-015 | acceptance | `tests/acceptance/logging/test_logging.py` | `test_ac_015_obsolete_module_deleted` |
+| INV-001 | property | `tests/property/logging/test_logging_properties.py` | `test_inv_001_concurrent_setup_logger_sinks` |
+| INV-002 | property | `tests/property/logging/test_logging_properties.py` | `test_inv_002_elapsed_time_non_negative` |
+| INV-003 | property | `tests/property/logging/test_logging_properties.py` | `test_inv_003_exception_propagates_unchanged` |
+| EDGE-001 | unit | `tests/unit/logging/test_logging_edges.py` | `test_edge_001_log_file_parent_created` |
+| EDGE-002 | unit | `tests/unit/logging/test_logging_edges.py` | `test_edge_002_logged_no_args` |
+| EDGE-003 | unit | `tests/unit/logging/test_logging_edges.py` | `test_edge_003_logged_nonexistent_setting` |
+| EDGE-004 | unit | `tests/unit/logging/test_logging_edges.py` | `test_edge_004_logged_class_no_public_methods` |
+| NFR-004 | contract | `tests/contract/logging/test_logging_contracts.py` | `test_nfr_004_backward_compatible_api` |
 
 ## 10. Traceability Matrix
 
@@ -157,24 +158,25 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
-| REQ-001 | AC-001 | `test_setup_logger_adds_sinks` | PENDING |
-| REQ-002 | AC-002 | `test_setup_logger_idempotent` | PENDING |
-| REQ-002 | AC-003 | `test_setup_logger_thread_safe` | PENDING |
-| REQ-003 | AC-004 | `test_intercept_handler_routes_records` | PENDING |
-| REQ-004 | AC-006 | `test_logged_sync_entry_exit` | PENDING |
-| REQ-004 | AC-007 | `test_logged_async_entry_exit` | PENDING |
-| REQ-004 | AC-008 | `test_logged_exception_propagates` | PENDING |
-| REQ-005 | AC-009 | `test_logged_level_param` | PENDING |
-| REQ-005 | AC-010 | `test_logged_include_args` | PENDING |
-| REQ-006 | AC-011 | `test_logged_slow_threshold` | PENDING |
-| REQ-007 | AC-012 | `test_logged_class_public_method` | PENDING |
-| REQ-007 | AC-013 | `test_logged_class_private_method` | PENDING |
-| REQ-008 | AC-014 | `test_get_settings_defaults` | PENDING |
-| REQ-009 | AC-015 | `test_obsolete_module_deleted` | PENDING |
-| INV-001 | — | `test_concurrent_setup_logger_sinks` | PENDING |
-| INV-002 | — | `test_elapsed_time_non_negative` | PENDING |
-| INV-003 | — | `test_exception_propagates_unchanged` | PENDING |
-| EDGE-001 | — | `test_log_file_parent_created` | PENDING |
-| EDGE-002 | — | `test_logged_no_args` | PENDING |
-| EDGE-003 | — | `test_logged_nonexistent_setting` | PENDING |
-| EDGE-004 | — | `test_logged_class_no_public_methods` | PENDING |
+| REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks` | PENDING |
+| REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | PENDING |
+| REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` | PENDING |
+| REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records` | PENDING |
+| REQ-004 | AC-006 | `test_ac_006_logged_sync_entry_exit` | PENDING |
+| REQ-004 | AC-007 | `test_ac_007_logged_async_entry_exit` | PENDING |
+| REQ-004 | AC-008 | `test_ac_008_logged_exception_propagates` | PENDING |
+| REQ-005 | AC-009 | `test_ac_009_logged_level_param` | PENDING |
+| REQ-005 | AC-010 | `test_ac_010_logged_include_args` | PENDING |
+| REQ-006 | AC-011 | `test_ac_011_logged_slow_threshold` | PENDING |
+| REQ-007 | AC-012 | `test_ac_012_logged_class_public_method` | PENDING |
+| REQ-007 | AC-013 | `test_ac_013_logged_class_private_method` | PENDING |
+| REQ-008 | AC-014 | `test_ac_014_get_settings_defaults` | PENDING |
+| REQ-009 | AC-015 | `test_ac_015_obsolete_module_deleted` | PENDING |
+| INV-001 | — | `test_inv_001_concurrent_setup_logger_sinks` | PENDING |
+| INV-002 | — | `test_inv_002_elapsed_time_non_negative` | PENDING |
+| INV-003 | — | `test_inv_003_exception_propagates_unchanged` | PENDING |
+| EDGE-001 | — | `test_edge_001_log_file_parent_created` | PENDING |
+| EDGE-002 | — | `test_edge_002_logged_no_args` | PENDING |
+| EDGE-003 | — | `test_edge_003_logged_nonexistent_setting` | PENDING |
+| EDGE-004 | — | `test_edge_004_logged_class_no_public_methods` | PENDING |
+| NFR-004 | — | `test_nfr_004_backward_compatible_api` | PENDING |

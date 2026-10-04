@@ -25,6 +25,8 @@ Replace the third-party logging backend with **structlog used as a processor/ren
 - **Breaking surface, no shim.** `context_getter` and `depth` are removed from `@logged` (they existed to serve the removed backend's frame arithmetic), `renderer` is added to `setup_logger()`, `get_logger()` is added. Version bump: **major** (Q-22).
 - **Secrets.** Exception records carry type, message and traceback frames only — never local variable values (`diagnose=False` policy restated as `logging.md` NFR-003 and proven by a Hypothesis property test).
 
+- **Verified pipeline constraints** (from the P.5 dependency smoke test — structlog 26.1.0 + orjson 3.12.0, Windows, isolated script, no project dependency added): the JSON renderer's serializer option is `serializer=` (the older name was removed and an unknown keyword fails only at render time); the JSON serializer returns **bytes**, so the adapter must decode to `str` and must tolerate the keyword arguments the renderer forwards; the formatter injects two bookkeeping keys into the event dict and nothing strips them by default, so a processor must drop them before rendering; the standard queue handler formats records while enqueueing, so the queue handler must override `prepare()` to pass the record through unformatted; the callsite step must run at the emitting call site (in the formatter chain it resolves inside the listener thread) and names its fields `filename`/`lineno`, which the feature maps to the spec's `file`/`line`; and `log.exception()` puts the exception on the record, not in the event dict — the pipeline must render it into the `exception` field and suppress the standard library's own exception formatting, or a JSON record stops being one line. These are the shape the spec's D3/D4/D7 require; they are not a change to this decision.
+
 This ADR **supersedes ADR-002**. It also **absorbs the incidental loguru wording** of ADR-035 (`:19`, `:21`, `:31`) and ADR-060 (`:37`): both decisions stand unchanged — `setup_logger()` is still called exactly once in the entrypoint, idempotent and thread-safe, and `@logged_class` is still the default tracing policy — only their naming of the backend is stale. Those two ADR files are deliberately **not edited** (fewest files; the wording is superseded by this ADR, which is the current record of the pipeline).
 
 ## Consequences
@@ -41,7 +43,7 @@ This ADR **supersedes ADR-002**. It also **absorbs the incidental loguru wording
 
 ## Compliance
 - `docs/specs/structlog-logging.md` (new, CROSS-CUTTING) — REQ-001…REQ-015, AC-001…AC-020, INV-001…INV-005, EDGE-001…EDGE-006, NFR-001…NFR-005.
-- Amended: `docs/specs/logging.md` v3 (REQ-001, REQ-003, REQ-005, AC-001, AC-004, AC-005 deleted, INV-001, EDGE-005 deleted, NFR-001, NFR-002, NFR-003), `docs/specs/logging-coverage.md` v2 (REQ-010, AC-010), `docs/specs/settings-coverage.md` v2 (REQ-014/015/016, AC-019/020/021, EDGE-008), `docs/specs/settings.md` v4 (wording only).
+- Amended: `docs/specs/logging.md` v3 (REQ-001, REQ-003, REQ-005, AC-001, AC-004, AC-005 deleted, INV-001, EDGE-005 deleted, NFR-001, NFR-002, NFR-003, NFR-004), `docs/specs/logging-coverage.md` v2 (REQ-010, AC-010, and REQ-011/AC-011 corrected to the no-argument `setup_logger()` call), `docs/specs/settings-coverage.md` v2 (REQ-014/015/016, AC-019/020/021, EDGE-008), `docs/specs/settings.md` v4 (wording only).
 - `docs/specs/event-bus.md` names no backend and is **not** amended.
 
 ## References

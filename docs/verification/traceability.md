@@ -902,7 +902,7 @@ Rows for `docs/specs/structlog-logging.md` (CROSS-CUTTING, ADR-082). The tests a
 | REQ-015 | AC-020 | — | PENDING (structlog-logging P.4, 2026-10-04) |
 | INV-001, INV-002, INV-003, INV-004, INV-005 | — | — | PENDING (structlog-logging P.4, 2026-10-04) |
 | EDGE-001 … EDGE-006 | — | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| NFR-001, NFR-002 (amended budgets in logging.md) | — | — | PENDING (re-measured locally, gate amended in the implementation PR) |
+| NFR-001 … NFR-005 (NFR-001/NFR-002 budgets amended in logging.md) | — | — | PENDING (re-measured locally, gate amended in the implementation PR) |
 
 ## Drift Checks
 

@@ -84,8 +84,69 @@ Precedent: `docs/verification/amend-nfr-001-budgets.md` (measure first, amend se
 - No `src/` or `tests/` file was modified at P.4; `pyproject.toml` and `uv.lock` are unchanged (`uv run` re-synced `uv.lock`'s project version to 0.6.1 during the checks; that edit was reverted — `main`'s lockfile is stale against `pyproject.toml` and is not this change's concern).
 - Spec ID self-consistency: every AC/INV/EDGE/NFR in `docs/specs/structlog-logging.md` has a row in its Test Strategy, and the amended approved IDs have rows naming the existing tests that will be re-derived.
 
-## Not yet done (P.5 and later)
+## Not yet done (later phases)
 
-- **P.5** must run the Self-Consistency Checklist and the **Dependency Smoke-Test** for `structlog` (not installed today: `uv run python -c "import structlog"` → `ModuleNotFoundError`) and for `orjson` (installed, currently unused).
 - Phase 1 S1.4: commit the prepared spec and open the **amendment PR** for human approval/merge.
 - Phase 2: ADRs beyond ADR-082 are not expected (no new pattern beyond the ADR); the task DAG must group by affected feature (logging, settings, eventbus, permissions, tooling/guidance).
+
+## P.5 Self-consistency (2026-10-04)
+
+Ran the specify skill's Self-Consistency Checklist and the Dependency Smoke-Test against the P.4 draft, and fixed the specification documents for every finding. Only spec / ADR / verification documents were changed — no `src/`, `tests/` or `pyproject.toml` file was touched.
+
+### Checklist results
+
+| Check | Result | Evidence |
+|---|---|---|
+| No duplicate ID | PASS | `REQ-001…015`, `AC-001…020`, `INV-001…005`, `EDGE-001…006`, `NFR-001…005` are each defined once in §4/§5/§6/§7/§8 (checked by script over the section tables; the repeats elsewhere are strategy and matrix references). |
+| No ID referenced that is not defined | PASS | Every ID `structlog-logging.md` references resolves inside this spec or inside the amended spec that defines it; the deleted `logging.md` `AC-005`/`EDGE-005` are named only as deleted. |
+| Every REQ has at least one AC | PASS (after F-P5-01) | All 15 REQs appear in the AC column of §5; REQ-011 was uncovered before the fix. |
+| Every AC maps to at least one REQ | PASS | 20 AC rows, each with a REQ column. |
+| Every INV/EDGE/NFR has a test-strategy row | PASS | §11 has a row for all 5 INV, 6 EDGE, 5 NFR and all 20 AC. |
+| Test-strategy rows name tests that exist or are marked to be created | PASS | The §11 rows for new tests name files that do not exist yet — all are Phase 3 creations, stated as such in §11. Every row of the amended-ID table names a test that exists on disk (`tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks`, `tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records`, `tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget` / `test_nfr_002_decorator_overhead_budget` / `test_nfr_004_backward_compatible_api`, `tests/property/logging/test_logging_properties.py::test_inv_001_concurrent_setup_logger_sinks`, `tests/acceptance/settings_coverage/test_setup_logger.py::test_setup_logger_reads_registry` / `test_sink_reconfigured_on_change`, `tests/unit/test_settings_coverage.py::test_logging_stub_removed` / `test_sink_reconfigured_rotation` / `test_observability_tracing`). The three authorized deletions are named and bounded. `scripts/check_traceability.py` enforces existence for matrix rows only, never for spec tables, so this was verified by hand. |
+| Configurability — nothing hard-coded that should be configurable | PASS | Level, rotation size and backup count stay settings-driven (`log_level`, `log_max_bytes`, `log_backup_count`); `renderer` is a parameter, not a constant; unregistered keys keep their documented fallbacks. |
+| Parameter coverage — every parameter in the spec is in the schema and vice versa | PASS | §2/§3 give `@logged` the parameters `level`, `slow_threshold_ms`, `slow_threshold_setting`, `include_args`; `@logged_class` `slow_threshold_ms`, `include_args`; `setup_logger()` `renderer`; and `context_getter`/`depth` are named as removed in REQ-007, REQ-015 and AC-013. |
+| REQ ↔ AC wording match | PASS (after F-P5-01, F-P5-06) | AC-003 now states the REQ-011 field contract, including the negative half (the pipeline's own names must not leak into a record). |
+| Terminology drift | PASS (after F-P5-05) | §3 defines a **sink** as one managed standard-library handler plus its renderer, so REQ-002 ("two managed sinks") and INV-001 ("exactly one console handler and one file handler") state the same fact. |
+| Scope consistency (CROSS-CUTTING: Impact Analysis names every affected feature and the REQ/AC IDs it touches) | PASS | §10 has 7 rows — `backend.logging` (owner), `backend.settings`, `backend.eventbus`, `backend.permissions`, tooling (`pyproject.toml`), guidance, and the amended specs — matching the TODO In-scope list and the 39-statement migration count (17 + 11 + 10 + 1). Out-of-scope items in `docs/todo/structlog-logging.md` (no HTTP request logging, no log shipping/aggregation, no consumer of structured records) appear in §1 Scope boundaries and nowhere as a requirement. |
+| Performance budget still holds with the mandated logging active, and states the logging context | PASS | NFR-001 < 25 ms (measured 0.85 ms median, n = 5 fresh processes, INFO, console + queue + rotating file handler + root forwarding handler + listener started). NFR-002 < 1 ms **with both managed sinks active at DEBUG** (measured 0.148 ms/call; 0.006 ms/call for the tracing machinery alone) — the pre-amendment budget had only ever been measured with logging disabled. NFR-005 caps the pipeline at one extra thread; NFR-003 keeps locals out of records. |
+| Traceability rows are legal | PASS | `## Structlog Logging Matrix` holds 18 rows (15 per-REQ plus grouped INV / EDGE / NFR rows), citing only IDs this spec defines and the legal `PENDING` status; the NFR row now covers NFR-001…NFR-005 (F-P5-08). |
+| Repository gates | PASS | `uv run python scripts/check_traceability.py` → `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)`, exit 0. `uv run mkdocs build --strict` → exit 0, only the Material for MkDocs 2.0 deprecation banner. |
+
+### Dependency Smoke-Test — PASS
+
+`structlog` is not a project dependency, so it was smoke-tested without adding one: `uv run --with structlog python C:/Users/domin/AppData/Local/Temp/p5_structlog_smoke.py`, run from the change worktree (the script is deliberately left uncommitted in the temp directory). Versions: structlog 26.1.0, orjson 3.12.0, project Python 3.14.5, Windows 11. No hang, no crash, no segfault; the script ends `SMOKE OK` and asserts, from what the JSON file sink actually wrote:
+
+- exactly one record per emitted call (one record per line, no appended traceback);
+- `level`, `logger`, `event`, `timestamp`, the location fields and `elapsed_ms` on the traced-exit record;
+- the formatter's bookkeeping keys absent from every record;
+- the exception record carries the traceback and **not** the value of the local variable planted in the raising frame (REQ-009, NFR-003);
+- a forwarded third-party record reaches the sink with its own logger name, level and emitting file (REQ-004, REQ-011);
+- a numeric level (47) renders as `[level 47 ]` (EDGE-004);
+- the bootstrap record appears exactly once (AC-015).
+
+The dependency is therefore **kept** as the ADR's default; the capability-first wording of REQ-001 and ADR-082 is what keeps the requirements independent of it.
+
+Six library facts came out of the smoke test and were absorbed into the design (F-P5-06, now in ADR-082 § Decision and spec D3/D4/D7): the JSON renderer's serializer option is `serializer=` (the older keyword was removed and an unknown keyword fails only at render time); the JSON serializer returns **bytes**, so the adapter must decode to `str` and must tolerate the keyword arguments the renderer forwards; the formatter injects two bookkeeping keys that nothing strips by default, so a processor must drop them before rendering; the standard queue handler formats records while enqueueing, so the queue handler must pass the record through unformatted; the callsite step must run at the emitting call site (in the formatter chain it resolves inside the listener thread) and names its fields `filename`/`lineno`; and `log.exception()` puts the exception on the record rather than in the event dict, so the pipeline renders it into `exception` and suppresses the standard library's own formatting.
+
+### Findings and resolutions
+
+| # | Finding | Resolution |
+|---|---|---|
+| F-P5-01 | `REQ-011` (record fields) had **no acceptance criterion** in §5, while the traceability row claimed AC-003 covered it — an untestable requirement plus a matrix claim the spec did not support. | AC-003 now maps to `REQ-002, REQ-011` and states the negative half of the field contract. |
+| F-P5-02 | `logging.md` §9/§10 cited test paths and function names that do not exist on disk (`tests/acceptance/test_logging.py::test_setup_logger_sinks_configured`, `tests/unit/test_logging.py::test_intercept_handler_routes_records`, …) — pre-existing drift already noted at `docs/verification/main-ci-green.md:368`. After P.4 it directly contradicted `structlog-logging.md` §11, which names the real functions. | §9/§10 corrected to the on-disk names (`tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks`, `tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records`, `tests/unit/logging/test_logging_edges.py::test_edge_001…004`, `tests/property/logging/test_logging_properties.py::test_inv_001…003`). Wording only: no ID and no status change; noted in the v3 changelog. |
+| F-P5-03 | `logging-coverage.md` mandated `setup_logger(Settings(...))` in five places (Design Pattern, D5, the §3.3 example, REQ-011, AC-011) although the call has always been no-arg (`def setup_logger() -> None` at `src/backend/logging/_setup.py:96`, called as `setup_logger()` at `src/main.py:220`) and the amended signature is keyword-only (`setup_logger(*, renderer=...)`) — the mandated call would be a `TypeError` after this change. | REQ-011, AC-011, D5, the Design Pattern line and the §3.3 example corrected to `setup_logger()`; the level and sinks come from the settings registry. Recorded in the v2 changelog. |
+| F-P5-04 | The amendment table restated `logging.md` NFR-001/002/003 but **omitted NFR-004**, whose test (`test_nfr_004_backward_compatible_api`) asserts that `logged` still accepts `context_getter` and `depth` — the parameters this change removes. The spec planned to amend a test for an ID it never declared amended. | NFR-004 added to the amendment table, to Impact Analysis row 1 and to ADR-082 Compliance; `logging.md` NFR-004 restated so the compatibility it requires is the **import path**, not the parameter surface; §11's row now reads `logging.md REQ-005, NFR-004`, and `logging.md` §9/§10 gained the NFR-004 row it was missing. |
+| F-P5-05 | Terminology drift: REQ-002 says "two managed sinks" while AC-002 and INV-001 say "two handlers". | §3 defines a sink as one managed handler plus its renderer and says both phrasings name the same pair. |
+| F-P5-06 | The record-field contract names `file`/`line`, but the pipeline's callsite step emits `filename`/`lineno`, and nothing said who maps them; the formatter's bookkeeping keys would otherwise reach rendered records. | §3 states the names are the contract and that the feature maps them; AC-003 forbids the pipeline's own names; D3/D4 and the new D7 record the adapter duties; ADR-082 records the six verified constraints. |
+| F-P5-07 | REQ-014/AC-019 scoped the guidance correction to text that "names the removed backend", but the same guidance also names the removed parameters `context_getter`/`depth` (`AGENTS.md:766`) and shows a `setup_logger(Settings(...))` call the amended signature rejects (`AGENTS.md:763`, `:769`, `:772-774`) — guidance this change makes false with no requirement to fix it. | REQ-014 and AC-019 widened to three defect classes (removed backend, removed parameters, rejected call shape) over the **same four files** Q-23 named; Impact Analysis row 7 updated. No new file enters scope. |
+| F-P5-08 | The `## Structlog Logging Matrix` NFR row covered only NFR-001 and NFR-002, leaving NFR-003/004/005 untraceable. | Row widened to `NFR-001 … NFR-005`. |
+
+### Accepted, deliberately out of scope
+
+- `logging.md` REQ-008 and its Design Decisions still describe a stub `Settings` module at `src/backend/logging/settings.py`, which conflicts with `settings-coverage.md` REQ-016. Pre-existing drift: `structlog-logging.md` explicitly leaves the `Settings`, `get_settings`, `register_settings` and `_read_setting` exports unchanged, so changing it here would introduce behavior this spec does not describe.
+- `AGENTS.md:764` ("Configure with `Settings`") stays for the same reason — the export is unchanged; only the call shape and the removed parameters are inside REQ-014.
+- `docs/verification/main-ci-green.md:368` keeps its now-stale note about `logging.md:133-155`: dated verification records are not rewritten.
+
+### P.5 verdict: **PASS**
+
+The specification set is internally consistent; every normative ID has an acceptance criterion and a test-strategy row; the CROSS-CUTTING impact analysis matches the TODO scope; the performance budgets hold with the mandated logging active and state their measurement context; the mandated dependency is verified working on the host; and both repository gates pass. The change is READY for Phase 1 S1.4 (commit the prepared spec, open the amendment PR).
