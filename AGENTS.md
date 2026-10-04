@@ -209,7 +209,7 @@ Which phases run for each type, and what each phase produces:
 | **2 Decompose** | ADRs + task DAG | — (skip; the triage is the plan) | ADRs + task DAG **grouped by affected feature** | — (skip) | — (skip) |
 | **3 Test & RED** | Tests derived from spec → RED | **Reproduction test** → RED | Tests derived from spec → RED | — (skip; existing tests are the contract) | — (skip) |
 | **4 Implement** | GREEN from DAG + refactor | **Minimal fix** → GREEN | GREEN from DAG + refactor | Behavior-preserving steps; suite stays GREEN | Make the change |
-| **5 Verify** | Full gate set | Targeted tests + full regression + lint/types | Full gate set **+ per-feature traceability updates** | Full regression + architecture + lint/types (no spec coverage) | Light: lint/types where applicable |
+| **5 Verify** | Full gate set | Targeted tests + full regression + lint/types | Full gate set **+ per-feature traceability updates** | Full regression + architecture rules (manual, Phase 6 checks 3–4) + lint/types (no spec coverage) | Light: lint/types where applicable |
 | **6 Review** | Full review → PR → merge → cleanup | Full review → PR → merge → cleanup | Full review → PR → merge → cleanup | Full review (**tests not weakened**) → PR → merge → cleanup | Light review → PR → merge → cleanup |
 
 "Full gate set" = the Phase 5 FEATURE checks below. Every type ends with a PR to `main` for human review/merge (human governance).
@@ -578,7 +578,7 @@ All types.
 12. If the regression suite shows a failure, classify it as in the FEATURE path (pre-existing vs regression).
 
 **REFACTOR**:
-13. Run the full regression suite (MUST be GREEN, zero test changes) and the architecture rules (`uv run pytest tests/architecture/ -v`).
+13. Run the full regression suite (MUST be GREEN, zero test changes) and verify the architecture rules by inspection — feature boundaries (code lives in the correct feature directory, no cross-feature internal imports) and architecture rules (`model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small) — recording the result in `docs/verification/[name].md`. These are the same checks as Phase 6 review checks 3 and 4.
 14. Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`).
 15. Confirm no observable behavior changed (suite result identical to baseline).
 

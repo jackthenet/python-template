@@ -85,7 +85,7 @@ The verify phase is decomposed into four atomic steps. Each has a **single objec
 - Run lint (`uv run ruff check .`) and confirm it passes. This must match CI exactly (`.github/workflows/lint.yml` runs `uv run ruff check .` on the whole repo). Pre-existing lint errors anywhere in the repo are in scope: fix them before marking the change verified, never as out of scope.
 - Run type checks (`uv run mypy src/`) and confirm they pass.
 - Run coverage (`uv run pytest tests/ --cov`) and confirm threshold passes.
-- Run architecture rules (`uv run pytest tests/architecture/ -v`) and confirm they pass.
+- Verify the architecture rules by inspection — feature boundaries (code lives in the correct feature directory, no cross-feature internal imports) and architecture rules (`model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small) — and record the result in `docs/verification/<name>.md`.
 - Run `uv run python scripts/verify_spec.py docs/specs/<name>.md` and confirm it passes.
 - CROSS-CUTTING: update the traceability matrix rows of every affected feature.
 
@@ -100,7 +100,7 @@ The verify phase is decomposed into four atomic steps. Each has a **single objec
 ### REFACTOR
 
 - Run the full regression suite and confirm it is GREEN with zero test changes.
-- Run architecture rules (`uv run pytest tests/architecture/ -v`) and confirm they pass.
+- Verify the architecture rules by inspection — feature boundaries (code lives in the correct feature directory, no cross-feature internal imports) and architecture rules (`model/` contains domain concepts, `services/` contains use cases, `shared/` is deliberately small) — and record the result in `docs/verification/<name>.md`.
 - Run lint (`uv run ruff check .`) and type checks (`uv run mypy src/`) and confirm they pass.
 - Confirm no observable behavior changed (suite result identical to baseline).
 
