@@ -19,7 +19,7 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 | REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` (victim of the items G/H pollution — assertion unchanged) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records`; `test_reconfigure_keeps_foreign_sink` (item E); autouse `tests/conftest.py::_stdlib_root_logging_restored` (item I — restores the stdlib root handlers the alembic `fileConfig` call replaced) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
-| REQ-003 | AC-005 | `test_ac_005_intercept_handler_skips_bootstrap`; autouse `_stdlib_root_logging_restored` (item I) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-003 | AC-005 | — (AC-005 deleted by the `structlog-logging` amendment, 2026-10-04 — the importlib bootstrap-frame rule only existed for the removed backend; its test is removed in the implementation PR) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) — retired by logging.md v3 |
 | REQ-004 | AC-006 | `test_ac_006_logged_sync_entry_exit` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-004 | AC-007 | `test_ac_007_logged_async_entry_exit` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-004 | AC-008 | `test_ac_008_logged_exception_propagates` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
@@ -37,7 +37,7 @@ This matrix maintains bidirectional traceability between requirements, acceptanc
 | EDGE-002 | — | `test_edge_002_logged_no_args` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | EDGE-003 | — | `test_edge_003_logged_nonexistent_setting` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | EDGE-004 | — | `test_edge_004_logged_class_no_public_methods` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
-| EDGE-005 | — | `test_edge_005_intercept_unknown_level`; autouse `_stdlib_root_logging_restored` (item I — the intercept handler must survive the migration path) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-005 | — | — (EDGE-005 deleted by the `structlog-logging` amendment, 2026-10-04 — restated in capability terms as EDGE-004 of `docs/specs/structlog-logging.md`; its test is removed in the implementation PR) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) — retired by logging.md v3 |
 | NFR-001 | — | `test_nfr_001_setup_time_budget` | GREEN |
 | NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | NFR-003 | — | `test_nfr_003_diagnose_false` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
@@ -878,6 +878,31 @@ The change wires existing features' content as search sources via additive `sear
 | session-management (supplementary query coverage) | `build_session_source` field/filter/group/sort/pagination behaviour (AC-036) | `tests/unit/search/test_feature_source_queries.py` — `test_session_source_free_text`, `test_session_source_string_filter_ops`, `test_session_source_exact_filter_ops`, `test_session_source_nested_groups`, `test_session_source_sort`, `test_session_source_pagination` | GREEN (87-test search-family smoke, `7bbc05a`) |
 | authentication (own-spec contract) | `SessionRepository` ABC widened additively with `list_all()` — the authentication public-API backward-compatibility contract must still hold | `test_nfr_003_public_api_stable` (`tests/contract/authentication/test_public_api.py`, authentication NFR-003) + `test_list_all_returns_all_sessions_created_at_desc` | GREEN (full suite `7bbc05a`) |
 | user-roles-permissions (own-spec contract) | the `search.search` action joins the static catalog built from feature-owned `register_actions` (permissions REQ-004, REQ-005, REQ-010) | `test_ac_031_permission_enforcement` (AC-031) + the permissions catalog/contract suite (`tests/acceptance/permissions/`, `tests/contract/permissions/`) | GREEN (full suite `7bbc05a`) |
+
+## Structlog Logging Matrix (amendment PR, 2026-10-04)
+
+Rows for `docs/specs/structlog-logging.md` (CROSS-CUTTING, ADR-082). The tests are derived in Phase 3 of the implementation change; the Test column is filled then (P.4 records the rows, not the tests).
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-002 | AC-002, AC-003 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-003 | AC-004, AC-005 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-004 | AC-006, AC-007 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-005 | AC-008, AC-009 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-006 | AC-010 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-007 | AC-011, AC-012, AC-013 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-008 | AC-014 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-009 | AC-015 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-010 | AC-016 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-011 | AC-003 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-012 | AC-017 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-013 | AC-018 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-014 | AC-019 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| REQ-015 | AC-020 | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| INV-001, INV-002, INV-003, INV-004, INV-005 | — | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| EDGE-001 … EDGE-006 | — | — | PENDING (structlog-logging P.4, 2026-10-04) |
+| NFR-001, NFR-002 (amended budgets in logging.md) | — | — | PENDING (re-measured locally, gate amended in the implementation PR) |
 
 ## Drift Checks
 
