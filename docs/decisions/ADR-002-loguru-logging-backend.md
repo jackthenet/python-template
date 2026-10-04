@@ -1,7 +1,7 @@
 # ADR-002: Loguru as the Logging Backend
 
 ## Status
-Accepted
+Superseded by ADR-082 (2026-10-04) — the logging feature no longer uses loguru; see ADR-082 for the current pipeline and for the correction of this ADR's structlog assessment.
 
 ## Context
 The logging feature needs a logging backend that supports: console sink with colorization and backtrace, rotating file sink with UTF-8 encoding and enqueue, stdlib logging interception, and decorator-based tracing. The spec (NFR-002) constrains the feature to depend only on loguru and the standard library.
