@@ -318,6 +318,8 @@ POST-MERGE [S] CLEANUP (git skill)
 | Phase 6: REVIEW | `review` | all | Reviews the change against its type-specific criteria before reviewing implementation style. |
 | (cross-cutting) | `git` | all | Branch/worktree creation, PR creation, post-merge cleanup. |
 
+Non-phase skills: `.agents/skills/update-readme/` (refresh `README.md` to current GitHub front-page practice, badges backed only by facts that exist) maps to no workflow phase.
+
 ### Phase Execution (Atomic Steps, Synchronous Subagents)
 
 Every workflow step is executed by a **new subagent** launched via the `subagent` tool (type `general-purpose`). The orchestrating agent (the agent talking to the user) **never executes a step itself** — it only orchestrates. A step subagent executes **exactly one atomic step** and returns.
