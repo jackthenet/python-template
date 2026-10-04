@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- P.4 scope record be65b0e in ../python-template_kopie-worktrees/chore/update-readme -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- P.4 scope record be65b0e in ../python-template_kopie-worktrees/chore/update-readme -->
 - **Change type:** DOCS/CHORE  <!-- docs + agent tooling; no externally observable behavior delta -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/update-readme.md`
@@ -126,3 +126,4 @@ None — no `src/backend/` or `src/frontend/` path is touched. Files: `README.md
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
 | Phase 4 + 5 (S4.2, S5.1/S5.2) | 2026-10-04 | **DONE / PASS (light)** — new `.agents/skills/update-readme/SKILL.md` (51 lines, body byte-identical to the supplied instruction set + 2-line repo-protocol note); `README.md` 35 → 96 lines (single H1, 7 badges backed by real workflows/tools, no coverage/license badge, License skipped, no TOC); **one** `AGENTS.md` line at `:321`; P-44 logged. Link check 22 targets / 0 broken; `ruff check .` clean; `mkdocs build --strict` exit 0; `check_traceability.py` PASS; diff = exactly the 5 allowed paths (no `src/`, `tests/`, `uv.lock`). Commits `4c20c5f`, `33f04c4`, `df1fb20` |
+| Phase 6 (S6.1–S6.4) | 2026-10-04 | **REVIEW CLEAN** (6 findings, all accepted/flagged — F-3 = the stale `role="member"` example at `AGENTS.md:851` flagged not fixed; commit `5eeffd9`; skill body diff-verified byte-identical to the supplied instruction set; 7 badges all re-justified; 16 commands re-checked; quick start executed OK) → **no version bump** → **PR #66**: https://github.com/jackthenet/python-template/pull/66. **WAITING** for human merge; S7.1 follows |
