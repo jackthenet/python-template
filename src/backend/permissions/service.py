@@ -372,6 +372,16 @@ class PermissionService:
         if not self._catalog.has(permission):
             return "unknown_permission"
         # 5. Grant evaluation.
+        return self._evaluate_grants(user, permission)
+
+    def _evaluate_grants(self, user: UserRead | None, permission: str) -> str | None:
+        """Evaluate the principal's grants (fail-closed, ADR-075).
+
+        The system principal (``user is None``, D10) is checked against the
+        configurable system set (live read); an admin holds every catalog
+        permission implicitly (REQ-010); otherwise the multi-role union of
+        explicit grants applies, including feature wildcards (REQ-009, REQ-003).
+        """
         if user is None:
             # System principal (D10): the configurable system set (live read).
             system_set = self._system_repository.get_permissions()
