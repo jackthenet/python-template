@@ -433,3 +433,12 @@ A step MUST log a problem when it:
 - **Resolution:** the on-disk planning records (`docs/todo/`, `docs/questions/`) are **authoritative** — a launch prompt must **quote** them, never restate them from memory. The rewritten record carries a "Correction" note naming the superseded commit and listing exactly what was removed, so the wrong draft stays auditable instead of being silently replaced.
 - **Date:** 2026-10-04
 - **Status:** Solved (2026-10-04) — recipe noted in this entry.
+
+## P-47 — orchestrator re-launched a finished step with a wrong-scope prompt
+- **Problem:** after P.4 for `pyproject-tooling-gaps` had already completed (`f9d357f`, branch `refactor/pyproject-tooling-gaps`, TODO already `READY`), the orchestrator launched a **second** P.4 subagent whose prompt listed a scope (`[tool.deptry]` config, `ty` in dev, a `ty` pre-commit hook, a `ty` CI job, an AGENTS.md Type-Safety fix) that appears in **neither** `docs/todo/pyproject-tooling-gaps.md` nor `docs/questions/pyproject-tooling-gaps.md`, and named the wrong branch type (`chore/` instead of the reclassified `refactor/`). Every premise was already false on `main`.
+- **Step / Phase:** P.4 Draft (duplicate re-entry).
+- **Change:** `pyproject-tooling-gaps` (REFACTOR).
+- **Duration / iterations:** one wasted subagent launch (462 s, 161.8k tokens).
+- **Renumbered:** logged as **P-45** on this change's branch (`c0dd9ff`); renumbered to **P-47** when this branch was rebased onto `main`, because `structlog-logging` had already taken P-45 there. Collision note (c) in `docs/verification/pyproject-tooling-gaps.md`: resolve as a union of the appended entries — no existing entry on `main` is reordered or renumbered.
+- **Resolution:** the step subagent did **not** comply blindly — it re-measured each premise against `main`, created nothing, and returned `BLOCKED-HUMAN` with the evidence and three options. The orchestrator chose (A): accept the existing P.4. This is the second occurrence of the P-44 root cause (launch prompt restated from memory instead of quoting the on-disk records) and the first case where the subagent's own verification caught it. Suggested for the after-workflow-optimization: a step subagent should always re-verify that its step is not already complete before executing it, and the orchestrator should paste the scope section of `docs/todo/<name>.md` and `docs/verification/<name>.md` into the launch prompt verbatim.
+- **Date:** 2026-10-04
