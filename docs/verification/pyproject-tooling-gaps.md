@@ -191,3 +191,59 @@ Eight in-scope items, each decided at P.3 (Q-1 … Q-8). Items 1 and 8 are the c
 
 Phase 4 (REFACTOR): small behavior-preserving steps per the order above, full suite re-run after every step (AGENTS.md Phase 4 REFACTOR: "Re-run the full suite after every step; it MUST stay GREEN"), no test modified/weakened/deleted, then Phase 5 (full regression + lint + types, no spec coverage) and Phase 6 (review, **no version bump**, PR to `main`).
 
+
+## Phase 4 progress — step 1 (src/ complexity)
+
+**Step:** S4.1 (Phase 4 step order item 1) — refactor the 5 `src/` complexipy offenders. **Type:** REFACTOR. **Date:** 2026-10-04. **Engine:** complexipy 8.0.1, gate `uv run complexipy src tests --max-complexity-allowed 15`.
+
+Re-measured before touching anything: the offender list is **exactly** the 10 rows of the scope table (5 `src/`, 5 `tests/`), scores unchanged.
+
+### Per-function before → after
+
+| # | File | Function | Before | After | Restructuring (behavior-preserving) |
+|---|---|---|---|---|---|
+| 1 | `src/backend/settings/models.py` | `is_valid_value` | **47** | **8** | Extracted the per-kind rules into five private module-level helpers (`_text_value_valid`, `_number_value_valid`, `_slider_value_valid`, `_select_value_valid`, `_list_value_valid`); `is_valid_value` keeps its exact signature and is now a flat kind-dispatch. `# noqa: PLR0911, PLR0912` → `# noqa: PLR0911` (PLR0912 no longer fires; RUF100 confirms PLR0911 still does). New helpers: 2/3/3/4/6/10. |
+| 2 | `src/backend/settings/models.py` | `SettingDefinition::_validate` | **26** | **2** | Extracted `_validate_kind_specs` (12), `_validate_no_kind_specs` (3) and `_validate_kind_exclusive_constraints` (6) as private methods; the if/elif/elif/else shape and every exception message are unchanged. `# noqa: PLR0912` removed (no longer fires). |
+| 3 | `src/backend/sessionmanagement/service.py` | `SessionService::list_sessions` | **18** | **12** | Extracted `_listed_limit` (1) and `_order_with_current` (5). The single `now` snapshot (INV-002) and the token-path validity check stay inline — `_resolve_token` is **not** reused because it re-reads the clock. |
+| 4 | `src/backend/permissions/service.py` | `PermissionService::_check` | **17** | **10** | Extracted the grant-evaluation tail into `_evaluate_grants` (7); the step order (shape → principal → session → catalog → grants) and the closed reason set are unchanged. `# noqa: PLR0911` **stays** (7 early returns > 6). |
+| 5 | `src/backend/search/service.py` | `SearchService::search` | **17** | **13** | Extracted the locked source selection into `_select_sources` (3); the `RLock` scope, the `UnknownSourceError` path and the fan-out/resilient-failure handling are unchanged. |
+
+All five are ≤ 15. No public signature, return value, exception type/message, log record or event changed; no test file was touched (rows 6–10 are step 2); no new dependency, no new public API, every extracted helper is private and inside its own feature directory (invariant 6).
+
+### Remaining offender list after step 1
+
+`uv run complexipy src tests --max-complexity-allowed 15` → exit 1, exactly the 5 `tests/` rows of the scope table (6–10): `test_nfr_005_concurrent_threads_safe` **18**, `FakeSmtpServer::_dialogue` **17**, `test_last_admin_invariant` **23**, `test_inv_006_event_correspondence` **22**, `test_inv_003_last_admin_invariant` **38**. No `src/` offender remains.
+
+### Gates after each refactor
+
+| After | Full suite (`uv run pytest tests/ -q`) | ruff (changed path) | ruff format --check | mypy src/ |
+|---|---|---|---|---|
+| `is_valid_value` | **728 passed, 1 skipped** (221.52 s) | All checks passed | already formatted | Success (83 files) |
+| `SettingDefinition::_validate` | **728 passed, 1 skipped** (228.48 s) | All checks passed | already formatted | Success |
+| `list_sessions` | **728 passed, 1 skipped** (221.20 s) | All checks passed | already formatted | Success |
+| `_check` | run 1: **1 failed, 727 passed, 1 skipped** → run 2 (authoritative): **728 passed, 1 skipped** (222.51 s) | All checks passed | already formatted | Success |
+| `search` | **728 passed, 1 skipped** (221.07 s) | All checks passed | already formatted | Success |
+
+Targeted sets also run per step: settings **85 passed**, sessionmanagement **69 passed**, permissions **68 passed**, search **83 passed**.
+
+**`_check` run-1 failure classification (NOT a regression, NOT caused by this change):** `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` — a wall-clock budget (`statistics.median(15 × svc.search(...)) < 0.3 s` local / 0.6 s on CI). It **passes in isolation** (`1 passed in 8.23 s`), it is the **documented** load/hardware-sensitive node (`docs/verification/search.md:456` CI failure `assert 0.368 < 0.3`; `docs/workflow/PROBLEMS.md:330` records the ~293 ms measured median vs the 300 ms budget), and the step that was in flight touched only `src/backend/permissions/service.py` — the test's `SearchService` is built with `permission_service=None` (standalone mode, `tests/search_test_helpers.py:201`), so `PermissionService::_check` is not on the measured path at all. The immediate re-run is 728 passed.
+
+### Commits (step 1)
+
+| Commit | Message |
+|---|---|
+| `5b2b149` | `refactor(pyproject-tooling-gaps): S4.1 reduce complexity of is_valid_value (47 → 8)` |
+| `c736105` | `refactor(pyproject-tooling-gaps): S4.1 reduce complexity of SettingDefinition::_validate (26 -> 2)` |
+| `eae8fbd` | `refactor(pyproject-tooling-gaps): S4.1 reduce complexity of SessionService::list_sessions (18 -> 12)` |
+| `5a430d2` | `refactor(pyproject-tooling-gaps): S4.1 reduce complexity of PermissionService::_check (17 -> 10)` |
+| `12338c6` | `refactor(pyproject-tooling-gaps): S4.1 reduce complexity of SearchService::search (17 -> 13)` |
+
+Diff stat `c0dd9ff..HEAD`: 4 files, +127 / −70 — `src/backend/permissions/service.py`, `src/backend/search/service.py`, `src/backend/sessionmanagement/service.py`, `src/backend/settings/models.py`. **No test file, no `pyproject.toml`, no workflow, no config touched** (steps 3–8). `uv.lock` was `git checkout --`-reverted before every commit (P-42 drift) and is not in any commit.
+
+### Note for later steps: complexipy measures **cognitive** complexity
+
+Measured empirically (nesting costs +1 per level, `else` costs nothing): the score is **not** Radon cyclomatic complexity, so a flat if-chain is much cheaper than a nested one — `if/elif/else` with nested bodies scored 16 where the same decisions flattened scored 4. Step 2 (the `tests/` offenders) should flatten nesting first, not just split `if`s.
+
+### Gate note: `uv run ty check src/` is red at baseline (pre-existing, informational)
+
+`uv run ty check src/` reports **151 diagnostics** (e.g. `error[invalid-type-form]` on `src/backend/authentication/feature_actions.py:20`, `warning[unsupported-base]` on `src/backend/authentication/repository.py:63`) — the `@logged`/`@logged_class` decorators and SQLModel bases are outside ty's model. None is in a file this step touched, and the P.4 baseline table records **no** clean `ty` result (only `uv run mypy src/` → Success, which is the CI gate at `quality.yml:23`; `ty` is the informational job at `quality.yml:25`). mypy stays clean (83 files) after every refactor in this step.
