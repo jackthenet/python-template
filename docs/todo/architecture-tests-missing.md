@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from the template.
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- all 6 questions ANSWERED 2026-10-04; P.4 (worktree + scope record) still to run -->
+- **Status:** READY  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- P.4 scope record committed b9afe76 in ../python-template_kopie-worktrees/chore/architecture-tests-missing -->
 - **Change type:** DOCS/CHORE  <!-- provisional: the type question (remove the reference vs. build the tests) is Q-1 in the question file -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/architecture-tests-missing.md`
@@ -61,3 +61,4 @@ Running the REFACTOR Phase 5 instruction from `AGENTS.md` no longer errors: eith
 | P.3 Answer (round 3: Q-4) | 2026-10-04 | **DONE — all 6 questions ANSWERED.** **Q-4 = (a) manual only, no follow-up**: no `tests/architecture/` suite and no CI boundary rule; the ruff `TID251` banned-api option was offered and not taken, so the 4 import fixes are made but not guarded. Next: **P.4** — create `chore/architecture-tests-missing` worktree + scope record → READY |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency | | |
+| P.4 Draft scope + worktree | 2026-10-04 | **DONE → READY** — branch `chore/architecture-tests-missing` + worktree from `main` @ `99ce0b8`; scope record `docs/verification/architecture-tests-missing.md` (`b9afe76`, +181): verbatim before/after for the 4 doc citations (`AGENTS.md:212`/`:579`, `verify/SKILL.md:88`/`:103`) and the import rewrites; no-behavior-delta proof; Phase 5 gate; bump = none. **F-1 scope finding:** only **3** of Q-5's 4 import fixes are DOCS/CHORE-actionable — `src/main.py:67` imports the private `_registry` to *install* the proxy-wired singleton, and `docs/specs/settings.md` REQ-014 exposes no public setter, so any substitution is a behavior change. It is out of scope here; the fix needs a public `set_settings_registry()` → settings-spec amendment (REQ-014), framed as a separate backlog item. Also corrected two drifted P.2 evidence numbers (`AGENTS.md:1145`, version `0.6.1`) |
