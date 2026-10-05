@@ -10,48 +10,37 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from logging_test_helpers import captured_stderr, wait_for_file_content
+from logging_test_helpers import captured_console, managed_sinks, pipeline_logger, wait_for_record
 from loguru import logger
 
 from backend.logging import setup_logger
 
-_EXPECTED_HANDLER_COUNT = 2  # one console sink + one file sink
-
 
 def test_ac_001_setup_logger_adds_sinks(session_settings: object) -> None:
-    """AC-001: setup_logger() configures a console sink on stderr and a rotating file sink."""
+    """AC-001 (logging.md v3, restated by structlog-logging): one setup_logger() call installs a
+    colorized text console sink on stderr and a rotating JSON file sink.
+
+    Re-derived from the amended AC-001 wording. The loguru handler-count and
+    ``_console_sink_options`` / ``_file_sink_options`` assertions measured the
+    implementation this change replaces, so they are replaced by assertions on
+    the observable sinks and the records they write.
+    """
     setup_logger()  # idempotent: the session fixture already performed the real setup
 
-    # Exactly one console sink and one file sink (loguru's default sink is removed).
-    assert len(logger._core.handlers) == _EXPECTED_HANDLER_COUNT
+    console, _file_sink = managed_sinks()
+    assert console.stream is not None, "AC-001: the console sink must write to a stream"
 
-    # Console sink: a log line reaches stderr (fd 2).
-    with captured_stderr() as stderr_path:
-        logger.info("ac_001 console line")
-        content = stderr_path.read_text(encoding="utf-8")
-    assert "ac_001 console line" in content
+    token = "ac_001 pipeline line"
+    with captured_console() as console_path:
+        pipeline_logger().warning(f"{token} console")
+        assert f"{token} console" in console_path.read_text(encoding="utf-8"), (
+            "AC-001: the console sink must render the record as text on stderr"
+        )
 
-    # File sink: a log line reaches the configured log file (enqueued writer).
     log_file = Path(session_settings.log_file)  # type: ignore[attr-defined]
-    logger.info("ac_001 file line")
-    assert wait_for_file_content(log_file, lambda c: "ac_001 file line" in c, timeout=15)
-
-    # Sink option contract (data-driven design): the named builders define the
-    # sink properties the spec requires.
-    from backend.logging._setup import _console_sink_options, _file_sink_options
-
-    console_opts = _console_sink_options("INFO")
-    assert console_opts["colorize"] is True
-    assert console_opts["backtrace"] is True
-    assert console_opts["diagnose"] is False
-
-    file_opts = _file_sink_options(session_settings)  # type: ignore[arg-type]
-    assert file_opts["encoding"] == "utf-8"
-    assert file_opts["enqueue"] is True
-    assert file_opts["backtrace"] is True
-    assert file_opts["diagnose"] is False
-    assert file_opts["rotation"] == session_settings.log_max_bytes  # type: ignore[attr-defined,union-attr]
-    assert file_opts["retention"] == session_settings.log_backup_count  # type: ignore[attr-defined,union-attr]
+    record = wait_for_record(log_file, lambda record: record.get("event") == f"{token} console")
+    assert record is not None, "AC-001: the file sink must write the record as JSON"
+    assert record["level"] == "WARNING", "AC-001: the record must carry its level"
 
 
 def test_ac_002_setup_logger_idempotent() -> None:

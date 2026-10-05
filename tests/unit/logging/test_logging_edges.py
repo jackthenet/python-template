@@ -2,7 +2,9 @@
 
 Covers the spec's edge cases: log file parent directory creation, @logged
 with no arguments, slow_threshold_setting referencing a non-existent field,
-@logged_class with no public methods, and stdlib records with unknown levels.
+and @logged_class with no public methods. (logging.md EDGE-005 is deleted by
+docs/specs/structlog-logging.md; the unknown-level case survives as that
+spec's EDGE-004 in tests/unit/logging/test_pipeline_edges.py.)
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from typing import Any
 
 from logging_test_helpers import run_python
 
-from backend.logging import logged, logged_class, setup_logger
+from backend.logging import logged, logged_class
 
 
 def test_edge_001_log_file_parent_created(tmp_path: Path) -> None:
@@ -77,26 +79,3 @@ def test_edge_004_logged_class_no_public_methods() -> None:
             self.x = 1
 
     assert Edge004Service().x == 1
-
-
-def test_edge_005_intercept_unknown_level(log_records: list[Any]) -> None:
-    """EDGE-005: a stdlib record with a level name loguru does not recognize is routed numerically."""
-    import logging
-
-    setup_logger()
-
-    unknown_level_no = 25
-
-    class UnknownLevelFilter(logging.Filter):
-        def filter(self, record: logging.LogRecord) -> bool:
-            record.levelname = "NOT_A_LEVEL"
-            return True
-
-    stdlib_logger = logging.getLogger("edge_005")
-    stdlib_logger.setLevel(unknown_level_no)
-    stdlib_logger.addFilter(UnknownLevelFilter())
-    stdlib_logger.log(unknown_level_no, "unknown level message")
-
-    routed = [m for m in log_records if "unknown level message" in str(m)]
-    assert routed
-    assert routed[0]["level"].no == unknown_level_no
