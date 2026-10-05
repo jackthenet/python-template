@@ -184,6 +184,7 @@ select = [
     "Q", # flake8-quotes
     "SIM",
     "C4",
+    "DTZ", # flake8-datetimez: naive datetime objects are a bug
 ]
 fixable = [
     "I",  # isort
