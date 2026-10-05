@@ -53,7 +53,7 @@ After a push to `main`, Codecov shows a coverage number for the run, and `README
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-04 | TODO + question file created on `main`; type **DOCS/CHORE** (CI/config only, no behavior delta); todo set for this change; **value triage 3/5, implement** — raised by the user's `update-readme` Q-3 = (d) answer on 2026-10-04 |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (29 questions) | 2026-10-05 | **BLOCKED-USER** — 29 questions (**Q-1 … Q-29**) recorded in `docs/questions/codecov-coverage-badge.md`, one batch, most-blocking first (Q-1 go/no-go on the service + the account-side activation only the human can do; Q-2/Q-3 the badge-honesty gate). 13 interrogation points closed from repository evidence without spending a question. Two P.1 premises corrected at P.2: `update-readme` is **MERGED** (PR #66 as `b7b0ee0`), so the badge row already exists at `README.md:3-9` and the "lands independently" note above is stale; and the repo is **public**, so the private-repo token framing does not apply (Q-4 still asks about authentication). Branch protection on `main` is not readable unauthenticated — Q-8 asks instead of asserting |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
