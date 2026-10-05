@@ -91,7 +91,7 @@ replace = 'version = "{new_version}"'
 
 [tool.complexipy]
 paths = ["src", "tests"]
-max-complexity-allowed = 30
+max-complexity-allowed = 15
 
 [tool.coverage.run]
 branch = true
