@@ -19,7 +19,7 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 ## Execution Context (Atomic Step, Synchronous Subagent)
 
 Per "Phase Execution (Atomic Steps, Synchronous Subagents)" in `AGENTS.md`:
-- **Commit planning artifacts and status advances (orchestrator, `main`)** — orchestrator only, always in the **primary worktree**, committed directly to `main`; covers the creation at P.1–P.3 **and every TODO `Status:` advance through `MERGED`**.
+- **Commit planning artifacts and status advances (orchestrator, `main`)** — orchestrator only, always in the **primary worktree**, committed directly to `main`; covers the creation at P.1–P.3 **and every TODO `Status:` advance through `MERGED` and `DROPPED`, and the archive move of both records**.
 - **Create change worktree (P.4)** — performed by the **P.4 Draft step subagent** as its first action (this skill owns the how); the orchestrator does NOT create it. It runs at P.4, after the questions are answered.
 - **Detect a cleared gate** — orchestrator, between steps, when scheduling which change to run next.
 - **Create PR** — runs inside the Phase 6 (review) subagent (atomic step **S6.4**).
@@ -56,18 +56,27 @@ The git skill's phase steps are decomposed into two atomic steps (S6.4 Create PR
 - **Objective:** After the human merges the PR, verify the merge is reachable from `origin/main` (after `git fetch`), remove the worktree, and delete the local + remote branches.
 - **Inputs:** the merged PR.
 - **Outputs:** the merge verified as reachable from `origin/main` (after `git fetch`); the worktree removed; the local + remote branches deleted.
-- **Done-criteria:** the merge commit is verified reachable from `origin/main` (run `git fetch` first, then `git merge-base --is-ancestor <merge-commit> origin/main` — do NOT rely on the local `main` ref, which may lag); the worktree is removed (`git worktree remove`); the local branch is deleted (`git branch -d`); the remote branch is deleted (`git push origin --delete`); `git worktree list` shows only the primary (`main`) worktree.
+- **Done-criteria:** the merge commit is verified reachable from `origin/main` (run `git fetch` first, then `git merge-base --is-ancestor <merge-commit> origin/main` — do NOT rely on the local `main` ref, which may lag); the worktree is removed (`git worktree remove`); the local branch is deleted (`git branch -d`); the remote branch is deleted (`git push origin --delete`); `git worktree list` shows only the primary (`main`) worktree; the change's TODO and question files are moved to `docs/todo/archive/` and `docs/questions/archive/` (the question file always moves with its TODO file).
 
 ## Operations
 
 ### Commit planning artifacts and status advances (orchestrator, `main`)
 
-`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`**, always from the **primary worktree**. This operation covers **every commit of** those two files: P.1 creates them, **P.2 records the questions (written by the P.2 step subagent in the primary worktree)**, P.3 records the answers, and the orchestrator then commits **every `Status:` advance** — `PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED` — plus any late (`Phases 2–6`) question a step returned in its handoff (AGENTS.md, "Planning records (owner: the orchestrator)"):
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`**, always from the **primary worktree**. This operation covers **every commit of** those two files: P.1 creates them, **P.2 records the questions (written by the P.2 step subagent in the primary worktree)**, P.3 records the answers, and the orchestrator then commits **every `Status:` advance** — `PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED` → `DROPPED` — plus any late (`Phases 2–6`) question a step returned in its handoff (AGENTS.md, "Planning records (owner: the orchestrator)"):
 
 ```bash
 git add docs/todo/<name>.md docs/questions/<name>.md
 git commit -m "chore(<name>): prepare"          # P.1–P.3
 git commit -m "chore(<name>): status <STATUS>"  # every later Status: advance
+```
+
+At the drop decision, and at post-merge cleanup (S7.1), the orchestrator moves the two records to the archive folders **together**:
+
+```bash
+# at the drop decision, and at post-merge cleanup (S7.1) — both records move together
+git mv docs/todo/<name>.md docs/todo/archive/<name>.md
+git mv docs/questions/<name>.md docs/questions/archive/<name>.md
+git commit -m "chore(<name>): archive <DROPPED|MERGED>"
 ```
 
 - They are the **only** files the workflow may commit directly to `main`. NOTHING else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
@@ -134,6 +143,13 @@ After the human merges the PR:
    git push origin --delete <type>/<name>
    ```
 
+5. Move the planning records to the archive (from the primary worktree, after the `Status: MERGED` advance):
+   ```bash
+   git mv docs/todo/<name>.md docs/todo/archive/<name>.md
+   git mv docs/questions/<name>.md docs/questions/archive/<name>.md
+   git commit -m "chore(<name>): archive MERGED"
+   ```
+
 ### Inspect / recover
 
 - `git worktree list` — after cleanup, only the primary (`main`) worktree should remain.
@@ -152,7 +168,7 @@ After the human merges the PR:
 ## Rules
 
 - Never check out a change branch in the primary worktree.
-- Commit **directly to `main`** only for the planning records under `docs/todo/` and `docs/questions/` — their creation at P.1–P.3 and every `Status:` advance through `MERGED` — and only from the primary worktree. Everything else reaches `main` only through a merged PR.
+- Commit **directly to `main`** only for the planning records under `docs/todo/` and `docs/questions/` — their creation at P.1–P.3 and every `Status:` advance through `MERGED` **and `DROPPED`, and the archive move of the two records into `docs/todo/archive/` and `docs/questions/archive/`** — and only from the primary worktree. Everything else reaches `main` only through a merged PR.
 - Never write `docs/todo/` or `docs/questions/` inside a change worktree: those paths are written only in the primary worktree — P.1–P.3 and every `Status:` advance by the orchestrator, and P.2 by its step subagent — so a change branch and its PR never contain them.
 - Never create two worktrees for the same change branch.
 - Do NOT merge PRs (human governance).

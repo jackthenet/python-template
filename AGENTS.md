@@ -127,8 +127,8 @@ All **scheduled** human interaction happens **before** the workflow runs. Phase 
 
 | Artifact | Created at | Committed to |
 |---|---|---|
-| `docs/todo/<name>.md` (from `docs/todo/template.md`) | P.1 | `main` |
-| `docs/questions/<name>.md` (from `docs/questions/template.md`) | P.1, answered at P.3 | `main` |
+| `docs/todo/<name>.md` (from `docs/todo/template.md`) | P.1 | `main` (→ `docs/todo/archive/<name>.md` once `DROPPED`/`MERGED`) |
+| `docs/questions/<name>.md` (from `docs/questions/template.md`) | P.1, answered at P.3 | `main` (→ `docs/questions/archive/<name>.md` once `DROPPED`/`MERGED`) |
 | `docs/specs/<name>.md` — draft spec | P.4, fixed at P.5 | the change branch |
 | `docs/verification/<name>.md` — type + triage / baseline / scope | P.4 | the change branch |
 
@@ -138,7 +138,7 @@ All **scheduled** human interaction happens **before** the workflow runs. Phase 
 
 | Step | Owner | Objective | Done when |
 |---|---|---|---|
-| **P.1 Frame** | orchestrator | classify the change type (Phase 0); create the TODO file and the question file from their templates; create the change's todo set | both files exist on `main`; the orchestrator sets TODO `Status: PREPARING` |
+| **P.1 Frame** | orchestrator | classify the change type (Phase 0); create the TODO file and the question file from their templates; create the change's todo set; **value-triage the TODO** (existing overlap, beneficiary, 1–5 score, recommendation — see "Backlog value triage") | both files exist on `main`; the orchestrator sets TODO `Status: PREPARING`; the TODO's `## Value triage` section is filled in (the user's decision is recorded **before P.4**) |
 | **P.2 Interrogate** | subagent (specify skill) | adversarially interrogate the idea; record every question in `docs/questions/<name>.md` | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch; overlap checked against `docs/specs/` **and** every TODO in `docs/todo/` |
 | **P.3 Answer** | orchestrator ⏸ | present the batch (≤ 4 per `ask_user_question` round, most blocking first) and record the answers | every question `ANSWERED` + incorporated; the orchestrator sets TODO `Status: QUESTIONS-ANSWERED` |
 | **P.4 Draft** | subagent (specify skill) | create the change branch + worktree from `main` (so the branch carries the TODO and the answers), then write the type's Phase 1 output: draft spec (FEATURE/CROSS-CUTTING), triage (ISSUE), GREEN baseline (REFACTOR), scope (DOCS/CHORE) | the artifact exists in the worktree and is committed |
@@ -148,7 +148,7 @@ All **scheduled** human interaction happens **before** the workflow runs. Phase 
 
 ### Planning records (owner: the orchestrator)
 
-`docs/todo/<name>.md` and `docs/questions/<name>.md` are **orchestrator-owned records that live only on `main`**. Both paths are written **only in the primary worktree**: P.1–P.3 and every `Status:` advance by the **orchestrator** — which commits each change directly to `main` (git skill: "Commit planning artifacts and status advances (orchestrator, `main`)") — and **P.2 by its step subagent** (which runs in the primary worktree because no change worktree exists yet, and writes only the question file). **No write to them may happen inside a change worktree**, and a change branch and its PR therefore never contain them — because the branch does not modify those paths, a later direct-to-`main` status update is never reverted by the merge.
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **orchestrator-owned records that live only on `main`**. Both paths are written **only in the primary worktree**: P.1–P.3 and every `Status:` advance by the **orchestrator** — which commits each change directly to `main` (git skill: "Commit planning artifacts and status advances (orchestrator, `main`)") — and **P.2 by its step subagent** (which runs in the primary worktree because no change worktree exists yet, and writes only the question file). **No write to them may happen inside a change worktree**, and a change branch and its PR therefore never contain them — because the branch does not modify those paths, a later direct-to-`main` status update is never reverted by the merge. The orchestrator also **moves** the two files **together** — `docs/todo/<name>.md` → `docs/todo/archive/<name>.md` and `docs/questions/<name>.md` → `docs/questions/archive/<name>.md` — at the **drop** decision and at **post-merge cleanup (S7.1)**; the question file always moves with its TODO file, and the move is itself a direct-to-`main` planning-record commit. `docs/questions/archive-AI_Questions.md` (the retired central file) is unrelated to the new folder and stays where it is.
 
 The orchestrator advances the TODO `Status:` on `main` at each of these moments, and commits each advance:
 
@@ -159,7 +159,8 @@ The orchestrator advances the TODO `Status:` on `main` at each of these moments,
 | after the P.5 handoff is verified (**FEATURE/CROSS-CUTTING**) or after the P.4 artifact is verified (**ISSUE / REFACTOR / DOCS/CHORE**) | `READY` |
 | when the change enters the normal workflow (S1.4 / Phase 3 / Phase 4) | `IN-WORKFLOW` |
 | when the change reaches a human gate (`S1.4` approval, `S6.4` merge, `BLOCKED-USER`, `BLOCKED-HUMAN`) | `WAITING` |
-| after post-merge cleanup | `MERGED` |
+| after post-merge cleanup (the two records then move to `docs/todo/archive/` and `docs/questions/archive/`) | `MERGED` |
+| when the user's value-triage decision is **drop** (the two records then move to `docs/todo/archive/` and `docs/questions/archive/`) | `DROPPED` |
 
 Step subagents never write the `Status:` field: they report the gate in their handoff and the orchestrator records it. A **late mid-workflow question** is returned in the step's handoff (`questions` field); the orchestrator appends it to the change's question file **on `main`** — a step subagent must not edit `docs/questions/` after P.4.
 
@@ -177,6 +178,10 @@ The former specification steps **S1.1 / S1.2 / S1.3** are now **P.2 / P.4 / P.5*
 ### Preparing many changes
 
 Prepare as many changes as you like before starting the workflow — preparation is what makes the workflow parallel. A prepared change costs nothing while it waits: its TODO, Q&A and draft spec are on disk and its worktree exists, but no phase runs for it until it is picked up.
+
+### Backlog value triage
+
+Before implementing any TODO, decide whether it is worth doing. At **P.1 Frame** the orchestrator fills in the TODO's `## Value triage` section: **(1)** check the codebase for existing functionality that covers it and name the file/function — if it overlaps, propose extending that feature instead of building a new one; **(2)** identify who benefits and how (the end user of this project), and say so instead of guessing when the value is unclear or the TODO is too vague to judge; **(3)** score it **1–5** (`5` = clear user value, new, small change · `3` = some value, or partly overlapping, or moderate effort · `1` = no clear value, duplicate, or large/risky change) with one sentence explaining the score; **(4)** recommend **implement / merge into <existing feature> / drop**. Present the results as a table (`ID | TODO | score | recommendation | reason`) and ask the user which to implement, merge, or drop: over a backlog sweep that is **one triage batch**, presented in as few rounds as possible (≤ 4 per round, most blocking first); a single TODO framed outside a sweep gets its ask **immediately**, as a one-row table riding that change's existing P.3 round-trip — no extra ⏸. The ask and the decision are recorded **only in the TODO's `## Value triage` section**, never as a question-file entry. **No TODO may pass P.4 (create its branch and worktree) until its own value-triage decision is recorded**; already-decided and READY changes keep running, so "never idle" is unaffected. Prefer reusing existing code and the smallest diff that delivers the value — dropping a low-value or duplicate TODO is a good outcome. The code-level counterpart is the "Ponytail, lazy senior dev mode" ladder (rungs 1–2), which this rule cross-references instead of restating. A dropped TODO gets `Status: DROPPED` and its two records move to the archive folders (see "Planning records (owner: the orchestrator)").
 
 ---
 
@@ -212,7 +217,7 @@ Which phases run for each type, and what each phase produces:
 | **5 Verify** | Full gate set | Targeted tests + full regression + lint/types | Full gate set **+ per-feature traceability updates** | Full regression + architecture rules (manual, Phase 6 checks 3–4) + lint/types (no spec coverage) | Light: lint/types where applicable |
 | **6 Review** | Full review → PR → merge → cleanup | Full review → PR → merge → cleanup | Full review → PR → merge → cleanup | Full review (**tests not weakened**) → PR → merge → cleanup | Light review → PR → merge → cleanup |
 
-"Full gate set" = the Phase 5 FEATURE checks below. Every type ends with a PR to `main` for human review/merge (human governance).
+"Full gate set" = the Phase 5 FEATURE checks below. Every type ends with a PR to `main` for human review/merge (human governance). Every Phase P output in the row above presupposes a recorded **Value triage** decision for that TODO (see "Backlog value triage"); a TODO whose decision is not recorded may not reach P.4.
 
 ### Workflow Diagram (atomic steps, dependencies, ownership, validation / user input)
 
@@ -408,8 +413,8 @@ Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing faili
 
 - **Unbounded in flight.** Any number of changes may be in flight, each in its own worktree with its own todo set. Parallelism comes from **interleaving changes**, not from concurrent subagents — only one step subagent runs at a time (see Execution Model).
 - **Never idle.** A change that reaches a human gate — S1.4 (spec approval), S6.4 (PR merge), or a mid-workflow `BLOCKED-USER` / `BLOCKED-HUMAN` — goes **WAITING**; the orchestrator immediately takes the next ready step of **another** change. It stops only when every in-flight change is WAITING **and** no prepared change is READY.
-- **Ready selection order.** (1) a change whose `Depends on:` changes are already merged; (2) among ready changes, **easiest first** (see Todo Tracking Discipline); (3) tie-break **FIFO by READY date**.
-- **Resume.** A WAITING change's gate is cleared when its spec PR / PR merge is reachable from `origin/main` after `git fetch` (`git merge-base --is-ancestor <merge-commit> origin/main`), or when its question file shows every answer. Then launch a **fresh** subagent at its next atomic step.
+- **Ready selection order.** (1) a change whose `Depends on:` changes are already merged; (2) among ready changes, **easiest first** (see Todo Tracking Discipline); (3) tie-break **FIFO by READY date**. A `DROPPED` or `MERGED` change's records live under `docs/todo/archive/` and `docs/questions/archive/`, so the two live folders are the backlog to select from.
+- **Resume.** A WAITING change's gate is cleared when its spec PR / PR merge is reachable from `origin/main` after `git fetch` (`git merge-base --is-ancestor <merge-commit> origin/main`), or when its question file shows every answer. Then launch a **fresh** subagent at its next atomic step. A change whose records have moved to `docs/todo/archive/` / `docs/questions/archive/` is finished (`MERGED`) or dead (`DROPPED`) — it is not resumed; read its question file there if its record must be checked.
 - **Todo sets.** One todo set per change; at most one `in_progress` **per change**; a WAITING change's step stays `in_progress` with an `activeForm` naming the wait (e.g. "waiting for spec PR merge").
 - **Backlog status on `main`.** **WAITING**, **IN-WORKFLOW** and **MERGED** are written to the change's TODO file **on `main`** by the orchestrator at those moments (see "Planning records (owner: the orchestrator)"), so the backlog on `main` is the live schedule.
 
@@ -659,6 +664,7 @@ Each change type enters at a different state (phases it skips are not entered):
 
 An agent MUST NOT:
 - Start implementation work before classifying the change type (Phase 0, at P.1).
+- Start **P.4** (create the change branch and worktree) for a TODO whose `## Value triage` section is empty or whose implement / merge / drop decision is not recorded (see "Backlog value triage").
 - Apply one change type's gates to a different type's change (use the Escalation Rules instead).
 - Write implementation before acceptance tests exist.
 - Modify an acceptance test merely to make implementation pass.
@@ -700,7 +706,7 @@ An agent MUST:
 14. Record every `BLOCKED-USER` question in the change's question file `docs/questions/<name>.md` (step, why needed, context, question, answer, status, incorporated) and present it to the user before that change proceeds.
 15. Run **ruff** after each implementation or test step and require it to be clean before the step's other gates.
 16. Log friction (failed/relaunched/iterating/blocked steps) in `docs/workflow/PROBLEMS.md` so the after-workflow-optimization can read it.
-17. Prepare every change before running its workflow (Phase P): TODO file, ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING, all answers recorded, draft spec / triage / baseline / scope, self-consistency check (FEATURE/CROSS-CUTTING).
+17. Prepare every change before running its workflow (Phase P): TODO file, ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING, all answers recorded, draft spec / triage / baseline / scope, self-consistency check (FEATURE/CROSS-CUTTING); the **value triage** (overlap, beneficiary, 1–5 score, recommendation) with the user's implement / merge / drop decision recorded before P.4.
 18. Keep the workflow moving: when a change reaches a human gate, mark it WAITING and continue with the next READY change; resume it with a fresh subagent when its gate clears.
 
 ---

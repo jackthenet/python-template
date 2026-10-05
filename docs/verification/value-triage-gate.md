@@ -428,3 +428,100 @@ The **Edit index** table above carries a `Decided by` column for all 22 rows (A1
 - [x] Follow-up orchestrator actions on `main` listed separately so they cannot be mistaken for this PR's content
 - [x] No implementation edit made (that is Phase 4); no P.5 run (DOCS/CHORE has no self-consistency step)
 - [x] Committed in the worktree as `chore(value-triage-gate): P.4 scope record (DOCS/CHORE)`
+
+---
+
+## S4.2 Implement (Phase 4, DOCS/CHORE — "make the scoped non-behavior changes")
+
+Run in the change worktree on top of `77ae870`. No RED/GREEN (DOCS/CHORE has no test step), no new tests, no test file touched.
+
+### Row-by-row confirmation — all 22 rows applied, every "before" anchor matched verbatim
+
+Located by the quoted text (not the recorded line number), as instructed. **Zero anchor mismatches** — no row needed an improvised edit, so no row deviates from the deciding Q-ID's decision.
+
+| Row | File | Applied | Anchor matched verbatim | Resulting location |
+|---|---|---|---|---|
+| A1 | `AGENTS.md` | ✅ archive destination added to both `Committed to` cells; no new row | ✅ | `:130-131` |
+| A2 | `AGENTS.md` | ✅ P.1 Frame row: objective + done-when clauses | ✅ | `:141` |
+| A3 | `AGENTS.md` | ✅ Planning-records paragraph: the joint **move** sentence + the `archive-AI_Questions.md` disclaimer | ✅ | `:151` |
+| A4 | `AGENTS.md` | ✅ `MERGED` row qualified + new `DROPPED` row added after it | ✅ | `:162-163` |
+| A5 | `AGENTS.md` | ✅ new `### Backlog value triage` subsection (planned text used verbatim) | ✅ | `:182-184` |
+| A6 | `AGENTS.md` | ✅ Phase Matrix note: one appended sentence; the five `**P Prepare**` cells untouched | ✅ | `:220` |
+| A7 | `AGENTS.md` | ✅ Ready selection order: appended sentence | ✅ | `:416` |
+| A8 | `AGENTS.md` | ✅ Resume / cleared-gate bullet: appended sentence | ✅ | `:417` |
+| A9 | `AGENTS.md` | ✅ new Prohibition bullet after the classify-before-implement bullet | ✅ | `:667` |
+| A10 | `AGENTS.md` | ✅ Obligation 17: appended clause before the final period; `≥ 20` floor untouched | ✅ | `:709` |
+| T1 | `docs/todo/template.md` | ✅ `DROPPED` added to the `Status:` comment vocabulary; value stays `PREPARING` | ✅ | `:7` |
+| T2 | `docs/todo/template.md` | ✅ new `## Value triage` section between `## Constraints and risks` and `## Acceptance signal (plain language)`; **no** Prep-log row | ✅ | `:34-39` |
+| S1 | `.agents/skills/specify/SKILL.md` | ✅ P.1 Frame: Objective / Inputs / Outputs / Done-criteria clauses | ✅ | `:64-67` |
+| S2 | `.agents/skills/specify/SKILL.md` | ✅ status chain gains `**DROPPED**` + the archive-move gloss | ✅ | `:169` |
+| S3 | `.agents/skills/specify/SKILL.md` | ✅ planning-record-paths rule: appended joint-archive sentence | ✅ | `:171` |
+| S4 | `.agents/skills/specify/SKILL.md` | ✅ new Value-triage Outputs bullet after the TODO bullet + the P.4 branch bullet clause | ✅ | `:197`, `:199` |
+| S5 | `.agents/skills/specify/SKILL.md` | ✅ Definition of Done, first bullet: appended sentence | ✅ | `:212` |
+| G1 | `.agents/skills/git/SKILL.md` | ✅ Execution Context bullet: `DROPPED` + the archive move, one sentence, no new bullet | ✅ | `:22` |
+| G2 | `.agents/skills/git/SKILL.md` | ✅ status chain gains `→ DROPPED`; one sentence + one fenced `git mv`/commit block after the existing block | ✅ | `:65`, `:73-80` |
+| G3 | `.agents/skills/git/SKILL.md` | ✅ S7.1 done-criteria: appended archive clause | ✅ | `:59` |
+| G4 | `.agents/skills/git/SKILL.md` | ✅ Post-merge cleanup: new step 5 (the two `git mv` + the `archive MERGED` commit) | ✅ | `:146-151` |
+| G5 | `.agents/skills/git/SKILL.md` | ✅ Rules: direct-to-`main` permission extended to `DROPPED` + the archive move | ✅ | `:171` |
+
+**Wording normalizations inside the planned text (no decision changed):**
+
+- **G1** — the planned text had two adjacent bold spans (`…through \`MERGED\`** **and \`DROPPED\`…`); they are merged into one span (`**and every TODO \`Status:\` advance through \`MERGED\` and \`DROPPED\`, and the archive move of both records**`). Same Q-3 + Q-7 decision, valid Markdown.
+- **G4** — the scope record quoted step 5 inline; it is rendered as a numbered list item with a fenced `bash` block, matching steps 1–4 in the same operation.
+
+### Diff scope proof
+
+`git diff --name-status` (before the evidence commit):
+
+```text
+M       .agents/skills/git/SKILL.md
+M       .agents/skills/specify/SKILL.md
+M       AGENTS.md
+M       docs/todo/template.md
+```
+
+- **Only the 4 scoped files** — 52 insertions, 22 deletions; every hunk maps to one of the 22 rows (checked hunk by hunk against the diff).
+- **No** `src/`, `tests/`, `docs/specs/`, `docs/verification/traceability.md`, `.github/workflows/`, `pyproject.toml`, `uv.lock`, `userdocs/`, `docs/questions/` or backlog TODO file is touched — and `docs/todo/` is touched **only** at `docs/todo/template.md` (the template, not a planning record).
+- **Wording hazard (TODO "Constraints and risks") checked:** `git diff -U0 | grep -c "Never idle\|Idle or wait in place\|Non-blocking:"` → **0**. `AGENTS.md` `:310` (Non-blocking), `:415` (Never idle), `:682` (the idle Prohibition) and the READY gate (`:147`) are byte-identical — the new text reads as one batched backlog gate plus a per-item stop at P.4, not a blocking gate on every change.
+- **Deliberate non-edits respected:** `git/SKILL.md:102` at base → `:111` after this step (the `BLOCKED-USER` cleared-gate test), `AGENTS.md:118`/`:135`/`:677`, `AGENTS.md:19-51` (Ponytail), `docs/questions/template.md`, `specify/SKILL.md:14`/`:45`/`:46`/`:69-75`, the Workflow Diagram, the Ownership sentences, the Atomic Steps chain and the todo-set rules — none in the diff.
+- No trailing whitespace (`git diff --check` clean), final newline present in all four files.
+
+### No-behavior-delta checks — base (`77ae870`) vs after, no delta
+
+| Command | Base (`77ae870`, before the edits) | After the 22 rows | Delta |
+|---|---|---|---|
+| `uv run ruff check .` | `All checks passed!` | `All checks passed!` | **none** |
+| `uv run mypy src/` | `Success: no issues found in 83 source files` | `Success: no issues found in 83 source files` | **none** |
+| `uv run python scripts/check_traceability.py` | `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | **none** |
+| `uv run --group docs mkdocs build --strict` | `Documentation built in 2.64 seconds`, no warning/error | `Documentation built in 1.54 seconds`, no warning/error | **none** |
+
+`ruff` is reported here as the whole-repo sweep because the step's changed paths are Markdown only — there is nothing for ruff to check in them; the sweep is the delta proof against `main`. (`lint.yml` is path-filtered to `src/**`, `tests/**`, `pyproject.toml`, `.pre-commit-config.yaml`, `.github/workflows/lint.yml`, `.github/hooks/**`, so this PR does not trigger the lint job at all.)
+
+**Record correction for Phase 5/6:** the P.4 gate table lists a `markdown-formatting (mdformat)` check that "runs". Measured: there is **no mdformat hook** in `.pre-commit-config.yaml` and **no markdown job** in `.github/workflows/` (`grep -rn -i "mdformat\|markdown" .github/ pyproject.toml` → only a `pyproject.toml` comment about Markdown code blocks in ruff's exclusion). The formatting requirements the row describes were therefore verified by hand (`git diff --check`, final newlines, pipe tables and fenced blocks intact) rather than by a tool.
+
+### Consistency sweep — places the scope record did not cover (reported, **not** edited)
+
+Grepped the status vocabulary (`PREPARING`/`QUESTIONS-ANSWERED`/`READY`/`IN-WORKFLOW`/`WAITING`/`MERGED`/`DROPPED`) and `docs/todo/`/`docs/questions/` path mentions over `AGENTS.md`, `.agents/skills/*/SKILL.md`, `docs/*/template.md`, `userdocs/`, `scripts/`. `userdocs/` and `scripts/` name neither (so the mkdocs site and `check_traceability.py` cannot go stale). Every hit inside the 22 rows is updated; these are **outside** the 22 rows and are left byte-identical for Phase 5/6 to adjudicate:
+
+| # | Place | What it enumerates | Assessment |
+|---|---|---|---|
+| 1 | `AGENTS.md:118` (Git Worktrees → Rules) | "every later `Status:` advance **through `MERGED`**" | **Scope finding.** The P.4 record lists `:118` as a deliberate non-edit, but its stated reason covers only the *path* argument (`docs/todo/archive/` is inside `docs/todo/`). It does not cover the *chain endpoint*: `DROPPED` is a status advance that follows `MERGED` in the sentence's ordering. Harmless (the archive move is inside the permitted paths, and A3/G5 state it explicitly), but the sentence is now slightly under-inclusive |
+| 2 | `.agents/skills/git/SKILL.md:12` (Purpose → delegate list) | "every `Status:` advance through `MERGED` directly to `main`" | **Scope finding** — same under-inclusiveness as #1; G1 (`:22`) and G5 (`:171`) carry the full wording, `:12` is the summary line above them |
+| 3 | `AGENTS.md:419` (Multi-change scheduling → "Backlog status on `main`") | "**WAITING**, **IN-WORKFLOW** and **MERGED** are written to the change's TODO file **on `main`**" | **Scope finding** — `DROPPED` is also written on `main` (A4 adds that advance); the enumeration is now incomplete |
+| 4 | `docs/questions/template.md:3`, `:6` | the TODO-file cross-reference; no archive destination | **Known out of scope** (closed point 12 — the whole file is owned by `spec-interview-protocol`). The question file's archive move is stated in A3/A4/S3/G2/G3/G4/G5, so the guidance is not contradicted, only not restated in the template |
+| 5 | `docs/todo/template.md:5` | "like `docs/questions/`, it is committed directly to `main`" | **Scope finding (minor)** — T1/T2 cover `:7` and the new section; `:5` does not mention the archive move |
+| 6 | `.agents/skills/specify/SKILL.md:12` (Purpose summary) | the skill's output list: TODO + question file + draft spec / triage / baseline / scope | **Scope finding (minor)** — the summary does not name the `## Value triage` section; `:45`/`:46` are explicitly out of scope (Q-1 = (b), Q-4 = (a)), `:12` was simply never in the 22 rows |
+| 7 | `AGENTS.md:370` (Roles → Orchestrator) | P.1's description: classify, create the two records, create the todo set | **Deliberately out of scope** per Q-1 = (b) ("the Ownership sentences `:329`/`:335`/`:365`") — recorded here for completeness |
+
+No place in the tree now *contradicts* the new `DROPPED` status or the two archive folders; #1–#3 and #5–#6 are enumerations that stop short of naming them.
+
+### S4.2 done-criteria checklist (this step)
+
+- [x] All **22 rows** applied; every "before" anchor matched verbatim (0 mismatches, 0 improvised edits)
+- [x] The diff touches **only the 4 scoped files** (`git diff --name-status` above); no `src/`, `tests/`, `docs/specs/`, `traceability.md`, `.github/workflows/`, `pyproject.toml` change
+- [x] Every hunk maps to one of the 22 rows
+- [x] The four quality commands report **no new failure** vs the `77ae870` base (identical output)
+- [x] The wording hazard checked: the never-idle rules, the WAITING rules and the idle Prohibition are not in the diff
+- [x] Consistency sweep run; 7 uncovered places **reported**, none edited
+- [x] No test file, no spec, no behavior touched; no version bump (DOCS/CHORE)
+- [x] Evidence recorded here and committed in the worktree
