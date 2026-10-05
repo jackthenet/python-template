@@ -1,6 +1,6 @@
 # Structure Map — Generated Repository Map
 
-**Status:** DRAFT (P.4) — awaiting P.5 self-consistency check and human approval (S1.4)
+**Status:** DRAFT — P.5 self-consistency passed (checklist + Dependency Smoke-Test); awaiting human approval (S1.4)
 **Change type:** FEATURE
 **Change branch:** `feature/structure-map`
 **Created:** 2026-10-05
@@ -124,7 +124,7 @@ The CLI accepts exactly these options; anything else is an argparse usage error 
 | Option | Default | Meaning |
 |---|---|---|
 | `--root PATH` | the repository root that contains `scripts/make_map.py`, resolved with `pathlib` | the directory the map describes |
-| `--out PATH` | `STRUCTURE.md`, resolved **relative to the current working directory** | the map file to write or check |
+| `--out PATH` | `STRUCTURE.md`, resolved **relative to the current working directory** | the map file to write or check; a missing parent directory is created before writing (EDGE-006) |
 | `--include-private` | off | also render `_name` functions, methods and classes |
 | `--max-depth N` | `4` | tree rendering depth, counted in path segments from the root (`src`=1, `src/backend`=2, `src/backend/settings`=3, `src/backend/settings/registry.py`=4); must be ≥ 1 |
 | `--check` | off | compare the existing `--out` file against a fresh render instead of writing |
@@ -153,7 +153,10 @@ stderr.
 | `3` | map file missing | not used | `--out` does not exist |
 | `4` | a source file could not be read or parsed | yes | yes |
 
-The contract is fixed: no other exit code is produced, and `1`/`3` never occur in generate mode.
+The contract is fixed: no other exit code is produced, and `1`/`3` never occur in generate mode. When
+more than one condition could apply, exactly one code is produced, chosen in this order:
+`2` (usage) → `4` (a source file cannot be read or parsed) → `3` (`--out` missing) → `1` (stale) → `0`.
+An unparseable file therefore outranks staleness in `--check` mode (exit `4`, not `1`).
 
 ### REQ-005 — `--check` semantics
 `--check` compares the **whole file** against a fresh render: the on-disk bytes are first normalised
@@ -168,8 +171,13 @@ STRUCTURE.md is out of date — run uv run python scripts/make_map.py
 ```
 
 The line names the `--out` path as given (the default renders exactly the text above). No diff, no
-counts, no per-section report. A missing `--out` file prints one line naming the missing path and
-exits 3.
+counts, no per-section report. A missing `--out` file prints exactly one line and exits 3:
+
+```text
+STRUCTURE.md is missing — run uv run python scripts/make_map.py
+```
+
+again naming the `--out` path as given.
 
 ### REQ-006 — Unreadable or unparseable source is a hard failure
 If a file in the file set cannot be parsed (`SyntaxError`), decoded (`UnicodeDecodeError`) or read
@@ -212,9 +220,12 @@ Counts are of tracked files under that directory (all file types, not only `.py`
 `--max-depth` affects **only** the tree rendering. When entries exist below the limit, the deepest
 rendered directory of that branch gets a final line `(+N dirs not shown)` (or `(+N files not shown)`
 when only files are hidden; a branch with both renders one combined line
-`(+N dirs, M files not shown)`). **Every** `.py` file in the file set is still parsed and, if it is in
-the Packages scope (REQ-011), still listed there regardless of depth. Pruning can therefore never hide
-a module from the map.
+`(+N dirs, M files not shown)`). **Every** `.py` file in the file set is still parsed — a file that
+cannot be parsed is a hard failure (REQ-006) wherever it lives — and every in-scope module (REQ-011)
+is still listed in the Packages section regardless of depth. Pruning can therefore never hide an
+in-scope module from the Packages section. A `.py` file outside a **code dir** (1 at the base commit,
+`.github/hooks/ruff-post-edit.py`) is parsed but appears only in its top-level directory's count line:
+it is in neither the tree nor the Packages scope.
 
 ### REQ-011 — Packages section scope
 The Packages section covers exactly:
@@ -241,7 +252,8 @@ directory, never one per module.
 
 A package whose `__init__.py` defines `__all__` renders one `exports:` line listing those names sorted;
 otherwise it lists the public names it imports, sorted; a package `__init__.py` with neither renders no
-`exports:` line (11 such lines at the base commit).
+`exports:` line. At the base commit 11 of the 27 package groups render an `exports:` line (all 11 `src/`
+packages define `__all__`) and 16 render none (EDGE-013).
 
 ### REQ-013 — Module header and summary
 Each module renders
@@ -251,11 +263,15 @@ Each module renders
 ```
 
 followed by the module summary line (REQ-018) when the module has a docstring, and no summary line
-when it does not (42 `tests/` modules and 1 `migrations/` module have none at the base commit).
+when it does not. Repo-wide 43 modules have no docstring (42 under `tests/`, 1 under `migrations/`),
+but only **1** of the 117 Packages-scope modules does — the 42 docstring-less `tests/` modules are out
+of Packages scope (REQ-011); see the NFR-002 line count.
 
 ### REQ-014 — Symbol inventory and signatures
-Each module lists its symbols in **source order**: module-level classes, then module-level functions;
-within a class, its annotated fields, then its methods. Rendering:
+Each module lists its symbols **grouped, each group in source order**: module-level classes first (in
+source order), then module-level functions (in source order); within a class, its annotated fields
+first (source order), then its methods (source order). A class or function defined inside a **function
+body** is not rendered — it is a statement inside a function, not a module- or class-level symbol. Rendering:
 
 ```text
 - @logged_class class `SettingsRegistry`: Registers and validates settings.
@@ -271,8 +287,11 @@ within a class, its annotated fields, then its methods. Rendering:
 - signatures are produced with `ast.unparse` for parameters, annotations and return annotation, so
   formatting drift in the source cannot change the map; a parameter default is included **only when
   its unparsed text is ≤ 20 characters**.
-- a nested class renders as a member line of its enclosing class (`  - class \`Inner\`: summary`) with
-  its own members at the next indent level (12 nested classes exist at the base commit, all in `tests/`).
+- a nested class (a `class` statement directly in a class body) renders as a member line of its
+  enclosing class (`  - class \`Inner\`: summary`) with its own members at the next indent level. No
+  class is nested inside a class at the base commit — the 12 classes the base-commit scan finds under
+  `tests/` are all defined inside function bodies and are therefore not rendered (above). The rule is
+  normative because the format must be defined for it, and the unit fixture exercises it.
 - module-level assignments, imports, `if TYPE_CHECKING` blocks and statements are not rendered.
 
 ### REQ-015 — Decorators
@@ -283,10 +302,12 @@ A decorator that is not a plain name or attribute chain (a call, a subscript) re
 `ast.unparse` text.
 
 ### REQ-016 — Visibility rules
-Dunder names (`__init__`, `__post_init__`, `__eq__`, …) are **always** rendered. `_name` functions,
-methods and classes are hidden unless `--include-private` is passed (221 such symbols in the Packages
-scope at the base commit). `--include-private` changes **only** which symbols are rendered: module and
-package inclusion is unaffected, and no `_name` module is ever hidden or added by the flag.
+A **public symbol** (Definitions) is always rendered: dunder names (`__init__`, `__post_init__`,
+`__eq__`, …) are public and therefore rendered unconditionally. A name that is not public — `_name`
+functions, methods and classes — is hidden unless `--include-private` is passed: 230 such symbols in
+the Packages scope at the base commit (10 classes, 105 methods of rendered classes, 115 module-level
+functions). `--include-private` changes **only** which symbols are rendered: module and package
+inclusion is unaffected, and no `_name` module is ever hidden or added by the flag.
 
 ### REQ-017 — Class fields
 A class-level annotated assignment renders as one line `  - \`name: annotation\`` — **no default value
@@ -388,19 +409,19 @@ Each AC is stated against the REQ it satisfies; the AC→REQ column is the cover
 | ID | REQ | Acceptance criterion (Given / When / Then) |
 |---|---|---|
 | AC-001 | REQ-001 | **Given** a clean checkout, **When** `uv run python scripts/make_map.py` runs, **Then** it exits `0`, **And** every import in `scripts/make_map.py` is standard-library, **And** `uv run deptry .` reports no new dependency, **And** each source file is read exactly once. |
-| AC-002 | REQ-002 | **Given** the CLI, **When** `--help` is printed, **Then** all six options of the REQ-002 table are listed with their stated defaults, **And** `--out STRUCTURE.md` resolves against the current working directory while `--root` defaults to the script's repository root, **And** an unknown option exits `2`. |
+| AC-002 | REQ-002 | **Given** the CLI, **When** `--help` is printed, **Then** all six options of the REQ-002 table are listed, each with its stated default where the table states one, **And** `--out STRUCTURE.md` resolves against the current working directory while `--root` defaults to the script's repository root, **And** an unknown option exits `2`. |
 | AC-003 | REQ-003 | **Given** a new `.py` file present in the working tree but not yet `git add`ed, **When** the generator runs, **Then** the map lists it; **Given** a tracked file deleted from the working tree but still in the index, **Then** the map omits it. |
-| AC-004 | REQ-004 | **Given** each condition of the REQ-004 table, **When** the corresponding mode runs, **Then** the process exit code is exactly the stated value (`0`, `1`, `2`, `3`, `4`), **And** `1` and `3` never occur in generate mode. |
-| AC-005 | REQ-005 | **Given** the map file differs from a fresh render by a single byte, **When** `--check` runs, **Then** it exits `1`, **And** prints exactly the one line `<out> is out of date — run uv run python scripts/make_map.py` and nothing else (no diff, no counts); **Given** the map file does not exist, **Then** it exits `3`; **Given** the only difference is that the checked-out file uses CRLF line endings, **Then** it exits `0`. |
+| AC-004 | REQ-004 | **Given** each condition of the REQ-004 table, **When** the corresponding mode runs, **Then** the process exit code is exactly the stated value (`0`, `1`, `2`, `3`, `4`), **And** `1` and `3` never occur in generate mode, **And** when two conditions could apply at once the code is the one the REQ-004 precedence order selects (an unparseable file plus a stale map exits `4`, not `1`). |
+| AC-005 | REQ-005 | **Given** the map file differs from a fresh render by a single byte, **When** `--check` runs, **Then** it exits `1`, **And** prints exactly the one line `<out> is out of date — run uv run python scripts/make_map.py` and nothing else (no diff, no counts); **Given** the map file does not exist, **Then** it exits `3`, **And** prints exactly the one line `<out> is missing — run uv run python scripts/make_map.py` and nothing else; **Given** the only difference is that the checked-out file uses CRLF line endings, **Then** it exits `0`. |
 | AC-006 | REQ-006 | **Given** a file in the set that raises `SyntaxError`, `UnicodeDecodeError` or `OSError`, **When** the generator runs, **Then** it exits `4`, **And** each offending `--root`-relative path is reported once, sorted, **And** no output file is written and a pre-existing output file is left byte-unchanged. |
 | AC-007 | REQ-007 | **Given** a source file the running interpreter cannot parse, **When** the generator runs, **Then** it is handled as in AC-006, **And** the CLI exposes no grammar/`feature_version` option. |
 | AC-008 | REQ-008 | **Given** a generated map, **Then** its first line is `# Repository structure`, **And** the generated-by line follows, **And** the sections are `## Directory tree` then `## Packages` in that order and nothing else, **And** no timestamp, absolute path, drive letter, host name or user name appears anywhere in it. |
-| AC-009 | REQ-009 | **Given** the current tree, **Then** the tree block renders `src/`, `tests/`, `scripts/` and `migrations/` entry by entry, **And** renders `docs/` as one line whose count equals `git ls-files docs` (200 at the base commit) with the label `(process record)`, **And** lists the top-level files by name. |
+| AC-009 | REQ-009 | **Given** the current tree, **Then** the tree block renders `src/`, `tests/`, `scripts/` and `migrations/` entry by entry, **And** renders `docs/` as one line whose count equals the number of files under `docs/` in the file set (REQ-003 — 200 at the base commit, where it equals `git ls-files docs` because the tree is clean) with the label `(process record)`, **And** lists the top-level files by name. |
 | AC-010 | REQ-010 | **Given** `--max-depth 2`, **Then** the tree shows no entry under `src/backend/` and shows a `(+N dirs not shown)` marker, **And** the Packages section still lists every module under `src/` (83 at the base commit) and the same modules as `--max-depth 4`. |
 | AC-011 | REQ-011 | **Given** the current tree, **Then** the Packages section has an entry for every `.py` under `src/`, `scripts/` and `migrations/`, **And** for each `conftest.py` and each `*_test_helpers.py` under `tests/`, **And** for no other `tests/` module. |
 | AC-012 | REQ-012 | **Given** the `backend.settings` package, **Then** exactly one header line shows `` `backend.settings` `` and `src/backend/settings/`, **And** its `exports:` line lists the sorted public names of its `__init__.py`, **And** no per-module import line appears. |
 | AC-013 | REQ-013 | **Given** a module with a docstring, **Then** its header is `#### <path> (<N> lines)` where `N` is the file's line count, followed by its summary line; **Given** a module without one, **Then** no summary line is rendered. |
-| AC-014 | REQ-014 | **Given** a module containing a class, a module-level function, methods, an `async def` and a nested class, **Then** each is rendered exactly once in source order in the stated line form, **And** the signature text equals the `ast.unparse` rendering, **And** a parameter default of ≤ 20 characters is shown while a longer one is omitted. |
+| AC-014 | REQ-014 | **Given** a module containing a class, a module-level function, methods, an `async def` and a nested class, **Then** each is rendered exactly once, in the REQ-014 group order (classes before functions, each group in source order), in the stated line form, **And** the signature text equals the `ast.unparse` rendering, **And** a parameter default of ≤ 20 characters is shown while a longer one is omitted. |
 | AC-015 | REQ-015 | **Given** symbols decorated with `@logged_class`, `@property` and `@pytest.fixture`, **Then** each decorator renders as a `@name` prefix before the `class`/`def`/signature token, in source order, **And** a decorator call renders as its `ast.unparse` text. |
 | AC-016 | REQ-016 | **Given** a module containing `_helper`, `_Private` and `__init__`, **Then** `__init__` is rendered with or without `--include-private`, **And** `_helper` and `_Private` are rendered only with the flag, **And** the set of rendered modules and packages is identical with and without it. |
 | AC-017 | REQ-017 | **Given** a class with annotated fields, a field with `Field(...)` and an unannotated assignment, **Then** each annotated field renders as `name: annotation` with no default and no `Field(...)` payload, **And** the unannotated assignment is absent, **And** a class with 17 annotated fields renders 15 field lines plus `… +2 fields`. |
@@ -420,10 +441,10 @@ Each AC is stated against the REQ it satisfies; the AC→REQ column is the cover
 | ID | Invariant |
 |----|-----------|
 | INV-001 | For any tree state, two consecutive generator runs with the same options produce byte-identical output. |
-| INV-002 | Every `.py` file in the file set at depth ≤ `--max-depth` appears in the Directory tree section, and every in-scope module appears in the Packages section, for any `--max-depth ≥ 1`. |
+| INV-002 | Every `.py` file **under a code dir** (REQ-009) at depth ≤ `--max-depth` appears in the Directory tree section, and every in-scope module (REQ-011) appears in the Packages section, for any `--max-depth ≥ 1`. A `.py` file outside a code dir appears only in its top-level directory's count line (REQ-010). |
 | INV-003 | The generated output never contains an absolute path, a Windows drive letter, a UNC path, a timestamp, a host name or the current user name. |
 | INV-004 | `--check` exits `0` if and only if the existing `--out` file's bytes equal a fresh render after `\r\n` → `\n` normalisation; any other difference (added, removed, reordered or whitespace-only) exits `1`. |
-| INV-005 | The generator writes no file other than `--out`, and only in generate mode; `--check` never modifies the working tree. |
+| INV-005 | The generator writes no file other than `--out`, and only in generate mode (it creates `--out`'s parent directory when missing, EDGE-006, and no other directory); `--check` never modifies the working tree. |
 | INV-006 | For any generated map, the active `trailing-whitespace` and `end-of-file-fixer` hooks leave the file unchanged. |
 
 ## 9. Edge Cases
@@ -451,22 +472,41 @@ Each AC is stated against the REQ it satisfies; the AC→REQ column is the cover
 
 | ID | Category | Requirement |
 |---|---|---|
-| NFR-001 | Performance | A full generate run over this repository (324 `.py`, 33 918 lines) completes in **under 2 s**, with one read per file. Measured floor: reading + `ast.parse` of all 324 files = **0.13 s** (CPython 3.14.5, this host) — ≈15× headroom. Asserted by a coarse upper-bound acceptance test, skipped on slow CI (`@pytest.mark.skipif` on a measured calibration run), not a CI gate. |
-| NFR-002 | Size | The generated `STRUCTURE.md` for the current repository is **≤ 2 000 lines**. Projected at the base commit: **≈1 924 lines** (tree 408 = 331 entries + 77 dirs; Packages ≈1 506 = 117 module headers + 116 summaries + 11 exports lines + 32 group headers + 232 class headers + 352 field lines + 483 method lines + 163 function lines). The per-class field cap (REQ-017) is the safety valve. **Deviation from Q-7:** the ~900–1 000 line budget in the question file is arithmetically incompatible with Q-8/Q-9/Q-19/Q-20 at this repository size; the content policy is implemented and the ceiling raised. The knobs that would reach ~1 000 are recorded in `docs/verification/structure-map.md`. |
+| NFR-001 | Performance | A full generate run over this repository (324 `.py`, 33 918 lines) completes in **under 2 s**, with one read per file. Measured floor: reading + `ast.parse` of all 324 files = **0.13 s** (CPython 3.14.5, this host) — ≈15× headroom. The budget is measured under the Observability table below — no logging framework, no sink, no per-call logging overhead. Asserted by a coarse upper-bound acceptance test, skipped on slow CI (`@pytest.mark.skipif` on a measured calibration run), not a CI gate. |
+| NFR-002 | Size | The generated `STRUCTURE.md` for the current repository is **≤ 2 000 lines**. Measured projection for the base-commit tree with the REQ-016 default visibility applied: **≈1 845 lines** — tree 424 (9 root files + 332 code-dir entries + 78 code dirs + 5 count lines) + Packages 1 413 (117 module headers + 116 summaries + 11 `exports:` lines + 32 group headers + 222 public class headers + 353 field lines after the REQ-017 cap + 399 public method lines + 163 public function lines) + ≈8 lines of document chrome. The committed map is generated for the **post-change** tree and maps itself: `scripts/make_map.py` is in Packages scope (REQ-011) and adds ≈25 lines, and the three new test files add 3 tree entries — projected **≈1 875**, margin ≈125 lines. The per-class field cap (REQ-017) is the safety valve. **Deviation from Q-7:** the ~900–1 000 line budget in the question file is arithmetically incompatible with Q-8/Q-9/Q-19/Q-20 at this repository size; the content policy is implemented and the ceiling raised. The knobs that would reach ~1 000 are recorded in `docs/verification/structure-map.md`. |
 | NFR-003 | Dependency | `uv run deptry .` reports no unused, missing or misplaced dependency after the change (the generator is stdlib-only). |
 | NFR-004 | Quality gates | `uv run mypy scripts/` and `uv run mypy src/` are clean; `uv run ruff check .` and `uv run ruff format --check .` are clean (both clean at the base commit; `mypy scripts/` has the one REQ-025 error). |
 | NFR-005 | Complexity | The new test files stay under `[tool.complexipy] max-complexity-allowed = 15` (`paths = ["src", "tests"]`); `scripts/` is not analyzed by complexipy. |
 | NFR-006 | Maintainability | `scripts/make_map.py` targets ≈250 lines. This is a **target, not a gate**: Phase 5 records the actual line count. |
 | NFR-007 | Portability | The **render** is byte-identical on Windows and on `ubuntu-latest` for the same tree (REQ-020, LF newlines); the checked-out file's line endings may differ (EDGE-016) and `--check` tolerates exactly that. |
 
+### Observability (the context NFR-001 is measured under)
+
+The generator is repo tooling under REQ-001 (stdlib-only), so it uses **no logging framework** — neither
+the shared logging feature (loguru is a dependency REQ-001 forbids) nor the stdlib `logging` module. Its
+entire observable output is:
+
+| Situation | Where | Output |
+|---|---|---|
+| generate mode success | — | nothing (the map file is the output) |
+| `--check`, file fresh | — | nothing |
+| `--check`, file stale | stdout | the one REQ-005 line |
+| `--check`, `--out` missing | stdout | the one REQ-005 line |
+| unreadable / unparseable source | stderr | one line per path, sorted, with the exception type (REQ-006) |
+| non-git root | stderr | one limitation note (REQ-003, EDGE-007) |
+
+There is no per-call logging overhead; that is the context in which the NFR-001 2 s budget holds. The
+tracing policy in `AGENTS.md` applies to backend features, not to `scripts/` tooling (precedent:
+`scripts/check_traceability.py`, `scripts/verify_spec.py`).
+
 ## 11. Test Strategy
 
 Placement is fixed by Q-10: the CLI end-to-end behavior goes in `tests/acceptance/test_structure_map.py`,
 the parser internals in `tests/unit/test_make_map.py`. Invariant witnesses additionally go in
 `tests/property/test_structure_map.py` because AGENTS.md Phase 3 requires a property test per `INV-XXX`
-(Q-10 fixed the acceptance/unit placement and forbade a `tests/unit/scripts/` directory; it does not
-replace the property-test rule). No new test directory is created. Every REQ ID appears in the REQ
-column below, so each REQ is covered by the AC that cites it.
+(Q-10 fixed the acceptance/unit placement — the two-file split was chosen over a `tests/unit/scripts/`
+directory; it does not replace the property-test rule). No new test directory is created. Every REQ ID
+appears in the REQ column below, so each REQ is covered by the AC that cites it.
 
 | ID | REQ | Category | Test file | Test function |
 |----|-----|----------|-----------|---------------|
@@ -570,6 +610,10 @@ evidence of this spec's coverage (see `docs/verification/structure-map.md`, find
   CRLF while the blob is LF. Normalising one comparison in `--check` is a two-line change inside the
   generator; a repo-wide `*.md text eol=lf` rule would change every Markdown file's checkout on Windows
   and is out of scope (EDGE-016).
+- **Why the section is headed `## Packages`, not `## Modules`:** the user instruction's sample output
+  uses `## Modules`; the section is grouped by package (REQ-012), so the heading names the groups. The
+  content policy Q-8 fixed (`src/` + `scripts/` + `migrations/` + `conftest.py` + `*_test_helpers.py`)
+  is unchanged — this is a heading rename, not a scope change.
 - **Known ceiling (ponytail):** the tree walk is a single `O(files)` pass with one read per file and no
   caching; the naive role-label table is a literal dict. Both are fine at 570 tracked files; the upgrade
   path if the repository grows 10× is a per-file mtime cache and a config-driven label table.
@@ -586,4 +630,7 @@ evidence of this spec's coverage (see `docs/verification/structure-map.md`, find
 
 ## 15. Changelog
 
-- v1 (2026-10-05): initial specification (P.4).
+- v1 (2026-10-05): initial specification (P.4). P.5 self-consistency pass: exit-code precedence order,
+  pinned missing-`--out` message, symbol group order, function-local classes excluded, INV-002 scoped to
+  code dirs, `exports:`/docstring/hidden-symbol counts re-measured, NFR-002 projection recomputed with
+  the REQ-016 visibility applied, Observability table added.
