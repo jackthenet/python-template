@@ -762,3 +762,125 @@ Run in the change worktree on top of `d90ec0c` (S5); working tree clean before (
 - [x] Verdict re-issued: **VERIFIED** (the S5 verdict is marked superseded in place)
 - [x] No Phase 6 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write, no test/spec/source file touched
 - [x] Committed in the worktree as `chore(value-triage-gate): S4.2 re-entry - close DROPPED status-chain gap (A11/A12/G6), verdict VERIFIED`
+
+---
+
+## S6.1 Review vs. normative basis
+
+Phase 6, step 1 (review skill, **DOCS/CHORE** routing: normative basis = the **P.4 scope record**, there is no spec). Run in the change worktree at HEAD `d800da4`; working tree clean before (`git status --short` → empty).
+
+**Bounded inputs (per the review skill's "Bounded scope" rule):** the P.4 scope contract (25 rows + the out-of-scope table + the deliberate non-edits), the S4.2 / S5 / S4.2-re-entry sections of this record, `docs/questions/value-triage-gate.md` (6 ANSWERED questions), and the **final state** of the 4 changed guidance files. Reviewed as a fresh reader would read the touched passages end-to-end. **Not** reviewed: commit-by-commit history; the full test suite (Phase 5 already confirmed the gate CLEAN — not re-run here); implementation style (out of scope for S6.1).
+
+### Check 1 — scope conformance: all 25 rows present, each saying what its deciding Q-ID requires
+
+Located by text, not by line number. `git diff --numstat main...HEAD` (guidance files): `AGENTS.md` 17/11, `git/SKILL.md` 21/5, `specify/SKILL.md` 9/8, `docs/todo/template.md` 8/1 — **25 removed lines, 55 added lines**, every hunk maps to a row.
+
+| Row | Present in the final text | Says what the deciding Q-ID requires |
+|---|---|---|
+| A1 (`AGENTS.md:130-131`) | ✅ | both `Committed to` cells carry the archive destination + the `DROPPED`/`MERGED` trigger; **no new row** (Q-7 (i), Q-5 "inside the TODO") |
+| A2 (`:141`) | ✅ | P.1 row: objective clause + done-when clause; **no `P.0` row**, the table still has exactly P.1–P.5 (Q-1 (b)) |
+| A3 (`:151`) | ✅ | the joint **move** sentence, both moments (drop decision, S7.1), question file moves with the TODO, `archive-AI_Questions.md` disclaimer (Q-7 (i)) |
+| A4 (`:162-163`) | ✅ | `MERGED` row qualified + new `DROPPED` row with its trigger moment (Q-3 (a), Q-7 (i)) |
+| A5 (`:182-184`) | ✅ | the new `### Backlog value triage` subsection — **byte-identical to the planned text** in the P.4 record (measured: `planned == actual` after stripping the heading) |
+| A6 (`:220`) | ✅ | one appended sentence under the Phase Matrix; the five `**P Prepare**` cells untouched (closed point 10) |
+| A7 (`:416`) | ✅ | the two live folders are the backlog to select from (Q-7 (i)) |
+| A8 (`:417`) | ✅ | an archived change is finished/dead and is **not resumed** — the cleared-gate/resume rule Q-7 named (Q-7 (i)) |
+| A9 (`:667`) | ✅ | the new Prohibition is a **P.4 boundary rule**, not a gate change (Q-2 (a), closed point 9) |
+| A10 (`:709`) | ✅ | Obligation 17 clause appended; the `≥ 20` floor byte-identical (closed point 12) |
+| T1 (`docs/todo/template.md:7`) | ✅ | `DROPPED` added to the comment vocabulary; the value stays `PREPARING` (Q-3 (a)) |
+| T2 (`:34-39`) | ✅ | the `## Value triage` section — **byte-identical to the P.4 block** (measured), in the predicted slot; the `workflow-docs-nits` Prep-log row shifted `:44 → :51` exactly as the record predicted, content unchanged; **no Prep-log row added** |
+| S1 (`specify:64-67`) | ✅ | all four P.1 Frame bullets carry their clause |
+| S2 (`:169`) | ✅ | chain gains `/ **DROPPED**` + the archive gloss (Q-3 (a)) |
+| S3 (`:171`) | ✅ | the joint archive move appended to the planning-record-paths rule (Q-7 (i)) |
+| S4 (`:197`, `:199`) | ✅ | the new Value-triage Outputs bullet + the "only after that change's own value-triage decision" clause on the P.4 bullet (Q-1 (b), Q-2 (a)) |
+| S5 (`:212`) | ✅ | the Definition-of-Done sentence (authorized by the question file's own "For P.4" plan) |
+| G1 (`git:22`) | ✅ | one sentence, no new bullet (Q-3, Q-7) |
+| G2 (`:65`, `:73-80`) | ✅ | chain + the `git mv` pair block (Q-3, Q-7) |
+| G3 (`:59`) | ✅ | S7.1 done-criteria gain the move (Q-7 (i)) — see finding F-1 for the sibling bullets |
+| G4 (`:146-151`) | ✅ | new numbered step 5 with the two `git mv` + the `archive MERGED` commit (Q-7 (i)) |
+| G5 (`:171`) | ✅ | the direct-to-`main` permission extended to `DROPPED` + the move (Q-3, Q-7) |
+| A11 (`AGENTS.md:118`) | ✅ | the chain endpoint + the move — now identical to G5 (the S5 fix) |
+| A12 (`:419`) | ✅ | the backlog-status set now includes `DROPPED` (the S5 fix) |
+| G6 (`git:12`) | ✅ | the summary line now matches the operation it summarizes (the S5 fix) |
+
+**Nothing outside the rows changed.** `git diff --name-status main...HEAD` → exactly `M AGENTS.md`, `M docs/todo/template.md`, `M .agents/skills/specify/SKILL.md`, `M .agents/skills/git/SKILL.md`, `A docs/verification/value-triage-gate.md`. The deliberate non-edits are byte-identical: `AGENTS.md:135`, `:683`, `:147` (the READY gate), `:19-51` (Ponytail), `:310`/`:415`/`:682` (never-idle + the idle Prohibition), the Workflow Diagram, the Ownership sentences, the Atomic Steps chain, the todo-set rules, `docs/questions/template.md`, `specify:14`/`:45`/`:46`/`:69-75`, `git:111-113` (the cleared-gate test).
+
+### Check 2 — decision fidelity (each ANSWER answer re-read against the final text)
+
+| Answer | Implemented as answered? | Evidence |
+|---|---|---|
+| **Q-1 = (b)** clause inside P.1 Frame + one paragraph, **no** new numbered step, `specify:45`/`:46` untouched | **yes** | the clause is in the P.1 row (`AGENTS.md:141`) and the P.1 Frame section (`specify:64-67`); exactly one new subsection (`AGENTS.md:182-184`); the Phase P table has P.1–P.5 only; the Workflow Diagram and the Atomic Steps chain have no hunk; `specify:14`/`:45`/`:46` are not in the diff |
+| **Q-2 = (a)** per-item stop at P.4, never-idle rules untouched | **yes** | the stop is stated at `AGENTS.md:184` ("No TODO may pass P.4 … already-decided and READY changes keep running, so 'never idle' is unaffected"), `:220` (A6), `:667` (A9), `specify:199`; the path-scoped wording-hazard grep is **0** (`:310`, `:415`, `:682` byte-identical) — no global stop, no reclassification trigger fired |
+| **Q-3 = (a)** `DROPPED` in the vocabulary | **yes** | `AGENTS.md:163` (table row), `docs/todo/template.md:7` (comment), `specify:169`, `git:12`/`:22`/`:65`/`:171`; no machine reader exists (`grep -rn "DROPPED\|PREPARING" scripts/ .github/ userdocs/` → **no match**) |
+| **Q-4 = (a)** nits → this → interview-protocol | **yes** | the merged qualifiers are built on, not restated (`template.md:51`, `specify:14`/`:45`/`:46` untouched); `docs/questions/template.md`, `docs/specs/template.md`, `specify:69-75` and the `≥ 20` floor are untouched |
+| **Q-5** immediate ask, recorded **only** in the TODO's `## Value triage` section, no question-file entry | **yes** | `AGENTS.md:184`: "a single TODO framed outside a sweep gets its ask **immediately**, as a one-row table riding that change's existing P.3 round-trip — no extra ⏸. The ask and the decision are recorded **only in the TODO's `## Value triage` section**, never as a question-file entry."; `template.md:34-39` carries the `**Decision:**` bullet; `docs/questions/template.md` untouched; no new ⏸ symbol anywhere in the diagram |
+| **Q-7 = (i)** `docs/todo/archive/` + `docs/questions/archive/`, moved at the drop decision and at S7.1, question file moves with the TODO | **yes** | stated in 11 places (`AGENTS.md:130-131`, `:151`, `:162-163`, `:416-417`, `git:12`/`:22`/`:59`/`:73-80`/`:146-151`/`:171`, `specify:171`); the folders themselves are **not** created by this PR (`ls docs/todo/archive docs/questions/archive` → *No such file or directory*) — correct, they are orchestrator `main` actions (P.4 "Follow-up actions") |
+
+No ANSWER is unimplemented; no edit contradicts an ANSWER.
+
+### Check 3 — internal consistency of the new guidance (every enumeration of the status chain, the archive layout, the `main` permission and the S7.1 action set, in the 4 files)
+
+| Place (final state) | Enumerates | Verdict |
+|---|---|---|
+| `AGENTS.md:118`, `:130-131`, `:151`, `:157-163`, `:416-417`, `:419` | the `main` permission, the archive destinations, the status table, the backlog set | **consistent** — the permission is now stated identically at `:118` and `git:171` (A11/G5), and the status set at `:419` includes `DROPPED` (A12) |
+| `AGENTS.md:135`, `:683` | path-only mentions of the two folders | **correct as-is** — `docs/todo/archive/` is inside `docs/todo/`; neither names a chain endpoint |
+| `AGENTS.md:147` (READY gate), `:310`, `:415`, `:682` | the gates and the never-idle rules | **byte-identical**, no contradiction with the per-item stop |
+| `AGENTS.md:184` | the triage rule + `Status: DROPPED` + the move | **consistent** with A4/A3 |
+| `AGENTS.md:106`, `:304`, `:353`, `:456`, `:466` | S7.1 as "verify + remove + delete" | **summaries that delegate** to the git skill's "Post-merge cleanup" operation, which now has step 5 → note F-3, no action |
+| **`AGENTS.md:443`** | the S7.1 **todo completion condition** | **under-inclusive → F-1** |
+| `git:12`, `:22`, `:65`, `:73-80`, `:146-151`, `:171` | the chain, the move, the `main` permission | **consistent** (G6/G1/G2/G4/G5) |
+| **`git:41`** | the S7.1 **todo completion condition** | **under-inclusive → F-1** |
+| **`git:56` / `:58` vs `:59`** | S7.1 Objective / Outputs vs Done-criteria — three consecutive bullets of the step section G3 edited | **inconsistent within one block → F-1** |
+| `git:111-113` | the `BLOCKED-USER` cleared-gate test | **correct as-is** — it applies only to a WAITING change, which is by definition neither dropped nor merged (note F-4) |
+| `git:3` (skill description) | the skill's operation summary | note F-3 |
+| `specify:169`, `:171`, `:197`, `:199`, `:212` | the chain, the move, the P.4 boundary, the DoD | **consistent** (S2/S3/S4/S5) — see note F-7 on the DoD vs `AGENTS.md:147` |
+| `docs/todo/template.md:7`, `:34-39` | the status vocabulary, the triage section | **consistent** (T1/T2); `:5` does not restate the move → note F-6 |
+
+**No place now contradicts the `DROPPED` status, the archive folders or the `main` permission.** The remaining gaps are all in one class: the **S7.1 completion rule**, which the change extended in only one of its four statements.
+
+### Check 4 — no behavior delta (the DOCS/CHORE contract)
+
+Measured at HEAD `d800da4` against `main`:
+
+| Check | Result |
+|---|---|
+| `src/`, `tests/`, `docs/specs/`, `docs/verification/traceability.md`, `.github/`, `pyproject.toml`, `uv.lock`, `userdocs/`, `docs/questions/` in the diff | **none** — the forbidden-path grep over `git diff --name-only main...HEAD` matches only `docs/todo/template.md` (the template, not a planning record) |
+| Python files in the diff | **0** |
+| Version bump | **none** — `git diff main...HEAD -- pyproject.toml` → 0 lines; `version = "0.6.1"` unchanged (correct: `REFACTOR / DOCS-CHORE → none`) |
+| Machine readers of the changed guidance | **none** — `grep -rn "AGENTS\.md\|docs/todo\|docs/questions\|DROPPED\|PREPARING" scripts/ .github/ userdocs/` → no match (only task-runner files, untouched) |
+| Markdown hygiene | `git diff --check main...HEAD` clean; all 4 files end with a newline; tables and fences intact |
+
+### Check 5 — nothing weakened (the guidance counterpart of "tests weakened to achieve GREEN")
+
+Compared every removed guidance line against the added lines (25 removed / 55 added):
+
+- **Every removed line is a strict prefix of its added counterpart** — the only "lost" tokens are four sentence-final periods replaced by `;` continuations in the four `specify` P.1 bullets. No clause, modal or negation was dropped.
+- Modal / negation counts, removed → added: `MUST` 1 → 1, `NOT` 1 → 1, `never` 5 → 7, `only` 12 → 16, `always` 2 → 4, `SHOULD` 0 → 0. Nothing was softened; the change only adds obligations and permissions.
+- No gate's requirements were removed: the READY gate, the Spec Approval Gate, the RED/GREEN gates and the Phase 5/6 gates are not in the diff (the only gate-adjacent edit is the `specify` DoD — note F-7).
+### Findings
+
+| # | Finding | Severity | Evidence | Resolution / action |
+|---|---|---|---|---|
+| **F-1** | The **S7.1 completion rule** is stated in four places and G3 (`git:59`) updated only one. `git:56` (Objective) and `git:58` (Outputs) — the two bullets **directly above** the updated Done-criteria, inside the step section this change edited — still list three actions; `git:41` and `AGENTS.md:443` (the normative Todo Tracking Discipline status-orders list) still state the cleanup todo as `completed` "when the worktree is removed and the local + remote branches are deleted". Same class as S5 finding 1.2/1.3, which this change itself adjudicated as a gap to close, and the same cost asymmetry applies (4 micro-edits in 2 already-touched files vs a whole second DOCS/CHORE change) | **blocking** | `git:56` "…remove the worktree, and delete the local + remote branches." / `git:58` "…the worktree removed; the local + remote branches deleted." vs `git:59` "…; the change's TODO and question files are moved to `docs/todo/archive/` and `docs/questions/archive/` (the question file always moves with its TODO file)." | Exact fix, 4 rows (deciding answers unchanged: **Q-7 = (i)**, the same answer that produced G3/G4). **G7** `git:56` → "…verify the merge is reachable from `origin/main` (after `git fetch`), remove the worktree, delete the local + remote branches, and move the change's TODO and question files to their archive folders." **G8** `git:58` → append "; the change's TODO and question files moved to `docs/todo/archive/` and `docs/questions/archive/` (the question file with its TODO file)". **G9** `git:41` → "`completed` when the worktree is removed, the local + remote branches are deleted, and the two planning records have been moved to the archive folders." **A13** `AGENTS.md:443` → same wording as G9. Must stay untouched: `AGENTS.md:106`/`:304`/`:353` (delegating summaries), `git:111-113`, the never-idle rules, the READY gate |
+| **F-2** | `git:65` renders the status chain with arrows — `… → IN-WORKFLOW → WAITING → MERGED → DROPPED` — which reads as if `DROPPED` follows `MERGED`. It does not: a dropped TODO never reaches `IN-WORKFLOW`/`MERGED`, `DROPPED` is an alternative terminal reached from the value-triage decision | **non-blocking** | `git:65` vs `AGENTS.md:157-163` (a moment → status table, unambiguous) and `specify:169` (`/ **MERGED** / **DROPPED**`, the correct alternative form) | Accept, or fold into the F-1 step by replacing `→ DROPPED` with "…→ `MERGED`, or `DROPPED` straight from the value-triage decision". No behavioral consequence — `AGENTS.md:157-163` is the authoritative mapping |
+| **F-3** | `AGENTS.md:106`, `:304`, `:353`, `:456`, `:466` and `git:3` summarize post-merge cleanup as verify + remove + delete without the archive move | **note** | each names the git skill's "Post-merge cleanup" operation (`AGENTS.md:106` explicitly: "(git skill: \"Post-merge cleanup\")"), which now has step 5 | **No action** — they delegate to the authoritative procedure; extending the Workflow Diagram (`:304`) and the todo examples would widen the diff for no rule change |
+| **F-4** | Q-7's answer lists "the cleared-gate test" among the places to update; `git:101-113` (Detect a cleared gate) is unchanged | **note** | the rule itself **is** updated at `AGENTS.md:417` (A8: an archived change "is not resumed"); the git-skill test fires only for a **WAITING** change, which by definition is neither dropped nor merged, so it never has to look in the archive. The non-edit and its reason are recorded in the P.4 "Deliberate non-edit" entry | **No action** — decision fidelity satisfied; the non-edit is reasoned and correct |
+| **F-5** | `AGENTS.md:141` P.1 "Done when" now contains a condition that cannot be met at P.1 (the user's decision, which per Q-5 is recorded between P.3 and P.4) | **note** | the parenthetical "(the user's decision is recorded **before P.4**)" and A5's ask timing ("riding that change's existing P.3 round-trip") resolve the reading; `specify:67` states it identically, so the two files agree | **No action** — consistent, and the enforcement point is the P.4 boundary (A6/A9), not P.1 |
+| **F-6** | `docs/todo/template.md:5` and `docs/questions/template.md` do not restate the archive move | **note** | `template.md:5` is a plain statement ("committed directly to `main`"), still true; `docs/questions/template.md` is owned by `spec-interview-protocol` (closed point 12) | **No action** — the move is stated in 11 places; already assessed no-action at S5 |
+| **F-7** | `specify:212` adds the value-triage record to the skill's READY-gate Definition of Done while `AGENTS.md:147` (the normative READY gate) keeps its three conditions byte-identical | **note** | the skill's DoD is already a superset checklist (branch/worktree, change type, spec self-consistency) beyond `AGENTS.md:147`; the question file's own "For P.4" plan authorizes the `:207-224` edit; READY is reached after P.4, so the P.4 boundary rule (A6/A9) already implies it | **No action** — not a gate change (`AGENTS.md:147` is the out-of-scope item and is untouched), and it cannot let a change pass a gate it would otherwise fail |
+
+### S6.1 verdict
+
+**Findings — not clean yet.** The change implements its normative basis **exactly**: all 25 rows are present, each says what its deciding Q-ID requires, every ANSWER is implemented as answered (Q-1 (b), Q-2 (a), Q-3 (a), Q-4 (a), Q-5, Q-7 (i)), nothing outside the rows changed, there is no behavior delta and no version bump, and no existing MUST/SHOULD sentence was weakened or diluted. **One blocking finding (F-1)** — the S7.1 completion rule is stated inconsistently in four places, one of them the two-line block this change itself edited — plus one non-blocking wording finding (F-2) and five notes.
+
+F-1 must be closed by an **S4.2 re-entry (4 micro-edits: G7, G8, G9, A13)** before S6.3 can issue a clean report; F-2 may be folded into the same step or explicitly accepted.
+
+### S6.1 done-criteria checklist (this step)
+
+- [x] Check 1 (scope conformance): all 25 rows verified present and faithful; nothing outside the rows changed
+- [x] Check 2 (decision fidelity): all 6 ANSWERED questions verified implemented as answered, including the Q-1 / Q-2 / Q-3 / Q-5 / Q-7 specifics named in the task definition
+- [x] Check 3 (internal consistency): every enumeration of the status chain, the archive layout, the `main` permission and the S7.1 action set in the 4 files listed with a verdict
+- [x] Check 4 (no behavior delta): forbidden-path grep, 0 Python files, no version bump, no machine reader
+- [x] Check 5 (nothing weakened): removed-vs-added line analysis and modal-token counts
+- [x] Findings classified: **1 blocking (F-1, with the exact 4-edit fix), 1 non-blocking (F-2), 5 notes**
+- [x] No S6.2/S6.3/S6.4 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write, no guidance file edited, no subagent launched, no full test suite re-run
