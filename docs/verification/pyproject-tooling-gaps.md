@@ -150,6 +150,7 @@ Eight in-scope items, each decided at P.3 (Q-1 … Q-8). Items 1 and 8 are the c
 3. **No test is modified, weakened or deleted.** Test bodies may only be restructured for complexity (item 1, rows 6–10) while asserting exactly the same thing: same `@given` strategies and settings, same assertions, same event/record comparisons, same expected exceptions. Any assertion change is a violation and MUST stop the step (AGENTS.md Agent Prohibitions).
 4. **Every gate stays green at every step:** `uv run ruff check .` (whole repo, == CI `lint.yml:37`), `uv run ruff format --check .`, `uv run mypy src/`, `uv run deptry .`, `uv run python scripts/check_traceability.py`, `uv run mkdocs build --strict`, `uv run alembic upgrade head`, and — after item 1/2 land — `uv run complexipy src tests --max-complexity-allowed 15` → exit 0.
    **Correction to this invariant (recorded at Phase 4 step 2, 2026-10-04): `uv run ty check src/` is NOT a "stays green" gate.** It is **red at the baseline**: **151 diagnostics** at `5c589d2` and still **151** after Phase 4 steps 1–2 (`95 error[invalid-type-form]`, `23 error[unresolved-attribute]`, `18 warning[unsupported-base]`, `5 invalid-argument-type`, `3 invalid-return-type`, `3 call-non-callable`, `2 missing-argument`, `1 invalid-base`, `1 warning[deprecated]`) — e.g. `invalid-type-form` on `src/backend/authentication/feature_actions.py:20` and `unsupported-base` on `src/backend/authentication/repository.py:63`, caused by the `@logged`/`@logged_class` decorators and the SQLModel table bases, all in files this change does not touch. `ty` is **informational** in CI (`quality.yml:25`, `continue-on-error: true`); **`mypy` is the gate** (`quality.yml:23`) and is clean at every step (**Success: no issues found in 83 source files**). The ty requirement for this change is therefore **"no new diagnostics relative to the 151-diagnostic baseline"**, not "clean" — Phase 5 MUST NOT record the 151 as a regression. (Item 8's "`uv run ty check src/` … still clean" is to be read the same way: no new diagnostics.)
+   **Amendment to this invariant (recorded at Phase 4 step 5, 2026-10-04): the requirement is "no new `ty` diagnostics except the SQLModel-table-class class introduced by precise annotations"; exact counts recorded (baseline 151, after S4.5 152, after S4.6 152).** The single accepted addition is `error[invalid-argument-type]` at `src/backend/authentication/service.py:221` (`Expected UserRead, found User`), introduced by the precise `-> User | None` on `AuthService._user_by_identifier`, which is **kept**: mypy types SQLModel table classes as `Any`, so the annotation buys the CI gate nothing, while `ty` types them as real classes and therefore reports the `User`/`UserRead` mismatch that an untyped (`Any`) return hid. `ty` is informational (`quality.yml:25`, `continue-on-error: true`), `mypy` is the gate (`quality.yml:23`) and stays clean. Honest evidence beats a gate that cannot hold: Phase 5 MUST NOT record 151 or 152 as a regression, and MUST NOT be told the count is unchanged.
 5. **A new CI gate must pass on day one:** the complexipy job is added to `quality.yml` only after the 10 functions are under 15 in the same branch.
 6. **Feature boundaries respected:** each of the four touched features keeps its code inside its own feature directory; no cross-feature internal import is introduced by the extracted helpers.
 
@@ -358,3 +359,162 @@ Invariant 3 holds: no test was modified, weakened or deleted — the only `tests
 ### Remaining Phase 4 steps
 
 5. mypy `disallow_untyped_defs = true` + the 8 annotation fixes. 6. declare `py-webauthn>=2.0.0` + drop the deptry `DEP001` and ty `allowed-unresolved-imports` suppressions. 7. `quality_check` string. 8. docs-group split (README note last).
+
+## Phase 4 progress — steps 5–7 (mypy strictness, webauthn, quality_check)
+
+### Step 5 — mypy `disallow_untyped_defs = true` + the 8 annotation fixes (commit `6d7a8e2`)
+
+Before (scope item 6, measured at `6cc7375` with the flag on): **8 errors in 6 files**, all
+`error: Function is missing a return type annotation [no-untyped-def]`:
+
+| # | File | Def |
+|---|---|---|
+| 1 | `src/backend/authentication/repository.py` | `_attach_utc` |
+| 2 | `src/backend/authentication/service.py` | `AuthService._user_by_identifier` |
+| 3 | `src/backend/authentication/webauthn.py` | `_webauthn` |
+| 4 | `src/backend/permissions/repositories.py` | `_make_engine` |
+| 5 | `src/backend/usermanagement/models.py` | `RoleListType.process_bind_param` |
+| 6 | `src/backend/usermanagement/models.py` | `RoleListType.process_result_value` |
+| 7 | `src/main.py` | `_LazyPermissionService.__getattr__` |
+| 8 | `src/main.py` | `_LazyUserManager.__getattr__` |
+
+After: `uv run mypy src/` → **Success: no issues found in 83 source files**. The flag is set in
+`[tool.mypy]`; `warn-return-any` deliberately stays off (it reports **20 errors in 12 files**,
+recorded in the pyproject comment — enabling it is not in scope). The diff is annotations only:
+18 insertions / 10 deletions across the 6 files + `pyproject.toml`, no logic change, no test touched.
+
+**`_attach_utc` — a PEP 695 generic was measured and rejected.** The precise return is generic
+(`def _attach_utc[T: (Session, PasswordReset, WebAuthnCredential)](obj: T | None) -> T | None`).
+Measured in this worktree: `ty` goes **152 → 155**, adding exactly three
+`error[invalid-return-type]` at `src/backend/authentication/repository.py:126:20`, `:155:20`,
+`:248:20` — the `return [_attach_utc(row) for row in s.exec(...).all()]` statements of
+`SqliteSessionRepository.list_for_user` (126), `SqliteSessionRepository.list_all` (155) and
+`SqliteWebAuthnCredentialRepository.list_for_user` (248); the comprehensions start on 124/153/246.
+`T | None` does not
+satisfy the declared `list[Session]` / `list[WebAuthnCredential]` returns. mypy gains nothing from
+it either (it types SQLModel table classes as `Any`). The shipped annotation is therefore
+`-> Any` with a reason comment naming the trade-off; the generic is the upgrade path if `ty` ever
+narrows SQLModel.
+
+### Step 6 — the `webauthn` dependency: distribution-name finding, API mismatch, revert
+
+**Distribution-name fact.** The authentication spec (Dependencies) and ADR-031 name the library
+"py-webauthn". Its PyPI **distribution** is `webauthn` (module `webauthn`, latest 3.0.1). The
+distribution literally named `py-webauthn` is an unrelated FIDO-metadata package stuck at 0.0.6, so
+`py-webauthn>=2.0.0` is unresolvable ("only py-webauthn<=0.0.6 is available"). `ffe1241` therefore
+declared `webauthn>=2.0.0` (resolves 3.0.1).
+
+**API-version mismatch (the blocker).** `PyWebAuthnProvider` (`src/backend/authentication/webauthn.py`)
+calls, with these exact keyword arguments:
+
+- `generate_registration_options(rp_id=, rp_name=, user_id=<str>, user_name=, user_display_name=)` → `options.challenge` (str), `options.public_dict`
+- `verify_registration_response(registration_response=<dict>, expected_challenge=<str>, expected_rp_id=, expected_origin=, require_user_verification=False)` → `verification["credential"]["id"|"publicKey"|"transports"|"signCount"]`
+- `generate_authentication_options(credential_ids=[<str>], rp_id=, user_verification="preferred")`
+- `verify_authentication_response(authentication_response=<dict>, expected_challenge=<str>, expected_rp_id=, expected_origin=, require_user_verification=False)` → `verification.get("new_sign_count", 0)`
+
+Signatures probed in a throwaway venv (`%TEMP%/wa-probe`, Python 3.12; the worktree environment was
+not churned):
+
+| Distribution / version | `verify_registration_response` | `generate_authentication_options` |
+|---|---|---|
+| `webauthn` 3.0.1 (what `>=2.0.0` resolves) | `credential=`, `expected_challenge: bytes` → `VerifiedRegistration` object | `allow_credentials=` |
+| `webauthn` 2.x | same 2.0 shape (`credential=`, bytes challenge) | `allow_credentials=` |
+| `webauthn` 1.11.1 / 1.6.0 / 1.4.0 / 1.2.0 / **1.0.0** | `credential=`, `expected_challenge: bytes` | `allow_credentials=` |
+| `webauthn` 0.4.7 | no such function (class API: `WebAuthnRegistrationResponse(...).verify()`) | — |
+| `py-webauthn` 0.0.6 | no such function (installs a `webauthn` module that is an attestation/metadata library) | — |
+
+**No released version of either distribution** takes `registration_response=` / `credential_ids=` / a
+`str` challenge, and none returns the dict shape the code reads. `verify_authentication_response`
+additionally requires `credential_public_key` and `credential_current_sign_count` in every released
+version — the provider passes neither.
+
+**Decision: revert (option 4).** At `main` the library is undeclared and absent from `uv.lock`, so the
+status quo in a synced environment is that every provider method raises
+`InvalidPasskeyResponseError("py-webauthn is required for PyWebAuthnProvider but is not installed")`.
+Declaring any released version makes the deferred import succeed and the calls then raise
+`TypeError: verify_registration_response() got an unexpected keyword argument 'registration_response'`
+— swallowed by `except Exception` into `InvalidPasskeyResponseError("registration response verification
+failed")`, a **different message** — or, for `generate_authentication_options`, an **uncaught**
+`TypeError` that propagates out of the feature. Either is an externally observable behavior change,
+which invariant 1 forbids. `ffe1241` is reverted with a new commit (`git revert --no-commit ffe1241`):
+the `webauthn` entry is dropped, the deptry `DEP001 = ["webauthn"]` and ty
+`allowed-unresolved-imports = ["webauthn"]` suppressions and their comments are restored verbatim, and
+`uv.lock` returns to its pre-S4.6 state (webauthn + cbor2, cryptography, pyasn1, pyasn1-modules,
+pyopenssl removed; the P-42 version drift left as at `main`). The worktree venv was re-synced
+(`uv sync` uninstalled those 6 packages) so the gates below ran in the same environment as `main`
+(`webauthn installed: False`).
+
+**Follow-up defect (separate change, deliberately not fixed here).** `PyWebAuthnProvider` is written
+against an API no released `webauthn` provides; adapting it to the current upstream API is its own
+change (ISSUE/FEATURE), framed by the orchestrator as a backlog item.
+
+### Gates after the revert (step 6 final state)
+
+| Gate | Result |
+|---|---|
+| `uv run deptry .` | **Success! No dependency issues found.** (Scanning 89 files) |
+| `uv run mypy src/` | **Success: no issues found in 83 source files** |
+| `uv run ty check src/` | Found 152 diagnostics (unchanged from S4.5; informational, `quality.yml:25`) |
+| `uv run ruff check .` | **All checks passed!** |
+| `uv run ruff format --check .` | 324 files already formatted |
+| `uv run pytest tests/ -q` | **728 passed, 1 skipped in 217.43s** |
+
+Note: with `webauthn` installed but undeclared, deptry reports `DEP003 'webauthn' imported but it is a
+transitive dependency` — the suppression alone is not enough, the environment must match the lock.
+`uv sync` (exact) is what makes the reverted state verifiable.
+
+### ty per-rule table (invariant 4, as amended)
+
+| Rule | baseline `5c589d2` | after S4.5 / S4.6 / S4.7 |
+|---|---|---|
+| `error[invalid-type-form]` | 95 | 95 |
+| `error[unresolved-attribute]` | 23 | 23 |
+| `warning[unsupported-base]` | 18 | 18 |
+| **`error[invalid-argument-type]`** | **5** | **6** |
+| `error[invalid-return-type]` | 3 | 3 |
+| `error[call-non-callable]` | 3 | 3 |
+| `error[missing-argument]` | 2 | 2 |
+| `error[invalid-base]` | 1 | 1 |
+| `warning[deprecated]` | 1 | 1 |
+| **total** | **151** | **152** |
+
+The single addition is `error[invalid-argument-type]` at `src/backend/authentication/service.py:221`
+(`Expected UserRead, found User`), from the precise `-> User | None` on
+`AuthService._user_by_identifier`: mypy types SQLModel table classes as `Any` (so the annotation buys
+the CI gate nothing) while ty types them as real classes. Accepted deviation — `ty` is informational
+(`quality.yml:25`, `continue-on-error: true`), `mypy` is the gate (`quality.yml:23`) and is clean.
+
+### Step 7 — `quality_check` at Phase 5 parity (commit `8322f27`, scope item 8)
+
+Before (`pyproject.toml:215`): `quality_check = "uv run ruff check src/ && uv run mypy src/"`
+After: `quality_check = "uv run ruff check . && uv run ruff format --check . && uv run mypy src/ && uv run deptry ."`
+— the four commands of the Phase 5 lint/types gate (Q-6). complexipy stays out of the per-task loop;
+pip-audit, mkdocs, alembic and coverage stay CI-only. All four verified clean (table above).
+
+### Per-step full-suite counts (invariant 2: identical result at every step)
+
+| Step | Commit | `uv run pytest tests/ -q` |
+|---|---|---|
+| S4.5 mypy strictness | `6d7a8e2` | 728 passed, 1 skipped — 218.05 s |
+| S4.6 declare (later reverted) | `ffe1241` | 728 passed, 1 skipped — 218.87 s |
+| S4.7 `quality_check` | `8322f27` | 728 passed, 1 skipped (recorded in the commit message) |
+| S4.6 revert | `2486b64` | 728 passed, 1 skipped — 217.43 s |
+
+The 1 skip is the pre-existing `tests/acceptance/filemanagement/test_filemanagement.py:364`
+("symlinks not available on this host"). No test was modified, weakened or deleted in any of the four
+steps (`git log --stat` shows no `tests/` file in `6d7a8e2`, `ffe1241`, `8322f27` or `2486b64`).
+
+### Commits (steps 5–7)
+
+| Commit | Message | Files |
+|---|---|---|
+| `6d7a8e2` | `refactor(pyproject-tooling-gaps): S4.5 enable mypy disallow_untyped_defs + annotate defs` | `pyproject.toml` + 6 src files (+18 / −10) |
+| `ffe1241` | `refactor(pyproject-tooling-gaps): S4.6 declare py-webauthn, drop DEP001 + ty suppressions` | `pyproject.toml`, `uv.lock` (+159 / −9) |
+| `8322f27` | `refactor(pyproject-tooling-gaps): S4.7 quality_check to Phase 5 parity` | `pyproject.toml` (+3 / −1) |
+| `2486b64` | `refactor(pyproject-tooling-gaps): S4.6 revert webauthn declaration — provider API matches no released version` | `pyproject.toml`, `uv.lock` (+9 / −159, reverts `ffe1241`) |
+
+`uv.lock` was `git checkout --`-reverted before each commit except where the lock change is the point
+(`ffe1241`, and `2486b64` restoring it) — P-42 drift.
+
+**Next step: 8** — docs-group split, the 11 `uv sync --only-group dev` lines, the `mkdocs-build`
+pre-push hook entry, README note last. Then Phase 5.
