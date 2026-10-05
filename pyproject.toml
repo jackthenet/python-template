@@ -22,10 +22,6 @@ dependencies = [
     "pillow>=12.3.0",
     # Safe YAML serialization for settings value/template storage.
     "ruamel-yaml>=0.19.1",
-    # Passkey/WebAuthn server library (the "py-webauthn" project of the
-    # authentication spec Dependencies list and ADR-031; its PyPI distribution
-    # name is `webauthn`), imported lazily in backend/authentication/webauthn.py.
-    "webauthn>=2.0.0",
 ]
 
 [dependency-groups]
@@ -121,6 +117,10 @@ DEP002 = [
     "mypy", "orjson", "pip-audit", "pre-commit", "py-spy", "pytest-cov",
     "pytest-randomly", "pytest-xdist", "ruff", "ty",
 ]
+# Optional production dependency: py-webauthn is deferred-imported inside
+# PyWebAuthnProvider (the fake provider is the test seam), so it is
+# intentionally not declared.
+DEP001 = ["webauthn"]
 # Transitive runtime dep (via sqlmodel) imported by repositories and the
 # alembic scaffold (migrations/env.py).
 DEP003 = ["sqlalchemy"]
@@ -151,6 +151,10 @@ python-version = "3.14"
 root = ["./src"]
 
 [tool.ty.analysis]
+# mypy `ignore_missing_imports = true` equivalent, scoped to the only
+# third-party package without type information (verified 2026-09-15:
+# sqlmodel/sqlalchemy/pydantic/loguru all ship `py.typed`).
+allowed-unresolved-imports = ["webauthn"]
 # mypy `check_untyped_defs = true` has no ty equivalent: ty analyzes all
 # function bodies by default.
 
