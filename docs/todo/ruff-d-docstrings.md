@@ -53,7 +53,7 @@ All rendered features, docstrings only: `backend/{authentication,eventbus,filema
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-04 | Framed from `pyproject-tooling-gaps` Q-9 (user decision: `D` off + backlog TODO). Measured cost re-checked: `ruff check --select D src` → 379 errors; consumer confirmed at `userdocs/api.md:7-14` + `mkdocs.yml:13` |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (28 questions) | 2026-10-05 | **BLOCKED-USER** — 28 questions (**Q-1 … Q-28**) recorded in `docs/questions/ruff-d-docstrings.md`, one batch, most-blocking first (Q-1 the `D` code subset, Q-2 the docstring style, Q-3/Q-4 which trees the gate covers, Q-5/Q-6/Q-7 the increment shape and how `select` lands green). Re-measured on `main` @ `305add3`: `src/` **386** (`D1xx` 198 — 195 of them on `__all__`-published objects), `tests/` 762, `migrations/` 11, `scripts/` 3, `.github/hooks/` 1, repo-wide 1 164; 43 `src/` files affected (18 docstring-only, 8 format-only, 17 both). **Two numbers in this TODO are stale** — "379 errors" is now 386, and "156 of 515 public defs lack a docstring" is not reproducible under any `D` rule (the `src/` missing-docstring family is 198: D102 131, D107 51, D101 14, D105 2); the preamble carries the measured figures and a Problem Log entry is owed at P.4 in the change worktree |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft scope + create branch/worktree | | |
 | P.5 Self-consistency (FEATURE/CROSS-CUTTING) | | |
