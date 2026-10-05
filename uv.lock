@@ -1663,7 +1663,7 @@ wheels = [
 
 [[package]]
 name = "python-template"
-version = "0.6.0"
+version = "0.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
@@ -1685,9 +1685,6 @@ dev = [
     { name = "complexipy" },
     { name = "deptry" },
     { name = "hypothesis" },
-    { name = "mkdocs" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings", extra = ["python"] },
     { name = "mypy" },
     { name = "pip-audit" },
     { name = "polyfactory" },
@@ -1701,6 +1698,11 @@ dev = [
     { name = "ruff" },
     { name = "time-machine" },
     { name = "ty" },
+]
+docs = [
+    { name = "mkdocs" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extra = ["python"] },
 ]
 
 [package.metadata]
@@ -1724,9 +1726,6 @@ dev = [
     { name = "complexipy", specifier = ">=8.0.1" },
     { name = "deptry", specifier = ">=0.25.1" },
     { name = "hypothesis", specifier = ">=6.168.1" },
-    { name = "mkdocs", specifier = ">=1.6" },
-    { name = "mkdocs-material", specifier = ">=9.5" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.6" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pip-audit", specifier = ">=2.10.1" },
     { name = "polyfactory", specifier = ">=3.3.0" },
@@ -1740,6 +1739,11 @@ dev = [
     { name = "ruff", specifier = ">=0.16.9" },
     { name = "time-machine", specifier = ">=3.5.1" },
     { name = "ty", specifier = ">=0.0.84" },
+]
+docs = [
+    { name = "mkdocs", specifier = ">=1.6" },
+    { name = "mkdocs-material", specifier = ">=9.5" },
+    { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.6" },
 ]
 
 [[package]]

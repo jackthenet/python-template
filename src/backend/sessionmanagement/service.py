@@ -200,22 +200,27 @@ class SessionService:
         if user_id is None:
             raise AssertionError("user_id must not be None")  # validated above (exactly one of token/user_id)
         valid = [row for row in self._repository.list_for_user(user_id) if not row.revoked and row.expires_at > now]
-        if current_session_id is not None:
-            # Pin the current session first; the remainder is already
-            # created_at descending from list_for_user (REQ-006, INV-005).
-            rest = [row for row in valid if row.id != current_session_id]
-            ordered = [row for row in valid if row.id == current_session_id] + rest
-        else:
-            ordered = valid
-        if limit is None:
-            limit = int(
-                self._read_setting(
-                    self._registry(), "sessionmanagement.max_listed_sessions", DEFAULT_MAX_LISTED_SESSIONS
-                )
-            )
-        entries = [self._to_entry(row, current_session_id) for row in ordered[:limit]]
+        ordered = self._order_with_current(valid, current_session_id)
+        entries = [self._to_entry(row, current_session_id) for row in ordered[: self._listed_limit(limit)]]
         self._publish(SessionsListed(user_id=user_id, count=len(entries)))
         return entries
+
+    def _listed_limit(self, limit: int | None) -> int:
+        """The listing bound: ``limit``, else the live-read ``max_listed_sessions`` (REQ-007, REQ-019)."""
+        if limit is not None:
+            return limit
+        return int(
+            self._read_setting(self._registry(), "sessionmanagement.max_listed_sessions", DEFAULT_MAX_LISTED_SESSIONS)
+        )
+
+    def _order_with_current(self, valid: list[Session], current_session_id: UUID | None) -> list[Session]:
+        """Pin the current session first; the remainder is already created_at descending
+        from ``list_for_user`` (REQ-006, INV-005)."""
+        if current_session_id is None:
+            return valid
+        current = [row for row in valid if row.id == current_session_id]
+        rest = [row for row in valid if row.id != current_session_id]
+        return current + rest
 
     def _resolve_token(self, token: str) -> Session:
         """Resolve the token path (authentication's ``session_info`` contract, REQ-002).

@@ -195,30 +195,46 @@ class FakeSmtpServer:
             line = self._readline(conn)
             if line is None:
                 return
-            cmd = line.decode("utf-8", "replace").strip().upper()
-            if cmd.startswith("EHLO"):
-                self._send(conn, "250 fake.smtp.local\r\n")
-            elif cmd.startswith("AUTH"):
-                if self.mode == "auth_fail":
-                    self._send(conn, "535 authentication failed\r\n")
-                    return
-                self._send(conn, "235 authentication ok\r\n")
-            elif cmd.startswith("MAIL FROM"):
-                if self.mode == "protocol_fail":
-                    self._send(conn, "550 protocol error\r\n")
-                    return
-                self._send(conn, "250 ok\r\n")
-            elif cmd.startswith("RCPT TO"):
-                self._send(conn, "250 ok\r\n")
-            elif cmd.startswith("DATA"):
-                self._send(conn, "354 go ahead\r\n")
-                self._read_data(conn)
-                self._send(conn, "250 queued\r\n")
-            elif cmd.startswith("QUIT"):
-                self._send(conn, "221 bye\r\n")
+            if not self._handle_command(conn, line):
                 return
-            else:
-                self._send(conn, "250 ok\r\n")
+
+    def _handle_command(self, conn: socket.socket, line: bytes) -> bool:
+        """Answer one SMTP command; return ``False`` when the dialogue ends after it (QUIT/failure)."""
+        cmd = line.decode("utf-8", "replace").strip().upper()
+        if cmd.startswith("EHLO"):
+            self._send(conn, "250 fake.smtp.local\r\n")
+        elif cmd.startswith("AUTH"):
+            return self._handle_auth(conn)
+        elif cmd.startswith("MAIL FROM"):
+            return self._handle_mail_from(conn)
+        elif cmd.startswith("RCPT TO"):
+            self._send(conn, "250 ok\r\n")
+        elif cmd.startswith("DATA"):
+            self._send(conn, "354 go ahead\r\n")
+            self._read_data(conn)
+            self._send(conn, "250 queued\r\n")
+        elif cmd.startswith("QUIT"):
+            self._send(conn, "221 bye\r\n")
+            return False
+        else:
+            self._send(conn, "250 ok\r\n")
+        return True
+
+    def _handle_auth(self, conn: socket.socket) -> bool:
+        """AUTH: in ``auth_fail`` mode answer 535 and end the dialogue, else 235 and continue."""
+        if self.mode == "auth_fail":
+            self._send(conn, "535 authentication failed\r\n")
+            return False
+        self._send(conn, "235 authentication ok\r\n")
+        return True
+
+    def _handle_mail_from(self, conn: socket.socket) -> bool:
+        """MAIL FROM: in ``protocol_fail`` mode answer 550 and end the dialogue, else 250 and continue."""
+        if self.mode == "protocol_fail":
+            self._send(conn, "550 protocol error\r\n")
+            return False
+        self._send(conn, "250 ok\r\n")
+        return True
 
     def _readline(self, conn: socket.socket) -> bytes | None:
         chunk = conn.recv(1)

@@ -38,12 +38,6 @@ dev = [
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.168.1",
-    # MkDocs static site build system.
-    "mkdocs>=1.6",
-    # MkDocs Material theme for the published documentation site.
-    "mkdocs-material>=9.5",
-    # MkDocs plugin: API docs from docstrings (python extra: docstring handler).
-    "mkdocstrings[python]>=1.0.6",
     # Static type checking for the source tree.
     "mypy>=2.3.1",
     # Vulnerability scanning for installed dependencies.
@@ -71,6 +65,17 @@ dev = [
     # Fast type checker for the source tree.
     "ty>=0.0.84",
 ]
+# Documentation site tooling: installed only with `uv sync --group docs` (the
+# mkdocs job in .github/workflows/quality.yml and the mkdocs-build pre-push hook).
+# Not in default-groups, so `uv sync` and every other CI job stay docs-free.
+docs = [
+    # MkDocs static site build system.
+    "mkdocs>=1.6",
+    # MkDocs Material theme for the published documentation site.
+    "mkdocs-material>=9.5",
+    # MkDocs plugin: API docs from docstrings (python extra: docstring handler).
+    "mkdocstrings[python]>=1.0.6",
+]
 
 [tool.uv]
 package = true
@@ -91,7 +96,7 @@ replace = 'version = "{new_version}"'
 
 [tool.complexipy]
 paths = ["src", "tests"]
-max-complexity-allowed = 30
+max-complexity-allowed = 15
 
 [tool.coverage.run]
 branch = true
@@ -131,6 +136,8 @@ DEP004 = ["alembic"]
 [tool.mypy]
 python_version = "3.14"
 check_untyped_defs = true
+# `warn-return-any` stays off deliberately: it reports 20 errors in 12 files.
+disallow_untyped_defs = true
 ignore_missing_imports = true
 # `src/backend/` is a namespace package (no `__init__.py`); these flags let
 # `mypy src/` resolve `backend.logging` correctly without CLI flags.
@@ -184,6 +191,7 @@ select = [
     "Q", # flake8-quotes
     "SIM",
     "C4",
+    "DTZ", # flake8-datetimez: naive datetime objects are a bug
 ]
 fixable = [
     "I",  # isort
@@ -211,5 +219,7 @@ testpaths = ["tests"]
 [tool.agent-runner]
 tasks_file = ".github/task-runner/tasks.json"
 test_command = "uv run pytest"
-quality_check = "uv run ruff check src/ && uv run mypy src/"
+# Phase 5 parity (Q-6). complexipy stays out of the per-task loop (CI gate only);
+# pip-audit, mkdocs, alembic and the coverage gate stay CI-only.
+quality_check = "uv run ruff check . && uv run ruff format --check . && uv run mypy src/ && uv run deptry ."
 max_retries = 3

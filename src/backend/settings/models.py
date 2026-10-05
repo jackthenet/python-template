@@ -66,7 +66,56 @@ def _slider_on_grid(value: float, min_: float, max_: float, step: float) -> bool
     return abs(value - (min_ + k * step)) <= _STEP_EPSILON
 
 
-def is_valid_value(  # noqa: PLR0911, PLR0912
+def _text_value_valid(value: Any, *, pattern: str | None, min_length: int | None, max_length: int | None) -> bool:
+    if not isinstance(value, str):
+        return False
+    if pattern is not None and re.fullmatch(pattern, value) is None:
+        return False
+    if min_length is not None and len(value) < min_length:
+        return False
+    return not (max_length is not None and len(value) > max_length)
+
+
+def _number_value_valid(value: Any, *, min_value: float | None, max_value: float | None) -> bool:
+    if not _is_number(value):
+        return False
+    if min_value is not None and value < min_value:
+        return False
+    return not (max_value is not None and value > max_value)
+
+
+def _slider_value_valid(
+    value: Any, *, slider_min: float | None, slider_max: float | None, slider_step: float | None
+) -> bool:
+    if not _is_number(value):
+        return False
+    if slider_min is None or slider_max is None or slider_step is None:
+        return False
+    return _slider_on_grid(value, slider_min, slider_max, slider_step)
+
+
+def _select_value_valid(value: Any, *, select_options: tuple[str, ...] | None) -> bool:
+    if select_options is None:
+        return False
+    return isinstance(value, str) and value in select_options
+
+
+def _list_value_valid(value: Any, *, list_spec: ListSpec | None) -> bool:
+    if not isinstance(value, list):
+        return False
+    if not all(isinstance(item, str) for item in value):
+        return False
+    spec = list_spec if list_spec is not None else ListSpec()
+    if spec.item_pattern is not None and any(re.fullmatch(spec.item_pattern, item) is None for item in value):
+        return False
+    if spec.min_items is not None and len(value) < spec.min_items:
+        return False
+    if spec.max_items is not None and len(value) > spec.max_items:
+        return False
+    return spec.allow_duplicates or len(set(value)) == len(value)
+
+
+def is_valid_value(  # noqa: PLR0911
     kind: SettingKind,
     value: Any,
     *,
@@ -81,48 +130,25 @@ def is_valid_value(  # noqa: PLR0911, PLR0912
     max_value: float | None = None,
     list_spec: ListSpec | None = None,
 ) -> bool:
-    """Return True iff ``value`` is valid for ``kind`` with the given params."""
+    """Return True iff ``value`` is valid for ``kind`` with the given params.
+
+    The kind dispatch is a flat chain; each kind's rules live in their own
+    private helper so the check for one kind can be read on its own.
+    """
     if kind is SettingKind.TEXT:
-        if not isinstance(value, str):
-            return False
-        if pattern is not None and re.fullmatch(pattern, value) is None:
-            return False
-        if min_length is not None and len(value) < min_length:
-            return False
-        return not (max_length is not None and len(value) > max_length)
+        return _text_value_valid(value, pattern=pattern, min_length=min_length, max_length=max_length)
     if kind is SettingKind.NUMBER:
-        if not _is_number(value):
-            return False
-        if min_value is not None and value < min_value:
-            return False
-        return not (max_value is not None and value > max_value)
+        return _number_value_valid(value, min_value=min_value, max_value=max_value)
     if kind is SettingKind.BOOLEAN:
         return isinstance(value, bool)
     if kind is SettingKind.EMAIL:
         return isinstance(value, str) and _email_valid(value)
     if kind is SettingKind.SLIDER:
-        if not _is_number(value):
-            return False
-        if slider_min is None or slider_max is None or slider_step is None:
-            return False
-        return _slider_on_grid(value, slider_min, slider_max, slider_step)
+        return _slider_value_valid(value, slider_min=slider_min, slider_max=slider_max, slider_step=slider_step)
     if kind is SettingKind.SELECT:
-        if select_options is None:
-            return False
-        return isinstance(value, str) and value in select_options
+        return _select_value_valid(value, select_options=select_options)
     if kind is SettingKind.LIST:
-        if not isinstance(value, list):
-            return False
-        if not all(isinstance(item, str) for item in value):
-            return False
-        spec = list_spec if list_spec is not None else ListSpec()
-        if spec.item_pattern is not None and any(re.fullmatch(spec.item_pattern, item) is None for item in value):
-            return False
-        if spec.min_items is not None and len(value) < spec.min_items:
-            return False
-        if spec.max_items is not None and len(value) > spec.max_items:
-            return False
-        return spec.allow_duplicates or len(set(value)) == len(value)
+        return _list_value_valid(value, list_spec=list_spec)
     return False
 
 
@@ -227,11 +253,19 @@ class SettingDefinition(BaseModel):
     max_value: float | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> SettingDefinition:  # noqa: PLR0912
+    def _validate(self) -> SettingDefinition:
         if not _KEY_RE.match(self.key):
             raise SettingsValidationError("setting key has an invalid format")
+        self._validate_kind_specs()
+        self._validate_kind_exclusive_constraints()
+        # Default validity.
+        if not _definition_default_valid(self):
+            raise SettingsValidationError("default is invalid for its kind")
+        return self
+
+    def _validate_kind_specs(self) -> None:
+        """Kind-specific spec presence/mismatch (one spec per kind)."""
         kind = self.kind
-        # Kind-specific parameter presence/mismatch.
         if kind is SettingKind.SLIDER:
             if self.slider is None:
                 raise SettingsValidationError("SLIDER requires a slider spec")
@@ -246,24 +280,27 @@ class SettingDefinition(BaseModel):
             # LIST always accepts: a ListSpec is optional (defaults to ListSpec()).
             pass
         else:
-            if self.slider is not None:
-                raise SettingsValidationError(f"{kind} forbids a slider spec")
-            if self.select is not None:
-                raise SettingsValidationError(f"{kind} forbids a select spec")
-            if self.list_spec is not None:
-                raise SettingsValidationError(f"{kind} forbids a list spec")
-        # TEXT-only constraints are rejected on other kinds.
+            self._validate_no_kind_specs()
+
+    def _validate_no_kind_specs(self) -> None:
+        """A kind other than SLIDER/SELECT/LIST forbids every kind-specific spec."""
+        kind = self.kind
+        if self.slider is not None:
+            raise SettingsValidationError(f"{kind} forbids a slider spec")
+        if self.select is not None:
+            raise SettingsValidationError(f"{kind} forbids a select spec")
+        if self.list_spec is not None:
+            raise SettingsValidationError(f"{kind} forbids a list spec")
+
+    def _validate_kind_exclusive_constraints(self) -> None:
+        """TEXT-only and NUMBER-only constraints are rejected on other kinds."""
+        kind = self.kind
         if kind is not SettingKind.TEXT and (
             self.pattern is not None or self.min_length is not None or self.max_length is not None
         ):
             raise SettingsValidationError(f"{kind} forbids TEXT-only constraints")
-        # NUMBER-only constraints are rejected on other kinds.
         if kind is not SettingKind.NUMBER and (self.min_value is not None or self.max_value is not None):
             raise SettingsValidationError(f"{kind} forbids NUMBER-only constraints")
-        # Default validity.
-        if not _definition_default_valid(self):
-            raise SettingsValidationError("default is invalid for its kind")
-        return self
 
 
 def value_valid_for(d: SettingDefinition, value: Any) -> bool:

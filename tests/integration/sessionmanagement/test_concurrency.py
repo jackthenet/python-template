@@ -11,6 +11,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 from sessionmanagement_test_helpers import build_session_service, db_url, make_session
@@ -63,6 +64,27 @@ def test_edge_010_concurrent_revocation_and_listing(tmp_path: Path) -> None:
     assert service.list_sessions(user_id=user_id) == []
 
 
+def _nfr_005_worker(
+    service: Any,
+    uid: UUID,
+    rows: list[tuple[object, str]],
+    all_ids: set[UUID],
+    errors: list[BaseException],
+) -> None:
+    """One NFR-005 worker thread: revoke its own sessions, list them, revoke all, clean up."""
+    try:
+        for row, _token in rows:
+            service.revoke_session(row.id)
+        for _ in range(5):
+            entries = service.list_sessions(user_id=uid)
+            for entry in entries:
+                assert entry.session_id in all_ids
+        service.revoke_all_sessions(uid)
+        service.cleanup_expired()
+    except BaseException as exc:
+        errors.append(exc)
+
+
 def test_nfr_005_concurrent_threads_safe(tmp_path: Path) -> None:
     """NFR-005: the service and the SQLite repositories are safe for
     concurrent use from multiple threads."""
@@ -77,22 +99,8 @@ def test_nfr_005_concurrent_threads_safe(tmp_path: Path) -> None:
     all_ids = {row.id for rows in rows_by_user.values() for row, _token in rows}
     errors: list[BaseException] = []
 
-    def worker(uid: UUID) -> None:
-        try:
-            rows = rows_by_user[uid]
-            for row, _token in rows:
-                service.revoke_session(row.id)
-            for _ in range(5):
-                entries = service.list_sessions(user_id=uid)
-                for entry in entries:
-                    assert entry.session_id in all_ids
-            service.revoke_all_sessions(uid)
-            service.cleanup_expired()
-        except BaseException as exc:
-            errors.append(exc)
-
     with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(worker, uid) for uid in user_ids]
+        futures = [pool.submit(_nfr_005_worker, service, uid, rows_by_user[uid], all_ids, errors) for uid in user_ids]
         for future in futures:
             future.result()
     assert not errors, errors

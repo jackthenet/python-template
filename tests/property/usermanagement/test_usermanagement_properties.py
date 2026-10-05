@@ -5,6 +5,11 @@ Hypothesis-based tests for the invariants INV-001 .. INV-006.
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Callable, Iterator
+from itertools import count
+from uuid import UUID
+
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
@@ -22,6 +27,7 @@ from backend.usermanagement import (
     UserManager,
     UserNotFoundError,
     UserPasswordChanged,
+    UserRead,
     UserRoleChanged,
     UserUpdate,
     UserUpdated,
@@ -106,6 +112,50 @@ def test_inv_002_password_round_trip(p1: str, p2: str) -> None:
     assert manager.verify_password(created.id, p1) is False
 
 
+def _admin_users(manager: UserManager, *, include_inactive: bool) -> list[UserRead]:
+    """The users that currently hold the ``admin`` role (in the requested active state)."""
+    return [u for u in manager.list_users(include_inactive=include_inactive) if "admin" in u.roles]
+
+
+def _mutate_first_admin(admins: list[UserRead], mutate: Callable[[UUID], object]) -> None:
+    """Apply ``mutate`` to the first admin that accepts it (a ``LastAdminError`` moves to the next)."""
+    for admin in admins:
+        try:
+            mutate(admin.id)
+        except LastAdminError:
+            continue
+        break
+
+
+def _apply_inv_003_op(manager: UserManager, op: str, counter: Iterator[int]) -> None:
+    """Apply one operation of the INV-003 sequence (the same four ops, the same arguments)."""
+    if op == "create_admin":
+        n = next(counter)
+        manager.create_user(
+            UserCreate(
+                **valid_create(
+                    username=f"a{n}x",
+                    email=f"a{n}@example.com",
+                    roles=["admin", "user"],
+                )
+            )
+        )
+    elif op == "create_member":
+        n = next(counter)
+        manager.create_user(
+            UserCreate(
+                **valid_create(
+                    username=f"m{n}x",
+                    email=f"m{n}@example.com",
+                )
+            )
+        )
+    elif op == "delete_admin":
+        _mutate_first_admin(_admin_users(manager, include_inactive=True), manager.delete_user)
+    elif op == "deactivate_admin":
+        _mutate_first_admin(_admin_users(manager, include_inactive=False), manager.deactivate_user)
+
+
 # deadline=1000 is measured, not guessed: the slowest local examples ran 258-270 ms against the
 # 200 ms default (seed 101 and the default random seed; this file is byte-identical to
 # origin/main, so the flake predates this change). The cost is argon2id password hashing
@@ -126,51 +176,11 @@ def test_inv_002_password_round_trip(p1: str, p2: str) -> None:
 )
 def test_inv_003_last_admin_invariant(ops: list[str]) -> None:
     _, manager, _ = _memory_manager()
-    counter = 0
-
-    def next_username(prefix: str) -> str:
-        nonlocal counter
-        counter += 1
-        return f"{prefix}{counter}x"
-
+    counter = count(start=1)
     for op in ops:
-        try:
-            if op == "create_admin":
-                manager.create_user(
-                    UserCreate(
-                        **valid_create(
-                            username=next_username("a"),
-                            email=f"a{counter}@example.com",
-                            roles=["admin", "user"],
-                        )
-                    )
-                )
-            elif op == "create_member":
-                manager.create_user(
-                    UserCreate(
-                        **valid_create(
-                            username=next_username("m"),
-                            email=f"m{counter}@example.com",
-                        )
-                    )
-                )
-            elif op == "delete_admin":
-                for admin in [u for u in manager.list_users(include_inactive=True) if "admin" in u.roles]:
-                    try:
-                        manager.delete_user(admin.id)
-                    except LastAdminError:
-                        continue
-                    break
-            elif op == "deactivate_admin":
-                for admin in [u for u in manager.list_users() if "admin" in u.roles]:
-                    try:
-                        manager.deactivate_user(admin.id)
-                    except LastAdminError:
-                        continue
-                    break
-        except UserAlreadyExistsError, LastAdminError, UserNotFoundError:
-            pass
-        admin_users = [u for u in manager.list_users(include_inactive=True) if "admin" in u.roles]
+        with contextlib.suppress(UserAlreadyExistsError, LastAdminError, UserNotFoundError):
+            _apply_inv_003_op(manager, op, counter)
+        admin_users = _admin_users(manager, include_inactive=True)
         if admin_users:
             assert any(u.is_active for u in admin_users)
 
@@ -247,6 +257,33 @@ def test_inv_005_uniqueness(specs: list[UserCreate]) -> None:
             assert users[i].email != users[j].email
 
 
+def _apply_event_op(manager: UserManager, op: str, user_id: UUID, counter: int) -> type | None:
+    """Apply one non-create operation; return the event type it must publish.
+
+    ``None`` means the operation published no event and the correspondence check is skipped:
+    an idempotent no-op (REQ-009) or an operation the sequence does not perform.
+    """
+    if op == "update":
+        manager.update_user(user_id, UserUpdate(display_name=f"upd{counter}"))
+        return UserUpdated
+    if op == "password":
+        manager.change_password(user_id, f"pass{counter}-1x")
+        return UserPasswordChanged
+    if op == "role":
+        new_role = "admin" if manager.get_user(user_id).roles == ["user"] else "user"
+        manager.set_role(user_id, new_role)
+        return UserRoleChanged
+    if op == "deactivate":
+        was_active = manager.get_user(user_id).is_active
+        manager.deactivate_user(user_id)
+        return None if not was_active else UserDeactivated  # idempotent no-op: no event (REQ-009)
+    if op == "activate":
+        was_inactive = not manager.get_user(user_id).is_active
+        manager.activate_user(user_id)
+        return None if not was_inactive else UserActivated  # idempotent no-op: no event (REQ-009)
+    return None
+
+
 @settings(max_examples=_MAX_EXAMPLES, suppress_health_check=[HealthCheck.too_slow])
 @given(
     ops=st.lists(
@@ -274,32 +311,10 @@ def test_inv_006_event_correspondence(ops: list[str]) -> None:
             user_id = created.id
             assert len(collector.of_type(UserCreated)) == before + 1
             continue
-        try:
-            if op == "update":
-                manager.update_user(user_id, UserUpdate(display_name=f"upd{counter}"))
-                ev = UserUpdated
-            elif op == "password":
-                manager.change_password(user_id, f"pass{counter}-1x")
-                ev = UserPasswordChanged
-            elif op == "role":
-                new_role = "admin" if manager.get_user(user_id).roles == ["user"] else "user"
-                manager.set_role(user_id, new_role)
-                ev = UserRoleChanged
-            elif op == "deactivate":
-                was_active = manager.get_user(user_id).is_active
-                manager.deactivate_user(user_id)
-                ev = UserDeactivated
-                if not was_active:
-                    continue  # idempotent no-op: no event (REQ-009)
-            elif op == "activate":
-                was_inactive = not manager.get_user(user_id).is_active
-                manager.activate_user(user_id)
-                ev = UserActivated
-                if not was_inactive:
-                    continue  # idempotent no-op: no event (REQ-009)
-            else:
-                continue
-        except LastAdminError, InvalidRoleError, UserNotFoundError:
+        ev = None
+        with contextlib.suppress(LastAdminError, InvalidRoleError, UserNotFoundError):
+            ev = _apply_event_op(manager, op, user_id, counter)
+        if ev is None:
             continue
         events = collector.of_type(ev)
         assert len(events) >= 1

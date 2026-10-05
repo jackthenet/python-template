@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.pool import StaticPool
@@ -34,7 +35,9 @@ from backend.logging import logged_class
 _MEMORY_URL = "sqlite:///:memory:"
 
 
-def _attach_utc(obj: Session | PasswordReset | WebAuthnCredential | None):
+# mypy types SQLModel tables as `Any`; a precise union return adds ty diagnostics
+# (`list[Session | None]` where callers declare `list[Session]`).
+def _attach_utc(obj: Session | PasswordReset | WebAuthnCredential | None) -> Any:
     """Attach UTC to naive timestamps (SQLite stores UTC without tzinfo).
 
     The service contract is tz-aware UTC; SQLite/SQLAlchemy materializes naive

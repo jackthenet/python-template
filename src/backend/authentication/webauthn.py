@@ -18,7 +18,7 @@ from backend.authentication.protocols import WebAuthnProvider
 from backend.logging import logged_class
 
 
-def _webauthn():
+def _webauthn() -> Any:
     """Import and return the py-webauthn module (deferred import)."""
     try:
         import webauthn

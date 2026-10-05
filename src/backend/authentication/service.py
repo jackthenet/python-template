@@ -86,7 +86,7 @@ from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
 from backend.logging import logged_class
 from backend.shared import PermissionChecker, Principal, requires_permission
-from backend.usermanagement import EventPublisher, UserManager, UserRead, UserRepository
+from backend.usermanagement import EventPublisher, User, UserManager, UserRead, UserRepository
 
 # A fixed Argon2id hash used for dummy verification (timing equalization, REQ-005).
 _DUMMY_HASH = PasswordHasher().hash("dummy-password-for-timing-equalization")
@@ -159,7 +159,7 @@ class AuthService:
         with contextlib.suppress(Argon2Error):
             self._hasher.verify(_DUMMY_HASH, "irrelevant-password")
 
-    def _user_by_identifier(self, identifier: str):
+    def _user_by_identifier(self, identifier: str) -> User | None:
         user = self._user_repository.get_by_username(identifier)
         if user is None:
             user = self._user_repository.get_by_email(identifier)

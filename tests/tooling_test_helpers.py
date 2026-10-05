@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 import respx
 import time_machine
@@ -50,7 +50,7 @@ def travel(destination: time_machine.DestinationType, *, tick: bool = False) -> 
     must observe the deadline pass — no sleeps, no manual clock mocking.
     """
     with time_machine.travel(destination, tick=tick):
-        yield datetime.now()
+        yield datetime.now(UTC)
 
 
 @contextmanager

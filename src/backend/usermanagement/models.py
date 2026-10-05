@@ -11,10 +11,11 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, EmailStr, field_validator
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Dialect, UniqueConstraint
 from sqlalchemy.types import String, TypeDecorator
 from sqlmodel import Field as SField
 from sqlmodel import SQLModel
@@ -35,12 +36,12 @@ class RoleListType(TypeDecorator):
     impl = String
     cache_ok = True
 
-    def process_bind_param(self, value, dialect):
+    def process_bind_param(self, value: Any, dialect: Dialect) -> Any:
         if value is None:
             return None
         return json.dumps(list(value))
 
-    def process_result_value(self, value, dialect):
+    def process_result_value(self, value: Any, dialect: Dialect) -> Any:
         if value is None:
             return None
         if isinstance(value, str):
