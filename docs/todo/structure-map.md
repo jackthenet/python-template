@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
 - **Change type:** FEATURE  <!-- new capability (a generator + a CLI + a CI gate); see the classification note below -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/structure-map.md`
@@ -117,6 +117,33 @@ None under `src/backend/` or `src/frontend/`. New tooling surfaces: `scripts/mak
 - **Score: 4/5** — clear, repeated value (33 701 lines, 323 modules, no cheap overview today), new capability, and a small self-contained diff; it is not 5 because the 400-line budget against this repo's size means the map's usefulness depends on a truncation policy that must be designed, and the freshness gate adds recurring friction to every change.
 - **Recommendation: implement** — as one change (script + tests + skill + hook + `AGENTS.md` line), with the four convention conflicts above resolved at P.2/P.3 rather than guessed at implementation time.
 
+## P.3 answer deltas (2026-10-05, rounds 3-8)
+
+All 31 questions are now ANSWERED. These answers **change the scope above** and are binding on P.4 (the spec must state them; the verbatim instruction text is superseded where they conflict):
+
+| # | Answer that changes scope |
+|---|---|
+| Q-11 | **The generated map is the truth about the current layout; `AGENTS.md` is updated in this PR.** The 'Project Structure' section and the stale `tests/architecture/` references in `AGENTS.md` + the `review`/`verify` skills are corrected to match reality (flat feature packages, empty `src/frontend/`, no `tests/architecture/`). No separate TODO; no `tests/architecture/` directory is created. |
+| Q-28a | **`uv run mypy scripts/` joins the gate** — `AGENTS.md` Tooling + the CI quality job (`quality.yml`) check `scripts/` from this change on; pre-existing mypy errors in the other `scripts/*.py` are in scope. (The `--check` CI job stays out of scope per Q-2 — this is the type gate, not the map gate.) |
+| Q-28b | The ~250-line limit is a **target**, not a gate. |
+| Q-26 / Q-26b | **A parse error fails the run** (the instruction's "must not crash … list with `(parse error)`" is superseded). Exit codes: **0** fresh, **1** stale, **2** usage, **3** output missing, **4** unparseable/undecodable source. |
+| Q-23 | `--check` compares byte-exact, prints one line and no diff. |
+| Q-24 | Files sorted by relative POSIX path; **symbols in source order** (not alphabetical); byte contract: no timestamps/absolute paths/host info, LF, one trailing newline, no trailing whitespace, UTF-8. |
+| Q-10 | Tests: `tests/acceptance/test_structure_map.py` (CLI end-to-end, exit codes) + `tests/unit/test_make_map.py` (parser internals). |
+| Q-15 | Regenerate in the same commit as the `.py` change; on conflict take either side and regenerate — never hand-merge `STRUCTURE.md`. |
+| Q-22 | File set = `git ls-files --cached --others --exclude-standard` (index + untracked-not-ignored). |
+| Q-16 | `--max-depth` prunes the **tree only** (modules always parsed); **tree default depth 4** with a `(+N dirs not shown)` marker. |
+| Q-17 | Dunder methods always shown; `--include-private` gates `_name` symbols; module inclusion unaffected. |
+| Q-18 | One sorted `exports:` line per package `__init__.py` (`__all__` or the imported public names). |
+| Q-19 | Class-level annotated fields shown, one per line (`name: annotation`, no defaults), capped ~15 with `… +N fields`. |
+| Q-20 | **All decorators shown**, including `@logged` / `@logged_class` (compact prefix). |
+| Q-21 | Filesystem-relative POSIX paths + one import-package line per package header. |
+| Q-25 | Docstring summary: first logical line, whitespace collapsed, 100-char truncation with `…`, backticks stripped, line omitted when absent. |
+| Q-27 | `ast.unparse` signatures, defaults included when ≤ 20 chars; grammar = the running interpreter's. |
+| Q-29 | NFR: full run < 2 s, one read per file; coarse upper-bound test, skipped on slow CI. |
+| Q-30 | `--out` relative to CWD; `--root` auto-detected via `pathlib`; root path never in the output; non-git root → built-in ignore list. |
+| Q-14 | AGENTS.md's Skill-to-Phase Mapping gains an **`(ambient)`** row for `code-structure-map`, and `python-best-practices` is listed the same way. |
+
 ## Acceptance signal (plain language)
 `uv run python scripts/make_map.py` writes `STRUCTURE.md`; running it twice in a row produces byte-identical output (the second run's `--check` exits 0), and touching any `.py` file makes `--check` exit 1 until it is regenerated. The map lists every tracked `.py` module with its line count, module summary, classes with bases, and annotated signatures — no bodies — and a file with a syntax error appears as `(parse error)` instead of crashing the run. The parser tests pass under `uv run pytest tests/`, `uv run ruff check .` and `uv run ruff format --check .` stay clean, the pre-commit hook runs the check, and `AGENTS.md` plus the skill point an agent at the map.
 
@@ -126,5 +153,6 @@ None under `src/backend/` or `src/frontend/`. New tooling surfaces: `scripts/mak
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE; todo set #1–#8 created; **value triage 4/5, implement**. Change left **PREPARING** at the user's instruction — not interrogated, not drafted. Q-1/Q-2/Q-3 (skill path, check-only hook, root `STRUCTURE.md`) answered at P.1 and incorporated above |
 | P.2 Interrogate (27 questions) | 2026-10-03 | **BLOCKED-USER** — 27 new questions (Q-4…Q-30), 9 points closed from evidence. **Two premises in the P.1 framing were wrong** (raised as questions, not silently fixed): (1) `tests/architecture/` **does not exist** — verified on `main` — yet `AGENTS.md:579` and `verify/SKILL.md:88,103` make `uv run pytest tests/architecture/ -v` a gate (tracked as a separate finding); (2) the generator's placement is `scripts/make_map.py`, not `src/backend/shared/` (which holds only `principal.py`) — placement decides whether the 92 % coverage floor and `mypy src/` apply (Q-12). **The 400-line budget is already blown by the tree alone**: 548 tracked paths ≈ 548 lines, `src/` modules ≈ 820, `tests/` ≈ 1386 — Q-7/Q-8/Q-9 are the blocking design decisions. **"Does something already do this?" verdict:** nothing generates a codebase overview, but a `git ls-files` + `rg '^(class|def) '` one-liner covers ~80 % of the value with zero new code (it cannot give docstring summaries, base classes, determinism, or one cached file) — that trade-off is Q-5, not a silent spec decision |
 | P.3 Answer (8 of 28 answered) | 2026-10-04 | **PARTIAL — paused by the user mid-batch.** Rounds 1-2 recorded: **Q-4 FEATURE** (spec + approval PR + `minor`), **Q-5 A** full deliverable, **Q-6 A** committed `STRUCTURE.md` + check-only hook, **Q-7 A** budget raised to ~900-1 000 lines with a hard per-class cap (no silent elision), **Q-8** Modules section covers `tests/*_test_helpers.py` + `conftest.py` only, **Q-9** code dirs in full + one-line counts for `docs/`/`userdocs/`/`.github/`/`.agents/`, **Q-12** everything in `scripts/` (no `src/backend/shared/` module, no CROSS-CUTTING reclassification), **Q-13 B** advisory hook only (skill + AGENTS.md tooling line + one advisory P.1 sentence; never a prerequisite, so it stays mergeable with `value-triage-gate`). **20 still PENDING: Q-10, Q-11, Q-14…Q-30** — resume at those; Q-1/Q-2/Q-3 were answered at P.1 |
+| P.3 Answer (all 31 answered) | 2026-10-05 | **COMPLETE — rounds 3-8, all 19 remaining questions ANSWERED and incorporated** (see "P.3 answer deltas" above). Three recommendations were **rejected by the user**: Q-11 (the map is the truth → `AGENTS.md` structure text and the stale `tests/architecture/` references are fixed **in this PR**), Q-28a (`mypy scripts/` is **added to the CI gate** instead of being self-imposed), Q-20 (**all** decorators shown). One P.1 premise was corrected mid-batch: the tree default depth is **4**, not 3 (a depth-3 tree hides all 82 backend module files). Left **QUESTIONS-ANSWERED**; next step **P.4 Draft** |
 | P.4 Draft spec + create branch/worktree | | |
 | P.5 Self-consistency | | |

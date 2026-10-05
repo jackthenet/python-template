@@ -6,7 +6,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/structure-map.md`
 - **Spec:** `docs/specs/structure-map.md`
 - **Opened:** 2026-10-03
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
+- **Status:** ALL ANSWERED  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
 - **Answer rounds:** 2
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
@@ -180,10 +180,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** `tests/unit/` already has top-level `test_settings_coverage.py` / `test_settings_test_isolation.py`; `tests/acceptance/` is per-feature today; the instruction asks for parser tests (nested classes, async, decorators, syntax-error, empty files) plus determinism and `--check`.
 - **Question:** Split as `tests/acceptance/test_structure_map.py` (CLI end-to-end: run the script, assert the file, run `--check` exit codes) + `tests/unit/test_make_map.py` (parser internals), or all under `tests/unit/`, or a new `tests/unit/scripts/` dir?
   - **Recommendation: the two-file split** — the CLI contract is the acceptance surface (AC/INV/EDGE trace to it), the parser detail is unit.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **The two-file split.** `tests/acceptance/test_structure_map.py` = CLI end-to-end (generate the file, `--check` exit codes); `tests/unit/test_make_map.py` = parser internals (nested classes, async, decorators, syntax errors, empty files).
+- **Date:** 2026-10-05 (round 3)
+- **Status:** ANSWERED
+- **Incorporated:** yes — test strategy
 
 ## Q-11 — Generator vs. architecture rules: which wins (and `tests/architecture/` does not exist)
 - **Step:** P.2 Interrogate
@@ -191,10 +191,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** A generated map is by construction descriptive — it will print the flat layout and the empty `frontend/`, which reads as a contradiction of AGENTS.md.
 - **Question:** (a) When the map and AGENTS.md's prescribed structure disagree, which wins — is the map explicitly declared **descriptive, never normative** (AGENTS.md stays the contract)? (b) Is adding a `tests/architecture/` check (asserting the prescribed layout) in scope, out of scope, or a separate TODO? (c) Should the AGENTS.md references to the non-existent `tests/architecture/` be recorded as a new backlog item?
   - **Recommendation: (a) map is descriptive, stated as an INV; (b) out of scope; (c) yes, open a separate DOCS/CHORE TODO.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **The generated map is the truth about the current layout; AGENTS.md is updated in this PR.** The recommendation is rejected: instead of declaring the map descriptive and deferring the mismatch, this change also updates AGENTS.md (the 'Project Structure' section and the stale `tests/architecture/` references in AGENTS.md and the review/verify skills) so the documented architecture matches the real one (flat feature packages, empty `src/frontend/`, no `tests/architecture/`). No separate TODO; no `tests/architecture/` directory is created by this change.
+- **Date:** 2026-10-05 (round 3)
+- **Status:** ANSWERED
+- **Incorporated:** yes — scope widened to AGENTS.md + skill structure references
 
 ## Q-12 — Does any code live under `src/backend/shared/`?
 - **Step:** P.2 Interrogate
@@ -227,10 +227,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** The new skill is not a workflow phase skill — it is ambient exploration guidance, like `python-best-practices`, which is also absent from the mapping table.
 - **Question:** Add a row (e.g. "(ambient) code-structure-map — optional, before exploring"), leave it unlisted like `python-best-practices`, or list both?
   - **Recommendation: leave it out of the phase table; the one-line AGENTS.md pointer (Q-13) is enough** — and note the precedent that `python-best-practices` is likewise unlisted.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Add an `(ambient)` row** to AGENTS.md's Skill-to-Phase Mapping for `code-structure-map` (optional, before exploring), and list `python-best-practices` the same way so the table covers every non-phase skill.
+- **Date:** 2026-10-05 (round 8)
+- **Status:** ANSWERED
+- **Incorporated:** yes — AGENTS.md Skill-to-Phase Mapping
 
 ## Q-15 — Freshness across parallel worktrees and PRs
 - **Step:** P.2 Interrogate
@@ -238,10 +238,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** The hook is check-only (Q-2), so it never rewrites; `git worktree list` currently shows one other change (`chore/remove-spec-tdd-driver`, PR #62) whose merge changes tracked-file counts.
 - **Question:** What is the regeneration/conflict policy — regenerate in the same commit as the `.py` change and resolve conflicts by regenerating (never hand-merge)? Or regenerate once at S6.4 before the PR? Or accept staleness on `main` and regenerate in a follow-up chore?
   - **Recommendation: regenerate in the same commit; on conflict, take either side and regenerate** — stated in the skill so no agent hand-edits the file.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Regenerate in the same commit as the `.py` change; on a merge conflict take either side and regenerate — never hand-merge the generated file.** Stated in the skill (and in the AGENTS.md pointer) so no agent hand-edits `STRUCTURE.md`.
+- **Date:** 2026-10-05 (round 4)
+- **Status:** ANSWERED
+- **Incorporated:** yes — workflow/skill guidance
 
 ## Q-16 — `--max-depth` semantics and default
 - **Step:** P.2 Interrogate
@@ -249,10 +249,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** 82 of 84 tracked `src/` files are at path depth 4 (`src/backend/<feature>/<module>.py`); `src/main.py` is depth 2. A depth-3 default would list no backend module at all.
 - **Question:** Does `--max-depth` limit the **tree rendering only** (modules always parsed), or module discovery too? Default value (unlimited? 4?)? Is depth counted in path segments from the root?
   - **Recommendation: tree rendering only, default unlimited for modules, default depth 3 for the tree with a `(+N dirs not shown)` marker.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **`--max-depth` prunes the tree rendering only — every `.py` module is always parsed and listed. Tree default depth = 4** (depth counted in path segments from the root: `src`(1)/`backend`(2)/`settings`(3)/`registry.py`(4)), which renders every file in the repo today; anything deeper gets a `(+N dirs not shown)` marker. The depth-3 default was rejected after the user pointed out it would hide all 82 backend module files.
+- **Date:** 2026-10-05 (rounds 5-6)
+- **Status:** ANSWERED
+- **Incorporated:** yes — CLI semantics + default
 
 ## Q-17 — `--include-private` semantics and dunder methods
 - **Step:** P.2 Interrogate
@@ -260,10 +260,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** No tracked module in the repo starts with `_` (checked: `git ls-files | rg "/_"` → none), so the module-level rule is currently unobservable — but the flag must still be specified.
 - **Question:** (a) Are dunder methods (`__init__`, `__post_init__`, `__eq__`) shown by default, always hidden, or shown only with `--include-private`? (b) Does the flag also include `_`-prefixed modules? (c) Are `_`-prefixed classes hidden while their public methods stay visible?
   - **Recommendation: dunders shown by default (they are public API), `_name` symbols gated by the flag, module inclusion unaffected by the flag.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Dunders always shown** (`__init__`, `__post_init__`, `__eq__` are public API). `--include-private` adds `_name` functions/methods/classes. Module inclusion is unaffected by the flag.
+- **Date:** 2026-10-05 (round 5)
+- **Status:** ANSWERED
+- **Incorporated:** yes — rendering rules
 
 ## Q-18 — How are the feature `__init__.py` public interfaces shown?
 - **Step:** P.2 Interrogate
@@ -271,10 +271,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** `src/backend/authentication/__init__.py` has 13 import lines; `src/backend/shared/__init__.py` 3.
 - **Question:** For `__init__.py`, emit (a) nothing, (b) an `exports:` line listing `__all__` (or the imported public names, sorted), or (c) a per-package header listing the public API once?
   - **Recommendation: (b)** — one sorted `exports:` line per package `__init__.py`; it is the cheapest accurate statement of the public interface.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) one sorted `exports:` line per package `__init__.py`** listing `__all__` when present, otherwise the imported public names.
+- **Date:** 2026-10-05 (round 4)
+- **Status:** ANSWERED
+- **Incorporated:** yes — rendering rules
 
 ## Q-19 — Class-level annotated fields (pydantic/SQLModel models)
 - **Step:** P.2 Interrogate
@@ -282,10 +282,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** e.g. `src/backend/settings/models.py`, `src/backend/*/models.py`; the specs' "Data Structures & API Schemas" sections treat fields as the contract.
 - **Question:** Show class-level annotated fields (name + annotation, no default value), or header only, or fields capped at N per class?
   - **Recommendation: show fields as one line each (`field: int`, no defaults, no `Field(...)` payloads), capped at ~15 per class with a `… +N fields` marker.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Show annotated fields, capped.** One line per class-level annotated field (`field: int`) — name + annotation, no default value, no `Field(...)` payload — capped at ~15 per class with a `… +N fields` marker.
+- **Date:** 2026-10-05 (round 4)
+- **Status:** ANSWERED
+- **Incorporated:** yes — rendering rules
 
 ## Q-20 — Decorators in the map
 - **Step:** P.2 Interrogate
@@ -293,10 +293,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** AGENTS.md mandates `@logged_class` on traced classes and `@requires_permission` + a `principal` parameter for enforced methods (ADR-079 plumbing in `backend/shared/`) — the second is exactly what a caller must know.
 - **Question:** Show decorators for all symbols, only contract-changing ones (`requires_permission`, `abstractmethod`, `property`, `staticmethod`, `classmethod`, `contextmanager`, `override`), or none?
   - **Recommendation: contract-changing only, in a compact prefix; skip logging decorators.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **All decorators are shown**, including `@logged` / `@logged_class` — the recommendation to skip logging decorators is rejected. Rendered as a compact prefix on the symbol line.
+- **Date:** 2026-10-05 (round 5)
+- **Status:** ANSWERED
+- **Incorporated:** yes — rendering rules (line budget re-checked against Q-7)
 
 ## Q-21 — Path form in the output
 - **Step:** P.2 Interrogate
@@ -304,10 +304,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** Determinism requires the POSIX form regardless (`as_posix()`), because the local run is Windows and CI is Linux.
 - **Question:** Filesystem-relative POSIX paths only (`src/backend/settings/registry.py`), or path plus import path (`backend.settings.registry`) in the module header?
   - **Recommendation: filesystem-relative POSIX everywhere; add the import package once per package header** (one line per package, not per module).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Filesystem-relative POSIX paths everywhere** (`as_posix()`), **plus one import-package line per package header** (`backend.settings`) — one per package, not per module.
+- **Date:** 2026-10-05 (round 5)
+- **Status:** ANSWERED
+- **Incorporated:** yes — output format
 
 ## Q-22 — File-set source: git index, working tree, or both
 - **Step:** P.2 Interrogate
@@ -315,10 +315,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** The instruction says "respecting `.gitignore` (use `git ls-files` if inside a git repo, otherwise fall back to a built-in ignore list: `.git`, `.venv`, `node_modules`, `__pycache__`, `dist`, `build`)".
 - **Question:** Use `git ls-files` (index only), or `git ls-files --cached --others --exclude-standard` (index + untracked-not-ignored)? In the non-git fallback, does the ignore list also exclude `.venv`-equivalents by name only, and does `.gitignore` get parsed?
   - **Recommendation: `--cached --others --exclude-standard`** (matches what an agent sees on disk); non-git fallback = built-in ignore list, `.gitignore` not parsed (documented limitation).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **`git ls-files --cached --others --exclude-standard`** (index + untracked-but-not-ignored), so a module created during Phase 4 is in the map before it is `git add`ed. Non-git fallback = the built-in ignore list; `.gitignore` is not parsed (documented limitation).
+- **Date:** 2026-10-05 (round 4)
+- **Status:** ANSWERED
+- **Incorporated:** yes — file-set rule
 
 ## Q-23 — `--check` contract and exit codes
 - **Step:** P.2 Interrogate
@@ -326,10 +326,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** Q-2 fixed the hook as check-only (`pass_filenames: false` implied); the acceptance signal in the TODO says "the second run's `--check` exits 0, touching any `.py` makes it exit 1".
 - **Question:** Confirm: exit 0 = fresh, 1 = stale **or missing**, 2 = usage error; comparison is byte-exact on the whole file; on 1 it prints one line (`STRUCTURE.md is out of date — run uv run python scripts/make_map.py`) and no diff; parse errors do **not** change the exit code.
   - **Recommendation: as stated above.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **As recommended, except a distinct code for a missing file:** exit **0** = fresh, **1** = stale, **3** = the output file is missing, **2** = usage error (argparse). Comparison is byte-exact on the whole file; on failure it prints one line (`STRUCTURE.md is out of date — run uv run python scripts/make_map.py`) and no diff; parse errors do **not** change the exit code.
+- **Date:** 2026-10-05 (round 3)
+- **Status:** ANSWERED
+- **Incorporated:** yes — CLI contract, AC/EDGE for exit codes 0/1/2/3
 
 ## Q-24 — Determinism contract: symbol ordering and byte-level rules
 - **Step:** P.2 Interrogate
@@ -337,10 +337,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** `git ls-files` order is not guaranteed locale-stable, so sorting must be explicit on the relative POSIX path string.
 - **Question:** (a) Files sorted by POSIX path — agreed; are **symbols** sorted alphabetically (instruction-faithful) or kept in source order (more useful, still deterministic)? (b) Confirm the byte contract: no timestamps, no absolute paths, no host/user info, LF newlines, exactly one trailing newline, no trailing whitespace, encoding UTF-8.
   - **Recommendation: files sorted by path; symbols in source order; byte contract exactly as (b) — and one acceptance test that runs the generator twice and compares bytes, plus one that asserts the output is `trailing-whitespace`/`end-of-file-fixer` clean.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Files sorted by relative POSIX path; symbols kept in source order.** Byte contract exactly as (b): no timestamps, no absolute paths, no host/user info, LF newlines, exactly one trailing newline, no trailing whitespace, UTF-8. Two acceptance tests: double-run byte equality, and output is `trailing-whitespace`/`end-of-file-fixer` clean.
+- **Date:** 2026-10-05 (round 3)
+- **Status:** ANSWERED
+- **Incorporated:** yes — INV determinism
 
 ## Q-25 — Docstring summary normalization and escaping
 - **Step:** P.2 Interrogate
@@ -348,10 +348,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** All 83 `src/` modules have a module docstring; 42 `tests/` modules have none (empty summary → skip the line, don't emit a blank).
 - **Question:** Normalize to: first logical line, whitespace collapsed, truncated at N chars (what N — 80? 100?) with an explicit marker, backticks/pipes escaped or stripped? Missing docstring → no summary line at all?
   - **Recommendation: collapse whitespace, truncate at 100 chars with `…`, strip backticks, omit the line when absent.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **First logical line, whitespace collapsed, truncated at 100 chars with an explicit `…` marker, backticks stripped; no summary line emitted when the docstring is missing.**
+- **Date:** 2026-10-05 (round 6)
+- **Status:** ANSWERED
+- **Incorporated:** yes — rendering rules
 
 ## Q-26 — Parse errors and unreadable files
 - **Step:** P.2 Interrogate
@@ -359,10 +359,19 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** No `.py` file currently fails to parse (all 317 parsed cleanly in the measurement run).
 - **Question:** Emit a bare `(parse error)` marker plus a sorted "Files that could not be parsed" section (no message), or include the message? Are `UnicodeDecodeError`/`OSError` treated as parse errors? Does a parse error affect the exit code or `--check`?
   - **Recommendation: bare marker + sorted section, no message (determinism); decode/OS errors are the same case; exit code unaffected.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A parse error fails the run** — the recommendation to list `(parse error)` and continue is rejected: unparseable input is a hard error, the offending file(s) are reported and the run exits non-zero. `UnicodeDecodeError`/`OSError` are the same case. (Exit-code collision with the stale-map code resolved in Q-26b.)
+- **Date:** 2026-10-05 (round 6)
+- **Status:** ANSWERED
+- **Incorporated:** yes — error handling, EDGE for parse failures
+
+## Q-26b — Exit code for a parse error (late clarification, P.3 round 7)
+- **Step:** P.3 Answer (follow-up to Q-26 vs Q-23)
+- **Why needed:** Q-23 already assigns exit 1 to a stale map; Q-26 made a parse error fail the run, so the two failure modes would collide on the same code.
+- **Question:** Which exit code does a parse error get?
+- **Answer:** **Distinct code 4.** Full contract: **0** = fresh, **1** = stale map, **2** = usage error, **3** = output file missing, **4** = a source file could not be parsed/decoded. Each failure mode is distinguishable in CI and in the pre-commit hook.
+- **Date:** 2026-10-05 (round 7)
+- **Status:** ANSWERED
+- **Incorporated:** yes — CLI contract, AC/EDGE for exit codes 0/1/2/3/4
 
 ## Q-27 — Signature rendering and grammar version
 - **Step:** P.2 Interrogate
@@ -370,10 +379,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** `python-best-practices/references/python-3.15.md` exists; a 3.15-syntax file parsed by a 3.14 `ast` would land in the parse-error list.
 - **Question:** Use `ast.unparse` for annotations/defaults (canonical) or verbatim source slices? Include default values in the signature or omit them? What is stated as the supported grammar (the running interpreter's)?
   - **Recommendation: `ast.unparse`, defaults included when short (≤ 20 chars), grammar = the running interpreter's, documented as an EDGE.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **`ast.unparse`** (canonical, deterministic, immune to formatting drift); **default values included when short (≤ 20 chars)**, omitted otherwise. Supported grammar = the running interpreter's (3.14 today); a file using newer syntax becomes a parse error — and per Q-26 that now fails the run.
+- **Date:** 2026-10-05 (round 6)
+- **Status:** ANSWERED
+- **Incorporated:** yes — signature rendering
 
 ## Q-28 — Quality gates for the new code (mypy, ruff, complexipy)
 - **Step:** P.2 Interrogate
@@ -381,10 +390,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** AGENTS.md Tooling: "mypy runs on `src/`"; the existing `scripts/*.py` are typed informally.
 - **Question:** (a) Extend the gate (`uv run mypy scripts/` in AGENTS.md/CI) or keep typing self-imposed and just run `uv run mypy scripts/` once in Phase 5 evidence? (b) Is the ≤ 250-line limit a hard NFR or a target?
   - **Recommendation: (a) self-imposed — run `mypy scripts/make_map.py` in Phase 5 evidence, do not change the gate; (b) target, not a gate (the truncation policy may need more lines).**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Add `uv run mypy scripts/` to the gate** — AGENTS.md Tooling and the CI quality job (`quality.yml`) both check `scripts/` from this change on (the recommendation to keep it self-imposed was rejected). Any pre-existing mypy errors in the other `scripts/*.py` are in scope for this change. **(b) The ~250-line limit is a target, not a gate** — Phase 5 records the actual line count.
+- **Date:** 2026-10-05 (round 8)
+- **Status:** ANSWERED
+- **Incorporated:** yes — NFR + CI gate change (quality.yml, AGENTS.md)
 
 ## Q-29 — Performance budget (NFR)
 - **Step:** P.2 Interrogate
@@ -392,10 +401,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** 323 `.py` files, 32 343 lines to read and parse; the script must read each file once (line count + AST) to stay cheap.
 - **Question:** What is the NFR — e.g. "a full run over this repository completes in under 2 s (single read per file, no re-reads)", and is it asserted by a test or stated as an untested NFR?
   - **Recommendation: NFR < 2 s, asserted only as a coarse upper-bound test (skip on slow CI), not a strict gate.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **NFR: a full run over this repository (323 `.py` files, ~32 343 lines) completes in under 2 s**, one read per file (line count + AST in the same pass). Asserted by a coarse upper-bound test that is skipped on slow CI, not a hard gate.
+- **Date:** 2026-10-05 (round 7)
+- **Status:** ANSWERED
+- **Incorporated:** yes — NFR
 
 ## Q-30 — `--root` / `--out` path resolution
 - **Step:** P.2 Interrogate
@@ -403,10 +412,10 @@ So: the **directory tree alone (≈548 lines) already exceeds the 400-line budge
 - **Context:** Worktrees live next to the repo (`../python-template_kopie-worktrees/...`), so relative resolution matters; the hook runs from the repo root.
 - **Question:** Is `--out` resolved relative to the CWD or to `--root`? Does the script require `--root` to be a git repo (or fall back)? Is the root path ever written into the output (it must not be)?
   - **Recommendation: `--out` relative to CWD (standard CLI behavior), `--root` defaults to the script's repo root via `pathlib`, root path never appears in the output; non-git root uses the fallback ignore list.**
-- **Answer:** **PENDING**
-- **Date:** 2026-10-03
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **`--out` is resolved relative to the CWD; `--root` defaults to the script's own repo root resolved via `pathlib`; the root path is never written into the output; a non-git root falls back to the built-in ignore list.**
+- **Date:** 2026-10-05 (round 7)
+- **Status:** ANSWERED
+- **Incorporated:** yes — CLI semantics
 
 ## Q-1 — Skill location
 - **Step:** P.1 Frame (conflict flagged while framing; answered out of the P.2 batch)
