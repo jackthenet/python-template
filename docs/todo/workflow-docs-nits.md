@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- waiting on human merge of PR #64 -->  <!-- all 3 questions ANSWERED 2026-10-04; P.4 scope record committed 99290c0 in ../python-template_kopie-worktrees/chore/workflow-docs-nits -->
+- **Status:** MERGED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->  <!-- PR #64 merged by the human as 5d59374; S7.1 cleanup done 2026-10-05 -->  <!-- all 3 questions ANSWERED 2026-10-04; P.4 scope record committed 99290c0 in ../python-template_kopie-worktrees/chore/workflow-docs-nits -->
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/workflow-docs-nits.md`
@@ -59,5 +59,5 @@ Every place that lists P.5 or S1.4 names the types it applies to; the `prepared-
 | P.4 Draft scope + worktree | 2026-10-04 | **DONE → READY** — branch `chore/workflow-docs-nits` + worktree `../python-template_kopie-worktrees/chore/workflow-docs-nits` from `main` @ `5c7d1e0`; scope record `docs/verification/workflow-docs-nits.md` (commit `99290c0`): 2 edits / 4 lines with verbatim before-after, both dropped items with the Q-1/Q-2 answers, no-behavior-delta confirmation, Phase 5 light gate, bump = none. All four target lines re-verified un-qualified at base — nothing already satisfied. Next: Phase 4 |
 | Phase 4 + 5 (S4.2, S5.1/S5.2) | 2026-10-04 | **DONE / PASS (light)** — the 2 edits applied verbatim (4 lines: `docs/todo/template.md:44`, `specify/SKILL.md:14/45/46`); P.5 consistency grep across `AGENTS.md` + both templates + the skill shows no contradiction; changed paths are docs/+.agents only (no `src/`, `tests/`, `pyproject.toml`, workflows, `userdocs/` → `mkdocs` skipped); `ruff check .` clean; `check_traceability.py` PASS. Commits `aa06c56`, `91db73f`. Steps coalesced per P-41 |
 | Phase 6 (S6.1–S6.4) | 2026-10-04 | **REVIEW CLEAN** (F-1/F-2 accepted, F-3 resolved, F-4 skipped by rule; commit `6e7cc93`) → **no version bump** (DOCS/CHORE) → **PR #64** opened: https://github.com/jackthenet/python-template/pull/64. Status **WAITING** for human merge; S7.1 follows. Queue note in the PR body: `value-triage-gate` → `spec-interview-protocol` → `security-changelog-license` land after this |
-| P.4 Draft spec / triage / baseline / scope | | |
+| Post-merge cleanup (S7.1) | 2026-10-05 | **DONE** — merge `5d59374` verified reachable from `origin/main`; worktree `../python-template_kopie-worktrees/chore/workflow-docs-nits` removed (no `--force`, no unmerged commits); local branch `chore/workflow-docs-nits` (was `6e7cc93`) and remote branch deleted; stale remote ref pruned. Status **MERGED**. Unblocks `value-triage-gate` (its `Depends on:`) |
 | P.5 Self-consistency | | n/a (DOCS/CHORE) |
