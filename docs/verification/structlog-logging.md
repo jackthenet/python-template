@@ -86,8 +86,70 @@ Precedent: `docs/verification/amend-nfr-001-budgets.md` (measure first, amend se
 
 ## Not yet done (later phases)
 
-- Phase 1 S1.4: commit the prepared spec and open the **amendment PR** for human approval/merge.
-- Phase 2: ADRs beyond ADR-082 are not expected (no new pattern beyond the ADR); the task DAG must group by affected feature (logging, settings, eventbus, permissions, tooling/guidance).
+- ~~Phase 1 S1.4: commit the prepared spec and open the **amendment PR** for human approval/merge.~~ **Done** — PR #67 merged as `eb68ed2` on 2026-10-04 (see *Phase 2 (S2.1) — Cached spec-approval result*).
+- ~~Phase 2: ADRs beyond ADR-082 are not expected (no new pattern beyond the ADR)~~ — **confirmed at S2.1** (see *Phase 2 (S2.1) — ADR decision*). The task DAG must still group by affected feature (logging, settings, eventbus, permissions, tooling/guidance).
+
+---
+
+## Phase 2 (S2.1) — ADRs (2026-10-04)
+
+### Cached spec-approval result (checked once, at S2.1 entry)
+
+| Item | Value |
+|---|---|
+| Approved | **yes** — HUMAN APPROVED through the configured GitHub review process |
+| Approval PR | **#67** (`crosscut/structlog-logging` → `main`) |
+| Merge commit | `eb68ed2dfc4e9812d07fb36357cc9b3cfa67e66a` — "Merge pull request #67 from jackthenet/crosscut/structlog-logging" |
+| Date | **2026-10-04** |
+| Check (run once) | `git log main --oneline -- docs/specs/structlog-logging.md` → `3cd700e` (P.4 draft) and `098ca1a` (P.5 pass); both reach `main` **only through the merge commit** `eb68ed2`, i.e. a reviewed merge, not a direct push |
+| Normative files carried by that merge | `docs/specs/structlog-logging.md` (new, v1), `docs/specs/logging.md` (v3), `docs/specs/logging-coverage.md` (v2), `docs/specs/settings-coverage.md` (v2), `docs/specs/settings.md` (v4), plus `docs/decisions/ADR-082-…` (new) and `docs/decisions/ADR-002-…` (status line only) |
+
+This row **is** the cache: later phases and later step subagents read it and MUST NOT re-run `git log main -- …`.
+
+### Branch sync at S2.1 entry
+
+- `git fetch --prune`; the local branch was 23 commits behind `origin/crosscut/structlog-logging` → `git merge --ff-only origin/crosscut/structlog-logging` (fast-forward, no conflicts).
+- `git merge main` → **fast-forward** to `main` at `0e4a1b7`; **no conflicts, nothing resolved**. The branch tip was already an ancestor of `main` (PR #67 merged it), so the merge only pulled in work that merged after the approval PR was opened.
+- `pyproject-tooling-gaps` — this change's `Depends on:` — is now on the branch (PR **#68**, merge `a278bd2`). The content this change depends on: `[tool.deptry]` now carries `package_module_name_map` and `DEP001 = ["webauthn"]`, and `DEP002` still lists `orjson` (`pyproject.toml:112-124`); `quality_check` is at Phase 5 parity — `uv run ruff check . && uv run ruff format --check . && uv run mypy src/ && uv run deptry .` (`pyproject.toml:224`); docs tooling moved to a separate `docs` dependency group (`pyproject.toml:68-77`) with `default-groups = ["dev"]` (`pyproject.toml:80-82`).
+- Post-sync state: `git merge-base --is-ancestor main HEAD` → true; the branch equalled `main` (`0e4a1b7`) before this S2.1 commit.
+
+### ADR decision: **no new ADR — ADR-082 is this change's only ADR, and it is already merged on `main`**
+
+The S2.1 threshold (new dependency / new pattern or architecture element / cross-feature interface) applied to every decision in the approved spec set:
+
+| # | Candidate decision | Threshold trigger | Verdict |
+|---|---|---|---|
+| 1 | Replace the third-party logging backend with structlog as a processor/renderer layer over standard-library handlers (`structlog-logging.md` §2 Dependencies) | **new dependency** (`structlog` added, `loguru` removed, `orjson` becomes used) **and** new pattern | **ADR-082** — created at P.4, merged with the approval PR; nothing further to create |
+| 2 | D1 handler ownership, D2 interception by forwarding, D3 renderer per sink, D4 queue handler + single listener, D7 exception rendered into a field / callsite at the emitting call site | the same new pattern element as #1 | Covered by ADR-082 § Decision + § "Verified pipeline constraints". Splitting one pipeline decision into five ADRs would fragment the record, not add to it |
+| 3 | D5 — `get_logger()` as the single statement entry point; 39 direct backend statements in `settings`, `eventbus`, `permissions` migrate to it | **cross-feature interface** | Already recorded in ADR-082 § Decision ("One statement entry point"), and the logging feature already owned the logging interface — ADR-035 (entrypoint wiring) and ADR-060 (tracing policy) stand unchanged and are named as absorbed. No second interface decision |
+| 4 | D6 — breaking surface, no shim (`context_getter`/`depth` removed, `renderer` added, `get_logger()` added, **major** bump) | consequence of #1/#3, no new pattern of its own | Recorded in ADR-082 § Decision, § Consequences and § Compliance (`logging.md` NFR-004 amended to the import path, not the parameter surface) |
+| 5 | Re-implementing the two test-helper capabilities with no standard-library equivalent (fd-level console capture, queue drain) | none — test infrastructure only: no new dependency, no production pattern, no cross-feature interface | Skip (protocol already recorded under *Test re-derivation protocol*) |
+| 6 | Retiring the `orjson` `DEP002` suppression and removing `loguru` from the dependency set | none — a tooling consequence of #1 | Skip; ADR-082 § Consequences already names it, and REQ-013/AC-018 make it executable |
+| 7 | Settings-driven level/rotation and sink reconfigure on a settings change | none — pre-existing decision (ADR-035; `settings-coverage.md` REQ-015/AC-020), unchanged by this change | Skip |
+
+**ADR numbering re-checked against merged `main`:** `docs/decisions/` still tops out at ADR-082 and **ADR-081 remains deliberately unclaimed** for `api-keys` (`docs/todo/api-keys.md:64`), so the numbering note above stands and no renumber is needed.
+
+### ADR-082 sanity check against merged `main`
+
+Every `pyproject.toml` statement ADR-082 makes was re-read against the post-`pyproject-tooling-gaps` state:
+
+- "`orjson` stops being an unused dependency and its `DEP002` suppression in `pyproject.toml` is retired" — **still true as a plan**: `orjson` is in `dependencies` (`pyproject.toml:14`) and still listed in `DEP002` (`pyproject.toml:122`); the retirement is this change's REQ-013/AC-018 and has not happened yet.
+- "This lands after `pyproject-tooling-gaps` (which owns `[tool.deptry]`)" — **now satisfied** (PR #68, merge `a278bd2`).
+- **No statement in ADR-082 is factually false after the merge, so ADR-082 was not edited.**
+
+Two facts the merged `main` adds that bind Phase 2–4 (recorded for S2.2; not ADR changes):
+
+1. `quality_check` now runs `deptry` at Phase 5 parity, so REQ-013/AC-018 is a gate the task DAG must satisfy **inside** the task that changes the dependency set: dropping `loguru` from `dependencies` while `src/` still imports it is a deptry *missing-dependency* failure, and dropping `orjson` from `DEP002` only stays clean once `orjson` is actually imported in `src/`. The dependency-set change, the 39-statement migration and the `orjson` file renderer therefore cannot be spread across tasks in an order that leaves deptry failing in an intermediate state.
+2. Docs tooling is now the `docs` dependency group with `default-groups = ["dev"]`, so the docs gate in a fresh worktree is `uv run --group docs mkdocs build --strict` (the plain form still worked here only because this worktree's venv already had mkdocs installed from before the group split).
+
+### S2.1 gates
+
+| Gate | Command | Result |
+|---|---|---|
+| Traceability | `uv run python scripts/check_traceability.py` | `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)`, exit 0 |
+| Docs | `uv run --group docs mkdocs build --strict` | exit 0, no warnings (only the Material-for-MkDocs 2.0 deprecation banner) |
+
+S2.1 touched **no** `src/`, `tests/`, `pyproject.toml` or `uv.lock` file — docs-only, so ruff is n/a. `docs/todo/` and `docs/questions/` were not touched (orchestrator-owned on `main`).
 
 ## P.5 Self-consistency (2026-10-04)
 
