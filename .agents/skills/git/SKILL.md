@@ -38,7 +38,7 @@ Subagents are always **synchronous** (never background); the workflow waits for 
 
 ## Todo
 
-Per the AGENTS.md Todo Tracking Discipline: mark the Post-merge cleanup item `in_progress` after the human merges the PR; `completed` when the worktree is removed and the local + remote branches are deleted. Each in-flight change has **its own todo set**, and at most **one item per change** is `in_progress` — a WAITING change's step stays `in_progress` with an `activeForm` naming the wait (e.g. "waiting for spec PR merge").
+Per the AGENTS.md Todo Tracking Discipline: mark the Post-merge cleanup item `in_progress` after the human merges the PR; `completed` when the worktree is removed, the local + remote branches are deleted, and the two planning records have been moved to the archive folders. Each in-flight change has **its own todo set**, and at most **one item per change** is `in_progress` — a WAITING change's step stays `in_progress` with an `activeForm` naming the wait (e.g. "waiting for spec PR merge").
 
 ## Atomic Steps
 
@@ -53,16 +53,16 @@ The git skill's phase steps are decomposed into two atomic steps (S6.4 Create PR
 
 ### S7.1 Post-merge cleanup
 
-- **Objective:** After the human merges the PR, verify the merge is reachable from `origin/main` (after `git fetch`), remove the worktree, and delete the local + remote branches.
+- **Objective:** After the human merges the PR, verify the merge is reachable from `origin/main` (after `git fetch`), remove the worktree, delete the local + remote branches, and move the change's TODO and question files to their archive folders.
 - **Inputs:** the merged PR.
-- **Outputs:** the merge verified as reachable from `origin/main` (after `git fetch`); the worktree removed; the local + remote branches deleted.
+- **Outputs:** the merge verified as reachable from `origin/main` (after `git fetch`); the worktree removed; the local + remote branches deleted; the change's TODO and question files moved to `docs/todo/archive/` and `docs/questions/archive/` (the question file with its TODO file).
 - **Done-criteria:** the merge commit is verified reachable from `origin/main` (run `git fetch` first, then `git merge-base --is-ancestor <merge-commit> origin/main` — do NOT rely on the local `main` ref, which may lag); the worktree is removed (`git worktree remove`); the local branch is deleted (`git branch -d`); the remote branch is deleted (`git push origin --delete`); `git worktree list` shows only the primary (`main`) worktree; the change's TODO and question files are moved to `docs/todo/archive/` and `docs/questions/archive/` (the question file always moves with its TODO file).
 
 ## Operations
 
 ### Commit planning artifacts and status advances (orchestrator, `main`)
 
-`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`**, always from the **primary worktree**. This operation covers **every commit of** those two files: P.1 creates them, **P.2 records the questions (written by the P.2 step subagent in the primary worktree)**, P.3 records the answers, and the orchestrator then commits **every `Status:` advance** — `PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED` → `DROPPED` — plus any late (`Phases 2–6`) question a step returned in its handoff (AGENTS.md, "Planning records (owner: the orchestrator)"):
+`docs/todo/<name>.md` and `docs/questions/<name>.md` are **planning records, not normative**: they carry no approval gate, so they are committed **directly to `main`**, always from the **primary worktree**. This operation covers **every commit of** those two files: P.1 creates them, **P.2 records the questions (written by the P.2 step subagent in the primary worktree)**, P.3 records the answers, and the orchestrator then commits **every `Status:` advance** — `PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED`, or `DROPPED` straight from the value-triage decision — plus any late (`Phases 2–6`) question a step returned in its handoff (AGENTS.md, "Planning records (owner: the orchestrator)"):
 
 ```bash
 git add docs/todo/<name>.md docs/questions/<name>.md

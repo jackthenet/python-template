@@ -58,7 +58,7 @@ Stop and reclassify if Phase 4 or review finds any of these:
 
 ## Scope (exact, verified against the tree at `535816c`)
 
-**22 edits in 4 files, all Markdown** — **25 with A11/A12/G6**, the three rows added to this table at the **S4.2 re-entry** after the S5 adjudication of finding 1 (see "S4.2 re-entry (A11/A12/G6) + re-verified gate set"); the 22-row count is the scope as approved at P.4. Every "before" below was re-read from the file in this worktree at P.4 with `grep -n` (line numbers are from the base commit `535816c`, **not** copied from the question file). The `workflow-docs-nits` qualifiers are **already live** and are re-measured, not restated:
+**22 edits in 4 files, all Markdown** — **25 with A11/A12/G6**, the three rows added to this table at the **S4.2 re-entry** after the S5 adjudication of finding 1 (see "S4.2 re-entry (A11/A12/G6) + re-verified gate set"), and **30 with G7/G8/G9/A13/G2a**, the five rows added at the **S4.2 re-entry #2** after the S6.1 review findings F-1/F-2 (see "S4.2 re-entry #2 (F-1/F-2) + completeness sweep"); the 22-row count is the scope as approved at P.4. Every "before" below was re-read from the file in this worktree at P.4 with `grep -n` (line numbers are from the base commit `535816c`, **not** copied from the question file). The `workflow-docs-nits` qualifiers are **already live** and are re-measured, not restated:
 
 | `workflow-docs-nits` edit (merged) | Live text at `535816c` (re-measured) |
 |---|---|
@@ -98,6 +98,11 @@ This change **builds on** those four lines and does not touch them (Q-1 = (b) + 
 | A11 | `AGENTS.md` | `:118` (Git Worktrees → Rules — the direct-to-`main` permission, chain endpoint) | Q-3 = (a), Q-7 = (i) — **row added at the S4.2 re-entry** (S5 finding 1.1) |
 | A12 | `AGENTS.md` | `:414` (Multi-change scheduling → "Backlog status on `main`", the status set) | Q-3 = (a) — **row added at the S4.2 re-entry** (S5 finding 1.3) |
 | G6 | `.agents/skills/git/SKILL.md` | `:12` (When to Use — the planning-commit summary line above G1) | Q-3 = (a), Q-7 = (i) — **row added at the S4.2 re-entry** (S5 finding 1.2) |
+| G7 | `.agents/skills/git/SKILL.md` | `:56` (S7.1 **Objective** bullet — the action set) | Q-7 = (i) — **row added at the S4.2 re-entry #2** (S6.1 finding F-1) |
+| G8 | `.agents/skills/git/SKILL.md` | `:58` (S7.1 **Outputs** bullet — the action set) | Q-7 = (i) — **row added at the S4.2 re-entry #2** (F-1) |
+| G9 | `.agents/skills/git/SKILL.md` | `:41` (Todo — the cleanup item's status-order sentence) | Q-7 = (i) — **row added at the S4.2 re-entry #2** (F-1) |
+| A13 | `AGENTS.md` | `:443` (Todo Tracking Discipline → "Status orders", the Post-merge cleanup bullet) | Q-7 = (i) — **row added at the S4.2 re-entry #2** (F-1) |
+| G2a | `.agents/skills/git/SKILL.md` | `:65` (planning-commit operation — the arrow-rendered `Status:` chain, same place as G2) | Q-3 = (a), Q-7 = (i) — **row added at the S4.2 re-entry #2** (F-2, wording only) |
 
 ### A1 — `AGENTS.md:130-131`, Preparation artifacts table
 
@@ -884,3 +889,142 @@ F-1 must be closed by an **S4.2 re-entry (4 micro-edits: G7, G8, G9, A13)** befo
 - [x] Check 5 (nothing weakened): removed-vs-added line analysis and modal-token counts
 - [x] Findings classified: **1 blocking (F-1, with the exact 4-edit fix), 1 non-blocking (F-2), 5 notes**
 - [x] No S6.2/S6.3/S6.4 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write, no guidance file edited, no subagent launched, no full test suite re-run
+
+---
+
+## S4.2 re-entry #2 (F-1/F-2) + completeness sweep
+
+Run in the change worktree on top of `9914193` (S6.1 review); working tree clean before (`git status --short` → empty). This is the **fix step the S6.1 verdict required**: close the blocking finding **F-1** (4 micro-edits G7/G8/G9/A13) and the non-blocking finding **F-2** (1 micro-edit, G2a), then run the **completeness sweep** the review asked for, so the next review pass converges instead of finding another sibling statement. Nothing else was touched — no S6.2/S6.3/S6.4 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write in this worktree, no test/spec/source file.
+
+### The five edits (verbatim before → after; located by text, not by line number)
+
+| Row | File (line at `9914193`) | Before (verbatim) | After (as applied) |
+|---|---|---|---|
+| **G7** | `.agents/skills/git/SKILL.md:56` (S7.1 **Objective**) | `- **Objective:** After the human merges the PR, verify the merge is reachable from \`origin/main\` (after \`git fetch\`), remove the worktree, and delete the local + remote branches.` | `- **Objective:** After the human merges the PR, verify the merge is reachable from \`origin/main\` (after \`git fetch\`), remove the worktree, delete the local + remote branches, and move the change's TODO and question files to their archive folders.` |
+| **G8** | `.agents/skills/git/SKILL.md:58` (S7.1 **Outputs**) | `- **Outputs:** the merge verified as reachable from \`origin/main\` (after \`git fetch\`); the worktree removed; the local + remote branches deleted.` | `- **Outputs:** the merge verified as reachable from \`origin/main\` (after \`git fetch\`); the worktree removed; the local + remote branches deleted; the change's TODO and question files moved to \`docs/todo/archive/\` and \`docs/questions/archive/\` (the question file with its TODO file).` |
+| **G9** | `.agents/skills/git/SKILL.md:41` (Todo — the cleanup status-order sentence) | `…\`completed\` when the worktree is removed and the local + remote branches are deleted.` | `…\`completed\` when the worktree is removed, the local + remote branches are deleted, and the two planning records have been moved to the archive folders.` |
+| **A13** | `AGENTS.md:443` (Todo Tracking Discipline → "Status orders", Post-merge cleanup bullet) | `  - Post-merge cleanup — \`in_progress\` after the human merges the PR; \`completed\` when the worktree is removed and the local + remote branches are deleted.` | `  - Post-merge cleanup — \`in_progress\` after the human merges the PR; \`completed\` when the worktree is removed, the local + remote branches are deleted, and the two planning records have been moved to the archive folders.` |
+| **G2a** | `.agents/skills/git/SKILL.md:65` (planning-commit operation, the arrow chain) | ``…`PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED` → `DROPPED`…`` | ``…`PREPARING` → `QUESTIONS-ANSWERED` → `READY` → `IN-WORKFLOW` → `WAITING` → `MERGED`, or `DROPPED` straight from the value-triage decision…`` |
+
+- Each anchor matched **exactly once** (`grep -cF` → `1` for all five); every replacement is inline text inside an existing bullet/paragraph, so no table, fence or list structure was touched. `git diff` for the guidance files at this step: **`2 files changed, 5 insertions(+), 5 deletions(-)`**.
+- **Deciding answers unchanged: Q-7 = (i)** for G7/G8/G9/A13 (the same answer that produced A1/A3/A4/A7/A8/G1/G2/G3/G4/G5/S3), and **Q-3 = (a) + Q-7 = (i)** for G2a. No new decision, no new rule, no gate changed — F-1 and F-2 are statements of rules this change already made, in the places that had not yet been brought in line.
+- **G2a is the F-2 fix, applied rather than merely accepted** (the review permitted either): the arrow rendering implied `DROPPED` follows `MERGED`; the new wording matches `specify:169` (`/ **MERGED** / **DROPPED**`, the alternative form) and `AGENTS.md:157-163` (the authoritative moment → status table). `AGENTS.md:157-163` stays the normative mapping.
+
+### Completeness sweep (the reason the review did not converge — run exhaustively this time)
+
+Enumerated **every** place in the four touched guidance files (`AGENTS.md`, `.agents/skills/git/SKILL.md`, `.agents/skills/specify/SKILL.md`, `docs/todo/template.md`) that states (a) the `Status:` chain/vocabulary, (b) the post-merge-cleanup completion rule, or (c) the planning-record paths. Candidate sets produced by three greps over exactly those four files, then classified by reading each hit:
+
+```bash
+grep -nE "PREPARING|QUESTIONS-ANSWERED|Status:|Status:\`|\`DROPPED\`|\*\*DROPPED\*\*|IN-WORKFLOW|WAITING.*MERGED|MERGED.*DROPPED" <4 files>   # (a)
+grep -nE "worktree is removed|worktree removed|remove the worktree|[Pp]ost-merge cleanup|local \+ remote branches|branches deleted|branches are deleted|verify the merge" <4 files>   # (b)
+grep -nE "docs/todo|docs/questions" <4 files>   # (c)  → 27 + 13 + 22 + 3 = 65 raw hits
+```
+
+**Totals: 29 statements of rule (a) — 1 updated (G2a), 28 already correct; 17 statements of rule (b) — 4 updated (G7/G8/G9/A13), 7 already correct, 6 deliberately unchanged; 38 statements of rule (c) — 0 updated, all already correct or deliberate non-edits. No sixth edit was required: every remaining under-inclusive statement is a delegating summary the task definition put on the must-stay-untouched list.**
+
+**(a) The `Status:` chain / vocabulary — 29 statements**
+
+| Place | What it states | Verdict |
+|---|---|---|
+| `AGENTS.md:118` | the `main` permission + chain endpoint `MERGED` **and** `DROPPED` + the archive move | **already correct** (A11) |
+| `AGENTS.md:130`, `:131` | artifact table: `main` → the archive path once `DROPPED`/`MERGED` | **already correct** (A1) |
+| `AGENTS.md:141`, `:143`, `:145` | the P.1 / P.3 / P.5 done-when cells (`PREPARING`, `QUESTIONS-ANSWERED`, `READY`) | **already correct** — mid-chain, no endpoint claim |
+| `AGENTS.md:147` | the **READY gate** (three conditions) | **already correct / must stay untouched** — out-of-scope item, byte-identical |
+| `AGENTS.md:151` | the joint **move** at the drop decision and at S7.1 | **already correct** (A3) |
+| `AGENTS.md:157-163` | the moment → `Status:` table (7 rows, incl. `MERGED` and `DROPPED`) | **already correct** (A4) — **the authoritative mapping** |
+| `AGENTS.md:184` | `Status: DROPPED` + the two records move to the archive | **already correct** (A5) |
+| `AGENTS.md:416`, `:417` | archived records = the two live folders are the backlog; an archived change is not resumed | **already correct** (A7/A8) |
+| `AGENTS.md:419` | the backlog-status set incl. **DROPPED** | **already correct** (A12) |
+| `AGENTS.md:436`, `:647` | the Phase P todo gate and the `PREPARED` state both keyed to `Status: READY` | **already correct** — no chain endpoint; `:647` is the workflow state machine, a different vocabulary |
+| `git:12`, `:22` | the planning-commit summary and the Execution Context bullet: through `MERGED` **and** `DROPPED` + the move | **already correct** (G6/G1) |
+| **`git:65`** | the arrow-rendered chain | **UPDATED — G2a (F-2)** |
+| `git:70`, `:79` | `# every later Status: advance` / `chore(<name>): archive <DROPPED\|MERGED>` | **already correct** — commit-message templates, no chain claim |
+| `git:146` | step 5 runs "after the `Status: MERGED` advance" | **already correct** (G4) |
+| `git:171` | the Rules direct-to-`main` permission: through `MERGED` **and** `DROPPED` + the move | **already correct** (G5) |
+| `specify:56`, `:90`, `:196`, `:212` | the Phase P todo gate, the P.5 handoff, the Outputs and the DoD, all keyed to `READY` | **already correct** (S4/S5) — see note F-7 on `:212` |
+| `specify:67` | P.1 done-criteria sets `Status: PREPARING` | **already correct** (S1) |
+| `specify:169` | the Rules chain in the **alternative** form `… / **MERGED** / **DROPPED**` + the archive gloss | **already correct** (S2) — the form G2a now matches |
+| `docs/todo/template.md:7` | the `Status:` comment vocabulary (7 values incl. `DROPPED`) | **already correct** (T1) |
+
+**(b) The post-merge-cleanup completion rule — 17 statements**
+
+| Place | What it states | Verdict |
+|---|---|---|
+| **`git:56`** | S7.1 **Objective** — the action set | **UPDATED — G7 (F-1)** |
+| **`git:58`** | S7.1 **Outputs** — the action set | **UPDATED — G8 (F-1)** |
+| **`git:41`** | the cleanup todo's completion condition | **UPDATED — G9 (F-1)** |
+| **`AGENTS.md:443`** | the cleanup todo's completion condition (normative Todo Tracking Discipline) | **UPDATED — A13 (F-1)** |
+| `git:59` | S7.1 **Done-criteria** — incl. the two archive moves | **already correct** (G3) |
+| `git:123-151` | the **Post-merge cleanup operation** — 5 numbered steps, step 5 = the `git mv` pair + the `archive MERGED` commit | **already correct** (G4) — **the authoritative procedure** |
+| `git:73`, `:76` | the move block: "At the drop decision, and at post-merge cleanup (S7.1)" | **already correct** (G2) |
+| `AGENTS.md:151`, `:162` | the move at S7.1; `MERGED` is set after post-merge cleanup, then the records move | **already correct** (A3/A4) |
+| `specify:171` | the move "(at the drop decision and at post-merge cleanup)" | **already correct** (S3) |
+| `docs/todo/template.md:39` | "a dropped TODO moves to `docs/todo/archive/` with its question file" | **already correct** (T2) — the drop moment only, which is what the template is about |
+| `AGENTS.md:106` | "verify the merge on `main`, remove the worktree, delete the local and remote change branches" | **deliberately unchanged** — names the git skill's "Post-merge cleanup" operation, which now has step 5 (F-3); on the must-stay-untouched list |
+| `AGENTS.md:304` | Workflow Diagram: `S7.1 Verify merge + remove worktree + delete branches ◆` | **deliberately unchanged** — diagram summary, must-stay-untouched (F-3); editing it would widen a fenced ASCII block for no rule change |
+| `AGENTS.md:353` | Atomic Steps: `S7.1 Cleanup (verify merge + remove worktree + delete branches)` | **deliberately unchanged** — table summary delegating to the git skill (F-3), must-stay-untouched |
+| `AGENTS.md:456`, `:466` | the two todo-set examples: `Post-merge cleanup — verify + remove + delete` | **deliberately unchanged** — illustrative ASCII-aligned examples, must-stay-untouched (F-3) |
+| `git:3` | the skill `description:` — "post-merge cleanup (verify merge on main, remove worktree, delete local + remote branches)" | **deliberately unchanged** — the skill's front-matter summary, explicitly must-stay-untouched; it lists the operation's git actions, and the archive move is an orchestrator planning-record action, not a git-worktree action |
+| `AGENTS.md:324`, `:425`, `:431`; `git:15`, `:26`, `:45` | name the step/operation without an action set (skill-to-phase row, todo-set rules, When to Use, Execution Context, Atomic Steps intro) | **already correct** — nothing to bring in line |
+
+**(c) The planning-record paths — 38 statements (65 raw path hits, grouped)**
+
+| Place | What it states | Verdict |
+|---|---|---|
+| `AGENTS.md:118`, `:130-131`, `:151`, `:162-163`, `:416-417` | the two paths + the archive destination + the `main`-only, orchestrator-only rule | **already correct** (A11/A1/A3/A4/A7/A8) |
+| `AGENTS.md:98`, `:101`, `:142`, `:165`, `:228`, `:231`, `:234`, `:309`, `:370`, `:381`, `:385`, `:387`, `:391`, `:394`, `:684`, `:686`, `:706` | plain references to the two files/folders (creation, ownership, question-file mechanics) | **already correct** — no path rule, no chain endpoint, no cleanup rule |
+| `AGENTS.md:135`, `:683` | "the **only** files the workflow may commit directly to `main`" / the matching Prohibition | **deliberately unchanged** — path-only: `docs/todo/archive/` is inside `docs/todo/`, so the rule already covers the move (P.4 "Deliberate non-edit") |
+| `git:12`, `:22`, `:58-59`, `:65`, `:68`, `:77-78`, `:148-149`, `:171-172` | the paths + the `git mv` pair + the primary-worktree / orchestrator-only rule | **already correct** (G6/G1/G8/G3/G2a/G2/G4/G5) |
+| `git:111-112` | the `BLOCKED-USER` cleared-gate test reads `docs/questions/<name>.md` (`:113` is the never-idle rule) | **deliberately unchanged** — the test fires only for a **WAITING** change, which is by definition neither dropped nor merged, so it never has to look in the archive (F-4); recorded as a P.4 deliberate non-edit. The whole range `git:111-113` is on the must-stay-untouched list |
+| `git:3` | the description's `(docs/todo/, docs/questions/)` | **deliberately unchanged** — must-stay-untouched summary |
+| `specify:12`, `:36-37`, `:49`, `:65-66`, `:72-75`, `:80`, `:90`, `:109`, `:119`, `:167`, `:174-175`, `:196`, `:198`, `:217-218` | the templates, the overlap-check inputs, the question-file ownership rule, the Outputs | **already correct** — path references only |
+| `specify:171` | the only `specify` path rule that carries the move | **already correct** (S3) |
+| `docs/todo/template.md:5`, `:10`, `:39` | "committed directly to `main`", the question-file link, the drop-move note | **already correct / deliberately unchanged** — `:5` is still true as written (F-6); `docs/questions/template.md` is owned by `spec-interview-protocol` and is **not** in this change's file set (0 diff lines) |
+
+**Outside the four files (note, not an edit).** `.agents/skills/review/SKILL.md:103` and `:127` say "perform post-merge cleanup per the git skill (…operation \"Post-merge cleanup\")" — a pure delegation with no action set, so it is already correct. No file outside the four touched guidance files states the cleanup completion rule in a way that contradicts the archive move (`grep -rn "worktree is removed\|Post-merge cleanup" --include="*.md" --include="*.py" --include="*.yml"` over the tree, excluding this record and `docs/todo/`).
+
+### Must-stay-untouched proof (re-verified after the five edits)
+
+Checked by byte-identical string match against `main` (`git show main:<file> | grep -cF -e "<text>"` vs the same grep in the worktree — every pair `1 == 1`):
+
+| Place | State |
+|---|---|
+| `AGENTS.md:106`, `:304`, `:353`, `:456`, `:466` | **unchanged** — the five delegating summaries (F-3) |
+| `.agents/skills/git/SKILL.md:3` | **unchanged** — the skill description |
+| `.agents/skills/git/SKILL.md:111-113` | **unchanged** — the `BLOCKED-USER` cleared-gate test (F-4) and the never-idle rule |
+| `AGENTS.md:310` (Non-blocking), `:415` (Never idle), `:682` (the idle Prohibition); `git:113` ("Never idle on a gate…") | **unchanged** — the path-scoped wording-hazard grep returns **0** |
+| `AGENTS.md:147` (the READY gate) | **unchanged** — not in the diff |
+| `docs/questions/template.md` | **unchanged** — `git diff $(git merge-base main HEAD) -- docs/questions/template.md` → **0 lines** (owned by `spec-interview-protocol`) |
+
+### Gate set re-run — the same commands as S5 / the S4.2 re-entry, at this step
+
+| # | Gate | Command (in the worktree) | Base (`77ae870`) | After G7/G8/G9/A13/G2a | Verdict |
+|---|---|---|---|---|---|
+| G-1 | Lint | `uv run ruff check .` | `All checks passed!` | `All checks passed!` | **PASS** — no delta |
+| G-2 | Types | `uv run mypy src/` | `Success: no issues found in 83 source files` | `Success: no issues found in 83 source files` | **PASS** — no delta |
+| G-3 | Traceability | `uv run python scripts/check_traceability.py` | `PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | **PASS** — identical counts |
+| G-4 | Docs site, strict | `uv run --group docs mkdocs build --strict` | exit 0, no `WARNING:`/`ERROR:` | exit 0, `Documentation built in 2.17 seconds`, `grep -cE "^(WARNING\|ERROR)"` → **0** | **PASS** — no delta |
+| G-5 | Diff scope | `git diff --name-only main...HEAD` | 5 paths | the same **5 paths** (4 guidance files + this record) | **PASS** |
+| G-6 | Markdown hygiene | `git diff --check main...HEAD` and `git diff --check` | clean | **clean**, exit 0 for both (branch range and worktree) | **PASS** |
+| G-7 | Wording hazard (path-scoped) | `git diff -U0 -- AGENTS.md .agents/skills docs/todo/template.md \| grep -cE "^[-+].*(Never idle\|Idle or wait in place\|Non-blocking:)"` | 0 | **0** | **PASS** |
+| G-8 | Guidance numstat | `git diff --numstat $(git merge-base main HEAD)` (worktree included) | — | `AGENTS.md` 18/12, `git/SKILL.md` 24/8, `specify/SKILL.md` 9/8, `docs/todo/template.md` 8/1 | **PASS** — 30 rows, 4 files, every hunk maps to a row |
+| G-9 | No test / no behavior / no bump | carried from S5 — this step's diff touches only `AGENTS.md`, `.agents/skills/git/SKILL.md` and this record | no `src/`, `tests/`, `docs/specs/`, `pyproject.toml` | **unchanged** — 0 Python files, `pyproject.toml` untouched, `version = "0.6.1"` | **PASS** |
+
+### F-3 … F-7 — no action (each already adjudicated)
+
+- **F-3** (the delegating summaries omit the move): **no action** — they name the git skill's "Post-merge cleanup" operation, which has step 5; the sweep confirms all six (`AGENTS.md:106`/`:304`/`:353`/`:456`/`:466`, `git:3`) are pure delegations, and the task definition put them on the must-stay-untouched list.
+- **F-4** (`git:111-113` cleared-gate test unchanged): **no action** — the test applies only to a WAITING change; the rule itself is updated at `AGENTS.md:417`.
+- **F-5** (P.1 "Done when" vs the decision's recording moment): **no action** — the parenthetical and A5's ask timing resolve the reading; the enforcement point is the P.4 boundary.
+- **F-6** (`docs/todo/template.md:5`, `docs/questions/template.md` do not restate the move): **no action** — `:5` is still true; the question template belongs to `spec-interview-protocol` and is outside this change's file set.
+- **F-7** (`specify:212` DoD vs `AGENTS.md:147`): **no action** — not a gate change; `AGENTS.md:147` is byte-identical (proved above).
+
+### S4.2 re-entry #2 done-criteria checklist (this step)
+
+- [x] F-1 closed by exactly the four adjudicated micro-edits (G7/G8/G9/A13), each anchor matched once, wording as the finding specifies
+- [x] F-2 closed by G2a — the chain now renders `… → MERGED, or DROPPED straight from the value-triage decision`
+- [x] The completeness sweep run over all four touched guidance files for rules (a)/(b)/(c): **29 + 17 + 38 statements classified** — updated / already correct / deliberately unchanged with the reason; **no sixth edit required** (every remaining under-inclusive statement is a delegating summary on the must-stay-untouched list)
+- [x] The P.4 Edit index gained **G7/G8/G9/A13/G2a** with their deciding Q-IDs (Q-7 = (i); Q-3 = (a) for G2a) and the lead sentence now reads "22 … **25 with A11/A12/G6** … **30 with G7/G8/G9/A13/G2a**" — the scope contract matches the applied diff
+- [x] Must-stay-untouched set re-verified byte-identical (`AGENTS.md:106`/`:304`/`:353`/`:456`/`:466`, `git:3`, `git:111-113`, the never-idle rules, the READY gate, `docs/questions/template.md`)
+- [x] Gate set re-run and recorded with base comparison: ruff / mypy / traceability / mkdocs / diff scope / `git diff --check` / wording hazard / numstat — all **PASS**, no delta
+- [x] F-3 … F-7 recorded as **no action** with their reasons
+- [x] No S6.2/S6.3/S6.4 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write, no test/spec/source file touched, no subagent launched, no full test suite re-run

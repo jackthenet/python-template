@@ -440,7 +440,7 @@ The agent MUST track every in-flight change with the `todo` tool. The todo list 
   - Phase 4 — `completed` only when **GREEN is achieved** and recorded.
   - Phase 5 — `completed` only when the type-specific gate set passes.
   - Phase 6 — `completed` only when the review report is clean **and** the PR is open.
-  - Post-merge cleanup — `in_progress` after the human merges the PR; `completed` when the worktree is removed and the local + remote branches are deleted.
+  - Post-merge cleanup — `in_progress` after the human merges the PR; `completed` when the worktree is removed, the local + remote branches are deleted, and the two planning records have been moved to the archive folders.
 
 **Reclassification (Escalation Rules).** When the change type changes, re-derive the todo set for the new type (add/remove items, relink with `blockedBy`) and record the reclassification in `docs/verification/[name].md`.
 
