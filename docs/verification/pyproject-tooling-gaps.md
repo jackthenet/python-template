@@ -312,3 +312,49 @@ Suite result identical to the baseline at every step (**728 passed, 1 skipped, 0
 3. One `ruff format` reflow was required (`test_concurrency.py`) because the extracted call fits on one 120-char line.
 
 The step-1 nesting lesson holds: flattening (early return, extracted helper, `if` instead of `if/elif` chains) is what moved these scores — e.g. `test_inv_003_last_admin_invariant` 38 → 6 by extracting the dispatch and the admin loop, not by splitting conditions.
+
+## Phase 4 progress — steps 3–4 (complexipy CI gate at 15 + ruff `DTZ`)
+
+**Steps:** Phase 4 step-order items 3 and 4 (scope items 1–3 and item 5). **Type:** REFACTOR. **Date:** 2026-10-04.
+
+### Step 3 — complexipy becomes a real gate at 15 (scope items 1–3)
+
+| Gate | Command / location | Result |
+|---|---|---|
+| Complexity at the new threshold | `uv run complexipy src tests --max-complexity-allowed 15` | **exit 0** — "All functions are within the allowed complexity." (zero offenders) |
+| Config flip | `pyproject.toml` `[tool.complexipy]` | `max-complexity-allowed = 30` → **15**; `paths = ["src", "tests"]` unchanged (live config now that CI runs the command) |
+| Hook removal (item 2) | `.pre-commit-config.yaml` | the 4-line `complexipy-pre-commit` (`rev: v5.1.0`, `id: complexipy`) block deleted; no other hook touched |
+| One engine (item 3) | — | the dev pin `complexipy>=8.0.1` is now the only engine; the hook's pre-rewrite 5.1.0 is gone |
+| New CI job | `.github/workflows/quality.yml` | **appended** `complexity` job after `migrations`; `git diff` shows **only** an added hunk (`@@ -125,3 +125,20 @@`) — no existing job block edited (collision note (a) respected). Shape mirrors the neighbours: `actions/checkout@v7` → `astral-sh/setup-uv@v7` → `actions/setup-python@v7` (`3.14`) → `uv sync --only-group dev` → `uv run complexipy src tests --max-complexity-allowed 15` |
+| pre-commit, changed files | `uv run pre-commit run --files .github/workflows/quality.yml .pre-commit-config.yaml pyproject.toml` | **exit 0** — every hook passes with the complexipy hook removed (ruff hooks *Skipped*: no `.py` in the set) |
+| Lint / format | `uv run ruff check .` / `uv run ruff format --check .` | **All checks passed!** / **324 files already formatted** |
+| Full suite | `uv run pytest tests/ -q` | **728 passed, 1 skipped, 0 failed** (221.32 s) — identical to the baseline |
+
+**Pre-existing `pre-commit run --all-files` failure found (not caused by this change, not fixed here).** The whole-tree run fails on `end-of-file-fixer` for **17 files** (`AGENTS.md`, `README.md`, `migrations/README`, `.github/CODEOWNERS.md`, `docs/tasks/README.md`, `docs/tasks/template.md`, `docs/tasks/settings.tasks.json`, `docs/verification/search.md`, `docs/verification/tooling-hardening.md`, `.agents/skills/python-best-practices/SKILL.md` + 7 `references/*.md`): their `HEAD` blobs have no final newline (`git show HEAD:migrations/README | tail -c 12` → `nfiguration.` with no `\n`) or carry trailing blank lines. Proof it predates this change: `git diff --name-only main...HEAD` lists 10 files and **none** of the 17 is among them, and `end-of-file-fixer` is untouched by this diff. The hook's modifications were reverted (`git checkout --`) — reformatting 17 unrelated files is out of this change's scope. The hook-removal gate is therefore evidenced by the scoped run above (exit 0 on the three changed files) plus the whole-tree run, in which the **only** failing hook is `end-of-file-fixer` (`trailing-whitespace`, `check-yaml`, `check-added-large-files`, `deptry` all pass). **Recommend a backlog TODO for the EOF backfill**: until it lands, `pre-commit run --all-files` is not usable as a whole-tree gate (relevant to step 8, whose verification list names that command).
+
+### Step 4 — ruff `DTZ` selected + the one fix (scope item 5)
+
+| Gate | Command / location | Result |
+|---|---|---|
+| Before the fix | `git show HEAD:tests/tooling_test_helpers.py \| uv run ruff check --select DTZ --stdin-filename tests/tooling_test_helpers.py -` | **exactly 1 error**: `DTZ005` at `tests/tooling_test_helpers.py:53` (`yield datetime.now()`) — matches the P.4 measurement |
+| The fix | `tests/tooling_test_helpers.py` | `from datetime import UTC, datetime`; `yield datetime.now(UTC)`. **No `noqa`, no per-file ignore.** |
+| After the fix | `uv run ruff check --select DTZ .` | **All checks passed!** (exit 0) |
+| `select` | `pyproject.toml` `[tool.ruff.lint]` | `"DTZ", # flake8-datetimez: naive datetime objects are a bug` appended after `"C4"` |
+| Lint / format / types | `uv run ruff check .` / `uv run ruff format --check .` / `uv run mypy src/` | **All checks passed!** / **324 files already formatted** / **Success: no issues found in 83 source files** |
+| Full suite | `uv run pytest tests/ -q` | **728 passed, 1 skipped, 0 failed** (217.37 s) — identical to the baseline |
+| Observability check | `grep -rn "tooling_test_helpers" tests/ src/` | **no importer** (only the helper file itself) — re-confirmed at this step, so the naive → aware value is not observable to the current suite; the full-suite run is the confirmation |
+
+Invariant 3 holds: no test was modified, weakened or deleted — the only `tests/` edit is the shared `travel()` helper's yield (a helper with no importer, and the file contains no assertion).
+
+### Commits (steps 3–4)
+
+| Commit | Message | Files |
+|---|---|---|
+| `e9d0c57` | `refactor(pyproject-tooling-gaps): S4.3 complexipy CI gate at 15, drop the pre-commit hook` | `pyproject.toml`, `.pre-commit-config.yaml`, `.github/workflows/quality.yml` (+18 / −5) |
+| `ff98a3a` | `refactor(pyproject-tooling-gaps): S4.4 select ruff DTZ, fix travel() naive datetime` | `pyproject.toml`, `tests/tooling_test_helpers.py` (+3 / −2) |
+
+`uv.lock` was `git checkout --`-reverted before both commits (P-42 drift) and is in neither.
+
+### Remaining Phase 4 steps
+
+5. mypy `disallow_untyped_defs = true` + the 8 annotation fixes. 6. declare `py-webauthn>=2.0.0` + drop the deptry `DEP001` and ty `allowed-unresolved-imports` suppressions. 7. `quality_check` string. 8. docs-group split (README note last).
