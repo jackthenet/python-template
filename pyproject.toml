@@ -38,12 +38,6 @@ dev = [
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.168.1",
-    # MkDocs static site build system.
-    "mkdocs>=1.6",
-    # MkDocs Material theme for the published documentation site.
-    "mkdocs-material>=9.5",
-    # MkDocs plugin: API docs from docstrings (python extra: docstring handler).
-    "mkdocstrings[python]>=1.0.6",
     # Static type checking for the source tree.
     "mypy>=2.3.1",
     # Vulnerability scanning for installed dependencies.
@@ -70,6 +64,17 @@ dev = [
     "time-machine>=3.5.1",
     # Fast type checker for the source tree.
     "ty>=0.0.84",
+]
+# Documentation site tooling: installed only with `uv sync --group docs` (the
+# mkdocs job in .github/workflows/quality.yml and the mkdocs-build pre-push hook).
+# Not in default-groups, so `uv sync` and every other CI job stay docs-free.
+docs = [
+    # MkDocs static site build system.
+    "mkdocs>=1.6",
+    # MkDocs Material theme for the published documentation site.
+    "mkdocs-material>=9.5",
+    # MkDocs plugin: API docs from docstrings (python extra: docstring handler).
+    "mkdocstrings[python]>=1.0.6",
 ]
 
 [tool.uv]

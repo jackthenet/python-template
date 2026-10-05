@@ -63,7 +63,7 @@ uv run deptry .                    # unused / missing dependencies
 uv run pip-audit                   # dependency vulnerabilities
 uv run bandit -r src/              # static security
 
-uv run mkdocs build --strict       # docs site (built from userdocs/)
+uv run mkdocs build --strict       # docs site (built from userdocs/) — needs `uv sync --group docs`
 uv run alembic upgrade head        # apply schema migrations
 uv run alembic revision -m "<description>"   # add one
 

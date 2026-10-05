@@ -32,7 +32,7 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|src/|tests/|scripts/|migrations/)
       - id: mkdocs-build
         name: mkdocs build --strict
-        entry: uv run mkdocs build --strict
+        entry: uv run --group docs mkdocs build --strict
         language: system
         pass_filenames: false
         stages: [pre-push]

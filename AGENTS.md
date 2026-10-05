@@ -60,10 +60,10 @@ This repository utilizes modern Python tooling managed via `uv`:
 - **Version Bumping:** `bump-my-version` (`uv tool install bump-my-version`; config in `pyproject.toml` under `[tool.bumpversion]`)
 - **Database Migrations:** `alembic` (`uv run alembic upgrade head` / `uv run alembic revision -m "<description>"`) — schema migrations for the SQLModel tables; the scaffold (`alembic.ini` + `migrations/`) is wired to `SQLModel.metadata` (see "Using Migrations (alembic)").
 - **Dependency Check:** `deptry` (`uv run deptry .`) — detects unused/missing/misplaced dependencies; configuration in `[tool.deptry]` (per-rule ignores for CLI/pytest-plugin tools).
-- **Documentation Site:** `mkdocs` + `mkdocs-material` + `mkdocstrings[python]` (`uv run mkdocs build --strict`) — published docs generated from `userdocs/` (never `docs/` — that is the internal process record).
+- **Documentation Site:** `mkdocs` + `mkdocs-material` + `mkdocstrings[python]` (`uv run --group docs mkdocs build --strict`) — published docs generated from `userdocs/` (never `docs/` — that is the internal process record).
 - **Test Tooling:** `polyfactory` (factories for Pydantic/SQLModel models), `respx` (httpx mocking), `time-machine` (time travel) — see "Using the Test Tooling".
 
-**MkDocs site note.** Published docs live in `userdocs/` (binding decision Q-64; never `docs/` — that is the internal process record: specs, decisions, verification, workflow). Build gate: `uv run mkdocs build --strict`; CI: the `docs` job in `.github/workflows/quality.yml`; pre-push: the `mkdocs-build` hook in `.pre-commit-config.yaml`.
+**MkDocs site note.** Published docs live in `userdocs/` (binding decision Q-64; never `docs/` — that is the internal process record: specs, decisions, verification, workflow). Build gate: `uv run --group docs mkdocs build --strict` (the docs tooling is the `docs` dependency group, not the default `dev` group; `uv sync --group docs` installs it); CI: the `docs` job in `.github/workflows/quality.yml`; pre-push: the `mkdocs-build` hook in `.pre-commit-config.yaml`.
 
 ---
 
@@ -560,7 +560,7 @@ All types.
 ### Phase 5: VERIFY
 All types.
 
-**FEATURE / CROSS-CUTTING** (after all tasks are complete):    
+**FEATURE / CROSS-CUTTING** (after all tasks are complete):
 1. Run the full test suite: `uv run pytest tests/ -v`.
 2. Run acceptance tests: `uv run pytest tests/acceptance/ -v`.
 3. Run property tests: `uv run pytest tests/property/ -v`.
@@ -1167,4 +1167,3 @@ Frontend Backend
 ```
 
 **Architecture should emerge from the requirements and tests rather than from the template.**
-

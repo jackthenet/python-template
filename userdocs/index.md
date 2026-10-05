@@ -26,6 +26,7 @@ from its package `__init__` via [mkdocstrings](https://mkdocstrings.github.io/).
 ## Building the site
 
 ```bash
+uv sync --group docs            # docs tooling is its own dependency group
 uv run mkdocs build --strict
 ```
 

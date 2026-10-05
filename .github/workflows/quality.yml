@@ -104,7 +104,7 @@ jobs:
         with:
           python-version: '3.14'
       - name: Sync tooling
-        run: uv sync --only-group dev
+        run: uv sync --only-group dev --only-group docs
       - name: Run mkdocs build (gate)
         run: uv run mkdocs build --strict
 
