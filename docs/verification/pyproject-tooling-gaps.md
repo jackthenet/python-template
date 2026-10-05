@@ -518,3 +518,78 @@ steps (`git log --stat` shows no `tests/` file in `6d7a8e2`, `ffe1241`, `8322f27
 
 **Next step: 8** — docs-group split, the 11 `uv sync --only-group dev` lines, the `mkdocs-build`
 pre-push hook entry, README note last. Then Phase 5.
+
+---
+
+## Phase 4 progress — step 8 (docs-group split) + Phase 4 complete
+
+### Rebase onto `main` (before step 8)
+
+- Base `5c589d2` → `eb68ed2` (`origin/main`, PRs #63–#67 merged). All **22** commits replayed; HEAD `f70d242` → `03a8f79`.
+- **One conflict**, in `docs/workflow/PROBLEMS.md`: a **P-45 ID collision** — `structlog-logging` (merged as #67) had already taken P-45 *and* P-46 on `main`. Resolved per collision note (c): every `main` entry kept verbatim, this change's entry renumbered to **P-47** with a `**Renumbered:**` line naming the original commit `c0dd9ff` (`docs/workflow/PROBLEMS.md:437-442`).
+- Post-rebase hash map (old → new, oldest first). Earlier sections of this record cite the **old** hashes; Phase 5 and the PR body use the new ones:
+
+```text
+f9d357f → 773ce93  P.4 baseline + refactor scope
+c0dd9ff → 4dd95b0  P-45 friction (renumbered to P-47)
+5b2b149 → f8cfa26  is_valid_value 47 → 8
+c736105 → 8194eff  SettingDefinition::_validate 26 → 2
+eae8fbd → 5d17352  SessionService::list_sessions 18 → 12
+5a430d2 → 2d1b1a8  PermissionService::_check 17 → 10
+12338c6 → 185e734  SearchService::search 17 → 13
+57d6c8e → 96ebc95  record src/ complexity refactors
+d3ff1ab → 6a50a50  test_inv_003_last_admin_invariant 38 → 6
+6db0d5f → faaa4f9  test_last_admin_invariant 23 → 9
+228a20a → 027b90c  test_inv_006_event_correspondence 22 → 6
+754bb6b → 0d72617  test_nfr_005_concurrent_threads_safe 18 → 9
+34a6f7e → fe23e36  FakeSmtpServer::_dialogue 17 → 5
+acc1a74 → f9c89dd  record tests/ complexity refactors
+e9d0c57 → 88a86f5  complexipy CI gate at 15, drop the pre-commit hook
+ff98a3a → a075607  ruff DTZ + travel() aware datetime
+6cc7375 → bbb7ff5  record steps 3–4
+6d7a8e2 → 73960d8  mypy disallow_untyped_defs + annotations
+ffe1241 → 0353d10  declare webauthn (reverted in 63cb54b)
+8322f27 → 67d2ea1  quality_check Phase 5 parity
+2486b64 → 63cb54b  revert webauthn declaration
+f70d242 → 03a8f79  record steps 5–7
+```
+
+### Post-rebase gate re-run (measured at `03a8f79`, before step 8)
+
+| Gate | Result |
+|---|---|
+| `uv run ruff check .` | **All checks passed!** |
+| `uv run ruff format --check .` | **324 files already formatted** |
+| `uv run mypy src/` | **Success: no issues found in 83 source files** |
+| `uv run ty check src/` | **152** diagnostics (baseline 151; the recorded +1 accepted deviation) |
+| `uv run deptry .` | **Success! No dependency issues found.** (89 files) |
+| `uv run complexipy src tests --max-complexity-allowed 15` | **exit 0** |
+| `uv run pytest tests/ -q` | **728 passed, 1 skipped in 216.51 s** |
+| `uv run python scripts/check_traceability.py` | **PASS** (765 matrix rows, 129 spec IDs, 714 test functions) |
+
+### Step 8 — docs dependency-group split (scope item 7, commit `47a4f04`)
+
+- **Group move.** The 3 mkdocs entries with their comments (`mkdocs>=1.6`, `mkdocs-material>=9.5`, `mkdocstrings[python]>=1.0.6`) moved out of `[dependency-groups] dev` into a new `docs` group, with a header comment naming why the group exists. `[tool.uv] default-groups = ["dev"]` is **unchanged**, so a plain `uv sync` still installs `dev` only and every other CI job stays docs-free.
+- **Sync-line count correction: 12, not 11.** Re-measured on this branch after the rebase: `uv sync --only-group dev` appears **12** times — `quality.yml` **8** (lines 21, 39, 56, 77, 92, 107, 122, 140), `spec-validation.yml` **3** (37, 66, 80), `lint.yml` **1** (35). The scope's "exactly 11" was measured at `5c589d2`; the **12th line is this change's own `complexity` job** (`quality.yml:140`, added in step 3). Only the `docs` job (`quality.yml:107`) was updated; the other 11 stay `--only-group dev`.
+- **Correction to scope item 7 (the command it specified is invalid).** `uv sync --only-group dev --group docs` is **rejected by uv 0.11.13** — `--only-group` cannot be combined with `--group` (usage error, verified again in Phase 5). Shipped: `uv sync --only-group dev --only-group docs` → **exit 0**, then `uv run mkdocs build --strict` → **exit 0**. The split is real, not cosmetic: after a plain `uv sync`, `uv run --no-sync mkdocs build --strict` → **exit 2** (`Failed to spawn: mkdocs`).
+- **Pre-push hook.** `.pre-commit-config.yaml:35` entry → `uv run --group docs mkdocs build --strict`. Verified: `uv run pre-commit run --hook-stage pre-push --files <changed>` → `mkdocs build --strict ... Passed`.
+- **`uv.lock` committed intentionally** (P-42 handling unchanged): the `dev` → `docs` group move (2 lock blocks) plus the pre-existing P-42 version-drift line.
+- **README note (last, per collision (b), against the post-#66 README, 96 lines).** One line added to the `## Development` command table (`README.md:66`): `uv run mkdocs build --strict       # docs site (built from userdocs/) — needs \`uv sync --group docs\``. No other README content touched; #66's text adopted as-is.
+- **Recorded extension beyond item 7.** The bare `uv run mkdocs build --strict` in live guidance would break for any reader after the split, so it was updated in the two places that state the build gate as an instruction: `AGENTS.md:63` and `AGENTS.md:66` → `uv run --group docs mkdocs build --strict` (plus a group note in the MkDocs-site paragraph), and `userdocs/index.md` "Building the site" gained a `uv sync --group docs` line. Documentation-only; no behavior, no test, no source change.
+- **Disclosed side effect.** Saving `AGENTS.md` let pre-commit's `trailing-whitespace` and `end-of-file-fixer` remove two **pre-existing** `AGENTS.md` nits (trailing spaces on line 563, a blank line at EOF, `@@ -560,7 +560,7 @@` and `@@ -1167,4 +1167,3 @@`). Not this change's intent, not hidden — they are in the step-8 diff.
+- **Step-8 commit:** `47a4f04` — 7 files, **+29 / −20** (`pyproject.toml`, `uv.lock`, `.github/workflows/quality.yml`, `.pre-commit-config.yaml`, `AGENTS.md`, `README.md`, `userdocs/index.md`). No `src/` or `tests/` file.
+
+## Phase 4 complete — all 8 steps (post-rebase hashes)
+
+| Step | What it did | Commit(s) | Gate after the step |
+|---|---|---|---|
+| 1 | Refactored the 5 `src/` complexipy offenders: `is_valid_value` 47→8, `SettingDefinition::_validate` 26→2, `SessionService::list_sessions` 18→12, `PermissionService::_check` 17→10, `SearchService::search` 17→13 | `f8cfa26` `8194eff` `5d17352` `2d1b1a8` `185e734` + record `96ebc95` | targeted set GREEN; ruff clean; full suite 728 passed / 1 skipped |
+| 2 | Refactored the 5 `tests/` offenders: `test_inv_003_last_admin_invariant` 38→6, `test_last_admin_invariant` 23→9, `test_inv_006_event_correspondence` 22→6, `test_nfr_005_concurrent_threads_safe` 18→9, `FakeSmtpServer::_dialogue` 17→5 — no assertion, strategy or `@settings` value changed | `6a50a50` `faaa4f9` `027b90c` `0d72617` `fe23e36` + record `f9c89dd` | targeted set GREEN; ruff clean; full suite 728 passed / 1 skipped |
+| 3 | complexipy became a real CI gate at **15** (threshold flipped, new `complexity` job appended in `quality.yml`), pre-commit complexipy hook deleted | `88a86f5` | `complexipy src tests --max-complexity-allowed 15` exit 0 |
+| 4 | Ruff `DTZ` selected + the one fix: `tests/tooling_test_helpers.py:53` naive `datetime.now()` → `datetime.now(UTC)` | `a075607` + record `bbb7ff5` | `ruff check .` clean; full suite 728 passed / 1 skipped |
+| 5 | mypy `disallow_untyped_defs = true` + the 8 annotation fixes (annotations only, 6 src files) | `73960d8` | `mypy src/` clean (83 files); ty 151 → 152 (+1, accepted) |
+| 6 | `webauthn` declaration attempted, then **reverted** — no released version matches `PyWebAuthnProvider`'s API (finding, follow-up defect filed) | `0353d10` → reverted by `63cb54b` | deptry clean; mypy clean; suite 728 passed / 1 skipped |
+| 7 | `[tool.agent-runner] quality_check` raised to Phase 5 parity (`ruff check . && ruff format --check . && mypy src/ && deptry .`) | `67d2ea1` | all four commands clean |
+| 8 | Docs dependency-group split (item 7, as corrected above) + README note + guidance updates | `47a4f04` | `uv sync --only-group dev --only-group docs` + `mkdocs build --strict` exit 0; pre-push hook Passed |
+
+Record commits interleaved: `773ce93` (P.4 baseline), `4dd95b0` (P-47 friction), `96ebc95`, `f9c89dd`, `bbb7ff5`, `03a8f79`, `47a4f04`. **Phase 4 gate: GREEN at every step — 728 passed, 1 skipped, identical to the baseline; no test modified, weakened or deleted.**
