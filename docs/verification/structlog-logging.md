@@ -367,3 +367,64 @@ The loguru-era capture surface is wider than the task brief's estimate: **38 tes
 
 **Phase 3 (S3.1, T-002) gate: PASS.** Next: S3.1 for T-003.
 
+
+---
+
+## Phase 3 (S3.1) — T-003 test derivation (2026-10-05)
+
+Task **T-003 — live reconfiguration on a `logging.*` settings change** (REQ-012, AC-017, INV-004; amended `settings-coverage.md` v2 REQ-014/015/016, AC-019/020/021, EDGE-008; `settings.md` v4 observability wording). All 6 `tests_to_create` functions exist in the DAG's paths; 5 were re-derived in place from the amended wording, none was weakened or deleted.
+
+### Tests created / re-derived
+
+| Test | File | Requirement | Old → new | Observed failure mode at HEAD `d82cc1e` |
+|---|---|---|---|---|
+| `test_ac_017_live_reconfigure` | `tests/acceptance/settings_coverage/test_setup_logger.py` (new) | AC-017 / REQ-012 + INV-004 | new — no predecessor | `AssertionError: expected exactly one logger owning the managed console sink, found {}` from `managed_sinks()` — no standard-library pipeline exists yet |
+| `test_setup_logger_reads_registry` | same file (re-derived) | AC-019 / REQ-014 v2 | subprocess printing loguru's private `logger._core.handlers` → `h._sink._file.name` / `h._levelno`, polled with `time.sleep(0.05)` → `PIPELINE_COUNT_CODE` + `_ROTATING_CONFIG_CODE` (handler configuration) + an ERROR/WARNING routing probe read from the captured stderr, no sleeps | `AssertionError: REQ-002: the no-arg setup must own one console sink: OWNERS 0 / CONSOLE 0 / FILE 0 / QUEUED 0 / FEATURE_HANDLERS 0 / ROTATING 0`. The level half already holds pre-change (the ERROR record is routed, the WARNING record is suppressed by loguru's ERROR sink) |
+| `test_sink_reconfigured_on_change` | same file (re-derived) | AC-020 / REQ-015 v2 + INV-004 | subprocess + loguru `h._levelno` polled with sleeps → in-process: the records that reach the console (fd capture) and the file sink (JSON), plus the INV-004 foreign-handler witnesses | `AssertionError: expected exactly one logger owning the managed console sink, found {}` |
+| `test_logging_stub_removed` | `tests/unit/test_settings_coverage.py` (re-derived) | AC-021 / REQ-016 v2 | one assertion on a CWD-relative path → repo-root path + `Settings` is not a model + its exact field set + the export carries the live registry values | **GREEN at HEAD** — the stub was already removed by the settings-coverage change; the re-derivation only strengthens the witness, so this test contributes no RED |
+| `test_sink_reconfigured_rotation` | same file (re-derived) | EDGE-008 v2 | **no assertion at all** after the write (the body ended at `set_value_settled`) → exactly one managed rotating sink, `maxBytes`/`backupCount` re-applied, path + encoding kept, a record at the current level still reaching the file | `AssertionError: EDGE-008/INV-001: exactly one managed rotating file sink after the reconfigure, found 0` |
+| `test_observability_tracing` | same file (re-derived) | NFR-004 + `settings.md` v4 §9 wording | `register_settings` traced + `assert _read_setting is not None` (vacuous) → both traced + the value-change record must arrive in the managed file sink | `AssertionError: NFR-004 / settings.md v4 §9: the value change must be logged with key context through the shared logging feature` (`assert None is not None`) — the loguru record is not a pipeline record |
+
+### Design decisions taken while deriving
+
+- **No sleeps.** The two old subprocess tests polled with `time.sleep(0.05)` against a 5 s deadline; neither re-derived test contains a `sleep` call. The in-process tests use the shared wait helpers (`wait_for_record`, `wait_for_record_since`) for the queue-fed file sink, and read the console deterministically — a standard-library `StreamHandler` flushes on `emit`, so the console half of AC-019 is asserted on the subprocess's captured stderr once the process has exited, with no waiting at all.
+- **Mechanism-free assertions.** EDGE-008 v2 states that replacing the sink is "one allowed mechanism, not a required one" and REQ-015 v2 allows mutating the feature's own handlers in place, so the tests read the handler's **configuration** (`maxBytes`, `backupCount`, `baseFilename`, `encoding`) and the **records** that reach the sinks — never whether a sink object was replaced.
+- **Registry values chosen so the defaults cannot masquerade as the configuration.** AC-019's subprocess sets `log_level=ERROR` (the hardcoded default is INFO), `log_max_bytes=2048`, `log_backup_count=3` (defaults 10485760 / 5). The level is probed behaviourally (an ERROR record lands, a WARNING record is suppressed) because the spec fixes the effective level, not whether it is set on the logger or on the handlers.
+- **In-process vs subprocess.** AC-017's clause is "without restarting the process", so it runs in-process against the session pipeline; AC-019 needs a process where `setup_logger()` has not run yet, so it stays a subprocess (the shape the old test already had). Both reuse the T-001/T-002 helpers; the only new subprocess source is `_ROTATING_CONFIG_CODE`, kept module-local in the test file because `tests/logging_test_helpers.py` is not in T-003's `allowed_files`.
+- **One witness set for the INV-004 clause.** A module-local `_ForeignState` attaches a handler to the root logger and a handler to another feature's logger, records their level/formatter and the other logger's level/propagate/disabled, and `assert_untouched()` checks them from both AC-017 and AC-020 (the same clause in both). It also keeps AC-017 inside ruff's PLR0915 statement limit.
+- **Registry hygiene.** Every `logging.*` write in the in-process tests goes through `set_value_settled` (the write's dispatch is awaited) and is restored in a `finally`, so the session sinks end pointed at the session log file for later tests. `test_logging_stub_removed` builds its registry with `EventCollector`, so its writes publish nothing to the shared bus and cannot reconfigure the session sinks; `test_observability_tracing` uses `install_isolated_registry()` with a temp `YamlValueRepository` and a non-`logging.*` probe key.
+- **No duplication of T-004's witness.** `test_observability_tracing` deliberately does not scan the settings modules for a backend import — that is structlog-logging AC-009's witness, derived in T-004 (`test_ac_009_settings_statements_go_through_get_logger`). What is observable from the settings side is that a settings operation's record arrives in the logging feature's file sink.
+
+### Assertion-strength record (settings-coverage: nothing weakened)
+
+| Test | Old | New | Delta |
+|---|---|---|---|
+| `test_setup_logger_reads_registry` | file-sink path == `log_file`; console handler level == the registry level | the same two facts via handler configuration + handler counts + `maxBytes`/`backupCount`/`encoding` + routed/suppressed records | restated in capability terms, strictly more assertions |
+| `test_sink_reconfigured_on_change` | after the write, the loguru handler levels are DEBUG | both sinks emit a DEBUG record without a restart + only the feature's own sinks change | same contract plus the third clause the v2 wording adds |
+| `test_logging_stub_removed` | stub file absent (CWD-relative) | stub absent (repo-root) + not a model + exact field set + export carries registry values | +3 assertions |
+| `test_sink_reconfigured_rotation` | none after the write | 5 assertions | +5 |
+| `test_observability_tracing` | `register_settings` traced; `_read_setting is not None` | both traced + record reaches the managed file sink | the one deleted assertion cannot fail (it asserted a name is not `None`); it is replaced by a tracing assertion on the same object plus a record-level assertion |
+
+### Red-command observation (informational — S3.2 runs the gate)
+
+`uv run pytest tests/acceptance/settings_coverage/test_setup_logger.py tests/unit/test_settings_coverage.py::test_logging_stub_removed tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/test_settings_coverage.py::test_observability_tracing -v` → **5 failed, 1 passed**; every failure is an assertion failure on unimplemented behaviour (no import, collection or test-data error). Neighbours: `uv run pytest tests/acceptance/settings_coverage tests/unit/test_settings_coverage.py -q` → 5 failed (the same set), **34 passed** — no collateral damage and no state leak into the tests that follow.
+
+### Cross-task dependency the orchestrator must know
+
+`test_observability_tracing` (NFR-004) cannot go GREEN inside T-003. Its witness is a **settings feature** operation's record arriving in the logging feature's managed file sink, and `src/backend/settings/registry.py` still logs through `from loguru import logger` — 17 statements there and 11 in `repository.py`. Those statements are migrated to `get_logger()` by **T-004** (REQ-005 / AC-009). Until then the record never reaches the standard-library pipeline, so the test stays RED after T-003's own reconfigure work lands. T-003's `green_command` therefore reaches 100% only once T-004 has run; the DAG lists no `blockedBy` edge between them. Shaping the witness to pass earlier would have meant asserting something other than the requirement, so it was left faithful and flagged.
+
+### Gate table (S3.1, T-003)
+
+| Gate | Command | Result |
+|---|---|---|
+| Pre-flight collection | `uv run pytest --collect-only -q tests/acceptance/settings_coverage/test_setup_logger.py` | 32 collected, 0 errors |
+| Post-flight collection (touched paths) | `uv run pytest --collect-only -q tests/acceptance/settings_coverage/test_setup_logger.py tests/unit/test_settings_coverage.py` | 33 collected, 0 errors |
+| Post-flight collection (whole suite) | `uv run pytest --collect-only -q tests/` | 755 collected, 0 errors |
+| Ruff (changed paths) | `uv run ruff check tests/acceptance/settings_coverage/test_setup_logger.py tests/unit/test_settings_coverage.py` | All checks passed |
+| Format | `uv run ruff format <same paths>` | 2 files left unchanged |
+| Traceability | `uv run python scripts/check_traceability.py` | PASS (765 matrix rows, 129 spec IDs, 739 test functions) |
+| No test weakened | assertion-strength table above | 5 re-derived tests are strictly stronger; EDGE-008 had no assertion at all before |
+| No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
+
+**Phase 3 (S3.1, T-003) gate: PASS.** Next: S3.1 for T-004.
+

@@ -6,8 +6,11 @@ AC-027, EDGE-001..EDGE-012, NFR-001, NFR-004, NFR-006.
 
 from __future__ import annotations
 
+import dataclasses
+import gc
 import importlib
 import inspect
+import os
 import threading
 import time
 from collections.abc import Iterator
@@ -15,7 +18,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from settings_test_helpers import install_isolated_registry, isolated_registry, set_value_settled
+from logging_test_helpers import bound_logger, file_size, rotating_file_handlers, wait_for_record, wait_for_record_since
+from pydantic import BaseModel
+from settings_test_helpers import (
+    EventCollector,
+    install_isolated_registry,
+    isolated_registry,
+    restore_singleton,
+    set_value_settled,
+)
 
 from backend.settings import (
     ListSpec,
@@ -34,6 +45,7 @@ from backend.settings.exceptions import (
 _DEFAULT_QUEUE_SIZE = 1000
 _CUSTOM_QUEUE_SIZE = 500
 _ROTATED_MAX_BYTES = 20971520  # the rotation size written by EDGE-008 (double the default)
+_ROTATED_BACKUP_COUNT = 3  # distinct from the logging.log_backup_count default (5)
 
 # --- AC-002: no import side effects ---
 
@@ -228,10 +240,54 @@ def test_eventbus_registry_value() -> None:
 # --- AC-021: logging stub removed ---
 
 
-def test_logging_stub_removed() -> None:
-    """AC-021: the logging stub Settings model does not exist."""
-    stub_path = Path("src/backend/logging/settings.py")
-    assert not stub_path.exists(), "the logging stub Settings model must be removed"
+def test_logging_stub_removed(tmp_path: Path) -> None:
+    """AC-021 (settings-coverage v2): no private settings model, and ``Settings`` carries the registry values.
+
+    Re-derived from the amended wording, which states the whole contract (the feature owns
+    no settings model of its own **and** its ``Settings`` export carries the registry
+    values); the pre-amendment test only checked that the stub file was gone, and resolved
+    that path from the current working directory rather than the repository root.
+    """
+    # (1) the stub settings module is gone.
+    stub_path = Path(__file__).resolve().parents[2] / "src" / "backend" / "logging" / "settings.py"
+    assert not stub_path.exists(), "AC-021: the logging stub Settings model must be removed"
+
+    # (2) no private settings model: the export is a plain container of registry values.
+    from backend.logging import Settings
+
+    assert not issubclass(Settings, BaseModel), "AC-021: Settings must not be a validation/settings model"
+    assert dataclasses.is_dataclass(Settings), "AC-021: Settings must be a plain container of the registry values"
+    assert {field.name for field in dataclasses.fields(Settings)} == {
+        "log_level",
+        "log_file",
+        "log_max_bytes",
+        "log_backup_count",
+        "profiling_include_arguments",
+    }, "AC-021: Settings must carry exactly the five logging.* values"
+
+    # (3) the Settings export carries the registry values, read from the live registry.
+    # A registry with a no-op publisher: a logging.* write here would otherwise
+    # reconfigure the session's sinks mid-test (settings-coverage REQ-015).
+    from backend.logging import get_settings
+    from backend.logging import register_settings as logging_register
+
+    registry = SettingsRegistry(event_bus=EventCollector(), value_repository=YamlValueRepository(str(tmp_path)))
+    logging_register(registry)
+    registry.set_value("logging.log_level", "WARNING")
+    registry.set_value("logging.log_file", str(tmp_path / "ac021.log"))
+    registry.set_value("logging.log_max_bytes", 4096)
+    registry.set_value("logging.log_backup_count", 3)
+    restore_singleton(registry)
+    try:
+        settings = get_settings()
+    finally:
+        restore_singleton(None)
+    assert (
+        settings.log_level,
+        settings.log_file,
+        settings.log_max_bytes,
+        settings.log_backup_count,
+    ) == ("WARNING", str(tmp_path / "ac021.log"), 4096, 3), "AC-021: the Settings export must carry the registry values"
 
 
 # --- AC-025: tracing ---
@@ -357,7 +413,12 @@ def test_setup_logger_idempotent() -> None:
 
 
 def test_sink_reconfigured_rotation(session_settings: Any) -> None:
-    """EDGE-008: a logging.* setting change reconfigures the sink (rotation parameters)."""
+    """EDGE-008 (settings-coverage v2): a ``logging.*`` change replaces the file sink and re-applies every current value.
+
+    The amended wording is explicit that the sink is replaced and that all current
+    ``logging.*`` values are re-applied, so the assertions cover the rotation parameters,
+    the file path and the level — not only the parameter that changed.
+    """
     from backend.logging import register_settings, setup_logger
 
     setup_logger()
@@ -374,11 +435,38 @@ def test_sink_reconfigured_rotation(session_settings: Any) -> None:
     # the logging feature's subscription reconfigures the sinks on the event-bus
     # worker (AC-020). An un-awaited reconfigure lands in whichever test runs
     # next, and its remove-then-add window transiently drops the process-global
-    # loguru handler count (main-ci-green item G).
+    # managed handler count (main-ci-green item G).
     set_value_settled(reg, "logging.log_file", session_settings.log_file)
     set_value_settled(reg, "logging.log_level", session_settings.log_level)
-    # Change a rotation parameter (requires sink replacement).
-    set_value_settled(reg, "logging.log_max_bytes", _ROTATED_MAX_BYTES)
+    original_max = int(reg.get_value("logging.log_max_bytes"))
+    original_backups = int(reg.get_value("logging.log_backup_count"))
+    # Change the rotation parameters (requires the file sink to be replaced).
+    try:
+        set_value_settled(reg, "logging.log_max_bytes", _ROTATED_MAX_BYTES)
+        set_value_settled(reg, "logging.log_backup_count", _ROTATED_BACKUP_COUNT)
+        gc.collect()
+        rotating = rotating_file_handlers()
+        assert len(rotating) == 1, (
+            f"EDGE-008/INV-001: exactly one managed rotating file sink after the reconfigure, found {len(rotating)}"
+        )
+        handler = rotating[0]
+        assert handler.maxBytes == _ROTATED_MAX_BYTES, "EDGE-008: the new rotation size must take effect"
+        assert handler.backupCount == _ROTATED_BACKUP_COUNT, "EDGE-008: the new backup count must take effect"
+        # All current logging.* values are re-applied, not only the changed one: the sink
+        # still points at the current logging.log_file, and a record at the current
+        # logging.log_level still reaches it.
+        assert os.path.normcase(os.path.realpath(handler.baseFilename)) == os.path.normcase(
+            os.path.realpath(session_settings.log_file)
+        ), "EDGE-008: the file sink must keep the current logging.log_file"
+        assert handler.encoding == "utf-8", "EDGE-008: the file sink must keep the UTF-8 encoding"
+        token = "edge008 rotation reconfigure probe"
+        bound_logger("edge_008").debug(token)
+        assert (
+            wait_for_record(Path(session_settings.log_file), lambda record: record.get("event") == token) is not None
+        ), "EDGE-008: the current logging.log_level must still be applied after the rotation change"
+    finally:
+        set_value_settled(reg, "logging.log_max_bytes", original_max)
+        set_value_settled(reg, "logging.log_backup_count", original_backups)
 
 
 # --- EDGE-009: persist all values ---
@@ -457,13 +545,38 @@ def test_live_read_in_memory() -> None:
 # --- NFR-004: observability tracing ---
 
 
-def test_observability_tracing() -> None:
-    """NFR-004: register_settings and change-detection live reads are logged."""
-    # The register_settings functions and the live-read helper are traced.
-    from backend.logging import _read_setting, register_settings
+def test_observability_tracing(session_settings: Any) -> None:
+    """NFR-004 + settings.md v4 §9: the settings feature's operations are logged through the logging feature's pipeline.
 
-    assert hasattr(register_settings, "__wrapped__") or hasattr(inspect.unwrap(register_settings), "__wrapped__")
-    assert _read_setting is not None
+    Re-derived for the settings.md v4 wording ("the feature writes one-off statements
+    through the shared logging feature's exported logger; it does not import a logging
+    backend itself"): what is observable from the settings side is that a settings
+    operation's record arrives in the logging feature's managed file sink. The per-file
+    "imports no logging backend" scan is structlog-logging AC-009's witness (task T-004)
+    and is not duplicated here.
+    """
+    # The register_settings entry point and the change-detecting live read are traced.
+    from backend.logging import _read_setting, register_settings, setup_logger
+
+    for traced in (register_settings, _read_setting):
+        assert hasattr(traced, "__wrapped__") or hasattr(inspect.unwrap(traced), "__wrapped__"), (
+            f"{traced} must be traced"
+        )
+
+    setup_logger()
+    registry = install_isolated_registry()
+    # No logging.* value is written here, so the session pipeline keeps its configuration:
+    # the session setup (tests/conftest.py) runs it at DEBUG, which is the level the
+    # settings feature logs its own operations at — the record below is observable only
+    # because of that.
+    registry.register(SettingDefinition(key="probe.observed_key", kind=SettingKind.TEXT, default="x"))
+    log_file = Path(session_settings.log_file)
+    offset = file_size(log_file)
+    set_value_settled(registry, "probe.observed_key", "y")
+    record = wait_for_record_since(log_file, offset, lambda record: "probe.observed_key" in str(record))
+    assert record is not None, (
+        "NFR-004 / settings.md v4 §9: the value change must be logged with key context through the shared logging feature"
+    )
 
 
 # --- NFR-006: thread safety ---
