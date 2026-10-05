@@ -309,3 +309,61 @@ No other test was deleted, weakened or altered. The third deletion the spec auth
 | Traceability after the 2 deletions | `uv run python scripts/check_traceability.py` | **PASS** (765 rows, 129 spec IDs, 729 test functions) — the `logging.md` AC-005/EDGE-005 rows already carry an em-dash Test cell, so nothing dangles |
 
 **Phase 3 (S3.1, T-001) gate: PASS.** Next: S3.1 for T-002…T-006, then S3.2 (ruff + RED confirmation across the derived set).
+
+## Phase 3 (S3.1) — T-002 test derivation (2026-10-05)
+
+Task **T-002 — Tracing decorator: entry/exit/exception records, `@logged_class`, coverage-suite capture** (REQ-005, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014; AC-003, AC-011…AC-015; INV-002, INV-003, INV-005; NFR-002, NFR-004). All 11 `tests_to_create` functions exist; the three amended existing tests were rewritten in place, never weakened.
+
+### Tests created / amended
+
+| Test | File | Requirement | Expected failure mode (RED) |
+|---|---|---|---|
+| `test_ac_011_sync_and_async_traced_records` | `tests/acceptance/logging/test_tracing_records.py` (new) | AC-011 / REQ-011 | `TimeoutError` from `wait_for_traced_record` — the loguru decorator writes no record to the managed file sink, so `json_records` never yields an entry or exit record for the call. |
+| `test_ac_012_exception_record_and_propagation` | `tests/acceptance/logging/test_tracing_records.py` (new) | AC-012 / REQ-012 | `TimeoutError` waiting for the exception record (no `exception` field is produced by the current decorator). |
+| `test_ac_014_logged_class_records` | `tests/acceptance/logging/test_tracing_records.py` (new) | AC-014 / REQ-014 | `TimeoutError` waiting for the public method's exit record; the private-method assertion passes vacuously today and stays as the regression guard. |
+| `test_ac_003_file_record_fields_as_json` | `tests/acceptance/logging/test_pipeline_backend.py` (amended) | AC-003 / REQ-005 + REQ-011 elapsed half | `TimeoutError` — the traced call produces no JSON record, so the required-field set (`level`, `logger`, `event`, `timestamp`, `elapsed_ms`, `file`, `line`) and the forbidden-key set are never checked. |
+| `test_ac_015_no_local_values_in_exception_record` | `tests/acceptance/logging/test_secrets.py` (new) | AC-015 / NFR-003 | `AssertionError` on `'RuntimeError' in blob` — the exception record never reaches the file, so the record assertions fail **before** the no-local-values assertion. |
+| `test_ac_013_removed_parameters` | `tests/contract/logging/test_tracing_surface.py` (appended) | AC-013 / REQ-013 | `AssertionError` — `context_getter` and `depth` are still in `inspect.signature(logged)`, and calling `@logged(context_getter=…)` / `@logged(depth=1)` does not raise. |
+| `test_inv_002_no_local_value_ever_recorded` | `tests/property/logging/test_pipeline_invariants.py` (appended) | INV-002 / NFR-003 | Pre-flight `AssertionError` (`managed_sinks()` is empty) before Hypothesis runs, so RED costs one assertion, not one wait per example. |
+| `test_inv_003_elapsed_non_negative` | `tests/property/logging/test_pipeline_invariants.py` (appended) | INV-003 / REQ-011 | Same pre-flight `AssertionError` on the empty pipeline. |
+| `test_inv_005_required_fields_present` | `tests/property/logging/test_pipeline_invariants.py` (appended) | INV-005 / REQ-005 | Same pre-flight `AssertionError`; the per-example body asserts the exact rendered key set (no `filename`/`lineno`, no formatter bookkeeping keys). |
+| `test_nfr_002_decorator_overhead_budget` | `tests/contract/logging/test_logging_contracts.py` (amended) | NFR-002 | `AssertionError` — `managed_sinks()` is empty, so the measurement context cannot be established (the test no longer measures with logging disabled). |
+| `test_nfr_004_backward_compatible_api` | `tests/contract/logging/test_logging_contracts.py` (amended) | NFR-004 | `AssertionError` — `logged`'s parameter set is still `{level, slow_threshold_ms, slow_threshold_setting, include_args, context_getter, depth}`; the import path and the zero-argument `setup_logger()` call already hold. |
+
+### Design decisions taken while deriving
+
+- **Records are observed through the pipeline surface, not loguru capture.** Every T-002 test reads the managed file sink as JSON (`json_records` / `wait_for_record`) and classifies traced records by **fields**, never by message wording: entry = event mentions the qualname and has no `elapsed_ms` key; exit = carries `elapsed_ms`; exception = carries an `exception` field. The spec fixes the fields, not the wording, so the tests cannot pin an event format T-004 is free to choose.
+- **AC-003 forbidden-key set is verified, not guessed.** `ProcessorFormatter` pops `positional_args` and `events` from the event dict before rendering (confirmed against structlog 26.1.0 with `uv run --with structlog==26.1.0`), and `PositionalArgumentsFormatter` writes `positional_args`. The asserted forbidden set is therefore `{filename, lineno, _record, _from_structlog, positional_args, events}`; the required set is `{level, logger, event, timestamp, elapsed_ms, file, line}`.
+- **AC-015 plants the secret where only a local-value dumper leaks it.** The secret is a local in the raising frame and never an argument, message or exception attribute, so a record that carries only type + message + traceback frames cannot contain it; the assertion scans the whole log file, not one record.
+- **Property tests fail fast.** INV-002/003/005 assert the managed pipeline exists before the Hypothesis loop and use short per-example waits, so a RED run costs one assertion instead of a 15 s wait per example. INV-002 checks only the bytes appended by its own call (`file_size` + `records_since`), which keeps examples independent in one shared session file.
+- **NFR-002 states its measurement context.** The test asserts the managed console handler and the queue-wrapped rotating file handler are installed at `DEBUG` before timing, and measures with **nothing disabled** — the old `logger.disable("DEBUG")` / `logger.enable("DEBUG")` pair disappears with the backend. Budget `< 1 ms/call` against the spec's 0.148 ms/call reference measurement.
+- **NFR-004 asserts compatibility of the import path, not of the old parameter list.** The old body asserted `context_getter` and `depth` are present, which the amended spec (design decision D6) removes; it now asserts the exact reduced parameter set and that `setup_logger()` still takes no required argument. This is a spec-driven restatement, not a weakening: the assertion got **stronger** on the parameter set and the import path is unchanged.
+
+### Helper adaptations (no assertion weakened)
+
+`tests/logging_test_helpers.py` gained, additively: `parse_json_records`, `session_log_path`, `record_mentions`, `wait_for_traced_record`, `traced_records`, `file_size`, `records_since`; `json_records` now delegates to `parse_json_records` (same signature, same behaviour). Nothing was removed or renamed, so every existing importer still resolves.
+
+The loguru-era capture helpers (`capture_records` in `tests/logging_coverage_test_helpers.py`, `log_records` in `tests/conftest.py`, and the loguru half of `tests/logging_test_helpers.py`) were **not** rewritten during derivation: they are the capture mechanism for 38 currently-green tests outside T-002's `tests_to_create`, and re-implementing them before the pipeline exists would turn those tests red without adding a single new RED signal. Re-implementing them keeping their public signatures is T-002's **implementation** step (they are in its `allowed_files`), and the coverage-suite assertions themselves are untouched.
+
+### Forward risks recorded for the implementation step
+
+- `test_nfr_003_diagnose_false` (same file, not in `tests_to_create`) drives the file sink through **loguru's** `logger.exception` and waits with the loguru-based `wait_for_file_content`. It is GREEN now and will break when `setup_logger` stops installing loguru sinks; §11 maps NFR-003 to the INV-002 property test, so the implementation step must re-point it at the pipeline (or delete it as a superseded loguru-internals test) rather than relax the no-local-values check.
+- `wait_for_file_content` still calls `logger.complete()` (loguru) before polling. Once the loguru sinks are gone that drain is a no-op and the flush must come from the stdlib `QueueListener`; every file-sink assertion in this task depends on that flush.
+- `tests/conftest.py`'s autouse `_stdlib_root_logging_restored` fixture is unchanged and stays.
+
+### Capture-helper blast radius (measured, for the implementation step)
+
+The loguru-era capture surface is wider than the task brief's estimate: **38 test functions in 24 modules** call `capture_records` / `log_records` / the coverage helpers. 14 of them are cross-feature (authentication, mail, settings, filemanagement, search, usermanagement, permissions, sessionmanagement); the remaining 24 are the `logging_coverage` suite. All 38 are currently GREEN and none is in T-002's `tests_to_create`, which is why the helpers were left working during derivation. T-002's implementation step must re-implement them behind their existing signatures or all 38 break at once.
+
+### S3.1 (T-002) gates
+
+| Check | Command | Result |
+|---|---|---|
+| Pre-flight collection (before derivation) | `uv run pytest --collect-only -q <T-002 paths>` | clean — 8 tests, 0 errors (the 4 existing files at HEAD; the 3 new modules did not exist, none of the 11 `tests_to_create` names present) |
+| Post-flight collection | `uv run pytest --collect-only -q <T-002 paths>` | clean — **17 tests, 0 errors**; all 11 `tests_to_create` functions collected (3 + 2 + 1 + 2 + 4 + 5 per file) |
+| Lint + format (changed paths only) | `uv run ruff check <paths>` / `uv run ruff format <paths>` | **All checks passed** (7 files) |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** (765 matrix rows, 129 spec IDs, 738 test functions) |
+| No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
+
+**Phase 3 (S3.1, T-002) gate: PASS.** Next: S3.1 for T-003.
+

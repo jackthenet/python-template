@@ -15,9 +15,10 @@ from logging_test_helpers import (
     managed_sinks,
     pipeline_logger,
     rotating_file_handlers,
+    wait_for_traced_record,
 )
 
-from backend.logging import get_settings, setup_logger
+from backend.logging import get_settings, logged, setup_logger
 
 
 def test_ac_002_two_managed_handlers() -> None:
@@ -44,3 +45,37 @@ def test_ac_002_two_managed_handlers() -> None:
     assert rotating[0].maxBytes == settings.log_max_bytes
     assert rotating[0].backupCount == settings.log_backup_count
     assert rotating[0].encoding == "utf-8"
+
+
+# --------------------------------------------------------------------------
+# AC-003: the field set of a rendered record (REQ-002 + REQ-011)
+#
+# The traced exit record is the strictest AC-003 case: it must carry every §3 field
+# including elapsed_ms, and must not leak the pipeline's own callsite names (D7 maps
+# add_callsite's filename/lineno onto file/line) or the formatter's two bookkeeping
+# keys (D3; verified against structlog 26.1.0, where ProcessorFormatter.format injects
+# exactly ``_record`` and ``_from_structlog`` — ADR-082's smoke-test facts).
+# --------------------------------------------------------------------------
+
+_REQUIRED_RECORD_FIELDS = frozenset({"level", "logger", "event", "timestamp", "elapsed_ms", "file", "line"})
+_PIPELINE_INTERNAL_KEYS = frozenset({"filename", "lineno", "_record", "_from_structlog"})
+
+
+def test_ac_003_file_record_fields_as_json() -> None:
+    """AC-003: a traced call's file record is a JSON object carrying the §3 field set — and nothing else."""
+    setup_logger()
+
+    @logged
+    def ac_003_traced_probe() -> None:
+        return None
+
+    ac_003_traced_probe()
+
+    record = wait_for_traced_record("ac_003_traced_probe", "exit")
+    assert record is not None, "AC-003: the traced exit record must reach the file sink as a JSON object"
+
+    missing = _REQUIRED_RECORD_FIELDS - record.keys()
+    assert not missing, f"AC-003/REQ-011: the record is missing {sorted(missing)}: {record!r}"
+
+    leaked = _PIPELINE_INTERNAL_KEYS & record.keys()
+    assert not leaked, f"AC-003/D3/D7: a rendered record must not carry {sorted(leaked)}: {record!r}"

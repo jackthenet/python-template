@@ -170,10 +170,10 @@ def rotating_file_handlers() -> list[logging.handlers.RotatingFileHandler]:
     return [obj for obj in gc.get_objects() if isinstance(obj, logging.handlers.RotatingFileHandler)]
 
 
-def json_records(path: Path) -> list[dict[str, Any]]:
-    """The JSON-object-per-line records in ``path`` (non-JSON lines are skipped)."""
+def parse_json_records(text: str) -> list[dict[str, Any]]:
+    """The JSON-object-per-line records in ``text`` (non-JSON lines are skipped)."""
     records: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         try:
             parsed = json.loads(line)
         except json.JSONDecodeError:
@@ -181,6 +181,11 @@ def json_records(path: Path) -> list[dict[str, Any]]:
         if isinstance(parsed, dict):
             records.append(parsed)
     return records
+
+
+def json_records(path: Path) -> list[dict[str, Any]]:
+    """The JSON-object-per-line records in ``path`` (non-JSON lines are skipped)."""
+    return parse_json_records(path.read_text(encoding="utf-8"))
 
 
 @contextmanager
@@ -312,3 +317,85 @@ def run_python(code: str, timeout: float = 60.0) -> subprocess.CompletedProcess[
         timeout=timeout,
         check=False,
     )
+
+
+# --------------------------------------------------------------------------
+# In-process tracing observation (the session pipeline's file sink)
+#
+# A traced call is observed through the RENDERED record, never through the
+# decorator's internals: the JSON object the file sink writes is the contract
+# (spec §3). The three traced record kinds are told apart by their fields, not
+# by message wording — an exit record carries ``elapsed_ms`` (REQ-011), an
+# exception record carries ``exception`` (REQ-009), an entry record carries
+# neither. Records are located by a token unique to the call under test, because
+# the session log file accumulates records across tests.
+# --------------------------------------------------------------------------
+
+
+def session_log_path() -> Path:
+    """The file-sink path of the in-process (session) pipeline."""
+    import backend.logging as feature
+
+    return Path(feature.get_settings().log_file)
+
+
+def record_mentions(record: dict[str, Any], token: str) -> bool:
+    """True when a rendered record names ``token`` (a traced qualname lands in the event)."""
+    return token in str(record.get("event", "")) or token in str(record.get("logger", ""))
+
+
+def wait_for_traced_record(
+    token: str, kind: str = "exit", *, path: Path | None = None, timeout: float = 15.0
+) -> dict[str, Any] | None:
+    """Wait for the traced record of ``kind`` (``entry`` | ``exit`` | ``exception``) for ``token``."""
+    target = session_log_path() if path is None else path
+
+    def _match(record: dict[str, Any]) -> bool:
+        if not record_mentions(record, token):
+            return False
+        if kind == "exit":
+            return "elapsed_ms" in record
+        if kind == "exception":
+            return "exception" in record
+        return "elapsed_ms" not in record and "exception" not in record
+
+    return wait_for_record(target, _match, timeout=timeout)
+
+
+def traced_records(token: str, *, path: Path | None = None) -> list[dict[str, Any]]:
+    """Every file-sink record naming ``token`` (call it once the awaited record has landed)."""
+    target = session_log_path() if path is None else path
+    return [record for record in json_records(target) if record_mentions(record, token)]
+
+
+def file_size(path: Path) -> int:
+    """Current size of the log file in bytes (0 before the sink creates it)."""
+    return path.stat().st_size if path.exists() else 0
+
+
+def records_since(path: Path, offset: int) -> list[dict[str, Any]]:
+    """The JSON records the file sink appended after byte ``offset``.
+
+    A property test emits, waits for its own record, then reads only this window, so
+    examples never read each other's records and a leak is attributed to the call
+    that caused it.
+    """
+    return parse_json_records(path.read_bytes()[offset:].decode("utf-8", errors="replace"))
+
+
+def wait_for_record_since(
+    path: Path, offset: int, predicate: Callable[[dict[str, Any]], bool], timeout: float = 15.0
+) -> dict[str, Any] | None:
+    """Wait for a JSON record appended after byte ``offset``; return it, or ``None`` on timeout.
+
+    The byte window is what keeps a property test's examples independent: the wait
+    cannot be satisfied by an earlier example's record, and the caller then reads the
+    same window to see exactly what this call emitted.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for record in records_since(path, offset):
+            if predicate(record):
+                return record
+        time.sleep(0.01)
+    return None
