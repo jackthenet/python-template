@@ -17,6 +17,7 @@ settings methods); both are broken with lazy proxies so the shared instances are
 wired into both sides.
 """
 
+from typing import Any
 from uuid import UUID
 
 from backend.authentication import (
@@ -109,7 +110,7 @@ class _LazyPermissionService:
     def has_permission(self, user_id: UUID | None, permission: str, session_token: str | None = None) -> bool:
         return self._service.has_permission(user_id, permission, session_token=session_token)  # type: ignore[union-attr]
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._service, name)
 
 
@@ -122,7 +123,7 @@ class _LazyUserManager:
     def set_manager(self, manager: UserManager) -> None:
         self._manager = manager
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._manager, name)
 
 

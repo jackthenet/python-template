@@ -131,6 +131,8 @@ DEP004 = ["alembic"]
 [tool.mypy]
 python_version = "3.14"
 check_untyped_defs = true
+# `warn-return-any` stays off deliberately: it reports 20 errors in 12 files.
+disallow_untyped_defs = true
 ignore_missing_imports = true
 # `src/backend/` is a namespace package (no `__init__.py`); these flags let
 # `mypy src/` resolve `backend.logging` correctly without CLI flags.

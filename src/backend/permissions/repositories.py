@@ -23,6 +23,7 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool, StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -47,7 +48,7 @@ def _sqlite_file_path(database_url: str) -> str | None:
     return None
 
 
-def _make_engine(database_url: str):
+def _make_engine(database_url: str) -> Engine:
     """Create the SQLite engine (parent dir auto-created; busy timeout for
     file-based URLs; a static pool for ``:memory:``; a null pool for
     file-based so the file is released after each operation)."""
