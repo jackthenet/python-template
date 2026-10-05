@@ -212,3 +212,31 @@ Six library facts came out of the smoke test and were absorbed into the design (
 ### P.5 verdict: **PASS**
 
 The specification set is internally consistent; every normative ID has an acceptance criterion and a test-strategy row; the CROSS-CUTTING impact analysis matches the TODO scope; the performance budgets hold with the mandated logging active and state their measurement context; the mandated dependency is verified working on the host; and both repository gates pass. The change is READY for Phase 1 S1.4 (commit the prepared spec, open the amendment PR).
+
+## Phase 2 (S2.2) — Task DAG (2026-10-05)
+
+**Artifact:** `docs/tasks/structlog-logging.tasks.json` (7 tasks), copied to `.github/task-runner/tasks.json` to initialize the active build environment.
+
+**Grouping (CROSS-CUTTING, by affected feature — §10 Impact Analysis):** `backend.logging` owner (T-001 pipeline core + dependency-set part 1, T-002 decorators + tracing-surface contract) · `backend.settings` (T-003 live reconfigure + the amended settings-coverage IDs, T-004 the 28 registry/repository statements) · `backend.eventbus` (T-005 the 10 statements) · `backend.permissions` + `tooling` (T-006 the last loguru import together with the dependency-set finalization) · `guidance` (T-007 AGENTS.md + the python-best-practices skill). §10 row 5 (migrations/alembic) needs no task — no code change, its interaction is EDGE-003, tested in T-001; row 7's amended specs merged with PR #67; row 8 (test suite) is carried by every task's `green_command`.
+
+**ID coverage (machine-checked):** all 51 normative IDs of `docs/specs/structlog-logging.md` (REQ-001…015, AC-001…020, INV-001…005, EDGE-001…006, NFR-001…005) appear in at least one task's `requirements` / `acceptance_criteria` / `invariants` / `edge_cases` / `non_functional`, and all 21 amended IDs of the four amended specs (`logging.md` REQ-001/003/005, AC-001/004/005†, INV-001, EDGE-005†, NFR-001…004; `logging-coverage.md` REQ-010, AC-010; `settings-coverage.md` REQ-014/015/016, AC-019/020/021, EDGE-008) appear in a task's `amended_ids`. The mapping is embedded in the DAG under `id_coverage` for Phase 3/5 traceability. (`settings-coverage.md` REQ-016 / AC-021 / EDGE-008 are amended IDs of that spec, not new IDs of this one.)
+
+**Gate evidence:**
+
+| Check | Command | Result |
+|---|---|---|
+| DAG well-formed + acyclic + docs/runner in sync | `uv run python scripts/validate_task_dag.py docs/tasks/structlog-logging.tasks.json` and `uv run python scripts/validate_task_dag.py` | PASSED: 7 tasks, acyclic, well-formed (both) |
+| JSON validity | `uv run python -c "import json; json.load(...)"` on both files | both valid |
+| ID coverage + allowed_files citation | ad-hoc check against the spec tables | 51 own + 21 amended covered, no missing ID, no citation outside `allowed_files` |
+
+**Deptry interlock (S2.1 merged-main fact 1, honored in the graph):** `quality_check` runs `uv run deptry .` at Phase 5 parity (`pyproject.toml:224`) and deptry scans `src/`, `migrations/`, `scripts/` but **not** `tests/` (it reports "Scanning 89 files" — the 90 non-test `.py` files). The dependency set is therefore changed in exactly two tasks, each paired with the code that keeps deptry clean afterwards: **T-001** declares `structlog` in the same task that imports it and drops `orjson` from the `DEP002` ignore in the same task that imports `orjson` (loguru stays declared — settings/eventbus/permissions still import it); **T-006** removes the last loguru import in the scan set (`src/backend/permissions/service.py`) in the same task that removes loguru from `[project].dependencies`. Every intermediate state passes deptry, and `uv run deptry .` is a `completion_gates` entry of T-001, T-004, T-005 and T-006.
+
+**DAG corrections made during validation (gate satisfiability — no test was dropped):**
+
+1. **Narrowed gate, AC-003 / INV-005 / the elapsed half of REQ-011 moved from T-001 to T-002.** They assert a *traced* exit record (`elapsed_ms`, the mapped field set), which needs the rebuilt decorator; in T-001 only untraced records exist. T-001 keeps the non-traced record-field path; **T-002** covers the traced-exit path.
+2. **Narrowed gate, AC-009 split per feature.** The spec's single all-four-features witness (`test_ac_009_statements_go_through_get_logger`) cannot pass before every feature is migrated, so T-004 and T-005 carry per-file witnesses (`…_settings_statements_go_through_get_logger`, `…_eventbus_statements_go_through_get_logger`) and **T-006** owns the spec-named all-four witness plus AC-001 (no backend import anywhere) — the task that removes the last one.
+3. **Gate scoping fix.** T-001, T-002 and T-004 originally ran whole test directories in `green_command`; because Phase 3 derives *every* task's tests before Phase 4 starts, those directories would have contained a later task's still-RED tests and the task's GREEN gate could never be observed. The commands now name this task's tests plus the pre-existing tests it must fix, and exclude later tasks' files (recorded as a `design_constraints` entry in each affected task). The full suite stays the Phase 5 gate.
+4. **T-004 dependency check.** Its `green_command` no longer runs `tests/acceptance/settings_coverage/` — T-004 does not depend on T-003, so T-003's RED tests would have failed T-004's gate.
+5. **Breaking-change containment (S2.1 merged-main fact 2).** Every task that breaks a pre-existing test lists those tests in its own `green_command`: T-001 (the two authorized deletions + the re-derived `logging.md` AC-001/AC-004/INV-001/NFR-001 tests), T-002 (the whole `logging_coverage` suite plus the four cross-feature logging tests, reached through the re-implemented helpers), T-003 (the six re-derived settings-coverage tests), T-006 (the `logging-coverage` REQ-010/AC-010 traceability row update alongside the authorized test deletion, so `scripts/check_traceability.py` never sees a dangling reference).
+
+**Phase 2 gate: PASS** — the DAG is initialized, acyclic, well-formed, feature-grouped, and covers every normative ID. Next: S3.1 (derive tests, one fresh subagent per DAG task).
