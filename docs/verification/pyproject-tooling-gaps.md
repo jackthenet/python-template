@@ -593,3 +593,93 @@ f70d242 → 03a8f79  record steps 5–7
 | 8 | Docs dependency-group split (item 7, as corrected above) + README note + guidance updates | `47a4f04` | `uv sync --only-group dev --only-group docs` + `mkdocs build --strict` exit 0; pre-push hook Passed |
 
 Record commits interleaved: `773ce93` (P.4 baseline), `4dd95b0` (P-47 friction), `96ebc95`, `f9c89dd`, `bbb7ff5`, `03a8f79`, `47a4f04`. **Phase 4 gate: GREEN at every step — 728 passed, 1 skipped, identical to the baseline; no test modified, weakened or deleted.**
+
+---
+
+## Phase 5 — VERIFY (REFACTOR)
+
+Worktree `…-worktrees/refactor/pyproject-tooling-gaps`, branch `refactor/pyproject-tooling-gaps`, measured at `b47e568` (HEAD after the step-8 record commit); `origin/main` = `eb68ed2` and `git merge-base HEAD origin/main` = `eb68ed2` (branch is current with `main`). Phase 5 is read-only for `src/` and `tests/`: no code or test file was touched in this phase.
+
+### S5.1 — full regression suite
+
+`uv run pytest tests/ -q` → **728 passed, 1 skipped in 220.04 s (0:03:40)**, 0 failed.
+
+- **Identical to the authoritative baseline** (728 passed, 1 skipped, 0 failed, 223.21 s at `5c589d2`) — AGENTS.md Phase 5 REFACTOR item 15 ("suite result identical to baseline") holds.
+- The 1 skip is the pre-existing host-dependent `tests/acceptance/filemanagement/test_filemanagement.py:364` ("symlinks not available on this host").
+- No flaky node failed in this run, so the documented wall-clock node `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` needed no isolation re-run (its classification rule is recorded in step 1's `_check` note and `docs/verification/search.md:456`).
+
+**Zero test changes vs the baseline (REFACTOR invariant 3), proved three ways:**
+
+1. `git diff --stat origin/main...HEAD -- tests/` → 5 files, **+173 / −130**: `tests/integration/sessionmanagement/test_concurrency.py` (38), `tests/mail_test_helpers.py` (62), `tests/property/usermanagement/test_multi_role_invariants.py` (44), `tests/property/usermanagement/test_usermanagement_properties.py` (155), `tests/tooling_test_helpers.py` (4). Every one is a step-2 complexity restructuring (the first four) or the step-4 `DTZ` fix (naive `datetime.now()` → `datetime.now(UTC)` in the shared `travel()` helper). No other test file is touched; no test was deleted, skipped, xfailed or weakened.
+2. Assertion inventory: `git diff origin/main...HEAD -- tests/ | grep -cE "^[-+].*assert"` → **2**. Both hits are the *same* line, `assert entry.session_id in all_ids`: it is removed from the nested `worker` closure of `test_nfr_005_concurrent_threads_safe` and re-added verbatim inside the extracted module-level `_nfr_005_worker` helper (the 18 → 9 restructuring). **Moved, not changed** — same expression, still executed once per `list_sessions` call in every worker thread, still surfaced by the unchanged trailing `assert not errors, errors`. This is the single moved-but-unchanged assertion the step-2 record reported.
+3. Wider inventory: `git diff origin/main...HEAD -- tests/ | grep -cE "^[-+].*(pytest\.raises|@settings|@given|st\.|hypothesis)"` → **0** changed lines touching expectations, Hypothesis strategies or `@settings`; `grep -cE "^-def test_"` → **0** and `grep -cE "^\+def test_"` → **0** — no test function added or removed.
+4. Marker inventory: `grep -cE "^\+.*(skip|xfail|parametrize|no:randomly)"` → **1** hit, and it is a docstring line in `test_usermanagement_properties.py` ("…the correspondence check is skipped:"), not a skip marker; the removal side is **0**. No test was skipped, xfailed or re-parametrized.
+
+### S5.2 — lint + types (+ the remaining Phase 5 gates)
+
+| Gate | Command | Exact result |
+|---|---|---|
+| Lint (whole repo, == CI `lint.yml:37`) | `uv run ruff check .` | **All checks passed!** |
+| Format (== CI `lint.yml:39`) | `uv run ruff format --check .` | **324 files already formatted** |
+| Types (== CI `quality.yml:23`) | `uv run mypy src/` | **Success: no issues found in 83 source files** |
+| Types, informational (== CI `quality.yml:25`, `continue-on-error: true`) | `uv run ty check src/` | **Found 152 diagnostics** — baseline 151, the recorded **+1 accepted deviation** (`authentication/service.py:221`, `Expected UserRead, found User`) |
+| Dependencies (== CI `quality.yml:94`) | `uv run deptry .` | **Success! No dependency issues found.** (Scanning 89 files) |
+| Complexity at the new gate **15** (this change's own `complexity` job) | `uv run complexipy src tests --max-complexity-allowed 15` | **exit 0** — "All functions are within the allowed complexity." (baseline: exit 1, 10 offenders) |
+| Traceability (== CI `spec-validation.yml:68`) | `uv run python scripts/check_traceability.py` | **Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)** |
+| Docs site (== CI `quality.yml` `docs` job) | `uv run --group docs mkdocs build --strict` | **exit 0** — "Documentation built in 1.55 seconds" (the bare `uv run mkdocs build --strict` form is invalid after the item-7 group split — that is the point of the split) |
+| Migrations (== CI `quality.yml:126`) | `ALEMBIC_DATABASE_URL=sqlite:////tmp/alembic-p5.db uv run alembic upgrade head` | **exit 0** — both revisions applied to a fresh temp DB (`→ eace2f772150`, `eace2f772150 → d94b7f2e6a31`) |
+
+No gate failed, so no gate was re-run or weakened. `uv.lock` stayed **clean** through every `uv run` in this phase (`git status --porcelain` → only this record): the P-42 drift line is committed on this branch (`uv.lock` `version = "0.6.1"` == `pyproject.toml:4`), so the drift that made every earlier step re-lock is gone — this change closes P-42 as a side effect (collision note (d)).
+
+### Architecture check (manual boundary review — AGENTS.md Phase 6 item 4)
+
+`tests/architecture/` does not exist and is no longer cited anywhere (PR #65 removed the dangling citations), so the REFACTOR architecture gate is the manual review defined in AGENTS.md Phase 6 item 4, performed here read-only:
+
+- **Code stays inside its own feature directory.** All **21** new `def`s this change adds are private helpers or private methods inside the file that owns them: `authentication/repository.py` `_attach_utc`; `authentication/service.py` `_user_by_identifier`; `authentication/webauthn.py` `_webauthn`; `permissions/repositories.py` `_make_engine`; `permissions/service.py` `_evaluate_grants`; `search/service.py` `_select_sources`; `sessionmanagement/service.py` `_listed_limit`, `_order_with_current`; `settings/models.py` `_text_value_valid`, `_number_value_valid`, `_slider_value_valid`, `_select_value_valid`, `_list_value_valid`, `is_valid_value`, `SettingDefinition._validate`, `_validate_kind_specs`, `_validate_no_kind_specs`, `_validate_kind_exclusive_constraints`; `usermanagement/models.py` `process_bind_param`, `process_result_value`; `main.py` two `__getattr__`. No new module, no new directory, nothing added to `shared/`.
+- **No extracted helper is imported across a feature boundary.** Grepping every new helper name across `src/`, `tests/`, `scripts/` finds only its defining file. The three apparent extra hits are substring false positives: `test_webauthn_repository_roundtrip` and `test_list_value_validation` (test function names), and `_attach_utc` in `filemanagement/repository.py:37` and `usermanagement/repository.py:41` — each feature already owns **its own** copy of that 3-line helper, so the authentication copy follows the existing convention instead of creating a `shared/` abstraction (`shared/` stays deliberately small). Informational for Phase 6: the helper is now triplicated by convention, not shared by design.
+- **Cross-feature imports in the changed files are unchanged from `main`** except one line: `src/backend/authentication/service.py:89` now also imports `User` from `backend.usermanagement` — the feature's **public package root** (`"User"` is in `__all__`, `src/backend/usermanagement/__init__.py:44`) — for the precise `-> User | None` annotation from step 5. Annotation-only; no new internal-module dependency.
+- **Pre-existing, untouched, not a finding of this change:** `src/backend/sessionmanagement/service.py:31-32` imports `backend.authentication.models` / `backend.authentication.repositories` (submodules rather than the public root). No import line there was changed by this change; recorded so Phase 6 sees it as out of scope, not as introduced here.
+- `model/` / `services/` roles: no file moved between roles; the settings validators stayed in `settings/models.py` (domain rules), the extracted session/search/permission helpers stayed in `services/` (use-case orchestration).
+
+**Architecture check: PASS** — boundaries respected, no cross-feature internal import introduced.
+
+### No observable behavior changed — every changed file classified
+
+`git diff --stat origin/main...HEAD` → **24 files, +973 / −236**. Every file classified (a file that could not be classified would be a finding; there are none):
+
+| File | Class |
+|---|---|
+| `pyproject.toml` | config (complexipy threshold 30→15, ruff `DTZ`, mypy `disallow_untyped_defs`, `quality_check` parity, `docs` dependency group) |
+| `uv.lock` | config — lock metadata (the `dev`→`docs` group move, 2 blocks, + the pre-existing P-42 version line) |
+| `.github/workflows/quality.yml` | CI (new `complexity` job; `docs` job sync line) |
+| `.pre-commit-config.yaml` | CI/tooling (complexipy hook removed; `mkdocs-build` entry gains `--group docs`) |
+| `src/backend/settings/models.py` | complexity-restructure (`is_valid_value` 47→8, `_validate` 26→2) |
+| `src/backend/sessionmanagement/service.py` | complexity-restructure (`list_sessions` 18→12) |
+| `src/backend/permissions/service.py` | complexity-restructure (`_check` 17→10) |
+| `src/backend/search/service.py` | complexity-restructure (`search` 17→13) |
+| `src/backend/authentication/repository.py` | annotation-only + complexity-restructure (`_attach_utc` helper) |
+| `src/backend/authentication/service.py` | annotation-only + complexity-restructure (`_user_by_identifier`) |
+| `src/backend/authentication/webauthn.py` | annotation-only + complexity-restructure (`_webauthn` deferred import) |
+| `src/backend/permissions/repositories.py` | annotation-only + complexity-restructure (`_make_engine`) |
+| `src/backend/usermanagement/models.py` | annotation-only (`TypeDecorator.process_*` signatures) |
+| `src/main.py` | annotation-only (two `__getattr__` signatures) |
+| `tests/integration/sessionmanagement/test_concurrency.py` | complexity-restructure (18→9) |
+| `tests/mail_test_helpers.py` | complexity-restructure (`_dialogue` 17→5) |
+| `tests/property/usermanagement/test_multi_role_invariants.py` | complexity-restructure (23→9) |
+| `tests/property/usermanagement/test_usermanagement_properties.py` | complexity-restructure (38→6, 22→6) |
+| `tests/tooling_test_helpers.py` | test-helper `DTZ` fix (naive → aware `datetime.now(UTC)`) |
+| `AGENTS.md` | docs (mkdocs build gate gains `--group docs`; 2 pre-existing whitespace/EOF nits fixed by pre-commit, disclosed in step 8) |
+| `README.md` | docs (one `## Development` table row) |
+| `userdocs/index.md` | docs (one `uv sync --group docs` line) |
+| `docs/verification/pyproject-tooling-gaps.md` | docs (this record) |
+| `docs/workflow/PROBLEMS.md` | docs (P-47 entry) |
+
+No file introduces behavior: the `src/` diffs are helper extractions, added private methods and annotations; the `tests/` diffs are structural; the rest is config/CI/docs. Whether any `src/` restructure altered semantics is Phase 6's bounded-review question (final-state review, not re-running the suite).
+
+**Gate not run, with reason:** `uv run pre-commit run --all-files` — known pre-existing failure at `main` (`end-of-file-fixer` over 17 unrelated files), so a repo-wide run is not a signal here. The hook this change actually modifies was run scoped in step 8: `uv run pre-commit run --hook-stage pre-push --files <changed>` → `mkdocs build --strict ... Passed`.
+
+### Verdict
+
+**VERIFIED** — REFACTOR Phase 5 gate set passes: full suite GREEN and **identical to the baseline (728 passed, 1 skipped, 0 failed)**, with zero test changes beyond the recorded complexity restructuring and the one-line `DTZ` helper fix (proved by diffstat + assertion/strategy/marker inventories); `ruff check .`, `ruff format --check .`, `mypy src/`, `deptry .`, `complexipy … 15`, `check_traceability.py`, `mkdocs build --strict` and `alembic upgrade head` all clean; `ty` at the recorded **+1 accepted deviation** (152 vs 151, informational); architecture boundary review PASS; every changed file classified with no unclassified file. No gate was weakened, no test touched in this phase.
+
+**Next:** Phase 6 (S6.1–S6.3 bounded review of the final state, then S6.4 — **no version bump** for REFACTOR — open the PR to `main`).
