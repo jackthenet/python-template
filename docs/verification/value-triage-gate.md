@@ -58,7 +58,7 @@ Stop and reclassify if Phase 4 or review finds any of these:
 
 ## Scope (exact, verified against the tree at `535816c`)
 
-**22 edits in 4 files, all Markdown.** Every "before" below was re-read from the file in this worktree at P.4 with `grep -n` (line numbers are from the base commit `535816c`, **not** copied from the question file). The `workflow-docs-nits` qualifiers are **already live** and are re-measured, not restated:
+**22 edits in 4 files, all Markdown** — **25 with A11/A12/G6**, the three rows added to this table at the **S4.2 re-entry** after the S5 adjudication of finding 1 (see "S4.2 re-entry (A11/A12/G6) + re-verified gate set"); the 22-row count is the scope as approved at P.4. Every "before" below was re-read from the file in this worktree at P.4 with `grep -n` (line numbers are from the base commit `535816c`, **not** copied from the question file). The `workflow-docs-nits` qualifiers are **already live** and are re-measured, not restated:
 
 | `workflow-docs-nits` edit (merged) | Live text at `535816c` (re-measured) |
 |---|---|
@@ -95,6 +95,9 @@ This change **builds on** those four lines and does not touch them (Q-1 = (b) + 
 | G3 | `.agents/skills/git/SKILL.md` | `:59` (S7.1 done-criteria) | Q-7 |
 | G4 | `.agents/skills/git/SKILL.md` | `:114-135` (Post-merge cleanup — new step 5) | Q-7 |
 | G5 | `.agents/skills/git/SKILL.md` | `:155` (Rules — direct-to-`main` rule) | Q-3, Q-7 |
+| A11 | `AGENTS.md` | `:118` (Git Worktrees → Rules — the direct-to-`main` permission, chain endpoint) | Q-3 = (a), Q-7 = (i) — **row added at the S4.2 re-entry** (S5 finding 1.1) |
+| A12 | `AGENTS.md` | `:414` (Multi-change scheduling → "Backlog status on `main`", the status set) | Q-3 = (a) — **row added at the S4.2 re-entry** (S5 finding 1.3) |
+| G6 | `.agents/skills/git/SKILL.md` | `:12` (When to Use — the planning-commit summary line above G1) | Q-3 = (a), Q-7 = (i) — **row added at the S4.2 re-entry** (S5 finding 1.2) |
 
 ### A1 — `AGENTS.md:130-131`, Preparation artifacts table
 
@@ -292,7 +295,8 @@ Before implementing any TODO, decide whether it is worth doing. At **P.1 Frame**
 ### Deliberate non-edit (measured, so the scope stays minimal)
 
 - `.agents/skills/git/SKILL.md:102` (the `BLOCKED-USER` cleared-gate test reads `docs/questions/<name>.md`) — **unchanged**: a change is archived only at the drop decision or after merge, and a WAITING change is by definition neither, so the test never has to look in the archive. `AGENTS.md:412` (A8) is the one place the archive is named, because that bullet is where the orchestrator decides whether to resume at all.
-- `AGENTS.md:118` and `:135` ("the planning records **under** `docs/todo/` and `docs/questions/`") — **unchanged**: `docs/todo/archive/` is already inside those paths, so the direct-to-`main` permission needs no rewording there.
+- `AGENTS.md:135` ("the planning records **under** `docs/todo/` and `docs/questions/`") — **unchanged**: `docs/todo/archive/` is already inside those paths, so the direct-to-`main` permission needs no rewording there.
+- **Narrowed at the S4.2 re-entry (scope-contract fix).** This entry originally also listed `AGENTS.md:118`. The argument it gives is the **path** argument only — and that half still holds (`docs/todo/archive/` is inside `docs/todo/`). It never argued the **chain endpoint**: `:118` ends its permission at "every later `Status:` advance through `MERGED`", which after this change forbids the `DROPPED` advance and the `git mv` pair the change authorizes. `:118` is therefore **edited by A11**, not left alone; `:135` (and `:677`/`AGENTS.md:683`) stay deliberate non-edits because they are path-only mentions with no chain endpoint.
 - `AGENTS.md:677` (the Prohibition "Commit anything except the Phase P planning artifacts … directly to `main`") — **unchanged** for the same reason.
 
 ---
@@ -401,7 +405,7 @@ The two `Disposition:` workaround lines exist precisely because the vocabulary h
 
 ### Reverse: each edit row is decided by an answer
 
-The **Edit index** table above carries a `Decided by` column for all 22 rows (A1–A10, T1–T2, S1–S5, G1–G5). Checked: **no row is unattributed**, and no row cites an answer that does not exist (the file has exactly Q-1, Q-2, Q-3, Q-4, Q-5, Q-7 — Q-6 was closed as a duplicate of Q-5 and generates no edit of its own; its content is in A5/T2 via Q-5).
+The **Edit index** table above carries a `Decided by` column for all 22 rows (A1–A10, T1–T2, S1–S5, G1–G5) — plus the three rows A11/A12/G6 added at the S4.2 re-entry, each attributed to the same Q-3 = (a) / Q-7 = (i) answers that produced A4/T1/S2/G1/G2/G5. Checked: **no row is unattributed**, and no row cites an answer that does not exist (the file has exactly Q-1, Q-2, Q-3, Q-4, Q-5, Q-7 — Q-6 was closed as a duplicate of Q-5 and generates no edit of its own; its content is in A5/T2 via Q-5).
 
 ### Consistency checks run at P.4
 
@@ -672,7 +676,7 @@ Why it is a gap and not a nit:
 
 ## Verification verdict
 
-**VERIFIED WITH FINDINGS.**
+**VERIFIED WITH FINDINGS.** *(superseded — see "S4.2 re-entry (A11/A12/G6) + re-verified gate set": the required fix step ran and the verdict is re-issued there as **VERIFIED**)*
 
 - The **DOCS/CHORE gate set passes in full** (G-1 … G-10): lint clean, mypy clean, traceability clean with identical counts, `mkdocs build --strict` exit 0 with no warnings, the diff limited to the 4 scoped guidance files + this record, **no test file and no behavior touched**, no version bump (correct for the type). Spec coverage is **n/a** — the change has no spec and invents no REQ/AC ID.
 - **One open finding:** finding 1 (three stale statements of the rule this change extends — `AGENTS.md:118`, `AGENTS.md:419`, `.agents/skills/git/SKILL.md:12`). It is a direct consequence of adding `DROPPED` and the archive layout, so it belongs to this change and must be closed by a **fix step (S4.2 re-entry, 3 micro-edits, rows A11/A12/G6)** before Phase 6 review. After that step, re-confirm G-1 … G-9 (the same commands) and re-issue this verdict as **VERIFIED**.
@@ -688,3 +692,73 @@ Why it is a gap and not a nit:
 - [x] Verdict recorded: **VERIFIED WITH FINDINGS** (one fix step required before Phase 6)
 - [x] No implementation/guidance file edited by this step (adjudicate and recommend only); no Phase 6 work, no PR, no version bump; `docs/todo/` and `docs/questions/` untouched in this worktree
 - [x] Committed in the worktree as `chore(value-triage-gate): S5 verification report (DOCS/CHORE light gate set)`
+
+---
+
+## S4.2 re-entry (A11/A12/G6) + re-verified gate set
+
+Run in the change worktree on top of `d90ec0c` (S5); working tree clean before (`git status --short` → empty). This is the **fix step the Phase 5 verdict required**: the three micro-edits of the "S5 adjudication of the three S4.2 findings" (finding 1), then the same gate set re-run and the verdict re-issued. Nothing else was touched — no Phase 6 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write in this worktree.
+
+### The three edits (verbatim before → after; located by text, not by line number)
+
+| Row | File (line at `d90ec0c`) | Before (verbatim) | After (as applied) |
+|---|---|---|---|
+| **A11** | `AGENTS.md:118` | `…their creation at P.1–P.3 **and every later \`Status:\` advance through \`MERGED\`** (see "Planning records (owner: the orchestrator)").` | `…their creation at P.1–P.3 **and every later \`Status:\` advance through \`MERGED\` and \`DROPPED\`, and the archive move of the two records** (see "Planning records (owner: the orchestrator)").` |
+| **A12** | `AGENTS.md:419` | `- **Backlog status on \`main\`.** **WAITING**, **IN-WORKFLOW** and **MERGED** are written to the change's TODO file **on \`main\`** …` | `- **Backlog status on \`main\`.** **WAITING**, **IN-WORKFLOW**, **MERGED** and **DROPPED** are written to the change's TODO file **on \`main\`** …` |
+| **G6** | `.agents/skills/git/SKILL.md:12` | `…and every \`Status:\` advance through \`MERGED\` directly to \`main\`.` | `…and every \`Status:\` advance through \`MERGED\` and \`DROPPED\`, and the archive move of both records, directly to \`main\`.` |
+
+- Each anchor matched **exactly once** (`grep -c` → `1` for all three); the replacement is text-only, so the rest of every bullet is byte-identical. `git diff HEAD` for the guidance files: **`2 files changed, 3 insertions(+), 3 deletions(-)`** — one changed line for G6, two for A11/A12.
+- Deciding answers: **Q-3 = (a)** and **Q-7 = (i)** — the same answers that produced A4/T1/S2/G1/G2/G5. No new decision, no new clause, no gate changed.
+- The three edits close the contradiction the adjudication identified: the direct-to-`main` permission is now stated identically at `AGENTS.md:118` and `git/SKILL.md:171` (G5), the git skill's summary (`:12`) matches the operation it summarizes (`:22`, G1), and the backlog-status set (`AGENTS.md:419`) now includes the `DROPPED` advance that A4 (`:163`) writes on `main`.
+
+### Scope-contract fix in the P.4 record (same step)
+
+- The P.4 **"Deliberate non-edit"** entry no longer lists `AGENTS.md:118`. Its stated reason covered only the **path** argument (`docs/todo/archive/` is inside `docs/todo/`) — that half still holds — and it never argued the **chain endpoint**, which is exactly what A11 changes. `AGENTS.md:135` and `:683` (base `:677`) remain deliberate non-edits: path-only mentions with no chain endpoint.
+- The P.4 **Edit index** gained **A11 / A12 / G6** with their deciding Q-IDs, and its lead sentence now reads "22 edits in 4 files … — **25 with A11/A12/G6**, the three rows added at the S4.2 re-entry", explicitly marked as added after the S5 adjudication. The rest of the P.4 record is not rewritten (historical-record convention, `AGENTS.md` Traceability).
+- **Scope contract ↔ applied diff:** 25 rows, 4 guidance files; every applied hunk maps to a row, and every row is applied. Guidance-file numstat at this step (`git diff $(git merge-base main HEAD)`): `AGENTS.md` 17/11, `git/SKILL.md` 21/5, `specify/SKILL.md` 9/8, `docs/todo/template.md` 8/1 (the record row grows by this section).
+
+### Must-stay-untouched proof (re-verified after the edits)
+
+| Place | State after A11/A12/G6 |
+|---|---|
+| `AGENTS.md:135` | **unchanged** — path-only ("the **only** files the workflow may commit directly to `main`"), no `MERGED`, no chain endpoint |
+| `AGENTS.md:683` (base `:677`) | **unchanged** — the Prohibition "Commit anything except the Phase P planning artifacts (`docs/todo/`, `docs/questions/`) directly to `main`" |
+| `.agents/skills/git/SKILL.md:111` (base `:102`) | **unchanged** — the `BLOCKED-USER` cleared-gate test still reads `docs/questions/<name>.md` |
+| `AGENTS.md:310` (Non-blocking), `:415` (Never idle), `:682` (the idle Prohibition) | **unchanged** — the path-scoped wording-hazard grep below returns **0** |
+| `AGENTS.md:147` (the READY gate) | **unchanged** — not in the diff |
+
+### Re-confirmed gate set — the same commands as S5, re-run at this step
+
+| # | Gate | Command (in the worktree) | Base (`77ae870`) | After A11/A12/G6 | Verdict |
+|---|---|---|---|---|---|
+| G-1 | Lint | `uv run ruff check .` | `All checks passed!` | `All checks passed!` | **PASS** — no delta |
+| G-2 | Types | `uv run mypy src/` | `Success: no issues found in 83 source files` | `Success: no issues found in 83 source files` | **PASS** — no delta |
+| G-3 | Traceability | `uv run python scripts/check_traceability.py` | `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | **PASS** — identical counts |
+| G-4 | Docs site, strict | `uv run --group docs mkdocs build --strict` | exit 0, `Documentation built in 2.64 seconds`, no `WARNING:`/`ERROR:` (S5 record) | exit 0, 0 `WARNING:`/`ERROR:` (built in 1.54 s and 2.84 s across the two runs at this step — wall-clock only) | **PASS** — no delta |
+| G-5 | Diff scope | `git diff --name-only main...HEAD` | 5 paths | exactly the same **5 paths** (4 guidance files + this record) | **PASS** |
+| G-6 | No test file | `git diff --name-only main...HEAD -- tests/` | empty | **empty** | **PASS** |
+| G-7 | No behavior delta | the forbidden-path grep over `git diff --name-only main...HEAD` (`src/`, `tests/`, `docs/specs/`, `traceability.md`, `.github/workflows/`, `pyproject.toml`, `uv.lock`, `userdocs/`, `docs/questions/`, `docs/todo/` except the template) | no match | **no match**; `.py` files in the diff: **0** | **PASS** |
+| G-8 | Markdown hygiene | `git diff --check main...HEAD`; final newline; pipe tables / fenced blocks intact | clean | `git diff --check` **clean** (exit 0); record and both guidance files end with a newline; the three edits are inline text inside existing bullets, no table or fence touched | **PASS** |
+| G-9 | Wording hazard (path-scoped) | `git diff -U0 -- AGENTS.md .agents/skills docs/todo/template.md \| grep -cE "^[-+].*(Never idle\|Idle or wait in place\|Non-blocking:)"` | 0 | **0** | **PASS** |
+| G-10 | Version bump | `git diff main...HEAD -- pyproject.toml` | empty | **empty** (0 lines) — `REFACTOR / DOCS-CHORE → none` | **PASS** |
+
+**Branch-vs-`main` note (measured, no action).** `main` advanced by one commit since the P.4 base — `e1b7706 chore(value-triage-gate): status READY`, a planning-record status advance touching only `docs/todo/value-triage-gate.md`. It changes no `AGENTS.md`/skill line, so the P.4 rebase rule ("re-measure every line number if another `AGENTS.md` edit merges first") is **not** triggered; the scope measure stays the three-dot range from the merge-base `535816c`. (A two-dot `git diff main` additionally shows that TODO file for exactly this reason — it is the orchestrator's `main` commit, not this branch's content.)
+
+### Verification verdict (re-issued)
+
+**VERIFIED.**
+
+- The DOCS/CHORE gate set passes in full (G-1 … G-10), with **no delta** against the `77ae870` base on every command; spec coverage is **n/a** (no spec, no invented REQ/AC ID); no test file and no behavior touched; correctly no version bump.
+- **Finding 1 is closed** by A11/A12/G6: the `DROPPED` status chain and the archive move are now stated consistently in all five places that enumerate them (`AGENTS.md:118`, `:130-131`, `:151`, `:155-163`, `:419`; `git/SKILL.md:12`, `:22`, `:65`, `:77-79`, `:146-151`, `:171`), and the three must-stay-untouched places are proven byte-identical.
+- **Finding 2 stays closed** as a record inaccuracy (the P.4 gate table named an `mdformat` check that does not exist; corrected in place at S4.2/S5, no code/CI action, no hook added).
+- **Finding 3 stays closed** as an out-of-scope note (the G1 bold-span merge and the G4 numbered-item rendering are wording normalizations inside planned text, permitted by the P.4 record).
+
+### S4.2 re-entry done-criteria checklist (this step)
+
+- [x] Exactly the three adjudicated edits applied (A11/A12/G6), each anchor matched once, rest of the bullets byte-identical
+- [x] The P.4 "Deliberate non-edit" entry for `AGENTS.md:118` narrowed to the path argument; A11/A12/G6 added to the Edit index with Q-3 = (a) / Q-7 = (i) — scope contract (25 rows) matches the applied diff
+- [x] Must-stay-untouched set re-verified (`AGENTS.md:135`, `:683`, `git/SKILL.md:111`, the never-idle rules, the idle Prohibition, the READY gate)
+- [x] Gate set re-run and recorded with base comparison: ruff / mypy / traceability / mkdocs / diff scope / no-test / no-behavior / markdown hygiene / wording hazard / no bump — all **PASS**, no delta
+- [x] Verdict re-issued: **VERIFIED** (the S5 verdict is marked superseded in place)
+- [x] No Phase 6 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write, no test/spec/source file touched
+- [x] Committed in the worktree as `chore(value-triage-gate): S4.2 re-entry - close DROPPED status-chain gap (A11/A12/G6), verdict VERIFIED`

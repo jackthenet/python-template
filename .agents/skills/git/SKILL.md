@@ -9,7 +9,7 @@ Cross-cutting git operations for the Spec-TDD workflow. This skill owns the **ho
 
 ## When to Use
 
-- **Orchestrator (Phase P and every later status advance)** delegate: commit the change's planning records (`docs/todo/<name>.md`, `docs/questions/<name>.md`) and every `Status:` advance through `MERGED` directly to `main`.
+- **Orchestrator (Phase P and every later status advance)** delegate: commit the change's planning records (`docs/todo/<name>.md`, `docs/questions/<name>.md`) and every `Status:` advance through `MERGED` and `DROPPED`, and the archive move of both records, directly to `main`.
 - **P.4 (specify)** delegates: create the change branch and its worktree (per change type) — the worktree is created at P.4, after the questions are answered, NOT at Phase 0/Phase 1.
 - Phase 6 (review) delegates: open the PR for the change branch.
 - After a PR is merged (human governance): post-merge cleanup.

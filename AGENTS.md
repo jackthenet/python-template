@@ -115,7 +115,7 @@ Exact commands, procedures, and edge cases for each operation live in the git sk
 - `git worktree remove` fails on a dirty worktree: do NOT use `--force` on an unmerged change. Force-removal is only permitted when the changes are intentionally discarded.
 - If a worktree directory was deleted manually, run `git worktree prune`.
 - Check for leftovers with `git worktree list`; after cleanup, the only worktree should be the primary (`main`).
-- **Direct-to-`main` commits are allowed only for the planning records** under `docs/todo/` and `docs/questions/` — their creation at P.1–P.3 **and every later `Status:` advance through `MERGED`** (see "Planning records (owner: the orchestrator)"). Nothing else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
+- **Direct-to-`main` commits are allowed only for the planning records** under `docs/todo/` and `docs/questions/` — their creation at P.1–P.3 **and every later `Status:` advance through `MERGED` and `DROPPED`, and the archive move of the two records** (see "Planning records (owner: the orchestrator)"). Nothing else — no spec, no verification record, no source, no test — may be committed directly to `main`; it reaches `main` only through a merged PR.
 
 ---
 
@@ -416,7 +416,7 @@ Emergency/fast-path exceptions (≤ 2 lines, one-line fix with an existing faili
 - **Ready selection order.** (1) a change whose `Depends on:` changes are already merged; (2) among ready changes, **easiest first** (see Todo Tracking Discipline); (3) tie-break **FIFO by READY date**. A `DROPPED` or `MERGED` change's records live under `docs/todo/archive/` and `docs/questions/archive/`, so the two live folders are the backlog to select from.
 - **Resume.** A WAITING change's gate is cleared when its spec PR / PR merge is reachable from `origin/main` after `git fetch` (`git merge-base --is-ancestor <merge-commit> origin/main`), or when its question file shows every answer. Then launch a **fresh** subagent at its next atomic step. A change whose records have moved to `docs/todo/archive/` / `docs/questions/archive/` is finished (`MERGED`) or dead (`DROPPED`) — it is not resumed; read its question file there if its record must be checked.
 - **Todo sets.** One todo set per change; at most one `in_progress` **per change**; a WAITING change's step stays `in_progress` with an `activeForm` naming the wait (e.g. "waiting for spec PR merge").
-- **Backlog status on `main`.** **WAITING**, **IN-WORKFLOW** and **MERGED** are written to the change's TODO file **on `main`** by the orchestrator at those moments (see "Planning records (owner: the orchestrator)"), so the backlog on `main` is the live schedule.
+- **Backlog status on `main`.** **WAITING**, **IN-WORKFLOW**, **MERGED** and **DROPPED** are written to the change's TODO file **on `main`** by the orchestrator at those moments (see "Planning records (owner: the orchestrator)"), so the backlog on `main` is the live schedule.
 
 ### Todo Tracking Discipline (todo tool)
 
