@@ -1046,3 +1046,46 @@ Must-stay-green guards from the RED gate are all still green: `test_ac_004_forei
 | Tests touched | — | none (refactor touched only the two pipeline modules) |
 
 **Phase 4 (S4.3, T-001) gate: PASS — refactor applied, GREEN unchanged.** Next: S4.4 (T-001) commit + set `"status": "VERIFIED"`.
+
+
+---
+
+### S4.4 T-001 — VERIFIED (2026-10-06)
+
+**Commit of the S4.2 + S4.3 work.** `git status --short` clean before the step; HEAD `b1675ad` — *"chore(structlog-logging): S4.2+S4.3 T-001 pipeline core (structlog + stdlib sinks, get_logger) + refactor pass"* — 13 files, +939 / −350:
+
+`docs/verification/structlog-logging.md`, `pyproject.toml`, `uv.lock`, `src/backend/logging/__init__.py`, `src/backend/logging/_pipeline.py` (new), `src/backend/logging/_renderers.py` (new), `src/backend/logging/_setup.py` (deleted), `src/backend/logging/feature_settings.py`, `tests/integration/logging/test_logging_integration.py`, `tests/logging_test_helpers.py`, `tests/unit/logging/test_logging.py`, `tests/unit/logging/test_logging_sink_ownership.py`, `tests/unit/logging/test_pipeline_edges.py` — all inside T-001's `allowed_files`.
+
+**GREEN re-confirmed once (the DAG's own `green_command`, verbatim).** → **45 passed, 3 failed** (46.81 s). The 3 failures are exactly the note-D cross-task exemptions ruled at the S3.2 RED gate — each is another task's witness, not a T-001 gap:
+
+| Exempted test | Owning task | Why it is not T-001's |
+|---|---|---|
+| `tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain` | **T-006** (remove loguru) | asserts the loguru-free dependency state; loguru is still declared and still imported by the three not-yet-migrated feature files |
+| `tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json` | **T-002** (rebuild `@logged` / `@logged_class` on the pipeline) | asserts the traced-record field set reaching the file sink; the decorators are still the old loguru-backed ones |
+| `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` | **T-002** | same: the decorator → pipeline integration is T-002's scope |
+
+T-001's own `tests_to_create` and every other path in its `green_command`: **45/45 passed**.
+
+**Status write.** `"status": "VERIFIED"` set for **T-001 only** in `.github/task-runner/tasks.json` and mirrored in `docs/tasks/structlog-logging.tasks.json`. The two files are **byte-identical** (`diff` → no output; `tasks` arrays compared as parsed JSON → equal), all other tasks still `PENDING`.
+
+**State machine (T-001).** `RED_CONFIRMED → GREEN → REFACTORED → VERIFIED` — RED observed at S3.2/S4.1, GREEN at S4.2, refactor applied without changing the GREEN result at S4.3, VERIFIED here with the traceability matrix already updated by S3.2 and the S4.2 collateral record.
+
+**Ready tasks unlocked by T-001 = VERIFIED** (per `dependencies` in `tasks.json`):
+
+| Task | Dependencies | State after T-001 |
+|---|---|---|
+| **T-002** | T-001 | **READY** |
+| **T-004** | T-001 | **READY** |
+| **T-005** | T-001 | **READY** |
+| T-003 | T-001, T-002 | still blocked by T-002 |
+| T-007 | T-001, T-002 | still blocked by T-002 |
+| T-006 | T-001, T-002, T-003, T-004, T-005 | still blocked by T-002, T-003, T-005 |
+
+| Gate | Command | Result |
+|---|---|---|
+| Work committed | `git status --short` / `git show --stat b1675ad` | clean tree; 13 files in the S4.2+S4.3 commit |
+| GREEN re-check | T-001 `green_command`, verbatim | **45 passed, 3 failed** — the three exemptions above, no new failure |
+| Status sync | `diff .github/task-runner/tasks.json docs/tasks/structlog-logging.tasks.json` | identical; T-001 `VERIFIED`, T-002..T-007 `PENDING` |
+| Ruff | n/a — S4.4 wrote no source or test file | n/a |
+
+**Phase 4 (S4.4, T-001) gate: PASS — T-001 VERIFIED.** Next: S4.1 (T-002) pick the next ready task.

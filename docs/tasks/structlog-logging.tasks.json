@@ -399,7 +399,7 @@
         "Both authorized deletions are recorded in docs/verification/structlog-logging.md."
       ],
       "dependencies": [],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-002",
