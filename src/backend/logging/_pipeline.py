@@ -47,6 +47,12 @@ RENDERERS: tuple[RendererName, ...] = ("text", "json")
 # stops being fast is visible as a WARNING exit record (REQ-007/AC-007).
 _SETUP_SLOW_THRESHOLD_MS = 25.0
 
+# The setup call is traced at INFO, not at the decorator default DEBUG: the pipeline's own
+# lifecycle record ("logging configured") is INFO (spec §9), and a DEBUG setup trace would
+# be filtered at the default level, so the entry/exit of setup would never be observable
+# (AC-005 requires records for the traced ``setup_logger`` module function).
+_SETUP_TRACE_LEVEL = "INFO"
+
 # The chains that produce the specified record fields. The callsite and the
 # exception are captured where they still exist: the structlog chain runs in the
 # emitting thread, and the foreign pre-chain runs before the formatter clears the
@@ -208,7 +214,7 @@ def _formatter_for(renderer: RendererName, stream: Any) -> ProcessorFormatter:
     )
 
 
-@logged(slow_threshold_ms=_SETUP_SLOW_THRESHOLD_MS)
+@logged(level=_SETUP_TRACE_LEVEL, slow_threshold_ms=_SETUP_SLOW_THRESHOLD_MS)
 def setup_logger(*, renderer: str | None = None) -> None:
     """Install the pipeline, or reconfigure the installed one (REQ-001, INV-001).
 

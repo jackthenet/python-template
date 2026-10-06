@@ -99,21 +99,17 @@ def log_records() -> Iterator[list[Any]]:
     pipeline mid-test. Draining first ensures the stale events are dispatched
     before the sinks exist, so the capture is stable for the test.
     """
-    from logging_coverage_test_helpers import PipelineCaptureHandler, loguru_sink
-    from logging_test_helpers import pipeline_logger
+    from logging_coverage_test_helpers import loguru_sink, pipeline_capture
 
     records: list[Any] = []
 
     _drain_event_bus()
-    feature = pipeline_logger()
-    capture = PipelineCaptureHandler(records)
-    feature.addHandler(capture)
     handler_id = logger.add(loguru_sink(records), level="DEBUG", catch=False)
     try:
-        yield records
+        with pipeline_capture(records):
+            yield records
     finally:
         logger.remove(handler_id)
-        feature.removeHandler(capture)
 
 
 def _drain_event_bus() -> None:

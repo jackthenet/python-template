@@ -208,17 +208,41 @@ class PipelineCaptureHandler(logging.Handler):
         self._records.append(capture_from_logrecord(record))
 
 
+class FailingHandler(logging.Handler):
+    """A sink whose ``emit`` always raises (EDGE-002 / AC-013 witness).
+
+    Harness-marked, so ``logging_test_helpers._is_harness_handler`` keeps it out of the
+    managed-sink count (REQ-002/INV-001).
+    """
+
+    _harness_capture = True
+
+    def emit(self, record: logging.LogRecord) -> None:
+        raise RuntimeError("sink failure")
+
+
 @contextmanager
 def pipeline_capture(records: list[Any], level: str = "DEBUG") -> Iterator[None]:
-    """Attach a :class:`PipelineCaptureHandler` to the pipeline logger for a block."""
+    """Attach a :class:`PipelineCaptureHandler` to the pipeline logger for a block.
+
+    The pipeline logger is also set to the capture level for the block and restored
+    afterwards. The pipeline gates a record's level on the *logger*, where the retired
+    loguru sink gated it on the *handler* (``logger.add(sink, level="DEBUG")``): a
+    capture that only attached the handler would silently miss every record of a level
+    another test had re-levelled the pipeline above (the level, not the traced call, is
+    what changes).
+    """
     from logging_test_helpers import pipeline_logger
 
     feature = pipeline_logger()
     handler = PipelineCaptureHandler(records, level)
+    previous_level = feature.level
     feature.addHandler(handler)
+    feature.setLevel(level)
     try:
         yield
     finally:
+        feature.setLevel(previous_level)
         feature.removeHandler(handler)
 
 

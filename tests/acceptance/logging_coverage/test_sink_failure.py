@@ -12,6 +12,7 @@ from typing import Any
 
 from logging_coverage_test_helpers import (
     INVENTORY_CLASSES,
+    FailingHandler,
     entry_records,
     exit_records,
     for_qualname,
@@ -34,14 +35,6 @@ def test_sink_failure_does_not_interrupt(log_records: list[Any], tmp_path: Any) 
     assert getattr(INVENTORY_CLASSES["SqliteUserRepository"], "__logged_class__", False) is True
 
     setup_logger()
-
-    class FailingHandler(logging.Handler):
-        """A sink that always fails; harness-marked so the managed-sink count is unaffected."""
-
-        _harness_capture = True
-
-        def emit(self, record: logging.LogRecord) -> None:
-            raise RuntimeError("sink failure")
 
     failing = FailingHandler()
     pipeline_logger().addHandler(failing)
