@@ -1203,3 +1203,134 @@ Schedule consequence: if T-005 runs **before T-002**, the Phase 5 full suite gai
 | No implementation written | this step changed only `docs/verification/structlog-logging.md` | confirmed |
 
 **Phase 4 (S4.1, T-005) gate: PASS — RED re-confirmed.** Next: S4.2 (T-005) — implement + confirm GREEN.
+
+---
+
+### S4.1 T-002 — task picked, RED re-confirmed (2026-10-06)
+
+**Task picked: T-002** — *tracing decorators rebuilt on the pipeline's binding machinery: `@logged` (sync + async) entry / exit-with-`elapsed_ms` / exception, `@logged_class`, exception rendered into the `exception` field with no local values, `context_getter` and `depth` removed, tracing-surface contract, amended NFR-002 budget, test record-capture helpers re-implemented* — Impact Analysis row 1, `backend.logging` (owner). Covers **REQ-007/008/009/011/015**, **AC-003/011/012/013/014/015**, **INV-002/003/005**, **NFR-002/003**.
+
+**Ordering (orchestrator decision, recorded because it departs from the DAG's numeric order).** T-002 runs **before T-004/T-005**. Note B of the S4.1 (T-005) block measured that migrating the feature statements first turns `tests/acceptance/logging_coverage/test_levels.py::test_semantic_log_levels` red — its only ERROR-level record is the bus's `logger.exception`, captured through the **loguru** `log_records` fixture (`tests/conftest.py:106`). T-002's `implementation_steps` item 5 re-implements exactly that capture surface, and `test_levels.py` is already in T-002's `green_command`, so rebuilding the decorators + capture first removes the temporary red instead of creating it.
+
+#### Readiness check
+
+| Check | Evidence | Result |
+|---|---|---|
+| Dependency satisfied | T-002 `"dependencies": ["T-001"]`; T-001 `"status": "VERIFIED"` (S4.4, `1dc155c`) | satisfied |
+| Status still `PENDING` | `.github/task-runner/tasks.json` — T-001 `VERIFIED`, T-002..T-007 `PENDING` | confirmed |
+| Its tests exist | `--collect-only -q` on the `red_command` set → **11 tests collected in 0.18 s**, every node id resolves | confirmed |
+| The pipeline it builds on exists | T-001 shipped `_pipeline.py` (`get_logger()` → `structlog.stdlib.BoundLogger` over `pipeline_logger()`, `_EMITTING_CHAIN = (callsite_adder(), exception_field)`, `_configure_structlog()`), and `_renderers.py` (`exception_field` / `_exception_content` / `_traceback_frames` = type + message + frames, never locals; `rename_callsite_fields`; `drop_pipeline_internals`) | confirmed |
+| Working tree | `git status --short` clean at HEAD `1a5ceb8` | confirmed |
+
+#### RED re-confirmed (the DAG's own `red_command`, verbatim)
+
+```text
+uv run pytest tests/acceptance/logging/test_tracing_records.py tests/acceptance/logging/test_secrets.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json tests/contract/logging/test_tracing_surface.py::test_ac_013_removed_parameters tests/property/logging/test_pipeline_invariants.py::test_inv_002_no_local_value_ever_recorded tests/property/logging/test_pipeline_invariants.py::test_inv_003_elapsed_non_negative tests/property/logging/test_pipeline_invariants.py::test_inv_005_required_fields_present tests/contract/logging/test_logging_contracts.py::test_nfr_002_decorator_overhead_budget tests/contract/logging/test_logging_contracts.py::test_nfr_004_backward_compatible_api -v
+```
+
+→ **10 failed, 1 passed (135.40 s)** at HEAD `1a5ceb8`. **S3.2 recorded 11 failed / 0 passed — the drift is exactly one test, and it is an improvement, not a weakening:** `test_nfr_002_decorator_overhead_budget` now passes. Verified by elimination against the collected list (it is the only collected node absent from the run's `short test summary` FAILED list); the reason is T-001 — the amended budget (< 1 ms with both managed sinks at DEBUG) is now measured against the new pipeline, whose overhead the spec records at **0.148 ms/call**. No test file changed after S3.2's gate (`git log -1 -- tests/contract/logging/test_logging_contracts.py` → `d82cc1e`, the S3.1 T-002 derivation commit).
+
+**Failure mode (test-contract sanity check): 10 `AssertionError`s, 0 collection / import / fixture / test-data errors.** Every failure is an assertion on unimplemented behavior:
+
+| Test | Failure (verbatim) |
+|---|---|
+| `test_tracing_surface.py::test_ac_013_removed_parameters:73` | `AC-013/REQ-007/D6: @logged must not accept context_getter (no shim, no alias)` |
+| `test_logging_contracts.py::test_nfr_004_backward_compatible_api:138` | `NFR-004 v3/AC-013: context_getter is removed from the @logged surface (no shim, no alias)` |
+| `test_tracing_records.py::test_ac_011_sync_and_async_traced_records:39` | `AC-011: ac_011_sync_target must emit an entry record before its exit record` |
+| `test_tracing_records.py::test_ac_012_exception_record_and_propagation:93` | `AC-012: the exception record must reach the file sink` |
+| `test_tracing_records.py::test_ac_014_logged_class_records:39` | `AC-014: ac_014_public_call must emit an entry record before its exit record` |
+| `test_secrets.py::test_ac_015_no_local_values_in_exception_record:35` | `AC-015: the exception record must reach the file sink` |
+| `test_pipeline_backend.py::test_ac_003_file_record_fields_as_json:79` | `AC-003: the traced exit record must reach the file sink as a JSON object` |
+| `test_pipeline_invariants.py::test_inv_002_no_local_value_ever_recorded:258` | `INV-002: the raising traced call must emit an exception record to the file sink` |
+| `test_pipeline_invariants.py::test_inv_003_elapsed_non_negative:287` | `INV-003/REQ-011: inv_003_sync_probe must emit an exit record carrying elapsed_ms` |
+| `test_pipeline_invariants.py::test_inv_005_required_fields_present:332` | `INV-005: the sync call emitted no record the test could wait for` |
+
+Single root cause for all ten: `src/backend/logging/_decorator.py` (231 lines) is still the pre-change **loguru** implementation. Its records go to loguru sinks that T-001 removed, so no traced record reaches the pipeline's file sink (8 failures), and `logged` still has parameters `func, level, slow_threshold_ms, slow_threshold_setting, include_args, context_getter, depth` (2 failures).
+
+#### Pre-implementation baseline for T-002's `green_command` set
+
+The `green_command` set verbatim → **14 failed, 60 passed (168.02 s)**. The 10 above plus **4 more reds this task owns** (the first three are the T-001-side consequence of `setup_logger` no longer being decorated):
+
+| Test | Failure (verbatim) | Why it is red / what fixes it |
+|---|---|---|
+| `logging_coverage/test_inventory.py::test_inventory_covers_all_public_classes:24` | `setup_logger is not traced with @logged` | `INVENTORY_MODULE_FUNCTIONS` (`tests/logging_coverage_test_helpers.py:74-83`) lists `setup_logger` and `get_settings`; T-001's rewrite left `setup_logger` undecorated → re-apply `@logged` in `_pipeline.py` |
+| `logging_coverage/test_slow_threshold.py::test_traced_classes_have_concrete_threshold:41` | `setup_logger has no concrete slow_threshold_ms (got None)` | same — the decorator must keep storing the resolved threshold on the wrapper |
+| `logging_coverage/test_services_traced.py::test_module_functions_traced:136` | `setup_logger: expected at least 1 entry record` | same — and that entry record must reach the re-implemented capture |
+| `test_logging_contracts.py::test_nfr_003_diagnose_false:116` | `assert False` on `wait_for_file_content(log_file, "nfr_003 leak test")` | the test emits through **loguru** (`logger.exception`, line 113), which no longer has a sink. Test-side adaptation inside T-002's allowed files: emit through the feature's own entry point; the assertion (`secret not in content`) stays exactly as written |
+
+#### Implementation brief for S4.2
+
+**(a) What the rebuilt `@logged` / `@logged_class` must produce.**
+
+Record classification is defined by the helpers, not by the test: `wait_for_traced_record` (`tests/logging_test_helpers.py:338-353`) calls a record **exit** iff it carries `elapsed_ms`, **exception** iff it carries `exception`, and **entry** iff it carries **neither**. So:
+
+| Record | Event text | Extra fields | Level |
+|---|---|---|---|
+| entry | `>> {func.__qualname__} called` (+ ` {_format_args(...)}` when `include_args`) | none | the `level` param (default `DEBUG`) |
+| exit | `<< {qualname} returned in {elapsed_ms:.3f} ms` | `elapsed_ms` as a **number**, not a string — AC-003 reads it from the parsed JSON | `level`, or `WARNING` when `elapsed_ms > slow_threshold_ms` |
+| exception | `!! {qualname} raised {Type}({msg})` | `exception` = `{type, message, frames}` — produced by the pipeline's `exception_field` processor, **not** by the decorator | `level` |
+
+- The text wording is **load-bearing**: `entry_records` / `exit_records` / `exception_records` filter on the `>>` / `<<` / `!!` prefixes, `parse_elapsed_ms` greps `returned in ([\d.]+) ms`, and `test_module_functions_traced` / `test_secret_args` / `test_abc_traced` assert the exact prefixes. Keep the three templates byte-identical and add `elapsed_ms` as a bound field on top.
+- `record_mentions` matches the token in `event` **or** `logger`, so the qualname must stay in the event text.
+- Exception path: emit with `exc_info` set (structlog's `exception()` sets `exc_info=True`; `_renderers.exception_field` then falls back to `sys.exc_info()` in the emitting thread and renders type / message / **frames** only — `_traceback_frames` reads `linecache` source text, never frame locals). Do **not** build the `exception` dict in the decorator: the pipeline owns it (D7). The exception still propagates unchanged (AC-012).
+- AC-003 forbids the keys `filename`, `lineno`, `_record`, `_from_structlog` in the rendered record (`tests/acceptance/logging/test_pipeline_backend.py:64-65`); `_renderers.INTERNAL_FIELDS` additionally drops `exc_info`, `stack_info`, `positional_args`. Consequence: **never pass positional arguments to the logger** — there is no `PositionalArgumentsFormatter` in `_EMITTING_CHAIN`, so they would land in `positional_args` and be dropped (the same trap recorded as note A of S4.1 T-005). Build the event text with f-strings.
+- AC-013 (`tests/contract/logging/test_tracing_surface.py:60-77`) inspects `inspect.signature(feature.logged).parameters`: `context_getter` and `depth` must be **absent**, and `logged(context_getter=None)` / `logged(depth=1)` must raise `TypeError`. Delete both parameters, `_format_context`, and the `logger.opt(depth=...)` line — no shim, no alias (D6). `level`, `slow_threshold_ms`, `slow_threshold_setting`, `include_args` stay with their current semantics (`_resolve_slow_threshold` and the byte-identical `_format_args` stay as they are).
+- Keep the markers the coverage suite inspects: `wrapper.__logged__`, `wrapper.slow_threshold_ms` (concrete, `> 0`), `cls.__logged_class__`, `cls.slow_threshold_ms`; `logged_class` keeps skipping private methods (`_is_private_method`) and keeps applying the threshold to every public method (AC-014, AC-007).
+- The sync/async split (`inspect.iscoroutinefunction`) stays; AC-011 requires both flavors to emit entry + exit-with-`elapsed_ms` at the configured level. `elapsed_ms` from `time.perf_counter` (INV-003, non-negative). logging-coverage INV-001: exactly one entry + one exit per call.
+- The `level` parameter is a **string name**; drive the stdlib method (`logger.debug/info/warning/error`, or `logger.log(number, ...)`) so `add_level_field` reads the authoritative `record.levelname` — AC-011 asserts `entry["level"] == "INFO"` for `level="INFO"`.
+
+**(b) Capture-surface re-implementation plan** (`implementation_steps` item 5; `tests/conftest.py`, `tests/logging_coverage_test_helpers.py`, `tests/logging_test_helpers.py` — public signatures unchanged).
+
+The interface the suite actually uses (measured over all consumers: `str(r)` ×21, `entry_records` ×17, `exit_records` ×11, `level_name` ×6, `for_qualname` ×6, `capture_records` ×4, `messages` ×3, `r["level"].name` ×2, `exception_records` ×1, `log_records.clear()` ×1). The replacement must therefore keep, per captured record: `str(record)` → the event text; `record["level"].name` → the level name (an object with a `.name` attribute — today `_Captured` hands back loguru's `Level`); `record["record"]` → the whole record; and a plain `list` (`.clear()` is called by `tests/contract/authentication/test_logging.py:13`).
+
+Facts the implementer must design against:
+
+1. **Attach to the pipeline logger, not the root.** Traced records go to `logging.getLogger("backend.logging")`, which is `propagate = False` (`_pipeline.py`). A handler on the root logger never sees them — use `logging_test_helpers.pipeline_logger()` (or the name) and set the handler's own level to `DEBUG`. The session fixture already sets `logging.log_level = DEBUG` (`tests/conftest.py:44`), so DEBUG entry records pass the logger's level filter.
+2. **A raw handler receives the event dict, not a rendered line.** With `ProcessorFormatter.wrap_for_formatter`, the record's `msg` **is the event dict** — the render chain runs inside the formatter (on the listener thread for the file sink) — and only `_EMITTING_CHAIN` (`callsite_adder`, `exception_field`) has run by then. So the shim must normalize: message text = `msg["event"]` when `msg` is a dict, else `record.getMessage()`; level = `record.levelname`; `record["record"]` = that dict. Do **not** run the pipeline formatter inside the capture handler (double rendering, and the file sink's formatter belongs to the listener thread).
+3. **The intermediate state is dual-backend.** Until T-004/T-005/T-006 the settings registry and repository, the event bus and `src/backend/permissions/service.py` still emit through **loguru**, and `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` (in `green_command`, deleted only by T-006) asserts their literal wording inside the capture; `test_levels.py` needs the bus's ERROR and the registry's WARNING through the same capture. So the fixture must keep its loguru sink **and** add the stdlib handler — mark that as a temporary dual capture with a comment naming the task that removes the loguru half.
+4. `capture_records(level="DEBUG")` (`tests/logging_coverage_test_helpers.py:156-172`) and `_LiveMessages._texts()` keep their signatures — 4 call sites in `tests/property/logging_coverage/test_invariants.py` plus the settings / filemanagement / search / usermanagement contract suites — with the same normalization as `_Captured`.
+5. Keep the fixture's `_drain_event_bus()` preamble (`tests/conftest.py:106-152`). Its stated reason (a stale `SettingChanged` triggering `logger.remove()`) no longer applies — `_reconfigure` mutates handlers in place and never removes a sink — but the drain still isolates cross-test bus traffic, and keeping it is the zero-risk choice.
+
+**(c) Amended NFR-002 budget** (`implementation_steps` item 6, spec NFR-002): `@logged` overhead **< 1 ms/call measured with the two managed sinks active at DEBUG**, nothing disabled. Re-measured for this pipeline: **0.148 ms/call** with console + queue + rotating file active at DEBUG (n = 3), and **0.006 ms/call** for the tracing machinery alone with no handler attached. The old gate's backend-specific disable/enable call disappears with the backend. The witness `test_nfr_002_decorator_overhead_budget` already passes at this step — do not re-tune it.
+
+**(d) The two T-001 exemptions T-002 must turn GREEN.**
+
+| Test | Status at `1a5ceb8` | In `green_command`? |
+|---|---|---|
+| `tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json` | RED (listed above) | yes |
+| `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline:36` | **RED** (re-measured this step: `assert False` on `wait_for_file_content(log_file, "integration_work_fn" and "<<")`) | **no** — S4.2 must run it explicitly; it is T-002's own exemption |
+
+**(e) AC-016: the protection for the traced path must sit at the emitting call site.** `tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_call_unaffected_by_failing_file_sink` replaces `queue_handler.emit` **on the instance** with a raising function. `Logger.callHandlers` → `Handler.handle()` does **not** guard `emit()`, and `_PipelineQueueHandler.emit`'s own guard is bypassed by the instance override. The test passes today only because the traced call still goes through loguru; once the decorator emits through the pipeline, that `RuntimeError` travels into `SqliteUserRepository.get_by_username` and the test fails. So the rebuilt decorator must not let an emitting failure reach the caller (guard the logging call, or route it through a helper that does) — the reasoning `_ForwardingHandler.emit` already records in its comment. Do not "fix" it by touching the test.
+
+**(f) Import-cycle trap for re-decorating `setup_logger`.** `_pipeline.py` must import `logged` in order to decorate `setup_logger` (the three reds in the baseline table), while `_decorator.py` needs the pipeline's `get_logger()` — which also runs `_configure_structlog()`, so a bare `structlog.get_logger()` before `setup_logger()` would bind to structlog's default `PrintLogger` and lose EDGE-006. A module-level `from backend.logging._pipeline import get_logger` in `_decorator.py` is circular. Follow the pattern already in `_decorator.py:55-57`: import inside the wrapper (or inside a one-line `_tracing_logger()` helper), with the same "imported here to avoid a circular import" comment.
+
+**(g) Blast radius: every consumer of the capture surface.** 27 test modules read `log_records` / `capture_records`; only part of them is in `green_command`, so the rest is the collateral check S4.2 must run (the discipline T-001 recorded):
+
+| In `green_command` (GREEN at this task's gate) | Outside `green_command` (collateral check — must not regress) |
+|---|---|
+| `unit/logging/test_logging.py` (20), `unit/logging/test_logging_edges.py` (4), `acceptance/logging_coverage/test_services_traced.py` (11), `test_secret_args.py` (10), `test_levels.py` (5), `test_sink_failure.py` (3), `test_abc_traced.py` (3), `test_slow_threshold.py` (2), `test_direct_loguru_kept.py` (2), `test_behavior_unchanged.py` (1), `property/logging/test_logging_properties.py` (3), `property/logging_coverage/test_invariants.py` (5), `contract/authentication/test_logging.py` (3), `contract/mail/test_logging.py` (2), `acceptance/authentication/test_logging.py` (2), `acceptance/mail/test_logging.py` (2) | `unit/logging_coverage/test_edge_cases.py` (11), `acceptance/sessionmanagement/test_observability.py` (9), `contract/usermanagement/test_usermanagement_contracts.py` (4), `contract/search/test_search_contracts.py` (4), `contract/filemanagement/test_filemanagement_contracts.py` (4), `contract/settings/test_settings_contracts.py` (3 — uses `r["level"].name` directly), `acceptance/search/test_search.py` (3), `acceptance/permissions/test_check_api.py` (3), `acceptance/filemanagement/test_filemanagement.py` (2), `contract/mail/test_secrets.py` (2), `contract/authentication/test_secrets.py` (2) |
+
+#### Completion gates (T-002, verbatim from the DAG)
+
+1. RED observed on the `red_command` set; recorded in `docs/verification/structlog-logging.md`. **← this step**
+2. AC-003, AC-011, AC-012, AC-013, AC-014, AC-015 tests pass.
+3. Property tests for INV-002, INV-003, INV-005 pass (INV-002 is also the NFR-003 witness).
+4. Contract gate NFR-002: `@logged` overhead < 1 ms/call with both managed sinks active at DEBUG (nothing disabled).
+5. The whole `logging_coverage` suite and the four cross-feature logging tests pass with unchanged assertions (this breaking change is fixed inside this task, not deferred to Phase 5).
+6. `uv run ruff check <changed paths>` clean; `uv run mypy src/` clean.
+7. `uv run python scripts/check_traceability.py` stays green.
+
+#### Gate table (S4.1, T-002)
+
+| Gate | Command | Result |
+|---|---|---|
+| Task ready | T-002 `dependencies: ["T-001"]` (VERIFIED), `status: "PENDING"` | confirmed |
+| Its tests present | `--collect-only -q` on the `red_command` set | **11 collected** |
+| RED re-observed | T-002 `red_command` verbatim | **10 failed, 1 passed (135.40 s)** — 10 `AssertionError`s, 0 errors |
+| Drift vs S3.2 (11 failed / 0 passed) | one test newly green: `test_nfr_002_decorator_overhead_budget` | explained (T-001 pipeline + amended budget); no test changed since S3.2 |
+| `green_command` baseline (pre-implementation) | the `green_command` set verbatim | **14 failed, 60 passed (168.02 s)** — the 10 plus 4 owned reds |
+| T-001 exemptions located | `test_ac_003_file_record_fields_as_json`, `test_stdlib_loguru_decorator_pipeline` | both RED; the second is outside `green_command` |
+| Capture-surface blast radius enumerated | grep over `tests/` | 27 consumer modules; interface reduced to 6 accessors |
+| No implementation written | this step changed only `docs/verification/structlog-logging.md` | confirmed |
+
+**Phase 4 (S4.1, T-002) gate: PASS — RED re-confirmed.** Next: S4.2 (T-002) — rebuild `_decorator.py` on the pipeline and re-implement the capture helpers, then confirm GREEN on the `green_command` set plus the two T-001 exemptions and the collateral check.
