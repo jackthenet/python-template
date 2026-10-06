@@ -1698,3 +1698,45 @@ T-005 completion gates from the DAG: (1) RED recorded ✓ (S4.1); (2) the eventb
 Out of scope, untouched as required: `pyproject.toml` (loguru declaration → T-006), `src/backend/settings/` (→ T-004), `src/backend/permissions/service.py` (→ T-006), every other test file, `docs/tasks/` and `.github/task-runner/tasks.json` (T-005's `status` stays `PENDING` — setting it to `VERIFIED` is S4.4's job).
 
 **Phase 4 (S4.2, T-005) gate: PASS — GREEN confirmed and recorded.** Next: S4.3 (T-005) — refactor, keep GREEN.
+
+---
+
+### S4.3 T-005 — refactor, keep GREEN (2026-10-06)
+
+**Objective:** improve the structure of the T-005 diff (duplication, complexity, naming, feature boundaries) without changing observable behavior, keeping the task's targeted tests GREEN. Diff reviewed: `src/backend/eventbus/eventbus.py` and `tests/acceptance/logging_coverage/test_statements_via_feature.py` (T-005's two `allowed_files`).
+
+#### Source: no structural changes needed (`src/backend/eventbus/eventbus.py` untouched)
+
+The migration is already the minimal form, and the two remaining "smells" are forced by the task's own gates, not by the code:
+
+1. **No logging helper for the four handler/event sites.** They repeat the shape *bind two locals → f-string event + the same values as keyword fields*. Folding that into a helper is forbidden by T-005's `design_constraints` ("The statement count stays 10", logging-coverage REQ-010 v2 restated): the AC-009 witness counts `<logger>.<level>(...)` call sites (`_statement_calls`) and asserts exactly 10, so a wrapper that emits on the callers' behalf would drop the count to 4 and fail the very test that gates this task. It would also move the record's callsite (`file`/`line` in the JSON sink, `_pipeline.py` `CallsiteParameterAdder`) off the emitting statement — an observable delta.
+2. **The value appears twice (interpolated + as a field) by design.** Spec §9 row 2 requires "message + keyword fields, unchanged wording", and the chain has no `PositionalArgumentsFormatter`, so the positional form would silently drop the values (measured in S4.2, "Correction to note A"). The locals (`handler_name`, `event_name`) are already the cheapest way to avoid recomputing `_handler_name(handler)` / `__name__` twice per site; hoisting `event_name` out of the `_dispatch` loop instead would compute it eagerly for events with no matching handler — a worse trade, not an improvement.
+3. **Naming and boundaries match the established T-001 pattern.** `_logger = get_logger("eventbus")` mirrors `src/backend/logging/feature_settings.py:22` (`_feature_logger = get_logger("logging")`): one module-level binding per module, feature-named, `@logged`/`@logged_class` untouched, import direction still `backend.eventbus → backend.logging` (spec §10 row 3). No new module, export, or abstraction was introduced, so `shared/` and the feature boundary are unchanged.
+
+#### Test: one real deduplication (`tests/acceptance/logging_coverage/test_statements_via_feature.py`)
+
+The per-feature half of the two per-feature witnesses — "scan the feature directory for a module that still imports a logging backend" — was copy-pasted verbatim in `test_ac_009_settings_statements_go_through_get_logger` and `test_ac_009_eventbus_statements_go_through_get_logger` (7 lines each, differing only in the directory and the message). Extracted once:
+
+```python
+def _dir_backend_imports(relative_dir: str) -> list[str]:
+    """Every module under ``relative_dir`` (repo-relative) that imports a logging backend. ..."""
+```
+
+and both call sites became `if offenders := _dir_backend_imports("src/backend/settings"):` / `("src/backend/eventbus")`. Net diff **+15 / −14** (one helper, two call sites collapsed).
+
+- **No test was weakened, deleted, renamed or converted**, and no assertion or violation-message wording changed — the helper returns exactly the list the inline scan built, and each witness still appends its own `f"a module under … imports a logging backend: {offenders}"`. Test function names are untouched, which matters because `scripts/check_traceability.py` fails on a matrix row citing a test function that no longer exists.
+- **The other two AC-009 witnesses are unaffected**: re-run before and after, `test_ac_009_settings_statements_go_through_get_logger` (T-004) and `test_ac_009_statements_go_through_get_logger` (T-006) still fail with a **byte-identical** violation string (only the assertion's line number in the traceback moves). `2 failed, 1 passed` before and after.
+
+#### Gate table (S4.3, T-005)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | **T-005 GREEN after the refactor** | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger tests/acceptance/eventbus tests/unit/eventbus tests/contract/eventbus tests/property/eventbus tests/integration/eventbus -v` | **32 passed, 0 failed (4.21 s)** — identical to the S4.2 result (1 witness + the 31 eventbus tests), i.e. no behavior delta |
+| b | Re-run after the formatter pass (the only reformatting the step caused) | same command | **32 passed (4.23 s → 4.21 s)** |
+| c | Other AC-009 witnesses still RED, unchanged | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py -q` | **2 failed, 1 passed (0.32 s)** — same two failures, same wording as before the refactor |
+| d | Ruff (changed paths) | `uv run ruff check tests/acceptance/logging_coverage/test_statements_via_feature.py src/backend/eventbus/eventbus.py` / `uv run ruff format <same>` then `--check` | **All checks passed!** / 1 file reformatted (the helper's generator fits on one line at 120 cols) → **2 files already formatted** |
+| e | Types | n/a — no `src/` file was changed in this step (`uv run mypy src/` covers `src/` only and its S4.2 result stands: *Success: no issues found in 84 source files*) | n/a |
+
+Out of scope, untouched: `pyproject.toml`, `src/backend/settings/`, `src/backend/permissions/`, every other test file, the spec, and `.github/task-runner/tasks.json` / `docs/tasks/` (T-005's `status` stays `PENDING` — setting it to `VERIFIED` is S4.4's job).
+
+**Phase 4 (S4.3, T-005) gate: PASS — source needs no structural change (reasons above), the test-side duplication removed once, GREEN maintained (32 passed), ruff clean.** Next: S4.4 (T-005) — commit + set status `VERIFIED`.

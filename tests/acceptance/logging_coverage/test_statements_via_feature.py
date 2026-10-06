@@ -47,6 +47,19 @@ def _backend_imports(tree: ast.AST) -> list[str]:
     return found
 
 
+def _dir_backend_imports(relative_dir: str) -> list[str]:
+    """Every module under ``relative_dir`` (repo-relative) that imports a logging backend.
+
+    The per-feature half of REQ-001/REQ-005: migrating one file is not enough when a
+    sibling module of the same feature still imports the backend.
+    """
+    return sorted(
+        relative
+        for relative in (path.relative_to(_REPO_ROOT).as_posix() for path in (_REPO_ROOT / relative_dir).rglob("*.py"))
+        if _backend_imports(_parse(relative))
+    )
+
+
 def _feature_logger_names(tree: ast.AST) -> set[str]:
     """Every name the module binds to a ``get_logger()`` call (its feature loggers)."""
     names: set[str] = set()
@@ -121,13 +134,7 @@ def test_ac_009_settings_statements_go_through_get_logger() -> None:
     ]
 
     # T-004's completion gate: the whole settings feature is backend-free.
-    settings_dir = _REPO_ROOT / "src" / "backend" / "settings"
-    offenders = sorted(
-        relative
-        for relative in (path.relative_to(_REPO_ROOT).as_posix() for path in settings_dir.rglob("*.py"))
-        if _backend_imports(_parse(relative))
-    )
-    if offenders:
+    if offenders := _dir_backend_imports("src/backend/settings"):
         violations.append(f"a module under src/backend/settings/ imports a logging backend: {offenders}")
 
     assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
@@ -140,13 +147,7 @@ def test_ac_009_eventbus_statements_go_through_get_logger() -> None:
     violations = _statement_violations("src/backend/eventbus/eventbus.py", 10)
 
     # T-005's completion gate: the whole event bus feature is backend-free.
-    eventbus_dir = _REPO_ROOT / "src" / "backend" / "eventbus"
-    offenders = sorted(
-        relative
-        for relative in (path.relative_to(_REPO_ROOT).as_posix() for path in eventbus_dir.rglob("*.py"))
-        if _backend_imports(_parse(relative))
-    )
-    if offenders:
+    if offenders := _dir_backend_imports("src/backend/eventbus"):
         violations.append(f"a module under src/backend/eventbus/ imports a logging backend: {offenders}")
 
     assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
