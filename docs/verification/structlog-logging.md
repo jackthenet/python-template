@@ -1089,3 +1089,117 @@ T-001's own `tests_to_create` and every other path in its `green_command`: **45/
 | Ruff | n/a — S4.4 wrote no source or test file | n/a |
 
 **Phase 4 (S4.4, T-001) gate: PASS — T-001 VERIFIED.** Next: S4.1 (T-002) pick the next ready task.
+
+
+---
+
+### S4.1 T-005 — task picked, RED re-confirmed (2026-10-06)
+
+**Task picked: T-005** — *migrate the 10 direct backend statements in `src/backend/eventbus/eventbus.py` to `get_logger()`* (REQ-005 / AC-009; amended `logging-coverage.md` v2 REQ-010 / AC-010; Impact Analysis row 3 — `backend.eventbus`, "no spec ID change").
+
+#### Readiness check
+
+| Check | Evidence | Result |
+|---|---|---|
+| Dependency satisfied | T-005 `"dependencies": ["T-001"]`; T-001 `"status": "VERIFIED"` (S4.4, HEAD `1dc155c`) | satisfied |
+| Status still `PENDING` | `.github/task-runner/tasks.json` — T-001 `VERIFIED`, T-002..T-007 `PENDING` | confirmed |
+| Its test exists | `tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger` (derived at S3.1, T-005) — collected and run below | confirmed |
+| The pipeline it migrates to exists | T-001 shipped `src/backend/logging/_pipeline.py` with `get_logger(name=None) -> BoundLogger`, exported from `backend.logging` (the §3 eight-name surface, AC-020); `src/backend/eventbus/eventbus.py:22` already imports `logged, logged_class` from it | confirmed |
+| Working tree | `git status --short` clean at HEAD `1dc155c` | confirmed |
+
+#### RED re-confirmed (the DAG's own `red_command`, verbatim)
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger -v
+```
+
+→ **1 failed, 0 passed (0.30 s)** at HEAD `1dc155c` — **identical to the S3.2 gate (1 failed / 0 passed)**; no drift between Phase 3 and Phase 4 entry. One `AssertionError` on unimplemented behavior; no collection, import, fixture or test-data error:
+
+```text
+AssertionError: AC-009 / REQ-005 (logging-coverage REQ-010 v2): src/backend/eventbus/eventbus.py imports a logging backend: ['loguru.logger']; src/backend/eventbus/eventbus.py statements not written through get_logger(): line(s) [86, 96, 115, 120, 136, 176, 197, 205, 222, 233]; a module under src/backend/eventbus/ imports a logging backend: ['src/backend/eventbus/eventbus.py']
+```
+
+The **count clause contributes no violation** — the file already holds exactly REQ-005's 10 statement call sites — so the witness is red exactly on the two clauses T-005 fixes: the backend import, and every statement's receiver not being a `get_logger()`-bound logger.
+
+Pre-implementation baselines for this task's gates:
+
+- `green_command` set minus the witness — `uv run pytest tests/acceptance/eventbus tests/unit/eventbus tests/contract/eventbus tests/property/eventbus tests/integration/eventbus -q` → **31 passed (3.78 s)**. The whole set must still be 31 passed afterwards (no behavior delta).
+- `uv run deptry .` → **Success! No dependency issues found** (90 files) — loguru is still declared *and* still imported by four feature modules, so neither DEP001 nor DEP002.
+
+#### Migration scope (`allowed_files.source_files`: `src/backend/eventbus/eventbus.py` only)
+
+The one import to replace: `eventbus.py:20` `from loguru import logger`. It is the **only** backend import anywhere under `src/backend/eventbus/` (`__init__.py` and `feature_settings.py` have none), so that single line fixes the witness's feature-wide clause. `get_logger` joins the existing `from backend.logging import logged, logged_class` edge at line 22 — no new import direction (spec §10 row 3).
+
+The 10 statement call sites (line numbers as they stand at `1dc155c`; levels and wording stay exactly as listed — spec §9 row 2, "DEBUG/INFO/WARNING as today", unchanged wording):
+
+| Line | Method | Message (current, loguru brace form) | Positional args |
+|---|---|---|---|
+| 86 | `logger.debug` | `event bus: subscribed handler '{}' for event type '{}'` | `_handler_name(handler)`, `event_type.__name__` |
+| 96 | `logger.debug` | `event bus: unsubscribed handler '{}' for event type '{}'` | same |
+| 115 | `logger.debug` | `event bus: published event type '{}'` | `type(event).__name__` |
+| 120 | `logger.warning` | `event bus: queue full; dropping event type '{}' (dropped={})` | `type(event).__name__`, `dropped` |
+| 136 | `logger.debug` | `event bus: shutdown initiated` | — |
+| 176 | `logger.debug` | `event bus: started background worker thread` | — |
+| 197 | `logger.debug` | `event bus: dispatching event type '{}' to handler '{}'` | `type(event).__name__`, `_handler_name(handler)` |
+| 205 | `logger.exception` | `event bus: handler '{}' raised for event type '{}'` | `_handler_name(handler)`, `type(event).__name__` |
+| 222 | `logger.debug` | `event bus: created shared default instance` | — |
+| 233 | `logger.debug` | `event bus: reset shared default instance` | — |
+
+8 × DEBUG, 1 × WARNING, 1 × `exception` (ERROR level).
+
+#### What the witness accepts (read from its own helpers in `test_statements_via_feature.py`)
+
+- `_backend_imports` flags a `loguru` **or `structlog`** import in **any** module under `src/backend/eventbus/` — the migration must not reach for structlog directly (REQ-005: `get_logger()` is the only entry point).
+- `_statement_calls` counts every call shaped `<recv>.<level>(...)` (`debug|info|warning|warn|error|exception|critical|fatal|log`); the count must stay **exactly 10** — none added, none removed, none folded into a helper (logging-coverage REQ-010 v2).
+- `_written_via_get_logger` accepts either an inline `get_logger(...).debug(...)` receiver or a name bound by an assignment (`_x = get_logger(...)`, module-level or attribute target). The module-level binding T-001 used in `src/backend/logging/feature_settings.py` (`_feature_logger = get_logger("logging")`) is the established, already-clean pattern to follow.
+
+#### Design constraints (verbatim from the DAG)
+
+1. REQ-005: no feature imports a logging backend; `get_logger()` is the only entry point.
+2. The statement count stays 10 (`logging-coverage` REQ-010 restated).
+3. Import direction unchanged: `backend.eventbus -> backend.logging` is the allowed direction (spec §10 row 3).
+4. deptry interlock: **`loguru` stays declared in `pyproject.toml`** — `src/backend/permissions/service.py` still imports it; removing the declaration is **T-006**. `pyproject.toml` is not in T-005's `allowed_files` and must not be touched here.
+5. `implementation_steps` 2: the worker-thread statements (startup, handler exception, shutdown) keep their current levels — the bus's own observability policy is unchanged.
+
+#### Risk notes for S4.2
+
+**A. Brace formatting silently loses data on the new pipeline — this is why the task says "keyword-field form".** `get_logger()` returns a `structlog.stdlib.BoundLogger` configured with `_EMITTING_CHAIN = (callsite_adder(), exception_field)` + `ProcessorFormatter.wrap_for_formatter` (`_pipeline.py:50`, `:166-173`); there is **no `PositionalArgumentsFormatter`** in the chain. Verified against the installed structlog 26.1.0: `structlog.stdlib.BoundLogger._proxy_to_logger` moves positional args into `event_kw["positional_args"]`, and `positional_args` is listed in `_renderers.INTERNAL_FIELDS`, so it is **dropped from every rendered record**. Copying the `'{}'` messages with positional args would emit `event bus: published event type '{}'` with the braces unfilled and the value discarded. The keyword-field form keeps the wording and keeps the values: `str.format` fills named placeholders from the same kwargs that land in the event dict (e.g. `"event bus: published event type '{event_type}'"` with `event_type=type(event).__name__`).
+
+**B. Two loguru-era tests outside T-005's scope go red at T-005 (cross-task interlock — do not "fix" them here).** Both capture through the **loguru** `log_records` fixture (`tests/conftest.py:106`, `logger.add(...)`), which stays loguru-based until **T-002** re-implements the capture (T-002 `implementation_steps` item 5; `tests/conftest.py` is in T-002's `allowed_files.test_files`). Neither file is in T-005's `allowed_files`, and neither is in T-005's `green_command`:
+
+| Test | Green now? | Why T-005 breaks it | Goes green in |
+|---|---|---|---|
+| `tests/acceptance/logging_coverage/test_levels.py::test_semantic_log_levels` | **yes** (measured: passes at `1dc155c`) | its only ERROR-level record is the bus's `logger.exception` at line 205 — `_dispatch` is private, so `@logged_class` emits no ERROR of its own; after the migration that record leaves the loguru capture | **T-002** (pipeline-based capture) |
+| `tests/acceptance/logging_coverage/test_direct_loguru_kept.py::test_existing_direct_loguru_kept` | **yes** (measured: 1 passed) | it asserts the literal wording of two bus statements (`event bus: published event type`, `event bus: shutdown initiated`) inside the loguru capture | **T-006** deletes the file (authorized deletion, recorded at S3.1 and in the S4.2 collateral note; it is T-006's `implementation_steps` item 1) |
+
+Schedule consequence: if T-005 runs **before T-002**, the Phase 5 full suite gains these two red tests, and **T-002's own `green_command` already includes `tests/acceptance/logging_coverage/test_levels.py`**, so T-002's conftest re-implementation is exactly what repairs the first one. Running T-002 before T-005 avoids the temporary red entirely. Neither test may be weakened, adapted or deleted in T-005 (prohibited, and out of `allowed_files`).
+
+**C. The bus's worker thread emits through the pipeline.** Statements at 176 / 197 / 205 run on the `eventbus-worker` daemon thread. The pipeline's file sink is a `QueueHandler` → `QueueListener`: the record is enqueued **unformatted** (`_PipelineQueueHandler.prepare` override, ADR-082) and rendered on the listener thread, while `callsite_adder` and `exception_field` run in the **emitting** thread — so `file`/`line` still point at `eventbus.py`, and line 205's `exc_info` is resolved in the worker thread before the record crosses the queue (structlog's `exception()` sets `exc_info=True`; `_renderers.exception_field` renders type / message / frames only, never locals — INV-002). Nothing to add: AC-016's "a failing sink never reaches the caller" guarantee is already enforced at both handler boundaries, so the implementer must not wrap the emits in a `try/except` or format anything by hand.
+
+**D. `@logged_class(slow_threshold_ms=250)` on `EventBus` and `@logged` on `get_event_bus` / `reset_event_bus` stay loguru-based until T-002.** After T-005 this one module emits through **two** backends (traced records via loguru, statements via the pipeline). That is the intended intermediate state — `_decorator.py` is not in T-005's file set and must not be touched, and the `logged` / `logged_class` import must stay.
+
+**E. Level filtering is unchanged, but visible.** The pipeline logger's level comes from settings (`Settings.log_level` default `INFO`, `_settings.py:19`; the `logging.log_level` SELECT default is `INFO`, `feature_settings.py:62`), so the 8 DEBUG statements reach a sink only at DEBUG — the same effective behavior as the deleted loguru sinks, which were added at `settings.log_level` (`_setup.py:159`, `:164` at `b1675ad^`). Tests that assert those statements install their own sink at DEBUG. The event bus's own 31 tests assert **no** records at all (measured: no `log_records` / `capture_records` / `caplog` use in any `tests/*/eventbus` file), which is precisely why the `green_command` set is a clean no-delta guard.
+
+**F. A module-level `get_logger()` binding is safe at import time.** It runs `_configure_structlog()` during import — already the case via `backend/logging/feature_settings.py` — and binds to the singleton `logging.Logger` the pipeline later attaches its sinks to (`_logger_factory` returns `pipeline_logger()`); using `get_logger()` before `setup_logger()` must not raise (EDGE-006, GREEN since T-001).
+
+#### Completion gates (T-005, verbatim from the DAG)
+
+1. RED observed on the `red_command` set; recorded here. **← this step**
+2. The eventbus-half AC-009 witness passes.
+3. No `loguru` import remains anywhere under `src/backend/eventbus/`.
+4. The event bus's whole test directory passes unchanged (no behavior delta) — baseline **31 passed**.
+5. `uv run deptry .` clean; `uv run ruff check <changed paths>` clean; `uv run mypy src/` clean.
+
+#### Gate table (S4.1, T-005)
+
+| Gate | Command | Result |
+|---|---|---|
+| Task ready | T-005 `dependencies: ["T-001"]` (VERIFIED), `status: "PENDING"` | confirmed |
+| Its test present | collected and executed below | confirmed |
+| RED re-observed | T-005 `red_command` verbatim | **1 failed, 0 passed (0.30 s)** — same as S3.2, one `AssertionError` |
+| `green_command` baseline (pre-implementation) | the event bus's five test directories | **31 passed (3.78 s)** |
+| deptry baseline (pre-implementation) | `uv run deptry .` | **Success! No dependency issues found** (90 files) |
+| Cross-task red tests identified | `test_levels.py` and `test_direct_loguru_kept.py` measured green before this step | note B |
+| No implementation written | this step changed only `docs/verification/structlog-logging.md` | confirmed |
+
+**Phase 4 (S4.1, T-005) gate: PASS — RED re-confirmed.** Next: S4.2 (T-005) — implement + confirm GREEN.
