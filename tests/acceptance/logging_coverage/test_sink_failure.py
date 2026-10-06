@@ -17,7 +17,16 @@ from logging_coverage_test_helpers import (
     exit_records,
     for_qualname,
 )
-from logging_test_helpers import captured_console, managed_sinks, pipeline_logger, rotating_file_handlers
+from logging_test_helpers import (
+    bound_logger,
+    captured_console,
+    managed_sinks,
+    pipeline_logger,
+    rotating_file_handlers,
+    session_log_path,
+    wait_for_record,
+)
+from settings_test_helpers import wait_for
 
 from backend.logging import setup_logger
 from backend.usermanagement.repository import SqliteUserRepository
@@ -80,3 +89,33 @@ def test_ac_016_call_unaffected_by_failing_file_sink(tmp_path: Path) -> None:
         del queue_handler.emit, rotating.emit
 
     assert token in console_path.read_text(encoding="utf-8"), "AC-016: the console sink must keep working"
+
+
+def test_ac_016_file_sink_keeps_working_after_a_failing_sink() -> None:
+    """AC-016/REQ-013: a broken managed file sink may not take the file sink down for good.
+
+    The queue listener (D4) drains on its own thread, and stdlib's ``QueueListener._monitor``
+    guards only ``queue.Empty``: one exception escaping the rotating handler ends that thread,
+    after which every later record is queued and never written — the AC-016 failure amplified
+    from one record to the rest of the process. The witness is the record written once the sink
+    works again; the bounded drain wait in front of it fails fast instead of hanging on the
+    helper's unbounded queue wait.
+    """
+    setup_logger()
+    _console, queue_handler = managed_sinks()
+    rotating = rotating_file_handlers()[0]
+
+    def exploding_emit(record: logging.LogRecord) -> None:
+        raise RuntimeError("managed file sink is down")
+
+    recovered = "ac016 file sink recovered probe"
+    rotating.emit = exploding_emit  # type: ignore[method-assign]
+    try:
+        bound_logger("ac_016").info("ac016 file sink down probe")  # queued while the sink is down
+    finally:
+        del rotating.emit
+
+    assert wait_for(queue_handler.queue.empty), "AC-016: the queue listener must keep draining after a sink failure"
+    bound_logger("ac_016").info(recovered)
+    record = wait_for_record(session_log_path(), lambda record: record.get("event") == recovered)
+    assert record is not None, "AC-016: the file sink must keep writing records after a sink failure"

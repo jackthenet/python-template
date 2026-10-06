@@ -9,6 +9,7 @@ place, so the process never grows a second file handler.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import logging.handlers
 import queue
@@ -131,6 +132,27 @@ class _PipelineQueueHandler(logging.handlers.QueueHandler):
             self.handleError(record)
 
 
+class _PipelineQueueListener(logging.handlers.QueueListener):
+    """Keep draining when a sink raises: the stdlib monitor loop does not.
+
+    ``QueueListener._monitor`` guards only ``queue.Empty``, so one exception escaping a
+    handler (a broken ``emit``, a closed stream, a formatter failure) ends the thread and
+    the file sink goes permanently silent for the rest of the process — every later
+    record is queued and never written. That amplifies the AC-016 failure from one
+    record to all of them, so the guard sits on the listener side of the queue too.
+    """
+
+    def handle(self, record: logging.LogRecord) -> None:
+        try:
+            super().handle(record)
+        except Exception:
+            # QueueListener has no handleError; the handlers' own reporting keeps the
+            # failure visible (stdlib traceback on stderr) without ending the loop.
+            with contextlib.suppress(Exception):  # a stderr that cannot be written
+                for handler in self.handlers:
+                    handler.handleError(record)
+
+
 class _ForwardingHandler(logging.Handler):
     """Hand foreign records to the managed sinks, keeping their level, name and location."""
 
@@ -243,7 +265,7 @@ def _install(renderer: RendererName | None) -> None:
         encoding="utf-8",
     )
     queue_handler = _PipelineQueueHandler(queue.SimpleQueue())
-    listener = logging.handlers.QueueListener(queue_handler.queue, rotating, respect_handler_level=True)
+    listener = _PipelineQueueListener(queue_handler.queue, rotating, respect_handler_level=True)
 
     console_stream = sys.stderr
     console = logging.StreamHandler(console_stream)
@@ -308,10 +330,16 @@ def _reconfigure(renderer: RendererName | None) -> None:
 def _move_file_handler(handler: logging.handlers.RotatingFileHandler, log_file: Path) -> None:
     """Point the single rotating file handler at a new path (its stream is replaced)."""
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    if handler.stream is not None:
-        handler.close()
-    handler.baseFilename = str(log_file.resolve())
-    handler.stream = handler._open()
+    # The rotating handler is written by the listener thread (D4); Handler.acquire()
+    # takes the same lock Handler.handle() holds around emit.
+    handler.acquire()
+    try:
+        if handler.stream is not None:
+            handler.close()
+        handler.baseFilename = str(log_file.resolve())
+        handler.stream = handler._open()
+    finally:
+        handler.release()
 
 
 def _reconcile_ownership(sinks: PipelineSinks) -> None:
