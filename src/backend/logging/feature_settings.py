@@ -12,12 +12,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from loguru import logger
-
 from backend.logging._decorator import logged
+from backend.logging._pipeline import get_logger
 
 if TYPE_CHECKING:
     from backend.settings import SettingsRegistry
+
+# The feature writes its own records through the pipeline it configures (REQ-005).
+_feature_logger = get_logger("logging")
 
 # Track the previously observed value per key so a live read is traced only
 # when the value changes (REQ-020).
@@ -33,12 +35,12 @@ def _read_setting(registry: SettingsRegistry, key: str, fallback: str) -> str:
     log a warning (EDGE-002).
     """
     if not registry.has(key):
-        logger.warning("setting '{}' is not registered; using fallback '{}'", key, fallback)
+        _feature_logger.warning(f"setting '{key}' is not registered; using fallback '{fallback}'")
         return fallback
     value = registry.get_value(key)
     previous = _previously_observed.get(key)
     if previous is not None and previous != value:
-        logger.debug("setting '{}' changed: '{}' -> '{}'", key, previous, value)
+        _feature_logger.debug(f"setting '{key}' changed: '{previous}' -> '{value}'")
     _previously_observed[key] = value
     return value
 

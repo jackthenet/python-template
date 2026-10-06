@@ -10,7 +10,9 @@ dependencies = [
     "pydantic>=2.13.5",
     # Structured application logging across backend and UI integrations.
     "loguru>=0.7.3",
-    # High-performance JSON serialization/deserialization.
+    # Structured logging: processor/renderer and binding layer over stdlib handlers.
+    "structlog>=25.1.0",
+    # High-performance JSON serialization/deserialization (logging file sink).
     "orjson>=3.12.0",
     # HTTP client for outbound calls.
     "httpx>=0.28.1",
@@ -116,10 +118,10 @@ package_module_name_map = { "ruamel-yaml" = "ruamel" }
 
 [tool.deptry.per_rule_ignores]
 # CLI tools / pytest plugins that are never imported from source, plus the
-# declared runtime capabilities (httpx, orjson) not yet imported from source.
+# declared runtime capability (httpx) not yet imported from source.
 DEP002 = [
     "bandit", "complexipy", "httpx", "mkdocs", "mkdocs-material", "mkdocstrings",
-    "mypy", "orjson", "pip-audit", "pre-commit", "py-spy", "pytest-cov",
+    "mypy", "pip-audit", "pre-commit", "py-spy", "pytest-cov",
     "pytest-randomly", "pytest-xdist", "ruff", "ty",
 ]
 # Optional production dependency: py-webauthn is deferred-imported inside

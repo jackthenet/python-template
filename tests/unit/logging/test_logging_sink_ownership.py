@@ -1,104 +1,108 @@
-"""Loguru sink-ownership tests for the logging feature (docs/specs/logging.md).
+"""Sink-ownership tests for the logging feature (docs/specs/logging.md REQ-001/INV-001).
 
-Reproduction tests for main-ci-green item E: ``_configure()`` opens with a
-blanket ``logger.remove()``, so a settings-driven reconfigure
-(settings-coverage REQ-015 / AC-020) removes every loguru handler in the
-process — including sinks the logging feature never created (the
-``tests/conftest.py::log_records`` capture sink, and any other component's).
-The feature must remove only the sinks it added, while keeping the two
-configured sinks it owns (logging REQ-001 / AC-001 / INV-001).
+Re-derived from the amended specs for the stdlib pipeline (docs/specs/structlog-logging.md
+ADR-082): the managed sinks are ordinary handlers owned by the feature's dedicated
+logger, and a third-party sink is an ordinary handler on the root logger. The contract
+is unchanged (settings-coverage REQ-015 / AC-020, main-ci-green item E): a
+settings-driven reconfigure must touch ONLY the handlers the logging feature owns —
+it must leave a foreign handler installed and still receiving records, must keep
+exactly one console + one file sink, and must re-establish a managed sink that
+someone else removed without raising on the event bus worker.
 
-The reconfiguration is driven through the public path (a ``logging.*`` write on
-the shared registry) and observed by the console sink's level changing to the
-written value — a signal specific to this test's write, so a queued reconfigure
-from another test can never satisfy it. Delivery is awaited with
-``settings_test_helpers.wait_for``, never a sleep.
+The reconfiguration is driven through the public path (a ``logging.*`` write on the
+shared registry) and observed by the console handler's level changing to the written
+value — a signal specific to this test's write, so a queued reconfigure from another
+test can never satisfy it. Delivery is awaited with ``settings_test_helpers.wait_for``,
+never a sleep.
 """
 
 from __future__ import annotations
 
 import contextlib
-import logging as std_logging
+import logging
+import logging.handlers
 from collections.abc import Callable, Iterator
-from typing import Any
 
 import pytest
-from loguru import logger
+from logging_test_helpers import managed_handlers, managed_sinks, pipeline_logger, rotating_file_handlers
 from settings_test_helpers import wait_for
 
 from backend.logging import register_settings
 from backend.settings import get_settings_registry
 
-_CONSOLE_SINK = "StreamSink"  # loguru's sink class for a standard-stream sink
-_FILE_SINK = "FileSink"  # loguru's sink class for a path sink
+_MANAGED_HANDLER_COUNT = 2  # REQ-002: one console handler + one queue handler
 
 
-def _handlers() -> dict[int, Any]:
-    """Every loguru handler currently installed in the process (loguru has no public API)."""
-    return logger._core.handlers
+class _CaptureHandler(logging.Handler):
+    """A third-party handler, added exactly the way another component would add one."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+    def mentions(self, message: str) -> bool:
+        """A record with ``message`` reached this handler."""
+        return any(message in record.getMessage() for record in self.records)
+
+    def error_messages(self) -> list[str]:
+        """The ERROR-or-above records this handler received (a worker-thread failure lands here)."""
+        return [record.getMessage() for record in self.records if record.levelno >= logging.ERROR]
 
 
-def _sink_ids_of(sink_class: str) -> list[int]:
-    """The handler ids whose sink is an instance of ``sink_class``."""
-    return [handler_id for handler_id, handler in _handlers().items() if type(handler._sink).__name__ == sink_class]
-
-
-def _console_levelno() -> int | None:
-    """The console sink's level number, or None unless there is exactly one console sink."""
-    ids = _sink_ids_of(_CONSOLE_SINK)
-    if len(ids) != 1:
-        return None
-    return int(_handlers()[ids[0]]._levelno)
+def _feature_handlers() -> list[logging.Handler]:
+    """The handlers the feature logger owns (empty while the pipeline is not installed)."""
+    with contextlib.suppress(AssertionError):  # pipeline_logger() asserts when there is no pipeline
+        return managed_handlers(pipeline_logger())
+    return []
 
 
 def _settled() -> bool:
-    """The logging feature's own sink set is exactly one console + one file sink."""
-    return len(_sink_ids_of(_CONSOLE_SINK)) == 1 and len(_sink_ids_of(_FILE_SINK)) == 1
+    """The feature owns exactly its two managed handlers, and exactly one file handler exists."""
+    return len(_feature_handlers()) == _MANAGED_HANDLER_COUNT and len(rotating_file_handlers()) == 1
+
+
+def _console_levelno() -> int | None:
+    """The console handler's level number, or None unless the managed sinks are in place."""
+    with contextlib.suppress(AssertionError):
+        console, _file_sink = managed_sinks()
+        return int(console.level)
+    return None
 
 
 def _level_no(name: str) -> int:
-    return int(std_logging.getLevelName(name))
+    return int(logging.getLevelName(name))
 
 
 def _reconfigure_applied(level_name: str) -> bool:
-    """A reconfigure has landed: the two managed sinks exist and the console level is ``level_name``.
+    """A reconfigure has landed: the managed sinks are intact and the console level is ``level_name``.
 
     The level check makes the signal specific to this test's write (a queued
-    reconfigure from another test cannot satisfy it); the settled check covers
-    the file sink, which ``_configure()`` adds after the console sink.
+    reconfigure from another test cannot satisfy it); the settled check covers the
+    file sink, which a reconfigure re-points after the console handler.
     """
     return _settled() and _console_levelno() == _level_no(level_name)
 
 
-def _captured(records: list[dict[str, Any]], message: str) -> bool:
-    return any(message in str(record["message"]) for record in records)
-
-
 @pytest.fixture(autouse=True)
 def settled_sinks() -> None:
-    """Start each test from the settled two-sink state (no reconfigure still in flight)."""
-    assert wait_for(_settled), "the logging feature's sinks are not settled before the test"
+    """Start each test from the settled two-handler state (no reconfigure still in flight)."""
+    assert wait_for(_settled), "the logging feature's managed sinks are not settled before the test"
 
 
 @pytest.fixture
-def capture_sink() -> Iterator[tuple[list[dict[str, Any]], int]]:
-    """A third-party sink, added exactly the way the ``log_records`` fixture adds one.
-
-    Yields ``(records, handler_id)`` — the captured records and the id of the
-    sink the logging feature does not own.
-    """
-    records: list[dict[str, Any]] = []
-
-    def _sink(message: Any) -> None:
-        records.append(message.record)
-
-    handler_id = logger.add(_sink, level="DEBUG", catch=False)
+def capture_handler() -> Iterator[_CaptureHandler]:
+    """A handler the logging feature does not own, installed on the root logger."""
+    handler = _CaptureHandler()
+    logging.getLogger().addHandler(handler)
     try:
-        yield records, handler_id
+        yield handler
     finally:
-        # The defect under test may already have removed the sink.
+        # The defect under test may already have removed the handler.
         with contextlib.suppress(ValueError):
-            logger.remove(handler_id)
+            logging.getLogger().removeHandler(handler)
 
 
 @pytest.fixture
@@ -106,10 +110,10 @@ def logging_level_change() -> Iterator[Callable[[], str]]:
     """Trigger the runtime reconfiguration through the public path (AC-020).
 
     Writes a different ``logging.*`` level on the shared registry (the logging
-    feature's ``SettingChanged`` subscription then reconfigures the sink on the
-    event bus worker) and returns the level written. The original level is
-    restored, and its reconfigure is awaited, inside this fixture — so no
-    reconfigure leaks into the next test.
+    feature's ``SettingChanged`` subscription then reconfigures the handlers on the
+    event bus worker) and returns the level written. The original level is restored,
+    and its reconfigure is awaited, inside this fixture — so no reconfigure leaks
+    into the next test.
     """
     registry = get_settings_registry()
     if not registry.has("logging.log_level"):
@@ -128,52 +132,53 @@ def logging_level_change() -> Iterator[Callable[[], str]]:
 
 
 def test_reconfigure_keeps_foreign_sink(
-    capture_sink: tuple[list[dict[str, Any]], int],
+    capture_handler: _CaptureHandler,
     logging_level_change: Callable[[], str],
 ) -> None:
-    """A sink the feature never created must still receive records after a reconfigure."""
-    records, _handler_id = capture_sink
-    logger.info("probe-before-reconfigure")
-    assert _captured(records, "probe-before-reconfigure"), "capture sink is not receiving records"
+    """A handler the feature never created must still receive records after a reconfigure."""
+    logging.getLogger("ownership_probe").warning("probe-before-reconfigure")
+    assert capture_handler.mentions("probe-before-reconfigure"), "capture handler is not receiving records"
 
     new = logging_level_change()
     assert wait_for(lambda: _reconfigure_applied(new)), "reconfigure never applied"
 
-    records.clear()
-    logger.info("probe-after-reconfigure")
-    assert wait_for(lambda: _captured(records, "probe-after-reconfigure")), (
-        "the reconfigure removed a sink it does not own: records emitted after it are lost"
+    capture_handler.records.clear()
+    logging.getLogger("ownership_probe").warning("probe-after-reconfigure")
+    assert wait_for(lambda: capture_handler.mentions("probe-after-reconfigure")), (
+        "the reconfigure removed a handler it does not own: records emitted after it are lost"
     )
 
 
 def test_reconfigure_replaces_only_the_managed_sinks(
-    capture_sink: tuple[list[dict[str, Any]], int],
+    capture_handler: _CaptureHandler,
     logging_level_change: Callable[[], str],
 ) -> None:
-    """After a reconfigure: exactly one console + one file sink, plus the foreign sink."""
-    _records, handler_id = capture_sink
-
+    """After a reconfigure: exactly one console + one file sink, plus the foreign handler."""
     new = logging_level_change()
     assert wait_for(lambda: _reconfigure_applied(new)), "reconfigure never applied"
 
-    assert len(_sink_ids_of(_CONSOLE_SINK)) == 1, "REQ-001/INV-001: exactly one console sink"
-    assert len(_sink_ids_of(_FILE_SINK)) == 1, "REQ-001/INV-001: exactly one file sink"
-    assert handler_id in _handlers(), "the reconfigure removed a sink it does not own"
+    console, file_sink = managed_sinks()
+    assert type(console) is logging.StreamHandler, "REQ-001/INV-001: exactly one console handler"
+    assert isinstance(file_sink, logging.handlers.QueueHandler | logging.handlers.RotatingFileHandler), (
+        "REQ-001/INV-001: exactly one file sink"
+    )
+    assert len(rotating_file_handlers()) == 1, "INV-001: a reconfigure must not grow a second file handler"
+    assert capture_handler in logging.getLogger().handlers, "the reconfigure removed a handler it does not own"
 
 
 def test_reconfigure_after_external_removal_of_a_managed_sink(
-    capture_sink: tuple[list[dict[str, Any]], int],
+    capture_handler: _CaptureHandler,
     logging_level_change: Callable[[], str],
 ) -> None:
-    """A managed sink removed by someone else must not break the next reconfigure."""
-    records, _handler_id = capture_sink
-    logger.remove(_sink_ids_of(_CONSOLE_SINK)[0])
+    """A managed handler removed by someone else must not break the next reconfigure."""
+    console, _file_sink = managed_sinks()
+    pipeline_logger().removeHandler(console)
 
     new = logging_level_change()
     assert wait_for(lambda: _reconfigure_applied(new)), (
-        "reconfigure did not re-establish the managed sinks after an external removal"
+        "reconfigure did not re-establish the managed handlers after an external removal"
     )
 
-    assert len(_sink_ids_of(_FILE_SINK)) == 1, "REQ-001/INV-001: exactly one file sink"
-    errors = [record for record in records if record["level"].name == "ERROR"]
-    assert not errors, f"the reconfigure raised on the event bus worker: {errors[-1]['message']}"
+    assert len(rotating_file_handlers()) == 1, "REQ-001/INV-001: exactly one file sink"
+    errors = capture_handler.error_messages()
+    assert not errors, f"the reconfigure raised on the event bus worker: {errors[-1]}"

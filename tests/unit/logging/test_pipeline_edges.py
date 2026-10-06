@@ -37,6 +37,22 @@ def _wait_for(path, token):
     return False
 """
 
+# Same, for a rotating sink: the listener thread renames app.log.1 -> app.log.2 and
+# deletes the oldest backup, so a file listed by the glob can vanish mid-read.
+_WAIT_FOR_ROTATED = """
+def _wait_for_rotated(log_dir, token):
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            written = "".join(p.read_text(encoding="utf-8", errors="replace") for p in log_dir.glob("app.log*"))
+        except OSError:
+            written = ""
+        if token in written:
+            return True
+        time.sleep(0.05)
+    return False
+"""
+
 
 def test_edge_001_log_file_parent_created(tmp_path: Path) -> None:
     """EDGE-001: a log_file path whose parent directory does not exist is created."""
@@ -84,17 +100,12 @@ from pathlib import Path
 
 from backend.logging import setup_logger
 
+{_WAIT_FOR_ROTATED}
 setup_logger()
 log = logging.getLogger("edge_002")
 for i in range(60):
     log.warning("edge_002 rotation probe %03d %s" % (i, "x" * 60))
-log_dir = Path({str(log_file)!r}).parent
-deadline = time.monotonic() + 15
-while time.monotonic() < deadline:
-    written = "".join(p.read_text(encoding="utf-8", errors="replace") for p in log_dir.glob("app.log*"))
-    if "edge_002 rotation probe 059" in written:
-        break
-    time.sleep(0.05)
+_wait_for_rotated(Path({str(log_file)!r}).parent, "edge_002 rotation probe 059")
 """
     )
 

@@ -20,67 +20,35 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
-# standard error's descriptor: the console sink's stream, whatever pytest redirects
-STDERR_FD = 2
+# The console sink's descriptor: sys.stderr's own fd at import time. The managed
+# console handler is built with whatever sys.stderr is when setup_logger() runs
+# (pytest's captured stream in-process, the real stderr in a fresh interpreter),
+# so the fd is taken from the live stream rather than hard-coded to 2.
+STDERR_FD = sys.stderr.fileno()
 
 # REQ-002: the feature logger owns exactly the console sink and the queue-fed file sink
 MANAGED_HANDLER_COUNT = 2
 
 
-def _console_sink_fd() -> int:
-    """Return the file descriptor that loguru's console (standard-stream) sink writes to.
-
-    loguru links a standard-stream sink permanently to the stream object that
-    ``sys.stderr`` referred to when the sink was ADDED. A ``logging.*`` setting
-    change reconfigures the sinks at runtime (AC-020) from the event bus's
-    background worker, so the console sink can be re-added at an arbitrary
-    moment - possibly while ``sys.stderr`` is the real stderr rather than a
-    test framework's captured stream. Redirecting the *current* ``sys.stderr``
-    descriptor would then miss the sink's output, so the descriptor is taken
-    from the sink's own stream.
-    """
-    for handler in logger._core.handlers.values():
-        stream = getattr(getattr(handler, "_sink", None), "_stream", None)
-        fileno = getattr(stream, "fileno", None)
-        if callable(fileno):
-            return int(fileno())
-    return int(sys.stderr.fileno())
-
-
-@contextmanager
-def captured_stderr() -> Iterator[Path]:
-    """Redirect the stderr file descriptor the console sink writes to.
-
-    loguru writes standard-stream sinks to the underlying file descriptor, so
-    this captures console output without going through Python-level buffering.
-    The descriptor comes from the console sink's own stream (see
-    ``_console_sink_fd``), not from the current ``sys.stderr``.
-    """
-    fd = _console_sink_fd()
-    saved_fd = os.dup(fd)
-    tmp_fd, tmp_name = tempfile.mkstemp()
-    tmp = Path(tmp_name)
-    try:
-        os.dup2(tmp_fd, fd)
-        yield tmp
-    finally:
-        os.dup2(saved_fd, fd)
-        os.close(saved_fd)
-        os.close(tmp_fd)
-        tmp.unlink(missing_ok=True)
+def _drain_queue() -> None:
+    """Wait until the queue listener has dequeued every record headed for the file sink."""
+    _console, file_sink = managed_sinks()
+    pending = getattr(file_sink, "queue", None)
+    if pending is None:  # a file handler attached directly to the feature logger
+        return
+    while not pending.empty():
+        time.sleep(0.001)
+    time.sleep(0.005)  # dequeued: let the handler's write land on disk
 
 
 def wait_for_file_content(path: Path, predicate: Callable[[str], bool], timeout: float = 15.0) -> bool:
     """Wait for a file written by an enqueued sink to satisfy predicate(content).
 
-    First drains loguru's enqueued-sink queue via ``logger.complete()`` so the
-    pending write is flushed before polling. This makes the wait deterministic
-    under load instead of relying on the background writer's scheduling (which
-    can be starved on a busy CI runner and time out).
+    First waits for the queue listener (D4) to take every queued record, so the
+    wait is deterministic under load instead of relying on the listener thread's
+    scheduling (which can be starved on a busy CI runner and time out).
     """
-    logger.complete()
+    _drain_queue()
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if path.exists():
@@ -118,6 +86,28 @@ def _is_console_handler(handler: logging.Handler) -> bool:
         return False
 
 
+try:  # pytest's logging plugin attaches its capture handler to every NON-PROPAGATING logger
+    from _pytest.logging import LogCaptureHandler as _PytestCaptureHandler
+except ImportError:  # pragma: no cover - running outside pytest
+    _PytestCaptureHandler = None
+
+
+def _is_harness_handler(handler: logging.Handler) -> bool:
+    """True for the capture handler pytest injects, which is never a managed sink.
+
+    The pipeline logger is non-propagating by design (AC-001), so pytest's
+    ``catching_logs`` attaches its own ``LogCaptureHandler`` to it for the duration of
+    each test phase. That handler belongs to the harness, not to the pipeline, and the
+    ownership assertions below count only the handlers the pipeline itself installed.
+    """
+    return _PytestCaptureHandler is not None and isinstance(handler, _PytestCaptureHandler)
+
+
+def managed_handlers(logger: logging.Logger) -> list[logging.Handler]:
+    """The handlers the pipeline owns on ``logger`` (harness handlers filtered out)."""
+    return [h for h in logger.handlers if not _is_harness_handler(h)]
+
+
 def pipeline_logger() -> logging.Logger:
     """The logging feature's own logger: the non-root logger that owns the console sink.
 
@@ -130,7 +120,7 @@ def pipeline_logger() -> logging.Logger:
     candidates = [
         obj
         for obj in manager.loggerDict.values()
-        if isinstance(obj, logging.Logger) and any(_is_console_handler(h) for h in obj.handlers)
+        if isinstance(obj, logging.Logger) and any(_is_console_handler(h) for h in managed_handlers(obj))
     ]
     if len(candidates) != 1:
         found = {lg.name: [type(h).__name__ for h in lg.handlers] for lg in candidates}
@@ -145,14 +135,13 @@ def managed_sinks() -> tuple[logging.Handler, logging.Handler]:
     feeds it (D4); either way the feature logger owns exactly two handlers.
     """
     feature = pipeline_logger()
-    console = [h for h in feature.handlers if _is_console_handler(h)]
+    owned = managed_handlers(feature)
+    console = [h for h in owned if _is_console_handler(h)]
     file_sink = [
-        h
-        for h in feature.handlers
-        if isinstance(h, logging.handlers.QueueHandler | logging.handlers.RotatingFileHandler)
+        h for h in owned if isinstance(h, logging.handlers.QueueHandler | logging.handlers.RotatingFileHandler)
     ]
-    if len(feature.handlers) != MANAGED_HANDLER_COUNT or len(console) != 1 or len(file_sink) != 1:
-        handlers = [type(h).__name__ for h in feature.handlers]
+    if len(owned) != MANAGED_HANDLER_COUNT or len(console) != 1 or len(file_sink) != 1:
+        handlers = [type(h).__name__ for h in owned]
         raise AssertionError(
             f"REQ-002/INV-001: the feature logger must own one console + one file sink, got {handlers}"
         )
@@ -208,7 +197,9 @@ def captured_console() -> Iterator[Path]:
         os.dup2(saved_fd, fd)
         os.close(saved_fd)
         os.close(tmp_fd)
-        tmp.unlink(missing_ok=True)
+        # ponytail: the captured file is left in place because every caller reads it
+        # after the block; the OS cleans the session temp dir. Upgrade path: yield the
+        # decoded text instead of the path and unlink here.
 
 
 def bound_logger(name: str) -> Any:

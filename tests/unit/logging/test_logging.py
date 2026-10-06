@@ -16,12 +16,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from logging_test_helpers import captured_console, wait_for_record
-from loguru import logger
+from logging_test_helpers import captured_console, managed_handlers, pipeline_logger, wait_for_record
 
 from backend.logging import get_settings, logged, logged_class, setup_logger
 
-_EXPECTED_HANDLER_COUNT = 2  # one console sink + one file sink
+_EXPECTED_HANDLER_COUNT = 2  # REQ-002: one console handler + one queue handler
 _ASYNC_SLEEP_MS = 50  # minimum measurable elapsed time for the ~100 ms async sleep
 _AC012_RESULT = 42
 _AC006_SUM = 3
@@ -45,7 +44,9 @@ def test_ac_003_setup_logger_thread_safe() -> None:
         thread.join()
 
     assert not errors
-    assert len(logger._core.handlers) == _EXPECTED_HANDLER_COUNT
+    assert len(managed_handlers(pipeline_logger())) == _EXPECTED_HANDLER_COUNT, (
+        "INV-001: concurrent setup must leave exactly the two managed handlers"
+    )
 
 
 def test_ac_004_intercept_handler_routes_records() -> None:
