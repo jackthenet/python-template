@@ -1028,3 +1028,162 @@ Checked by byte-identical string match against `main` (`git show main:<file> | g
 - [x] Gate set re-run and recorded with base comparison: ruff / mypy / traceability / mkdocs / diff scope / `git diff --check` / wording hazard / numstat — all **PASS**, no delta
 - [x] F-3 … F-7 recorded as **no action** with their reasons
 - [x] No S6.2/S6.3/S6.4 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write, no test/spec/source file touched, no subagent launched, no full test suite re-run
+
+---
+
+## S6.2 Traceability + boundaries (Phase 6, review checks 2/3/4/6)
+
+Inputs (bounded, as tasked): the FINAL state of the 4 changed guidance files at `7238395` + this record. NOT the
+commit-by-commit diff, and the full test suite was **not** re-run (Phase 5 confirmed the gate clean; the S4.2 re-entry
+#2 gate set above re-ran the four DOCS/CHORE gates at this same state).
+
+### Check 1 — traceability for a process change (edit index ⇄ diff ⇄ deciding Q, both directions)
+
+There are no `REQ-XXX`/`AC-XXX` IDs in this change (DOCS/CHORE, no spec), so traceability here = **every applied edit
+row maps to a deciding Q-ID, every row has a diff hunk, and every diff hunk has a row.**
+
+**Row count and ID set (measured, not inferred from commit messages).** `docs/verification/value-triage-gate.md:72`
+`### Edit index` → **30 rows**: `A1…A13`, `T1`, `T2`, `S1…S5`, `G1…G9`, `G2a`. (The lead sentence at `:413` still
+narrates "22 rows … plus the three rows A11/A12/G6" and the later G7/G8/G9/A13/G2a addition — the table itself is the
+authority and it has 30. Note T-1, not a finding.)
+
+**Direction A — row → hunk.** Every added line of the diff was extracted
+(`git diff main...HEAD -- AGENTS.md .agents/skills docs/todo/template.md | grep '^+'`) and each of the 30 rows was
+matched against it as a literal string (`grep -cF`). **All 30 rows matched (≥ 1 added line each); zero rows without a
+hunk.**
+
+| Row | added-line hits | Row | added-line hits | Row | added-line hits |
+|---|---|---|---|---|---|
+| A1 | 1 | A6 | 1 | A11 | 1 |
+| A2 | 1 | A7 | 1 | A12 | 1 |
+| A3 | 1 | A8 | 1 | A13 | 2 (AGENTS + git, same sentence) |
+| A4 | 1 (the `DROPPED` row; the `MERGED` row is the 2nd line of the same hunk) | A9 | 1 | T1 | 1 |
+| A5 | 4 (heading + blank + paragraph + blank) | A10 | 1 | T2 | 7 (heading + 5 bullets + blank) |
+| S1 | 4 (Objective/Inputs/Outputs/Done-criteria) | S2 | 1 | S3 | 1 |
+| S4 | 2 (new bullet + the P.4-output clause) | S5 | 1 | G1 | 1 |
+| G2 | 10 (1 changed line `:65` + the 9-line block at `:73-81`) | G3 | 1 | G4 | 7 (step 5 + its code block) |
+| G5 | 1 | G6 | 1 | G7 | 1 |
+| G8 | 1 | G9 | 2 (AGENTS + git, same sentence) | G2a | 1 (the `:65` chain line) |
+
+**Direction B — hunk → row.** Per-file added/removed line counts match the row attribution exactly:
+
+| File | numstat `main...HEAD` | Attribution arithmetic |
+|---|---|---|
+| `AGENTS.md` | 18 / 12 | 12 changed lines (A11, A1×2, A2, A3, A4×2, A12, A13, A10, A7, A8) + 6 pure additions (A5 = 4, A6, A9) = **18 added**, 12 removed ✔ |
+| `docs/todo/template.md` | 8 / 1 | T1 (1 changed) + T2 (7 added) = **8 added**, 1 removed ✔ |
+| `.agents/skills/specify/SKILL.md` | 9 / 8 | S1 (4/4) + S2 (1/1) + S3 (1/1) + S4 (2 added / 1 changed) + S5 (1/1) = **9 added**, 8 removed ✔ |
+| `.agents/skills/git/SKILL.md` | 24 / 8 | 8 changed lines (G6, G1, G9, G7, G8, G3, G2/G2a) + 9-line block (G2) + 7-line step-5 block (G4) = **24 added**, 8 removed ✔ |
+
+Total: **59 added content lines** (63 minus the 4 `+++ b/…` headers), every one attributable to a row → **zero hunks
+without a row**. Hunk headers confirm the same arithmetic (`git diff -U0`: AGENTS 12 hunks, template 2, specify 6, git
+10).
+
+**Direction C — ANSWERED question → realised text.** The question file defines `Q-1…Q-5, Q-7`
+(`grep -oE '^## Q-[0-9]+'` → 6 headings; `Q-6` exists nowhere — it was closed as a duplicate), header
+`Status: ALL ANSWERED  <!-- 0 PENDING -->`, and `## Late questions (Phases 2–6)` is still the empty template
+placeholder. Each answer is realised in the final text:
+
+| Q | Answer (abridged) | Realised as (final text, verified by grep) |
+|---|---|---|
+| Q-1 | (b) clause inside P.1, one "Backlog value triage" paragraph, no new numbered step | `AGENTS.md:182` `### Backlog value triage`; `AGENTS.md:141` P.1 row carries the clause; `grep -c "P\.0\b"` over the 4 files = **0** (no new step); `specify:45`/`:46` byte-identical (Check 3) |
+| Q-2 | (a) per-item stop at P.4; never-idle / WAITING / the Prohibition untouched | `AGENTS.md` A6 ("Every Phase P output … presupposes …"), A9 (Prohibition "Start **P.4** … for a TODO whose `## Value triage` section is empty"), `specify` S4 Done-criteria + S4b P.4 output; the `Never idle.` line and the `Proceed past a BLOCKED-USER step…` prohibition still present once each in `main` and in HEAD |
+| Q-3 | (a) add `DROPPED` + the user's folder addition | `DROPPED` in `docs/todo/template.md:7`, `AGENTS.md:163` (the status-table row = the producing moment), `:419`, `specify:169`, `git:12`/`:22`/`:65`/`:79`/`:171` |
+| Q-4 | (a) `workflow-docs-nits` → this change → `spec-interview-protocol`; nothing folded in | realised as **non-edits**: `docs/questions/template.md` 0 diff lines, `specify:45`/`:46` untouched, `AGENTS.md:142` byte-identical, `specify:69-75` byte-identical, the `≥ 20` floor byte-identical in both files; `docs/todo/value-triage-gate.md:13` carries `Depends on: workflow-docs-nits` |
+| Q-5 | immediate ask, riding the existing P.3 round-trip; recorded **only** in the TODO's `## Value triage` section | `AGENTS.md:184` "a single TODO framed outside a sweep gets its ask **immediately** … no extra ⏸" + "recorded **only in the TODO's `## Value triage` section**, never as a question-file entry"; `docs/todo/template.md` T2 section; `specify` S1/S5 |
+| Q-7 | (i) `docs/todo/archive/` + `docs/questions/archive/`, moved at the drop decision and at S7.1, question file always with its TODO file, guidance updated in the same change | `AGENTS.md:130`/`:131`/`:151`/`:162`/`:163`/`:416`; `git:65` + the two `git mv` blocks (`:77-79`, `:148-150`) + `:58`/`:59`; `specify:171`; `template.md:39` |
+
+The edit index's `Decided by` column cites only defined IDs (`Q-1`×8, `Q-2`×4, `Q-3`×10, `Q-5`×4, `Q-7`×18). `Q-4`
+cites no row by design — its realisation is a set of non-edits, verified in Check 3.
+
+### Check 2 — no orphaned guidance (rule ⇄ producer, both directions)
+
+**Rule without a producer — none.** Every statement of the new `DROPPED` status and of the archive layout names (or
+delegates to a section that names) who performs it and when:
+
+| Statement | Producer named |
+|---|---|
+| `AGENTS.md:118` (direct-to-`main` permission incl. the archive move) | the orchestrator, via the cross-reference to "Planning records (owner: the orchestrator)" |
+| `AGENTS.md:130-131` (artifact table, `→ archive/` once `DROPPED`/`MERGED`) | the trigger column is the moment; the section above it owns the write |
+| `AGENTS.md:151` | "the orchestrator … at the drop decision and again at post-merge cleanup (S7.1)" — both moments, both files, `main` only |
+| `AGENTS.md:162-163` (status table) | the table's own lead sentence: "The orchestrator advances the TODO `Status:` on `main` at each of these moments, and commits each advance" |
+| `AGENTS.md:184` (value triage → `DROPPED` + archive) | "A dropped TODO gets `Status: DROPPED` and its two records move to the archive folders (see …)" |
+| `AGENTS.md:416`/`:417`/`:419` | scheduling consequences only — no action claimed; `:419` names the orchestrator as the writer |
+| `git:12`/`:22`/`:171` | the operation itself, orchestrator-only, always the primary worktree |
+| `git:65` + `:73-81` | the executable `git mv` / `git commit` block |
+| `git:58`/`:59` + `:146-151` | S7.1 outputs/done-criteria + step 5 with its own command block |
+| `specify:169`/`:171` | the orchestrator owns the `Status:` write and the folder move |
+| `docs/todo/template.md:7`/`:39` | template comments — no action claimed; `:39` states the move passively, its producer is `AGENTS.md:151`/`git:65` (F-6 already adjudicated: no action) |
+
+**Producer without a rule — none.** The two `git mv` blocks (`git:77-79`, `git:148-150`) are authorised by
+`AGENTS.md:118` + `git:171` (the direct-to-`main` permission now names the archive move) and required by
+`AGENTS.md:151`/`:162`/`:163`, `AGENTS.md:419` and the Post-merge-cleanup done-criteria (`git:59`, A13). Nothing
+instructs a move or a status that no rule authorises.
+
+**Value-triage rule ⇄ producer — closed in both directions.** Filled by the orchestrator at P.1 (`AGENTS.md:184`,
+`specify:64`/`:66`/`:67`); asked by the orchestrator at P.3 (`AGENTS.md:184`, plus the standing rule that a step
+subagent never calls `ask_user_question`); enforced at P.4 (`AGENTS.md` A9 Prohibition + `specify:199` P.4 output +
+`specify:67` Done-criteria); checked at the READY gate (`specify:212`).
+
+**One gap — the `DROPPED` todo set has no closure rule (finding N-1).** `AGENTS.md:427` "Sets are created at **P.1**
+and completed by the **Post-merge cleanup** item" is the only closure rule, and a `DROPPED` change never runs
+post-merge cleanup (it never reaches Phase 6). The status is produced and the files move, but nothing says what
+happens to that change's todo set.
+
+### Check 3 — boundaries (no drift into another change's territory)
+
+| Boundary | Measurement | Verdict |
+|---|---|---|
+| `docs/questions/template.md` (owned by `spec-interview-protocol`) | `git diff main...HEAD -- docs/questions/template.md` → **0 lines** | **PASS** |
+| `specify/SKILL.md:45`/`:46` (the `workflow-docs-nits` qualifiers) | `git diff -U0 -- .agents/skills/specify/SKILL.md` hunks are `@@ -64,4`, `-169`, `-171`, `-196,0+197`, `-198`, `-211` — **no hunk in 40-50**; final `:45`/`:46` still carry the qualifiers | **PASS** |
+| `docs/specs/` (any file) | `git diff main...HEAD -- docs/specs/` → **0 lines**; `docs/specs/template.md` (the `spec-interview-protocol` non-goals slot) untouched | **PASS** |
+| CI / `pyproject.toml` / version | `pyproject.toml` diff **0 lines**, `version = "0.6.1"` unchanged (no bump — correct for DOCS/CHORE); no `.github/` path in the diff | **PASS** |
+| Diff scope | `git diff --name-only main...HEAD` = 5 paths; the only `docs/todo/`-or-`docs/questions/` path is `docs/todo/template.md` (in scope, T1/T2); no `src/`, `tests/`, `docs/verification/traceability.md`, `userdocs/` | **PASS** |
+| `spec-interview-protocol`'s four deltas — **not implemented here** | `Recommended:` field → question template untouched (0 lines); category checklist → `specify:69-75` (P.2) **byte-identical** to `main`; non-goals question → `AGENTS.md:142` **byte-identical**, `docs/specs/template.md` untouched; `≥ 20` floor → `grep -c "≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in"` = 1 in `main` and 1 in HEAD, `Ask at least 20 questions during interrogation` = 1 and 1 | **PASS** |
+| `spec-interview-protocol`'s four deltas — **not blocked** | Its own `Depends on: value-triage-gate` (`docs/todo/spec-interview-protocol.md:15`) matches Q-4 = (a); this change edits only the P.1 row (`AGENTS.md:141`, directly above its `:142`) and the P.1 section (`specify:64-67`, above its `:69-75`) → **line shifts only**, no overlapping line; it adds a `## Value triage` section to the **TODO** template, not the question template | **PASS** |
+
+### Check 4 — nothing machine-reads the status vocabulary or the two planning paths
+
+`grep -rnE "PREPARING|QUESTIONS-ANSWERED|IN-WORKFLOW|\bDROPPED\b|\bMERGED\b"` and
+`grep -rnE "docs/todo|docs/questions"` over `scripts/`, `.github/workflows/`, `.pre-commit-config.yaml`, `userdocs/`,
+`.github/hooks/`, `.github/task-runner/`, `mkdocs.yml`, `pyproject.toml` → **0 hits in every surface**. The three
+scripts read only `docs/verification/traceability.md` and `docs/specs/` (`check_traceability.py:129-130`). No workflow
+`paths:` filter mentions `docs/todo/**` or `docs/questions/**` (only `docs/specs/**`, `docs/tasks/**`,
+`docs/verification/**` in `spec-validation.yml:7-9`/`:17-19`), so the archive move — a `main`-only commit — triggers
+no CI job. `mkdocs.yml` has no nav entry for `docs/todo/`/`docs/questions/`, and `mkdocs build --strict` passed at this
+state (G-4 above). **PASS — no parser, gate, hook or docs build depends on what this change changes.**
+
+### Check 5 — rebase exposure of the in-flight branches
+
+`git worktree list` → 5 worktrees (primary on `main` at `e1b7706` + 4 change worktrees). Files each in-flight branch
+changes vs `main` (`git diff --name-only main...<branch>`):
+
+| Branch | HEAD | Files touched | Overlap with this change's 4 files |
+|---|---|---|---|
+| `feature/structure-map` | `8eb130b` | `docs/specs/structure-map.md`, `docs/verification/structure-map.md` (spec + record only — Phase 4 not started) | **none today**; its Phase 4 will edit `AGENTS.md` (Tooling / Skill-to-Phase Mapping / Project Structure) → same file, different sections → **line-shift rebase only** |
+| `crosscut/structlog-logging` | `f2490a0` | 24 paths, all `tests/` + the task DAG + its record (Phase 3/4 in flight) | **none today**; its Phase 4 will edit `AGENTS.md` "Using the Logging Feature" → **line-shift rebase only** |
+| `issue/pytest-randomly` | `249bb32` | **empty diff** (branch still at its base) | none |
+
+Merge simulation (`git merge-tree --write-tree --name-only`, git 2.51): `main` × `chore/value-triage-gate` → exit
+**0** (clean); this branch × each of the three → exit **0** (clean) for all three. Staleness vs `main`: structure-map
+and pytest-randomly are 3 commits behind their merge-base, structlog-logging 9, this branch 1. **This change creates no
+conflict; the only exposure is line shifts in `AGENTS.md` for the two branches that will later edit it.**
+
+### Findings
+
+| ID | Severity | Finding | Evidence | Fix (cost) |
+|---|---|---|---|---|
+| **B-1** | **blocking** | The archive-move **producer does not run as written**. `git mv` does **not** create the destination directory, and neither `docs/todo/archive/` nor `docs/questions/archive/` exists (`ls` → no such directory; `git ls-tree -r main` → 0 such paths). Measured in a scratch repo: `git mv a.md archive/a.md` → `fatal: renaming 'a.md' failed: No such file or directory`, exit **128** (git 2.51.0.windows.1 — the environment the orchestrator runs in); the identical command succeeds after `mkdir -p archive`. `grep -rn mkdir AGENTS.md .agents/skills docs/todo/template.md` → **0 hits**: no step creates the folders. This also contradicts this record at `:280` ("they are created by the first move"), which the measurement refutes. Consequence: the first drop decision or the first S7.1 cleanup after this change merges fails and the orchestrator has to improvise mid-step. | scratch-repo test (`git init` → `git mv a.md archive/a.md` fails; after `mkdir -p archive` → `R a.md -> archive/a.md`); `git mv -h` offers no directory-creation option | Add `mkdir -p docs/todo/archive docs/questions/archive` as the first command inside both blocks of `.agents/skills/git/SKILL.md` (after `:76` and after `:147`), and correct `:280` of this record to "created by the orchestrator with the first archive commit". **2 lines in an already-touched file.** |
+| **N-1** | non-blocking | A `DROPPED` change's **todo set has no closure rule**: `AGENTS.md:427` makes Post-merge cleanup the only completer of a todo set, and a dropped change never reaches it. The status, the ask, the decision and the file move are all produced; the todo-set side is undefined. | `grep -rn "todo set" AGENTS.md` → 8 hits, none about closure on drop; `AGENTS.md:427` ("completed by the **Post-merge cleanup** item"), `:445` | One clause — in the `DROPPED` status row (`AGENTS.md:163`) or the "Todo sets" bullet (`:418`): a `DROPPED` change's todo set is closed at the drop decision (no Post-merge cleanup item runs). |
+| **T-1** | note | The edit-index lead sentence (`:413`) still narrates "22 rows … plus the three rows A11/A12/G6"; the table itself has **30** rows and is complete. The table is the authority. | row extraction from `:72` → exactly 30 IDs (`A1…A13 T1 T2 S1…S5 G1…G9 G2a`) | Cosmetic — fold into the S6.3 report wording if that step touches it. |
+| **T-2** | note | `docs/questions/archive-AI_Questions.md` is the **only** path in `main` matching the string `docs/questions/archive` (the retired central file — a prefix collision with the new folder name). `AGENTS.md:394` already states it stays where it is and must not be moved; no machine reader globs it (Check 4). | `git ls-tree -r --name-only main \| grep docs/questions/archive` → exactly that 1 path | none — already disambiguated in the text. |
+| **T-3** | note | Boundary with `spec-interview-protocol`'s ask mechanics: the value-triage ask is deliberately **not** a question-file entry, so it neither counts toward P.2's `≥ 20` floor nor would carry that change's planned `Recommended:` field. No conflict (the floor counts question-file entries; the ask is an orchestrator P.3 table), and the floor is byte-identical. | `grep -c "never as a question-file entry"` → `AGENTS.md` 1, `specify` 0 (the rule is normative-side only, which is where the ask lives) | none — record the boundary so the later change does not "fix" it. |
+| **T-4** | note | The worktree's copy of `docs/todo/value-triage-gate.md:7` still reads `Status: QUESTIONS-ANSWERED` with a stale "P.4 … still to r…" comment; `main` advanced it to `READY` at `e1b7706`. Orchestrator-owned planning record — correctly **not** in this diff. | `grep -n "Status:\|Depends on" docs/todo/value-triage-gate.md` | orchestrator advances the record on `main` (not this change's file). |
+
+### S6.2 done-criteria checklist (this step)
+
+- [x] Check 1: the 30-row edit index verified against `git diff main...HEAD` in **both** directions (0 rows without a hunk, 0 hunks without a row, per-file numstat arithmetic reconciled), and against the 6 ANSWERED questions — each realised in the final text, Q-4 realised as non-edits
+- [x] Check 2: rule ⇄ producer verified in both directions for `DROPPED`, the archive layout and the value-triage gate (11 rule statements mapped to a producer; 2 producers mapped to a rule); one gap found (N-1)
+- [x] Check 3: all boundaries measured — question template 0 lines, `specify:45/46` no hunk, `docs/specs/` 0 lines, CI/pyproject/version untouched, diff scope 5 paths, and `spec-interview-protocol`'s four deltas neither implemented nor blocked (4 byte-identical anchors proved)
+- [x] Check 4: 0 machine readers of the status vocabulary or the two planning paths across 8 surfaces; no CI `paths:` filter, no mkdocs nav entry
+- [x] Check 5: rebase exposure measured for all three in-flight branches — no overlap today, `git merge-tree` clean against `main` and against each of them, line-shift-only exposure later
+- [x] Full test suite NOT re-run (Phase 5 gate already recorded); no commit-by-commit review; no PR; no version bump; no `docs/todo/` or `docs/questions/` write; no subagent launched; no `ask_user_question`
