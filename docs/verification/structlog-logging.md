@@ -2266,3 +2266,148 @@ No `loguru`/`structlog` import anywhere under `src/backend/settings/` (source sc
 Out of scope, untouched: every test file, `pyproject.toml`, `src/backend/permissions/service.py` (→ T-006), `docs/specs/`, `docs/tasks/`, `.github/task-runner/tasks.json` (T-004's `status` stays `PENDING` — setting it is S4.4's job), `docs/todo/`, `docs/questions/`.
 
 **Phase 4 (S4.3, T-004) gate: PASS — no structural changes needed (reasons 1–4), zero `src/` edits, statement counts and level split unchanged (17 = 9 DEBUG + 8 WARNING; 11 = 5 DEBUG + 6 ERROR), ruff clean, GREEN from S4.2 intact.** Next: S4.4 (T-004) — commit + set status `VERIFIED`.
+
+---
+
+### S4.1 (T-003) — pick task + confirm RED (2026-10-07)
+
+**Objective:** pick the ready DAG task and confirm its `red_command` fails on behavior, before any implementation. No `src/`, no test file, no `pyproject.toml`, no `tasks.json` change was made in this step; the only file written is this record.
+
+#### 1. Task picked: T-003
+
+`git status --porcelain` clean at HEAD `c6cd11a`; task states in `.github/task-runner/tasks.json`: **T-001, T-002, T-004, T-005, T-007 `VERIFIED`; T-003 and T-006 `PENDING`.** T-003 is picked because it is the only ready task left that may run now: its `dependencies` (`T-001`, `T-002`) are both `VERIFIED`, and **T-006 must run last** — it is the only task allowed to drop `loguru` from the dependency set, and its deptry interlock (`docs/verification` S4.1 T-004 note E: `deptry` still reports loguru used by `permissions/service.py` + the three test helpers) stays red until every other migration lands. T-003's `feature_group` is `backend.settings` (the amended settings-coverage IDs); the reconfigure code lives in the logging feature.
+
+Full entry, quoted verbatim from `.github/task-runner/tasks.json`:
+
+```json
+{
+  "task_id": "T-003",
+  "feature_group": "backend.settings (amended settings-coverage IDs; the reconfigure code lives in the logging feature's _setup.py)",
+  "title": "live reconfiguration on a logging.* settings change: mutate the managed handlers in place re-applying all current logging.* values, setup_logger() stays callable with no arguments, settings-coverage amended tests re-derived",
+  "requirements": ["REQ-012"],
+  "acceptance_criteria": ["AC-017"],
+  "invariants": ["INV-004"],
+  "edge_cases": [],
+  "non_functional": [],
+  "amended_ids": [
+    "settings-coverage.md REQ-014", "settings-coverage.md REQ-015", "settings-coverage.md REQ-016",
+    "settings-coverage.md AC-019", "settings-coverage.md AC-020", "settings-coverage.md AC-021",
+    "settings-coverage.md EDGE-008", "settings.md observability wording (no ID)"
+  ],
+  "tests_to_create": [
+    "tests/acceptance/settings_coverage/test_setup_logger.py::test_ac_017_live_reconfigure",
+    "tests/acceptance/settings_coverage/test_setup_logger.py::test_setup_logger_reads_registry (re-derived from settings-coverage AC-019 v2)",
+    "tests/acceptance/settings_coverage/test_setup_logger.py::test_sink_reconfigured_on_change (re-derived from settings-coverage AC-020 v2)",
+    "tests/unit/test_settings_coverage.py::test_logging_stub_removed (re-derived from settings-coverage AC-021 v2)",
+    "tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation (re-derived from settings-coverage EDGE-008 v2)",
+    "tests/unit/test_settings_coverage.py::test_observability_tracing (re-derived for the settings.md v4 wording: the settings feature uses the logging feature's logger)"
+  ],
+  "red_command": "uv run pytest tests/acceptance/settings_coverage/test_setup_logger.py tests/unit/test_settings_coverage.py::test_logging_stub_removed tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/test_settings_coverage.py::test_observability_tracing -v",
+  "implementation_steps": [
+    "Change the SettingChanged subscription in src/backend/logging/_setup.py so a logging.* write reconfigures the feature's OWN handlers in place, re-applying every current logging.* value (level, file path, rotation size, backup count) without restarting the process (REQ-012, AC-017).",
+    "Keep setup_logger() callable with no arguments - the new renderer parameter is optional and keyword-only (settings-coverage REQ-014 v2).",
+    "The reconfigure must touch only the handlers the feature owns (AC-017 third clause, INV-004): a foreign handler attached to the root logger or to another feature's logger stays attached and unmodified; the re-enable + re-install path for the alembic fileConfig case (EDGE-003) runs here.",
+    "Adapt tests/settings_test_helpers.py to the new backend (set_value_settled keeps its semantics: the write's dispatch is awaited) and remove the loguru import from tests/acceptance/settings_coverage/test_setup_logger.py.",
+    "Re-derive the six settings-coverage tests listed above from the amended v2 wording; assertions stay as strong as before (no weakening)."
+  ],
+  "green_command": "uv run pytest tests/acceptance/settings_coverage tests/unit/test_settings_coverage.py tests/contract/settings_coverage tests/property/test_settings_coverage.py -v",
+  "inputs": [
+    "docs/specs/structlog-logging.md section 4 (REQ-012), section 5 (AC-017), section 10 row 2",
+    "docs/specs/settings-coverage.md v2 (REQ-014/015/016, AC-019/020/021, EDGE-008)",
+    "docs/specs/settings.md v4 (wording only)",
+    "T-001 handoff (the managed handlers), T-002 handoff (the record-capture helpers)"
+  ],
+  "allowed_files": {
+    "source_files": ["src/backend/logging/_setup.py (the reconfigure path only)"],
+    "test_files": [
+      "tests/acceptance/settings_coverage/test_setup_logger.py",
+      "tests/unit/test_settings_coverage.py",
+      "tests/settings_test_helpers.py",
+      "tests/property/test_settings_coverage.py (only if the reconfigure change breaks it)",
+      "tests/contract/settings_coverage (only if the reconfigure change breaks it)"
+    ]
+  },
+  "implementation_scope": "The settings-driven live reconfigure path and the settings-coverage tests re-derived from the amended IDs. No new settings key, no change to the settings feature's own behavior.",
+  "design_constraints": [
+    "No new settings keys: the five logging.* keys (log_level, log_file, log_max_bytes, log_backup_count, profiling_include_arguments) and their defaults are unchanged (spec section 1 out of scope).",
+    "ADR-035: setup_logger() stays idempotent and thread-safe; the reconfigure must not race a concurrent setup (INV-001).",
+    "INV-004: only the feature's own handlers change; the single root forwarding handler is the only foreign-logger touch.",
+    "The autouse tests/conftest.py::_stdlib_root_logging_restored fixture stays (EDGE-003 test-suite guard).",
+    "settings.md is wording-only in this change: no settings.md ID is re-opened here."
+  ],
+  "completion_gates": [
+    "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+    "AC-017 passes: DEBUG records reach both sinks without a restart, the rotation parameters are re-applied, and only the feature's own handlers change.",
+    "The re-derived settings-coverage AC-019, AC-020, AC-021 and EDGE-008 tests pass with unchanged assertion strength.",
+    "uv run ruff check <changed paths> clean; uv run mypy src/ clean.",
+    "uv run python scripts/check_traceability.py stays green (the settings-coverage rows keep citing the same test function names)."
+  ],
+  "dependencies": ["T-001", "T-002"],
+  "status": "PENDING"
+}
+```
+
+**What constrains S4.2:**
+
+- **Only one source file is writable** — the reconfigure path. The DAG names `src/backend/logging/_setup.py`, **which no longer exists**: T-001 renamed the module to `src/backend/logging/_pipeline.py` (the reconfigure path is `_pipeline.py:303` `_reconfigure`, `:330` `_move_file_handler`, `:345` `_reconcile_ownership`, `:372` `_subscribe_to_setting_changes`). S4.2 must read the stale path as `_pipeline.py`, reconfigure path only — nothing else under `src/` is writable.
+- **Tests are writable only in the five listed paths**, and the re-derived ones must keep their assertion strength (no weakening — the S3.1 T-003 assertion-strength table is the contract).
+- **No new settings keys**; the five `logging.*` keys and defaults are frozen. **INV-001/ADR-035**: setup stays idempotent and thread-safe, the reconfigure must not race a concurrent setup (the `_setup_lock` at `_pipeline.py:247`/`:381` is the mechanism). **INV-004**: only the feature's own handlers change; the single root forwarding handler is the only foreign-logger touch. The autouse `tests/conftest.py::_stdlib_root_logging_restored` fixture (conftest `:55`) stays.
+- **`settings.md` is wording-only** — no settings.md ID may be re-opened here (so the NFR-004 witness must be satisfied without changing the settings feature's behavior).
+- Gates: ruff on the changed paths, `uv run mypy src/`, and `uv run python scripts/check_traceability.py` staying green with the **same test function names** (the settings-coverage matrix rows cite them).
+
+#### 2. RED gate — the DAG's `red_command`, verbatim, at HEAD `c6cd11a`
+
+```text
+uv run pytest tests/acceptance/settings_coverage/test_setup_logger.py tests/unit/test_settings_coverage.py::test_logging_stub_removed tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/test_settings_coverage.py::test_observability_tracing -v
+```
+
+→ **1 failed, 5 passed (15.93 s)**, `--randomly-seed=609011854`.
+
+| Test | Outcome | Witness / assertion |
+|---|---|---|
+| `test_setup_logger_reads_registry` (AC-019) | **PASSED** | — |
+| `test_ac_017_live_reconfigure` (AC-017 / REQ-012 + INV-004) | **PASSED** | — |
+| `test_sink_reconfigured_on_change` (AC-020 / REQ-015 v2 + INV-004) | **PASSED** | — |
+| `test_sink_reconfigured_rotation` (EDGE-008 v2) | **PASSED** | — |
+| `test_logging_stub_removed` (AC-021 / REQ-016 v2) | **PASSED** | — (already green at the Phase 3 gate, see the S3.1 T-003 table) |
+| `test_observability_tracing` (NFR-004 + `settings.md` v4 §9 wording) | **FAILED** | `tests/unit/test_settings_coverage.py:577` — `AssertionError: NFR-004 / settings.md v4 §9: the value change must be logged with key context through the shared logging feature` / `assert None is not None` (`wait_for_record_since` found no record in the session file sink mentioning `probe.observed_key`) |
+
+**Failure-mode sanity check (invalid test data is not a legal RED):** 1 `AssertionError`, **0** collection / fixture / import errors, **0** `ValidationError` on test data — the six tests collected and ran (`collected 6 items`). The failure is deterministic, not order-dependent: re-run 3× in isolation with `uv run pytest tests/unit/test_settings_coverage.py::test_observability_tracing -q -p no:randomly` → **1 failed** every time (15.4–15.6 s).
+
+**RED is thinner than the DAG implies.** At the Phase 3 gate (`cc7894f`) this same command was **5 failed, 1 passed**; today it is **1 failed, 5 passed**. The five that flipped GREEN did so in **T-001**, which landed the whole live-reconfigure machinery this task's `implementation_steps` 1–3 describe: `_pipeline.py:240` `setup_logger(*, renderer: str | None = None)` (no-arg call still the default → REQ-014 v2 / step 2), `_pipeline.py:303` `_reconfigure` mutating the installed handlers in place — level on console/rotating/forwarding + the pipeline logger, `maxBytes`/`backupCount` re-applied, the path moved via `_move_file_handler` (`:330`) — and `_pipeline.py:372` `_subscribe_to_setting_changes()` subscribing `SettingChanged` and re-running `_reconfigure` for any `logging.*` key (`:379-385`), i.e. **a settings change already re-applies all current `logging.*` values without a restart**. `_settings.py:26` `_settings_from_registry()` is where the five values are read (`log_level`, `log_file`, `log_max_bytes`, `log_backup_count`, `profiling_include_arguments`), falling back to the hardcoded defaults when the registry is absent (`_settings.py:38`) or a key is unregistered (`feature_settings.py:37-39`, warning + fallback). Step 4 (drop the loguru import from `test_setup_logger.py`, adapt `settings_test_helpers.py`) is likewise already done. **S4.2's remaining T-003 work is therefore the one red witness, not the reconfigure path.**
+
+#### 3. The implementation state the failing witness contradicts
+
+The failing test is **not** failing for the reason the S3.1 T-003 derivation flagged ("cannot go GREEN inside T-003 — `src/backend/settings/registry.py` still logs through loguru, T-004 must migrate it"). That cause is gone: T-004 is `VERIFIED` (`09de5b4`), and the test's own captured log now shows the settings records arriving through the pipeline (`logger_name: 'backend.settings.registry'` on `backend.logging`). It fails for a different, newly observable reason:
+
+- `tests/unit/test_settings_coverage.py:53-57` — an **autouse** fixture wraps every test in the module in `isolated_registry(install=False)` (`tests/settings_test_helpers.py:136-166`), which **resets the settings singleton** for the duration of the test (`_registry[0]` is `None`).
+- `tests/unit/test_settings_coverage.py:566-567` — the test calls `setup_logger()` **before** `install_isolated_registry()`, i.e. while the singleton is reset. `get_settings()` (`_settings.py:59`) → `_settings_from_registry()` takes the `registry is None` branch (`_settings.py:38-39`) and returns the **hardcoded defaults** (`_settings.py:19-23`: `log_level="INFO"`, `log_file="logs/app.log"`).
+- `_reconfigure` (`_pipeline.py:303-328`) then applies those defaults to the session pipeline: the level drops **DEBUG → INFO** on the console, rotating and forwarding handlers and on the pipeline logger, and because `log_file != sinks.log_file` the single rotating handler is **re-pointed** from the session temp file to the CWD-relative `logs/app.log` (`_pipeline.py:319-322` + `_move_file_handler`). The test's own setup record proves it: `logging configured … level='INFO', file='logs\\app.log', rotation_bytes=10485760, reconfigured=True`.
+- The witness record is `src/backend/settings/registry.py:157` `_logger.debug(f"value set: key={key}", key=key)` — a **DEBUG** record. After the downgrade it is filtered by the INFO handler levels, and it would in any case be written to the re-pointed file, not to `session_settings.log_file` the test polls. Measured directly (read-only probe, no repo edit): with the session-like registry the rotating handler is `DEBUG` on the session temp path; after `reset_settings_registry()` + `setup_logger()` it is `INFO` on `…\\structlog-logging\\logs\\app.log`. `logs/app.log` contains **0** `probe.observed_key` records.
+
+So the contradiction is between the test's stated premise ("No `logging.*` value is written here, so the session pipeline keeps its configuration") and the specified fallback behavior: `settings-coverage.md` REQ-014 v2 says `setup_logger()` "reads `logging.*` from the shared registry (**falling back to the logging defaults with a warning if unregistered**)", so a no-arg `setup_logger()` **while the registry is absent** is specified to re-apply the defaults — including re-pointing the file sink. The implementation follows the spec; the test's own call ordering breaks its premise.
+
+**Decision S4.2 must take (not taken here):** (a) fix the witness ordering inside `allowed_files.test_files` — install/register the registry **before** calling `setup_logger()`, so the re-applied values are the session's (no assertion deleted or softened; the assertion set stays identical), or (b) change the reconfigure/settings read so an absent registry keeps the installed configuration — which contradicts REQ-014 v2's fallback clause and EDGE-002 and is outside `implementation_steps`. (a) is the spec-faithful reading; (b) would need a spec amendment. Recorded as a finding, not acted on.
+
+#### 4. Baselines S4.2 must not regress (measured at `c6cd11a`, this step)
+
+| Set | Command | Measured now |
+|---|---|---|
+| **T-003 `green_command`** | `uv run pytest tests/acceptance/settings_coverage tests/unit/test_settings_coverage.py tests/contract/settings_coverage tests/property/test_settings_coverage.py -v` | **1 failed, 50 passed** (19.84 s) — the single failure is `test_observability_tracing`; **S4.2 must end at 51 passed, 0 failed** |
+| T-003 `red_command` set | (as above) | 1 failed, 5 passed |
+| T-004's targeted set (already `VERIFIED`) | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger -v` | **1 passed (0.20 s)** — measured in this step; must stay green |
+| Full suite | not run (Phase 5 gate; per-task targeted runs only) | n/a |
+
+Working tree before and after this step: only `docs/verification/structlog-logging.md` (this record). No `src/`, no test file, no `pyproject.toml`/`uv.lock`, no `docs/tasks/` or `.github/task-runner/tasks.json` change (T-003's `status` stays `PENDING` — setting it is S4.4's job), no `docs/todo/` / `docs/questions/` change.
+
+#### Gate table (S4.1, T-003)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | Task ready | task states in `.github/task-runner/tasks.json` | T-003 `PENDING`, dependencies T-001/T-002 `VERIFIED` → ready; T-006 deferred (deptry interlock) |
+| b | **RED observed** | the verbatim `red_command` | **1 failed, 5 passed** — RED observed on `test_observability_tracing` |
+| c | RED is behavioral | failure-mode scan of the run + 3 isolated re-runs with `-p no:randomly` | 1 `AssertionError`, 0 collection/fixture/import errors, 0 `ValidationError` on test data; deterministic (3/3) |
+| d | Ruff | n/a — this step wrote no tests or implementation code (only this record) | n/a |
+| e | Working tree | `git status --porcelain` | only this file |
+
+**Phase 4 (S4.1, T-003) gate: PASS — RED observed (1 failed / 5 passed, behavioral, deterministic) and recorded.** Next: S4.2 (T-003) — implement + confirm GREEN (51 passed, 0 failed on the verbatim `green_command`), deciding the note-3 question first.
