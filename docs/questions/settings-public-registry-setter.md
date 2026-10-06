@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 16 of 29 answered (round 4, 2026-10-06) -->
-- **Answer rounds:** 4
+- **Status:** OPEN  <!-- 18 of 29 answered (round 5, 2026-10-06) -->
+- **Answer rounds:** 5
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -290,10 +290,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Migrate the embedded code too** (`from backend.settings import set_settings_registry; set_settings_registry(reg)`) — the `rg` signal holds and the subprocess still proves the same wiring.
   - **Exempt them and scope the acceptance signal to importable test code** — no risk to the subprocess tests, but the private write survives in the suite.
   - **Rewrite them as in-process tests** — removes the subprocess, but changes what AC-003/AC-019 prove (import-time wiring in a fresh interpreter).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Migrate the embedded code too: the `python -c` programs at `tests/acceptance/settings_coverage/test_wiring.py:17-18` and `test_setup_logger.py:31,55` call the public setter instead of `_reg_mod._registry[0] = ...`. The acceptance signal holds with no exception list, and the subprocess still proves import-time wiring in a fresh interpreter (AC-003/AC-019 unchanged).
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — in-scope test migration list; the acceptance signal needs no exception
 
 ## Q-18 — Is a regression guard added, and with which mechanism
 - **Step:** P.2 Interrogate
@@ -332,10 +332,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) Keep the local and pass it explicitly; install once** — object identity and wiring order are unchanged.
   - **Install, then read back with `get_settings_registry()` everywhere** — one source of truth at startup, but adds reads that would silently pick up a different instance if the install moved.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Install, then read back globally: after `set_settings_registry(reg)`, `src/main.py` uses `get_settings_registry()` at the consumer sites instead of the local `_settings_registry`. Recorded risk (from the question's own context): the read-back would silently pick up a different instance if the install moved or a test installed something else, and it adds global reads to startup. Mitigation to specify at P.4: the read-back sites are the registrations (`:173-178`) and the four service constructors (`:198,204,214`), all of which run after the install in the same module, and `tests/acceptance/settings_coverage/test_wiring.py` keeps asserting that the wiring landed.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — composition-root shape; AC-003's subprocess test stays the evidence
 
 ## Q-21 — Must the install stay at module-import time in its current position
 - **Step:** P.2 Interrogate
