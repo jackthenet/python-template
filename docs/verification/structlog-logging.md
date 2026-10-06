@@ -1905,3 +1905,36 @@ All five clauses are satisfied by real content, not by inserted magic strings: e
 | f | Full suite | not run (Phase 5 gate; per-task targeted run only) | n/a |
 
 **Phase 4 (S4.2, T-007) gate: PASS — GREEN confirmed (AC-019 witness passes, 24 → 0 violations) and recorded; ruff clean on the changed paths (Markdown-only, nothing to check).** Next: S4.3 (T-007) — refactor (keep GREEN; the no-op fast-path is expected, there is no code in this task's diff), then S4.4 commit + set T-007 `VERIFIED`.
+
+
+### S4.3 T-007 — refactor, keep GREEN (2026-10-06)
+
+**Objective:** review the T-007 diff (commit `9071346`) for text-quality/structure problems only — duplicated guidance, wording that contradicts the implemented API, stale references, broken markdown/links — and fix them without changing what the guidance mandates. Guidance text only; no `src/`, no tests, no specs.
+
+#### Review findings (four guidance files, checked against `src/backend/logging/`)
+
+| # | Finding | Verdict | Action |
+|---|---|---|---|
+| 1 | `AGENTS.md:770` — "It is usable before setup — the record still reaches standard error" contradicts the implemented behaviour. Before `setup_logger()` the pipeline logger has no handler, so the record propagates to the root logger and only stdlib `lastResort` (level `WARNING`) writes it: an `info` record is dropped. Measured: `uv run python -c "from backend.logging import get_logger; get_logger('probe').info(...); get_logger('probe').warning(...)"` → only the `warning` record on stderr. `EDGE-006` and its test (`tests/unit/logging/test_pipeline_edges.py:157`) use `.warning(...)` for exactly this reason. | **Defect** — guidance not true of the code it publishes (the spec's stated goal) | Reworded to what the pipeline actually does: no exception, the record bypasses the managed sinks, only WARNING-and-above reaches standard error via the last-resort handler, and setup still comes first (the setup mandate is unchanged) |
+| 2 | `AGENTS.md:772` — the tracing-policy bullet re-states the setup mandate verbatim ("`setup_logger()` MUST be called exactly once in the application entrypoint, before any feature code runs"), already stated by the bullet that owns it (`:765`, "Set it up once at startup") and again as a precondition in `:771`. Three copies of one MUST. | **Duplication** | Deleted the third copy from the tracing-policy bullet. The mandate is preserved verbatim in `:765` and its precondition in `:771`; nothing the guidance mandates changed |
+| 3 | Entry-point list repeated in all four guidance files (`AGENTS.md`, `SKILL.md:16`, `modern-python.md:85`, `errors-and-resources.md:30`) | **Not a defect — kept.** AC-019 clause 3 requires **each** of the four files to name all four entry points (`_FEATURE_ENTRY_POINTS` in `tests/contract/logging/test_dependency_contract.py:122`), and `SKILL.md:26` tells the reader to open only one reference file per task, so each reference must be self-contained. Deduplicating would break the witness and the skill | none |
+| 4 | Stale references: `grep -ci "loguru|context_getter|\bdepth\b|diagnose|structlog"` over the four files | **Clean** — 0 matches in every file; no `setup_logger(Settings(...))` shape survives anywhere in `AGENTS.md` (`grep -n "setup_logger\|get_settings()\|Settings("` → only the corrected lines 765–777) | none |
+| 5 | Markdown/links: the `SKILL.md` reference table's seven `references/*.md` links all resolve (`ls .agents/skills/python-best-practices/references/`); code fences balanced; the two files the diff touched at EOF keep the skill files' existing convention (CRLF throughout, no final newline — `SKILL.md` is untouched and also has none), so no mixed line endings were introduced | **Clean** | none |
+| 6 | API agreement of the rest of the rewritten text: `@logged` parameters (`level`, `slow_threshold_ms`, `slow_threshold_setting`, `include_args`) match `_decorator.logged:189`; `@logged_class` parameters match `_decorator.logged_class:220`; `renderer` values and the `ValueError`-before-install wording match `_validate_renderer` / `RENDERERS` in `_pipeline.py`; the five `logging.*` keys match `feature_settings.register_settings`; the private-module list (`_pipeline` / `_decorator` / `_renderers` / `_settings`) matches the files that exist | **Clean** | none |
+
+#### Changes made
+
+One file, two lines (`git diff --stat` → `AGENTS.md | 4 ++--`): the "One-off statements" bullet reworded (finding 1) and the duplicated setup mandate deleted from the "Tracing policy" bullet (finding 2). No mandate added, weakened or removed; no other guidance file needed a change.
+
+#### Gate table (S4.3, T-007)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | **GREEN re-confirmed after the refactor** | `uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v` | **1 passed in 0.20 s** |
+| b | AC-019 clause count still 0 | the witness's own `_guidance_violations` over the four files | **0 violations** (AGENTS.md 0, SKILL.md 0, modern-python.md 0, errors-and-resources.md 0) |
+| c | Published site unaffected | `uv run --group docs mkdocs build --strict` | exit **0** (1.57 s) — re-run because `AGENTS.md` text moved |
+| d | **Ruff** | `uv run ruff check AGENTS.md` | n/a — every changed path is Markdown (`warning: No Python files found under the given path(s)`, `All checks passed!`); `ruff format` does not apply |
+| e | Scope | `git status --short` | only `AGENTS.md` + this record; `src/`, `tests/`, specs, `docs/todo/`, `docs/questions/`, `.github/task-runner/tasks.json` (T-007 stays `PENDING` — S4.4's job) untouched |
+| f | Full suite | not run (Phase 5 gate; per-task targeted run only, per the skill's S4.4 no-op/re-run rule) | n/a |
+
+**Phase 4 (S4.3, T-007) gate: PASS — two text defects fixed (one contradiction with the implemented pipeline, one duplicated mandate), GREEN maintained, ruff n/a (markdown).** Next: S4.4 (T-007) — commit + set T-007 `VERIFIED`.
