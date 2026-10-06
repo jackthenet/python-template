@@ -37,7 +37,7 @@ dev = [
     # Dependency checker (unused/missing/transitive deps).
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
-    "hypothesis>=6.168.1",
+    "hypothesis>=6.168.3",
     # Static type checking for the source tree.
     "mypy>=2.3.1",
     # Vulnerability scanning for installed dependencies.
