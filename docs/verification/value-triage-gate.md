@@ -58,7 +58,7 @@ Stop and reclassify if Phase 4 or review finds any of these:
 
 ## Scope (exact, verified against the tree at `535816c`)
 
-**22 edits in 4 files, all Markdown** — **25 with A11/A12/G6**, the three rows added to this table at the **S4.2 re-entry** after the S5 adjudication of finding 1 (see "S4.2 re-entry (A11/A12/G6) + re-verified gate set"), and **30 with G7/G8/G9/A13/G2a**, the five rows added at the **S4.2 re-entry #2** after the S6.1 review findings F-1/F-2 (see "S4.2 re-entry #2 (F-1/F-2) + completeness sweep"); the 22-row count is the scope as approved at P.4. Every "before" below was re-read from the file in this worktree at P.4 with `grep -n` (line numbers are from the base commit `535816c`, **not** copied from the question file). The `workflow-docs-nits` qualifiers are **already live** and are re-measured, not restated:
+**22 edits in 4 files, all Markdown** — **25 with A11/A12/G6**, the three rows added to this table at the **S4.2 re-entry** after the S5 adjudication of finding 1 (see "S4.2 re-entry (A11/A12/G6) + re-verified gate set"), **30 with G7/G8/G9/A13/G2a**, the five rows added at the **S4.2 re-entry #2** after the S6.1 review findings F-1/F-2 (see "S4.2 re-entry #2 (F-1/F-2) + completeness sweep"), and **35 with G10/G11/A14/V1/V2**, the five rows added at the **S4.2 re-entry #3** after the S6.2 findings B-1/N-1/T-1 (see "S4.2 re-entry #3 (B-1, N-1, T-1)"). The 22-row count is the scope as approved at P.4; the guidance file set stays the same **4 files** — **V1/V2 are corrections inside this record** and are the only two rows that are not guidance text. Every "before" below was re-read from the file in this worktree at P.4 with `grep -n` (line numbers are from the base commit `535816c`, **not** copied from the question file). The `workflow-docs-nits` qualifiers are **already live** and are re-measured, not restated:
 
 | `workflow-docs-nits` edit (merged) | Live text at `535816c` (re-measured) |
 |---|---|
@@ -103,6 +103,11 @@ This change **builds on** those four lines and does not touch them (Q-1 = (b) + 
 | G9 | `.agents/skills/git/SKILL.md` | `:41` (Todo — the cleanup item's status-order sentence) | Q-7 = (i) — **row added at the S4.2 re-entry #2** (F-1) |
 | A13 | `AGENTS.md` | `:443` (Todo Tracking Discipline → "Status orders", the Post-merge cleanup bullet) | Q-7 = (i) — **row added at the S4.2 re-entry #2** (F-1) |
 | G2a | `.agents/skills/git/SKILL.md` | `:65` (planning-commit operation — the arrow-rendered `Status:` chain, same place as G2) | Q-3 = (a), Q-7 = (i) — **row added at the S4.2 re-entry #2** (F-2, wording only) |
+| G10 | `.agents/skills/git/SKILL.md` | `:73-80` (planning-commit operation — the archive-move code block: `mkdir -p` before the `git mv` pair) | Q-7 = (i) — **row added at the S4.2 re-entry #3** (S6.2 finding B-1) |
+| G11 | `.agents/skills/git/SKILL.md` | `:146-151` (Post-merge cleanup step 5 — the same `mkdir -p` line in the S7.1 code block) | Q-7 = (i) — **row added at the S4.2 re-entry #3** (B-1) |
+| A14 | `AGENTS.md` | `:425` (Todo Tracking Discipline — "One todo set per change", the closure sentence) | Q-3 = (a) — **row added at the S4.2 re-entry #3** (N-1) |
+| V1 | `docs/verification/value-triage-gate.md` (this record) | `:280` (the G2 row's claim that the archive folders "are created by the first move") | Q-7 = (i) — **row added at the S4.2 re-entry #3** (B-1, record correction; no guidance file) |
+| V2 | `docs/verification/value-triage-gate.md` (this record) | `:413` (the "Reverse: each edit row is decided by an answer" lead sentence) | **record-consistency fix (T-1)** — no deciding Q, no guidance file — **row added at the S4.2 re-entry #3** |
 
 ### A1 — `AGENTS.md:130-131`, Preparation artifacts table
 
@@ -277,7 +282,8 @@ Before implementing any TODO, decide whether it is worth doing. At **P.1 Frame**
   git mv docs/questions/<name>.md docs/questions/archive/<name>.md
   git commit -m "chore(<name>): archive <DROPPED|MERGED>"
   ```
-- The `archive/` subdirectories do not exist yet (`ls docs/todo/archive` → no such directory); they are created by the first move, on `main`, by the orchestrator — **not** by this PR (see "Follow-up actions").
+- The `archive/` subdirectories do not exist yet (`ls docs/todo/archive` → no such directory); the **move step creates them** with `mkdir -p docs/todo/archive docs/questions/archive` before the `git mv` pair, on `main`, by the orchestrator — **not** by this PR (see "Follow-up actions").
+- **Correction (S4.2 re-entry #3, S6.2 finding B-1 — row V1).** This bullet originally read "they are created by the first move". That claim is **false**: `git mv` does not create the destination directory. Measured in a scratch repo at `81a389b` (`git init` → commit → `git mv docs/todo/demo.md docs/todo/archive/demo.md`): `fatal: renaming 'docs/todo/demo.md' failed: No such file or directory`, exit **128**; the same sequence succeeds only after `mkdir -p` (see "S4.2 re-entry #3 (B-1, N-1, T-1)" for the full proof). The guidance is fixed by **G10/G11**; this record is corrected here rather than silently rewritten.
 
 ### G3 — `.agents/skills/git/SKILL.md:59`, S7.1 done-criteria
 
@@ -410,7 +416,7 @@ The two `Disposition:` workaround lines exist precisely because the vocabulary h
 
 ### Reverse: each edit row is decided by an answer
 
-The **Edit index** table above carries a `Decided by` column for all 22 rows (A1–A10, T1–T2, S1–S5, G1–G5) — plus the three rows A11/A12/G6 added at the S4.2 re-entry, each attributed to the same Q-3 = (a) / Q-7 = (i) answers that produced A4/T1/S2/G1/G2/G5. Checked: **no row is unattributed**, and no row cites an answer that does not exist (the file has exactly Q-1, Q-2, Q-3, Q-4, Q-5, Q-7 — Q-6 was closed as a duplicate of Q-5 and generates no edit of its own; its content is in A5/T2 via Q-5).
+The **Edit index** table above carries a `Decided by` column for all **35 rows** — **A1–A14, T1–T2, S1–S5, G1–G11, G2a, V1–V2** (growth history: 22 as approved at P.4 → 25 with A11/A12/G6 at the S4.2 re-entry → 30 with G7/G8/G9/A13/G2a at re-entry #2 → 35 with G10/G11/A14/V1/V2 at re-entry #3; the table is the authority for the count, **V2**). Every guidance row is attributed to the same Q-3 = (a) / Q-7 = (i) answers that produced A4/T1/S2/G1/G2/G5. Checked: **no guidance row is unattributed**, and no row cites an answer that does not exist (the file has exactly Q-1, Q-2, Q-3, Q-4, Q-5, Q-7 — Q-6 was closed as a duplicate of Q-5 and generates no edit of its own; its content is in A5/T2 via Q-5). The two designed exceptions are both record rows: **V1** cites Q-7 = (i) because it corrects a claim about the archive move, and **V2** cites **no** Q — it is a record-consistency fix (the T-1 note) that touches no guidance file.
 
 ### Consistency checks run at P.4
 
@@ -1187,3 +1193,90 @@ conflict; the only exposure is line shifts in `AGENTS.md` for the two branches t
 - [x] Check 4: 0 machine readers of the status vocabulary or the two planning paths across 8 surfaces; no CI `paths:` filter, no mkdocs nav entry
 - [x] Check 5: rebase exposure measured for all three in-flight branches — no overlap today, `git merge-tree` clean against `main` and against each of them, line-shift-only exposure later
 - [x] Full test suite NOT re-run (Phase 5 gate already recorded); no commit-by-commit review; no PR; no version bump; no `docs/todo/` or `docs/questions/` write; no subagent launched; no `ask_user_question`
+
+---
+
+## S4.2 re-entry #3 (B-1, N-1, T-1)
+
+Run in the change worktree on top of `81a389b` (S6.2 traceability + boundaries); working tree clean before (`git status --short` → empty). This is the fix step the S6.2 findings required: close the **blocking** finding **B-1** (the archive-move producer does not run as written) and, in the same pass, **N-1** (no closure rule for a `DROPPED` change's todo set) and **T-1** (the edit-index lead sentence narrates 22 rows while the table has 30). Nothing else — no S6.3/S6.4 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write in this worktree, no test/spec/source file, no full test suite re-run.
+
+### The five edits (verbatim before → after; located by text, not by line number)
+
+| Row | File (line at `81a389b`) | Before (verbatim) | After (as applied) |
+|---|---|---|---|
+| **G10** | `.agents/skills/git/SKILL.md:73-80` (planning-commit operation, the archive-move block) | `At the drop decision, and at post-merge cleanup (S7.1), the orchestrator moves the two records to the archive folders **together**:` — then the fenced block whose first command is `git mv docs/todo/<name>.md docs/todo/archive/<name>.md` | intro gains the reason clause — `…to the archive folders **together** (\`git mv\` does **not** create the destination directory, so the folders are created first):` — and the block's first command line is now `mkdir -p docs/todo/archive docs/questions/archive` |
+| **G11** | `.agents/skills/git/SKILL.md:146-151` (Post-merge cleanup, step 5 block) | `5. Move the planning records to the archive (from the primary worktree, after the \`Status: MERGED\` advance):` — then the fenced block starting at `git mv docs/todo/<name>.md …` | `5. Move the planning records to the archive (from the primary worktree, after the \`Status: MERGED\` advance; \`mkdir -p\` first — \`git mv\` does not create the destination directory):` and the block's first line is now `   mkdir -p docs/todo/archive docs/questions/archive` |
+| **A14** | `AGENTS.md:425` (Todo Tracking Discipline, "One todo set per change", the closure sentence) | `Sets are created at **P.1** and completed by the **Post-merge cleanup** item.` | `Sets are created at **P.1** and completed by the **Post-merge cleanup** item; a **\`DROPPED\`** change's set is closed by the orchestrator at the drop decision (no Post-merge cleanup item runs for it).` — one clause, the section is not restructured |
+| **V1** | this record `:280` (the G2 row's archive-folder bullet) | `- The \`archive/\` subdirectories do not exist yet (\`ls docs/todo/archive\` → no such directory); they are created by the first move, on \`main\`, by the orchestrator — **not** by this PR (see "Follow-up actions").` | the bullet now reads "the **move step creates them** with \`mkdir -p docs/todo/archive docs/questions/archive\` before the \`git mv\` pair…", followed by an explicitly labelled **Correction (S4.2 re-entry #3, S6.2 finding B-1 — row V1)** bullet quoting the false claim and the measurement — the earlier record is corrected, not silently rewritten |
+| **V2** | this record `:413` (the "Reverse: each edit row is decided by an answer" lead sentence) | `The **Edit index** table above carries a \`Decided by\` column for all 22 rows (A1–A10, T1–T2, S1–S5, G1–G5) — plus the three rows A11/A12/G6 added at the S4.2 re-entry, …` | the sentence now states the count the table actually has — **35 rows: A1–A14, T1–T2, S1–S5, G1–G11, G2a, V1–V2** — with the growth history kept as a parenthetical (`22 → 25 → 30 → 35`) and the note that the table is the authority; the two designed non-Q exceptions (V1 cites Q-7 = (i), V2 cites no Q) are named |
+
+- Each anchor matched **exactly once** (`grep -cF` → `1` for G10/G11/A14/V1/V2); every replacement is inline text inside an existing paragraph, list item, table row or fenced block — no fence, table or list structure was re-flowed. `git diff --numstat HEAD` for this step: `.agents/skills/git/SKILL.md` **4/2**, `AGENTS.md` **1/1** (plus this record's own growth).
+- **Deciding answers unchanged.** G10/G11 and V1 follow from **Q-7 = (i)** — the answer that already produced A1/A3/A4/A7/A8/S3/G1/G2/G3/G4/G5/G7/G8/G9 — and A14 from **Q-3 = (a)** (the `DROPPED` status already exists; N-1 only states what happens to its todo set). **V2 cites no Q**: it is a record-consistency fix (T-1) that touches no guidance file. No new decision, no new rule, no gate changed.
+- **B-1 is a correctness fix to a command the guidance tells the orchestrator to run**, not a wording change: as written, the first drop decision or the first S7.1 cleanup after this change merges would fail mid-step. The two `mkdir -p` lines are the whole fix (2 lines in an already-touched file), plus the reason clause so a later reader does not delete them as redundant.
+- **A14 vs the re-entry #2 sweep — no contradiction.** The re-entry #2 completeness sweep classified `AGENTS.md:425` under rule **(b)** (the post-merge-cleanup *action set*) as "already correct — nothing to bring in line". That verdict stands: the sentence's cleanup clause is untouched. A14 closes a **different** rule the sweep did not enumerate — todo-set **closure** for a change that never reaches Post-merge cleanup (N-1). `AGENTS.md:418` ("Todo sets", the Multi-change-scheduling bullet) is likewise unchanged: the normative closure rule lives in the Todo Tracking Discipline, which is where the sweep's `:425` row points.
+
+### B-1 proof — the fixed sequence run in a throwaway repo (the guidance must be executable, not plausible)
+
+`git init` in a fresh `mktemp -d` repo, two planning records committed, then the exact command sequence as the guidance now reads (git `2.51.0.windows.1`, the environment the orchestrator runs in; the repo was deleted afterwards, `rm -rf` exit 0):
+
+| # | Command | Exit | Output |
+|---|---|---|---|
+| 1 | `git init -q .` | **0** | — |
+| 2 | `git add -A && git commit -qm init` (`docs/todo/demo.md`, `docs/questions/demo.md`) | **0** | — |
+| 3 | `git mv docs/todo/demo.md docs/todo/archive/demo.md` — **as the guidance read before B-1** | **128** | `fatal: renaming 'docs/todo/demo.md' failed: No such file or directory` |
+| 4 | `git mv docs/questions/demo.md docs/questions/archive/demo.md` — same | **128** | `fatal: renaming 'docs/questions/demo.md' failed: No such file or directory` |
+| 5 | `mkdir -p docs/todo/archive docs/questions/archive` — **the G10/G11 line** | **0** | — |
+| 6 | `git mv docs/todo/demo.md docs/todo/archive/demo.md` | **0** | — |
+| 7 | `git mv docs/questions/demo.md docs/questions/archive/demo.md` | **0** | — |
+| 8 | `git commit -qm "chore(demo): archive MERGED"` | **0** | — |
+| 9 | `git status --short` | **0** | empty (clean tree) |
+| 10 | `git show --stat --oneline HEAD` | **0** | `docs/questions/{ => archive}/demo.md \| 0`, `docs/todo/{ => archive}/demo.md \| 0`, `2 files changed, 0 insertions(+), 0 deletions(-)` |
+| 11 | `git ls-files` | **0** | `docs/questions/archive/demo.md`, `docs/todo/archive/demo.md` |
+
+**Verdict: B-1 is real (steps 3–4 fail, exit 128) and B-1 is fixed (steps 5–11 all exit 0, both records end up in their archive folder, tree clean).** The same sequence is what both guidance blocks now state, so the drop-decision move and the S7.1 move are executable on first run.
+
+### Scope contract updated (the edit index and its two count statements)
+
+- The **Edit index** gained **G10, G11, A14, V1, V2** with their deciding Q-IDs (Q-7 = (i) for G10/G11/V1, Q-3 = (a) for A14, none for V2 — labelled a record-consistency fix). The table now has **35 rows**: `A1…A14`, `T1`, `T2`, `S1…S5`, `G1…G11`, `G2a`, `V1`, `V2`.
+- The **Scope** lead sentence (`:61`) now reads "…**30 with G7/G8/G9/A13/G2a** … and **35 with G10/G11/A14/V1/V2**, the five rows added at the **S4.2 re-entry #3** after the S6.2 findings B-1/N-1/T-1", and states that the guidance file set stays at **4 files** because **V1/V2 are corrections inside this record** — the only two rows that are not guidance text.
+- The **Reverse-direction** lead sentence (`:413`, the T-1 fix = **V2**) now states the same 35-row count and ID set, with the growth history parenthetical, so the two places that narrate the count agree with the table (T-1 closed).
+- Historical sections are **not** rewritten: the "all 22 rows applied" statements in the S4.2 / S5 records stay as the dated gate record of those steps (AGENTS.md traceability convention — a dated record is a legal record of a past gate).
+
+### Gate set re-run — the same commands as S5 / the two earlier re-entries, at this step
+
+| # | Gate | Command (in the worktree) | Base (`77ae870`) | After G10/G11/A14/V1/V2 | Verdict |
+|---|---|---|---|---|---|
+| G-1 | Lint | `uv run ruff check .` | `All checks passed!` | `All checks passed!` | **PASS** — no delta |
+| G-2 | Types | `uv run mypy src/` | `Success: no issues found in 83 source files` | `Success: no issues found in 83 source files` | **PASS** — no delta |
+| G-3 | Traceability | `uv run python scripts/check_traceability.py` | `PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | `Traceability: PASS (765 matrix rows, 129 spec IDs, 714 test functions)` | **PASS** — identical counts |
+| G-4 | Docs site, strict | `uv run --group docs mkdocs build --strict` | exit 0, no `WARNING:`/`ERROR:` | exit **0**, `Documentation built in 1.55 seconds`, `grep -cE "^(WARNING\|ERROR)"` → **0** | **PASS** — no delta |
+| G-5 | Diff scope | `git diff --name-only main...HEAD` | 5 paths | the same **5 paths** (4 guidance files + this record) | **PASS** |
+| G-6 | Markdown hygiene | `git diff --check main...HEAD` and `git diff --check` | clean | **clean**, exit 0 for both (branch range and worktree) | **PASS** |
+| G-7 | Wording hazard (path-scoped) | `git diff -U0 -- AGENTS.md .agents/skills docs/todo/template.md \| grep -cE "^[-+].*(Never idle\|Idle or wait in place\|Non-blocking:)"` | 0 | **0** (and **0** over the whole branch range `$(git merge-base main HEAD)`) | **PASS** |
+| G-8 | Guidance numstat | `git diff --numstat $(git merge-base main HEAD)` (worktree included) | — | `AGENTS.md` **19/13** (was 18/12 — A14 is 1 changed line), `git/SKILL.md` **26/8** (was 24/8 — G10/G11 add 2 lines; the two intro clauses sit on lines that are themselves new vs the merge-base, so the removed count does not grow), `specify/SKILL.md` **9/8** (unchanged), `docs/todo/template.md` **8/1** (unchanged) | **PASS** — 35 rows, 4 guidance files, every hunk maps to a row |
+| G-9 | No test / no behavior / no bump | carried from S5 — this step's diff touches only `.agents/skills/git/SKILL.md`, `AGENTS.md` and this record | no `src/`, `tests/`, `docs/specs/`, `pyproject.toml` | **unchanged** — 0 Python files, `pyproject.toml` untouched, `version = "0.6.1"` | **PASS** |
+
+### Must-stay-untouched set re-verified after the three guidance edits
+
+Checked by byte-identical string match against `main` (`git show main:<file> \| grep -cF -- "<text>"` vs the same grep in the worktree — every pair `1 == 1`), plus whole-line `cmp` where the line number is stable:
+
+| Place | State |
+|---|---|
+| `AGENTS.md:106`, `:304`, `:353`, `:456`, `:466` | **unchanged** — the five delegating cleanup summaries (F-3); the `:456`/`:466` example rows still match `main` (2 == 2) |
+| `.agents/skills/git/SKILL.md:3` (the skill `description:`) | **unchanged** — `cmp` of line 3 vs `main` → identical |
+| `.agents/skills/git/SKILL.md` — the `BLOCKED-USER` cleared-gate test, the "Do NOT rely on the local \`main\` ref, which may lag; \`git fetch\` first." line, and the "Never idle on a gate…" line | **unchanged** — each present exactly once, 1 == 1 (F-4) |
+| `AGENTS.md:147` (the READY gate) | **unchanged** — `cmp` of the line vs `main` → identical |
+| `AGENTS.md:310` (Non-blocking), `:415` (Never idle), `:682` (the idle Prohibition), `:418` (the "Todo sets" bullet) | **unchanged** — 1 == 1 each; **A14 is confined to `:425`** |
+| `docs/questions/template.md` | **unchanged** — `git diff main...HEAD` and `git diff` → **0 lines** (owned by `spec-interview-protocol`) |
+
+### S4.2 re-entry #3 done-criteria checklist (this step)
+
+- [x] **B-1 closed** — `mkdir -p docs/todo/archive docs/questions/archive` added as its own fenced `bash` line before the `git mv` pair in **both** blocks (G10 planning-commit operation, G11 S7.1 step 5), each with a short reason clause so the line is not later deleted as redundant
+- [x] **B-1 proved fixed, not merely plausible** — the fixed sequence run in a throwaway `git init` repo: the pre-fix form fails (exit **128**, both moves), the post-fix form exits **0** end to end, both records land in their archive folder, tree clean; recorded above with per-command exit codes
+- [x] **B-1's record contradiction corrected (V1)** — `:280` no longer claims the folders "are created by the first move"; the correction is labelled as a correction of the earlier record (original wording quoted, measurement cited), not a silent rewrite
+- [x] **N-1 closed (A14)** — one clause added where the todo-set lifecycle is stated: a `DROPPED` change's set is closed by the orchestrator at the drop decision; the section is not restructured and `AGENTS.md:418` is untouched
+- [x] **T-1 closed (V2)** — the lead sentence now states the final count (35 rows, full ID set) with the growth history as a parenthetical; the Scope lead sentence and the Reverse-direction lead sentence now agree with the table
+- [x] Edit index gained **G10/G11/A14/V1/V2** with their deciding Q-IDs (Q-7 = (i) for G10/G11/V1, Q-3 = (a) for A14, none for V2 — explicitly a record-consistency fix, no guidance file) and the count updated in both places
+- [x] Gate set re-run and recorded with base comparison: ruff / mypy / traceability / mkdocs / diff scope / `git diff --check` / wording hazard / numstat — all **PASS**, no delta
+- [x] Must-stay-untouched set re-verified byte-identical (`AGENTS.md:106`/`:147`/`:304`/`:310`/`:353`/`:415`/`:418`/`:456`/`:466`/`:682`, `git:3`, the cleared-gate test lines, `docs/questions/template.md` 0 lines)
+- [x] No S6.3/S6.4 work, no PR, no version bump, no `docs/todo/` or `docs/questions/` write, no test/spec/source file touched, no subagent launched, no `ask_user_question`, no full test suite re-run

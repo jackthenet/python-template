@@ -70,10 +70,11 @@ git commit -m "chore(<name>): prepare"          # P.1–P.3
 git commit -m "chore(<name>): status <STATUS>"  # every later Status: advance
 ```
 
-At the drop decision, and at post-merge cleanup (S7.1), the orchestrator moves the two records to the archive folders **together**:
+At the drop decision, and at post-merge cleanup (S7.1), the orchestrator moves the two records to the archive folders **together** (`git mv` does **not** create the destination directory, so the folders are created first):
 
 ```bash
 # at the drop decision, and at post-merge cleanup (S7.1) — both records move together
+mkdir -p docs/todo/archive docs/questions/archive
 git mv docs/todo/<name>.md docs/todo/archive/<name>.md
 git mv docs/questions/<name>.md docs/questions/archive/<name>.md
 git commit -m "chore(<name>): archive <DROPPED|MERGED>"
@@ -143,8 +144,9 @@ After the human merges the PR:
    git push origin --delete <type>/<name>
    ```
 
-5. Move the planning records to the archive (from the primary worktree, after the `Status: MERGED` advance):
+5. Move the planning records to the archive (from the primary worktree, after the `Status: MERGED` advance; `mkdir -p` first — `git mv` does not create the destination directory):
    ```bash
+   mkdir -p docs/todo/archive docs/questions/archive
    git mv docs/todo/<name>.md docs/todo/archive/<name>.md
    git mv docs/questions/<name>.md docs/questions/archive/<name>.md
    git commit -m "chore(<name>): archive MERGED"
