@@ -55,10 +55,13 @@ def _feature_logger_names(tree: ast.AST) -> set[str]:
             continue
         if _callee_name(node.value.func) != "get_logger":
             continue
-        if isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-        elif isinstance(node.target, ast.Attribute):
-            names.add(node.target.attr)
+        # ``ast.Assign`` has a list of targets, ``ast.AnnAssign`` a single one.
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
+            elif isinstance(target, ast.Attribute):
+                names.add(target.attr)
     return names
 
 

@@ -17,11 +17,14 @@ import threading
 from collections.abc import Callable
 from typing import TypeVar
 
-from loguru import logger
-
-from backend.logging import logged, logged_class
+from backend.logging import get_logger, logged, logged_class
 
 T = TypeVar("T")
+
+# REQ-005 (structlog-logging): the module's one-off statements go through the logging
+# feature's entry point instead of importing a logging backend. The feature name keeps
+# the records attributable to the event bus.
+_logger = get_logger("eventbus")
 
 # Sentinel placed in the queue to tell the worker to stop after draining.
 _SENTINEL = object()
@@ -83,8 +86,11 @@ class EventBus:
                 if et is event_type and h is handler:
                     return
             self._registry.append((event_type, handler))
-            logger.debug(
-                "event bus: subscribed handler '{}' for event type '{}'", _handler_name(handler), event_type.__name__
+            handler_name, event_name = _handler_name(handler), event_type.__name__
+            _logger.debug(
+                f"event bus: subscribed handler '{handler_name}' for event type '{event_name}'",
+                handler=handler_name,
+                event_type=event_name,
             )
 
     def unsubscribe(self, event_type: type[T], handler: Callable[[T], None]) -> None:
@@ -93,10 +99,11 @@ class EventBus:
             for i, (et, h) in enumerate(self._registry):
                 if et is event_type and h is handler:
                     del self._registry[i]
-                    logger.debug(
-                        "event bus: unsubscribed handler '{}' for event type '{}'",
-                        _handler_name(handler),
-                        event_type.__name__,
+                    handler_name, event_name = _handler_name(handler), event_type.__name__
+                    _logger.debug(
+                        f"event bus: unsubscribed handler '{handler_name}' for event type '{event_name}'",
+                        handler=handler_name,
+                        event_type=event_name,
                     )
                     return
 
@@ -110,15 +117,18 @@ class EventBus:
             if self._shutdown:
                 return
             self._ensure_worker_unlocked()
+        event_name = type(event).__name__
         try:
             self._queue.put_nowait(event)
-            logger.debug("event bus: published event type '{}'", type(event).__name__)
+            _logger.debug(f"event bus: published event type '{event_name}'", event_type=event_name)
         except queue.Full:
             with self._lock:
                 self._dropped += 1
                 dropped = self._dropped
-            logger.warning(
-                "event bus: queue full; dropping event type '{}' (dropped={})", type(event).__name__, dropped
+            _logger.warning(
+                f"event bus: queue full; dropping event type '{event_name}' (dropped={dropped})",
+                event_type=event_name,
+                dropped=dropped,
             )
 
     def start(self) -> None:
@@ -133,7 +143,7 @@ class EventBus:
                 return
             self._shutdown = True
             worker = self._worker
-        logger.debug("event bus: shutdown initiated")
+        _logger.debug("event bus: shutdown initiated")
         if worker is not None:
             # Blocking put: the worker is draining, so space opens up.
             self._queue.put(_SENTINEL)
@@ -173,7 +183,7 @@ class EventBus:
             daemon=True,
         )
         self._worker.start()
-        logger.debug("event bus: started background worker thread")
+        _logger.debug("event bus: started background worker thread")
 
     def _worker_loop(self) -> None:
         """Drain the queue and dispatch events until the sentinel or shutdown."""
@@ -194,18 +204,19 @@ class EventBus:
             registry = list(self._registry)
         for event_type, handler in registry:
             if isinstance(event, event_type):
-                logger.debug(
-                    "event bus: dispatching event type '{}' to handler '{}'",
-                    type(event).__name__,
-                    _handler_name(handler),
+                handler_name, event_name = _handler_name(handler), type(event).__name__
+                _logger.debug(
+                    f"event bus: dispatching event type '{event_name}' to handler '{handler_name}'",
+                    event_type=event_name,
+                    handler=handler_name,
                 )
                 try:
                     handler(event)
                 except Exception:
-                    logger.exception(
-                        "event bus: handler '{}' raised for event type '{}'",
-                        _handler_name(handler),
-                        type(event).__name__,
+                    _logger.exception(
+                        f"event bus: handler '{handler_name}' raised for event type '{event_name}'",
+                        handler=handler_name,
+                        event_type=event_name,
                     )
 
 
@@ -219,7 +230,7 @@ def get_event_bus() -> EventBus:
     if bus is None:
         bus = EventBus()
         _default_bus[0] = bus
-        logger.debug("event bus: created shared default instance")
+        _logger.debug("event bus: created shared default instance")
     return bus
 
 
@@ -230,4 +241,4 @@ def reset_event_bus() -> None:
     if bus is not None:
         bus.shutdown()
     _default_bus[0] = None
-    logger.debug("event bus: reset shared default instance")
+    _logger.debug("event bus: reset shared default instance")

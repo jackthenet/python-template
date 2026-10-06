@@ -1589,3 +1589,112 @@ Failure reason per clause: (1) the file still imports a logging backend (`loguru
 | Nothing implemented | only `docs/verification/structlog-logging.md` changed in this step | confirmed |
 
 **Phase 4 (S4.1, T-005) gate: PASS — RED re-confirmed at `2b047e4`.** Next: S4.2 (T-005) — implement + confirm GREEN.
+
+---
+
+### S4.2 T-005 — implement + confirm GREEN (2026-10-06)
+
+**Objective:** migrate the 10 direct loguru statements in `src/backend/eventbus/eventbus.py` to the logging feature's `get_logger()` (REQ-005 / AC-009; `logging-coverage.md` v2 REQ-010 / AC-010). Files changed: `src/backend/eventbus/eventbus.py` (the only allowed source file — `__init__.py` untouched, no new export was needed) and `tests/acceptance/logging_coverage/test_statements_via_feature.py` (in T-005's `allowed_files.test_files`; a crash in the witness's own helper, see *Finding 1*).
+
+#### What was implemented
+
+One import line and one module-level binding replace the backend:
+
+```python
+from backend.logging import get_logger, logged, logged_class
+
+_logger = get_logger("eventbus")
+```
+
+The module-level binding is the pattern T-001 established in `src/backend/logging/feature_settings.py:22` (`_feature_logger = get_logger("logging")`) — one call per module, not one per statement: `get_logger()` re-runs `_configure_structlog()` on every call (`_decorator.py:86`), so an inline `get_logger(...).debug(...)` receiver at all 10 sites would re-configure structlog 10 times per burst. The name `"eventbus"` follows the same feature-name convention and renders as the record's `logger` field. Import direction unchanged (`backend.eventbus → backend.logging`, spec §10 row 3); `logged` / `logged_class` stay as they were.
+
+All 10 call sites converted, level and wording unchanged (spec §9 row 2, "DEBUG/INFO/WARNING as today"):
+
+| Old line | Level | Rendered event text (identical to the loguru output) | Keyword fields |
+|---|---|---|---|
+| 86 | DEBUG | `event bus: subscribed handler '{h}' for event type '{e}'` | `handler`, `event_type` |
+| 96 | DEBUG | `event bus: unsubscribed handler '{h}' for event type '{e}'` | `handler`, `event_type` |
+| 115 | DEBUG | `event bus: published event type '{e}'` | `event_type` |
+| 120 | WARNING | `event bus: queue full; dropping event type '{e}' (dropped={n})` | `event_type`, `dropped` |
+| 136 | DEBUG | `event bus: shutdown initiated` | — |
+| 176 | DEBUG | `event bus: started background worker thread` | — |
+| 197 | DEBUG | `event bus: dispatching event type '{e}' to handler '{h}'` | `event_type`, `handler` |
+| 205 | ERROR (`exception`) | `event bus: handler '{h}' raised for event type '{e}'` | `handler`, `event_type` |
+| 222 | DEBUG | `event bus: created shared default instance` | — |
+| 233 | DEBUG | `event bus: reset shared default instance` | — |
+
+Statement count stays **exactly 10** (logging-coverage REQ-010 v2): nothing added, removed, folded into a helper, or moved. Where a value appears twice it is bound to a local (`handler_name`, `event_name`) instead of being recomputed — locals only, no new function, no behavior delta (the values were already evaluated eagerly as loguru positional args).
+
+#### Correction to note A of S4.1 (T-005): `str.format` does **not** fill named placeholders here
+
+Note A proposed `"event bus: published event type '{event_type}'"` with `event_type=…`, on the premise that "`str.format` fills named placeholders from the same kwargs that land in the event dict". **That premise is false for this pipeline** — measured against the installed structlog and this chain:
+
+- `structlog.stdlib.BoundLogger._proxy_to_logger` only moves *positional* args into `event_kw["positional_args"]`; it never formats the event string. The base `FilteringBoundLogger._proxy_to_logger` passes the event through unchanged.
+- stdlib `LogRecord.getMessage()` interpolates `%`-style `record.args` only, and structlog passes none.
+- Probe at this step (`get_logger("probe").debug("… '{event_type}'", event_type="UserCreated")` with the pipeline installed): the console line renders **`event bus: published event type '{event_type}'`** — braces literal, value only in the appended field.
+
+So the message is built with an **f-string** (the pattern T-002's brief already states: "Build the event text with f-strings", §(a) of the S4.1 T-002 block) and the same values are **additionally** passed as keyword fields. That satisfies both halves of spec §9 row 2 — "message + keyword fields, unchanged wording" — and avoids the `positional_args` drop trap note A identified correctly. The rendered wording is byte-identical to the loguru output (evidence below), which is what `test_direct_loguru_kept.py` and `test_levels.py` depend on.
+
+#### Finding 1 — the AC-009 witness helper crashed on the first migrated module (test-code defect, fixed in place)
+
+`_feature_logger_names` (`tests/acceptance/logging_coverage/test_statements_via_feature.py:51`) read `node.target` on an `ast.Assign` node:
+
+```text
+AttributeError: 'Assign' object has no attribute 'target'. Did you mean: 'targets'?
+```
+
+`ast.Assign` carries a **list** `targets`; only `ast.AnnAssign` has a single `target`. The line is reached only when the parsed module actually contains a `name = get_logger(...)` assignment, so the defect was invisible while every module under test still imported the backend — the first migrated module (this one) surfaced it. The witness therefore failed with a **test-code error, not an `AssertionError` on behavior**, which is not a legal RED/GREEN state (AGENTS.md, Phase 3: a test that crashes on its own data/code is invalid test code, not evidence).
+
+Fix (3 lines, in T-005's `allowed_files.test_files`, shared by all three AC-009 witnesses — one fix, not one per test):
+
+```python
+targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+for target in targets:
+    ...
+```
+
+- **No assertion was changed, weakened or deleted** — the clause logic is untouched; the fix makes the third clause *actually evaluate* instead of crashing, i.e. the witness becomes strictly stronger.
+- The same defect would have blocked **T-004** (the settings modules get the same module-level binding) and **T-006** (`permissions/service.py`), so fixing the shared helper here removes a third of the re-work those tasks would otherwise hit.
+- Status of the other two witnesses is **unchanged** by the fix: `test_ac_009_settings_statements_go_through_get_logger` and `test_ac_009_statements_go_through_get_logger` still fail with the same `AssertionError` naming the settings/permissions statements and their `loguru` imports (T-004 / T-006's reds).
+
+#### Rendered-output evidence (wording and levels preserved, worker-thread statements alive)
+
+Probe run against the installed pipeline at DEBUG (`setup_logger()`, `logging.log_level=DEBUG`), subscribe → publish → failing handler → unsubscribe → shutdown. Console (text renderer):
+
+```text
+[DEBUG ] event bus: subscribed handler 'bad' for event type 'E' (eventbus:90)
+[DEBUG ] event bus: started background worker thread (eventbus:186)
+[DEBUG ] event bus: published event type 'E' (eventbus:123)
+[DEBUG ] event bus: dispatching event type 'E' to handler 'bad' (eventbus:208)
+[ERROR ] event bus: handler 'bad' raised for event type 'E' (eventbus:216)
+  exception: RuntimeError: handler boom
+[DEBUG ] event bus: unsubscribed handler 'bad' for event type 'E' (eventbus:103)
+[DEBUG ] event bus: shutdown initiated (eventbus:146)
+```
+
+File sink (JSON, default renderer) — the keyword fields arrive structured, the callsite still points at `eventbus.py` although the record was emitted on the `eventbus-worker` thread, and the exception record carries type/message/frames only (INV-002, no locals):
+
+```json
+{"level":"ERROR","logger":"eventbus","event":"event bus: handler 'bad' raised for event type 'E'","timestamp":"…","file":"eventbus.py","line":216,"handler":"bad","event_type":"E","exception":{"type":"RuntimeError","message":"handler boom","frames":[…]}}
+{"level":"DEBUG","logger":"eventbus","event":"event bus: unsubscribed handler 'bad' for event type 'E'","…":"…","file":"eventbus.py","line":103,"handler":"bad","event_type":"E"}
+```
+
+No `try/except` was added around any emit (AC-013/AC-016 are enforced at the handler boundaries, T-002's `_PipelineQueueListener` keeps the listener draining) — the three worker-thread statements (176 / 197 / 205) are visible above, emitted from the worker thread.
+
+#### Gate table (S4.2, T-005)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | **T-005 GREEN** | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger tests/acceptance/eventbus tests/unit/eventbus tests/contract/eventbus tests/property/eventbus tests/integration/eventbus -v` | **32 passed, 0 failed (4.19 s)** — the witness PASSED, and the five eventbus directories are the pre-implementation **31 passed** unchanged (no behavior delta) |
+| b | Cross-task collateral (note B) | `uv run pytest tests/acceptance/logging_coverage/test_levels.py tests/acceptance/logging_coverage/test_direct_loguru_kept.py -q` | **2 passed (0.53 s)** — the bus's ERROR record and the two literal wordings survive the migration |
+| c | Event bus + all contract suites | `uv run pytest tests/acceptance/eventbus tests/integration/eventbus tests/unit/eventbus tests/property/eventbus tests/contract -q` | **2 failed, 76 passed (1:29)** — both failures pre-existing, re-measured at `122caba` with this work stashed: `test_ac_018_dependency_report_clean` (loguru still declared → **T-006**), `test_ac_019_guidance_names_feature_entry_points` (guidance not yet corrected → **T-007**). **No new failure** |
+| c+ | Full suite (extra evidence, not a Phase 4 gate) | `uv run pytest tests/ -q` | **7 failed, 754 passed, 1 skipped (4:08)** — 6 reds are the scheduled T-003/T-004/T-006/T-007 set (`test_ac_001_no_backend_import_and_stdlib_chain` → T-006, the two remaining AC-009 witnesses → T-004/T-006, `test_ac_018` → T-006, `test_ac_019` → T-007, `unit/test_settings_coverage.py::test_observability_tracing` → T-003); the 7th, `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets`, is a **load-flaky timing budget**: PASSED in isolation both with this change (7.28 s) and at `122caba` (7.48 s) — not a T-005 regression |
+| d | Ruff (changed paths) | `uv run ruff check src/backend/eventbus/eventbus.py tests/acceptance/logging_coverage/test_statements_via_feature.py` / `uv run ruff format <same>` | **All checks passed!** / **2 files left unchanged** |
+| e | Types | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| f | Dependency check (T-005 completion gate) | `uv run deptry .` | **Success! No dependency issues found** (90 files) — loguru still declared *and* still imported by settings/permissions, the interlock T-006 lifts |
+
+T-005 completion gates from the DAG: (1) RED recorded ✓ (S4.1); (2) the eventbus-half AC-009 witness passes ✓; (3) no `loguru` import remains under `src/backend/eventbus/` ✓ (the witness's feature-wide clause is green — `__init__.py` and `feature_settings.py` never had one, so no export was added); (4) the event bus's whole test directory passes unchanged, 31 → 31 ✓; (5) deptry / ruff / mypy clean ✓.
+
+Out of scope, untouched as required: `pyproject.toml` (loguru declaration → T-006), `src/backend/settings/` (→ T-004), `src/backend/permissions/service.py` (→ T-006), every other test file, `docs/tasks/` and `.github/task-runner/tasks.json` (T-005's `status` stays `PENDING` — setting it to `VERIFIED` is S4.4's job).
+
+**Phase 4 (S4.2, T-005) gate: PASS — GREEN confirmed and recorded.** Next: S4.3 (T-005) — refactor, keep GREEN.
