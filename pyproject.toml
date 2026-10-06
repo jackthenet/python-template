@@ -39,7 +39,7 @@ dev = [
     # Property-based testing for pure logic and boundary-heavy helpers.
     "hypothesis>=6.168.3",
     # Static type checking for the source tree.
-    "mypy>=2.3.1",
+    "mypy>=2.4.0",
     # Vulnerability scanning for installed dependencies.
     "pip-audit>=2.10.1",
     # Test data factories for pydantic models.
@@ -59,7 +59,7 @@ dev = [
     # httpx mocking for outbound-call tests.
     "respx>=0.23.1",
     # Linting, formatting, and autofix checks.
-    "ruff>=0.16.9",
+    "ruff>=0.16.10",
     # Time travel for time-dependent tests.
     "time-machine>=3.5.1",
     # Fast type checker for the source tree.
