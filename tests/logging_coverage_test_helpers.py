@@ -12,7 +12,9 @@ where secrets are handled.
 
 from __future__ import annotations
 
+import logging
 import re
+from collections import namedtuple
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -126,6 +128,109 @@ def parse_elapsed_ms(message: str) -> float | None:
     return float(m.group(1)) if m else None
 
 
+# --- Record capture -------------------------------------------------------
+# The suite reads a captured record in exactly three ways: ``str(record)`` for the
+# message text, ``record["level"].name`` for the level, and ``record["record"]`` for
+# the whole record. Both backends are normalised into one shape so no consumer has
+# to know which one produced a record.
+
+_LevelName = namedtuple("_LevelName", "name")
+
+# structlog's ProcessorFormatter bookkeeping plus the exception markers: never part of
+# a rendered record (AC-003), so never part of a captured one either.
+_CAPTURED_DROP = ("_record", "_from_structlog", "exc_info", "stack_info")
+
+
+class CaptureRecord:
+    """One captured log record, presented the way the suite reads records."""
+
+    __slots__ = ("_fields", "_level", "_text")
+
+    def __init__(self, text: str, level: str, fields: dict[str, Any]) -> None:
+        self._text = text
+        self._level = level
+        self._fields = fields
+
+    def __str__(self) -> str:
+        return self._text
+
+    def __repr__(self) -> str:
+        return self._text
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "level":
+            return _LevelName(self._level)
+        if key == "record":
+            return self._fields
+        return self._fields[key]
+
+
+def capture_from_loguru(message: Any) -> CaptureRecord:
+    """Normalise a direct loguru statement (the backend T-004..T-006 retire)."""
+    record = message.record
+    return CaptureRecord(str(record.get("message", "")), record["level"].name, record)
+
+
+def capture_from_logrecord(record: logging.LogRecord) -> CaptureRecord:
+    """Normalise a pipeline record.
+
+    With ``ProcessorFormatter.wrap_for_formatter`` the record's ``msg`` **is** the
+    structlog event dict, and the render chain runs later, inside the formatter, on
+    the listener thread — so the capture reads the event dict as it stands at the
+    emitting call site (only the emitting chain has run) and copies it, because the
+    formatter mutates that same dict in place.
+    """
+    if isinstance(record.msg, dict):
+        fields = {key: value for key, value in record.msg.items() if key not in _CAPTURED_DROP}
+        text = str(fields.get("event", ""))
+    else:  # a foreign stdlib record forwarded into the pipeline (AC-006)
+        fields = {"message": record.getMessage()}
+        text = fields["message"]
+    return CaptureRecord(text, record.levelname, fields)
+
+
+class PipelineCaptureHandler(logging.Handler):
+    """Collect the pipeline's records for the duration of a test.
+
+    Attached to the pipeline's own logger: that logger is non-propagating by design
+    (AC-001), so a handler on the root logger never sees the feature's records. The
+    ``_harness_capture`` marker is what ``logging_test_helpers._is_harness_handler``
+    uses to keep this handler out of the managed-sink count (REQ-002/INV-001).
+    """
+
+    _harness_capture = True
+
+    def __init__(self, records: list[Any], level: str = "DEBUG") -> None:
+        super().__init__(level)
+        self._records = records
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self._records.append(capture_from_logrecord(record))
+
+
+@contextmanager
+def pipeline_capture(records: list[Any], level: str = "DEBUG") -> Iterator[None]:
+    """Attach a :class:`PipelineCaptureHandler` to the pipeline logger for a block."""
+    from logging_test_helpers import pipeline_logger
+
+    feature = pipeline_logger()
+    handler = PipelineCaptureHandler(records, level)
+    feature.addHandler(handler)
+    try:
+        yield
+    finally:
+        feature.removeHandler(handler)
+
+
+def loguru_sink(records: list[Any]) -> Callable[[Any], None]:
+    """A loguru sink appending captured records to ``records`` (the dual-capture half)."""
+
+    def _sink(message: Any) -> None:
+        records.append(capture_from_loguru(message))
+
+    return _sink
+
+
 # --- Record capture for Hypothesis property tests -------------------------
 class _LiveMessages:
     """A live view of captured records as message-text strings.
@@ -140,7 +245,7 @@ class _LiveMessages:
         self._raw = raw
 
     def _texts(self) -> list[str]:
-        return [str(r.get("message", "")) for r in self._raw]
+        return [str(r) for r in self._raw]
 
     def __len__(self) -> int:
         return len(self._raw)
@@ -154,19 +259,19 @@ class _LiveMessages:
 
 @contextmanager
 def capture_records(level: str = "DEBUG") -> Iterator[_LiveMessages]:
-    """Capture loguru records for the duration of the ``with`` block.
+    """Capture log records for the duration of the ``with`` block.
 
     Yields a fresh live view of message-text strings per invocation, so
     Hypothesis iterations do not accumulate across each other. The view
-    reflects records added while the block is active.
+    reflects records added while the block is active. The capture is dual-backend
+    while the migration runs: traced records arrive through the pipeline, direct
+    loguru statements through loguru's own sink (the loguru half is removed by T-006).
     """
     raw: list[Any] = []
 
-    def _sink(message: Any) -> None:
-        raw.append(message.record)
-
-    handler_id = logger.add(_sink, level=level, catch=False)
+    handler_id = logger.add(loguru_sink(raw), level=level, catch=False)
     try:
-        yield _LiveMessages(raw)
+        with pipeline_capture(raw, level):
+            yield _LiveMessages(raw)
     finally:
         logger.remove(handler_id)

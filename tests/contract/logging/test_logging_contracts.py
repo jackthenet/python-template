@@ -17,9 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from logging_test_helpers import managed_sinks, pipeline_logger, run_python, wait_for_file_content
-from loguru import logger
 
-from backend.logging import logged, setup_logger
+from backend.logging import get_logger, logged, setup_logger
 
 _SETUP_TIME_BUDGET_MS = 25  # structlog-logging NFR-001 amends logging.md NFR-001 (was 50 ms)
 
@@ -104,13 +103,20 @@ def test_nfr_002_decorator_overhead_budget() -> None:
 
 
 def test_nfr_003_diagnose_false(session_settings: Any) -> None:
-    """NFR-003: the file sink uses diagnose=False; local variable values never reach the log file."""
+    """NFR-003: the pipeline never renders local variable values into the log file.
+
+    structlog-logging amends logging.md NFR-003 (the ``diagnose=False`` guarantee becomes
+    INV-002 on the new pipeline): the emission goes through the feature's own entry point
+    instead of the removed backend, and the assertion — the local's value must not appear
+    anywhere in the file — is unchanged.
+    """
     secret = "SECRET_TOKEN_12345"
+    setup_logger()
     try:
         local_secret = secret  # noqa: F841  (the variable's existence in the frame is the point)
         raise RuntimeError("nfr_003 leak test")
     except RuntimeError:
-        logger.exception("nfr_003 leak test")
+        get_logger("nfr_003").exception("nfr_003 leak test")
 
     log_file = Path(session_settings.log_file)
     assert wait_for_file_content(log_file, lambda c: "nfr_003 leak test" in c, timeout=15)

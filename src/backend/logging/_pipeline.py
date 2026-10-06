@@ -22,6 +22,7 @@ from typing import Any, Literal, cast
 import structlog
 from structlog.stdlib import BoundLogger, ProcessorFormatter
 
+from backend.logging._decorator import logged
 from backend.logging._renderers import (
     LOGGER_NAME_FIELD,
     TextRenderer,
@@ -41,6 +42,10 @@ PIPELINE_LOGGER_NAME = "backend.logging"
 
 RendererName = Literal["text", "json"]
 RENDERERS: tuple[RendererName, ...] = ("text", "json")
+
+# The slow-call threshold for the setup call itself: NFR-001's budget, so a setup that
+# stops being fast is visible as a WARNING exit record (REQ-007/AC-007).
+_SETUP_SLOW_THRESHOLD_MS = 25.0
 
 # The chains that produce the specified record fields. The callsite and the
 # exception are captured where they still exist: the structlog chain runs in the
@@ -203,6 +208,7 @@ def _formatter_for(renderer: RendererName, stream: Any) -> ProcessorFormatter:
     )
 
 
+@logged(slow_threshold_ms=_SETUP_SLOW_THRESHOLD_MS)
 def setup_logger(*, renderer: str | None = None) -> None:
     """Install the pipeline, or reconfigure the installed one (REQ-001, INV-001).
 

@@ -16,31 +16,41 @@ from logging_coverage_test_helpers import (
     exit_records,
     for_qualname,
 )
-from logging_test_helpers import captured_console, managed_sinks, rotating_file_handlers
-from loguru import logger
+from logging_test_helpers import captured_console, managed_sinks, pipeline_logger, rotating_file_handlers
 
 from backend.logging import setup_logger
 from backend.usermanagement.repository import SqliteUserRepository
 
 
 def test_sink_failure_does_not_interrupt(log_records: list[Any], tmp_path: Any) -> None:
-    """AC-013: with a failing log sink, a traced call completes normally and still
-    produces entry + exit records."""
+    """AC-013/REQ-013: with a failing log sink, a traced call completes normally and still
+    produces entry + exit records.
+
+    structlog-logging: the failing sink is a handler on the pipeline's feature logger — the
+    backend the records actually travel through — instead of the removed backend's sink.
+    The assertion (one entry + one exit record despite the failure) is unchanged.
+    """
     # The subject is a traced class.
     assert getattr(INVENTORY_CLASSES["SqliteUserRepository"], "__logged_class__", False) is True
 
-    # A sink that always fails. loguru catches it (best-effort) and the call
-    # continues.
-    def failing_sink(message: Any) -> None:
-        raise RuntimeError("sink failure")
+    setup_logger()
 
-    handler_id = logger.add(failing_sink, level="DEBUG", catch=True)
+    class FailingHandler(logging.Handler):
+        """A sink that always fails; harness-marked so the managed-sink count is unaffected."""
+
+        _harness_capture = True
+
+        def emit(self, record: logging.LogRecord) -> None:
+            raise RuntimeError("sink failure")
+
+    failing = FailingHandler()
+    pipeline_logger().addHandler(failing)
     try:
         repo = SqliteUserRepository(f"sqlite:///{tmp_path}/sink.db")
         result = repo.get_by_username("probe")  # must not raise
         assert result is None
     finally:
-        logger.remove(handler_id)
+        pipeline_logger().removeHandler(failing)
 
     # The traced call still produced entry + exit records (via the working sink).
     entries = for_qualname(entry_records(log_records), "SqliteUserRepository.get_by_username")

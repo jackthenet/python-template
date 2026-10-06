@@ -93,13 +93,18 @@ except ImportError:  # pragma: no cover - running outside pytest
 
 
 def _is_harness_handler(handler: logging.Handler) -> bool:
-    """True for the capture handler pytest injects, which is never a managed sink.
+    """True for a capture handler the test harness owns, which is never a managed sink.
 
-    The pipeline logger is non-propagating by design (AC-001), so pytest's
-    ``catching_logs`` attaches its own ``LogCaptureHandler`` to it for the duration of
-    each test phase. That handler belongs to the harness, not to the pipeline, and the
+    Two handlers belong to the harness rather than to the pipeline: pytest's
+    ``catching_logs`` attaches its own ``LogCaptureHandler`` to every NON-PROPAGATING
+    logger (the pipeline logger is non-propagating by design, AC-001), and the
+    record-capture surface (``tests/conftest.py``) attaches its own handler to the
+    pipeline logger to collect records for a test. Both mark themselves — pytest by
+    type, the capture surface by the ``_harness_capture`` attribute — and the
     ownership assertions below count only the handlers the pipeline itself installed.
     """
+    if getattr(handler, "_harness_capture", False):
+        return True
     return _PytestCaptureHandler is not None and isinstance(handler, _PytestCaptureHandler)
 
 

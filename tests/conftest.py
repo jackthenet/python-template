@@ -80,54 +80,40 @@ def _stdlib_root_logging_restored() -> Iterator[None]:
             lg.disabled = was_disabled
 
 
-class _Captured:
-    """A captured loguru record.
-
-    Exposes the message text via ``str(m)`` and the record fields via
-    ``m["level"]``/``m["function"]``/... plus ``m["record"]`` for the whole
-    record dict, matching the suite's assertions.
-    """
-
-    __slots__ = ("_record",)
-
-    def __init__(self, record: dict[str, Any]) -> None:
-        self._record = record
-
-    def __str__(self) -> str:
-        return str(self._record.get("message", ""))
-
-    def __getitem__(self, key: str) -> Any:
-        if key == "record":
-            return self._record
-        return self._record[key]
-
-
 @pytest.fixture
 def log_records() -> Iterator[list[Any]]:
-    """Capture loguru records for the duration of a test.
+    """Capture log records for the duration of a test.
 
-    Each record supports ``str(m)`` (the message text) and ``m["level"]`` /
-    ``m["record"]`` (record fields), matching the suite's assertions.
+    Each record supports ``str(record)`` (the message text) and ``record["level"]`` /
+    ``record["record"]`` (record fields), matching the suite's assertions.
 
-    The shared event bus is drained before the sink is added: the bus
+    The capture is dual-backend while the migration runs (structlog-logging T-002):
+    traced records and pipeline statements arrive through the stdlib handler on the
+    pipeline's own logger, direct loguru statements through loguru's sink. T-006
+    removes the loguru half together with the last loguru statement.
+
+    The shared event bus is drained before the sinks are added: the bus
     dispatches events asynchronously on a background worker, so stale events
     from previous tests (e.g. ``SettingChanged`` events from ``set_value``
-    calls) can otherwise be dispatched during this test, triggering the
-    logging feature's ``_configure()`` (which calls ``logger.remove()``) and
-    removing the sink added here. Draining first ensures the stale events are
-    dispatched before the sink exists, so the sink is safe for the test.
+    calls) can otherwise be dispatched during this test and reconfigure the
+    pipeline mid-test. Draining first ensures the stale events are dispatched
+    before the sinks exist, so the capture is stable for the test.
     """
+    from logging_coverage_test_helpers import PipelineCaptureHandler, loguru_sink
+    from logging_test_helpers import pipeline_logger
+
     records: list[Any] = []
 
-    def _sink(message: Any) -> None:
-        records.append(_Captured(message.record))
-
     _drain_event_bus()
-    handler_id = logger.add(_sink, level="DEBUG", catch=False)
+    feature = pipeline_logger()
+    capture = PipelineCaptureHandler(records)
+    feature.addHandler(capture)
+    handler_id = logger.add(loguru_sink(records), level="DEBUG", catch=False)
     try:
         yield records
     finally:
         logger.remove(handler_id)
+        feature.removeHandler(capture)
 
 
 def _drain_event_bus() -> None:
