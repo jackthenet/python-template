@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 12 of 29 answered (round 3, 2026-10-06) -->
-- **Answer rounds:** 3
+- **Status:** OPEN  <!-- 16 of 29 answered (round 4, 2026-10-06) -->
+- **Answer rounds:** 4
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -234,10 +234,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) Keep the direct write inside the owner module** — the owner may touch its own slot; no nested logging on the lazy path.
   - **Call the setter from the lazy path** — one write path and one lock, but every lazy creation now emits a second traced call and its log records change.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Keep the direct write inside the owning module — the owner may touch its own slot. No nested logging on the lazy path, so the traced-record counts asserted by `tests/acceptance/logging_coverage/test_services_traced.py` stay unchanged. The lazy path still takes the lock decided at Q-11.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the singleton REQ wording; no change to the traced-function inventory
 
 ## Q-14 — Tracing of the new public function
 - **Step:** P.2 Interrogate
@@ -248,10 +248,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) `@logged(slow_threshold_ms=5)`, default `include_args`** — identical to its two neighbours.
   - **`@logged(slow_threshold_ms=5, include_args=False)`** — keeps the record clean (the argument repr carries nothing useful).
   - **`@logged(slow_threshold_ms=50)`** — treats an install as a heavier operation than a read.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** `@logged(slow_threshold_ms=5)` with default `include_args` — identical to its two neighbours `get_settings_registry()` / `reset_settings_registry()` (`registry.py:361,378`), and the same for the four siblings. The shared logging feature's tracing policy (public module-level functions traced with `@logged`) is satisfied with no new parameter choice.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the new function is traced; recorded in the logging-coverage row (Q-15)
 
 ## Q-15 — Does the logging-coverage inventory get a row too?
 - **Step:** P.2 Interrogate
@@ -262,10 +262,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Yes, in the same amendment** — keeps REQ-001's inventory true; touches a second spec (a row, not a requirement change).
   - **No — rely on REQ-005 ("every public module-level function is traced")** — one spec touched, but the inventory silently drifts and AC-001's "every … is listed" claim weakens.
   - **Defer to a separate chore** — keeps this change to one spec and records the gap.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Yes — add a `set_settings_registry()` row (and the four sibling rows) to `docs/specs/logging-coverage.md` §3.1 in the same amendment, so REQ-001's normative inventory stays true. Consequence: this change touches **six** specs, not five (`settings`, `event-bus`, `user-roles-permissions`, `search`, `session-management`, `logging-coverage`), and `structlog-logging` amends the same file — a rebase is expected and is recorded in the TODO's `Depends on:` note.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — §3.1 rows added; the Impact Analysis lists logging-coverage as an affected spec
 
 ## Q-16 — Which of the 9 test sites migrate
 - **Step:** P.2 Interrogate
@@ -276,10 +276,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) All 9 sites** — the acceptance signal holds and the helpers become the documented pattern; each helper keeps its exact save/restore semantics.
   - **Only `tests/settings_test_helpers.py` (3 sites)** — the shared helpers are fixed and the other 6 files keep their direct write; the signal then needs an exception list.
   - **None — `src/main.py` only** — smallest diff, but the leak the finding describes stays in the suite.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** All 9 test sites migrate to the public setter. The acceptance signal then holds with no exception list, and the three shared helpers (`isolated_registry`, `restore_singleton`, `install_isolated_registry` in `tests/settings_test_helpers.py`, used by 30 test files) become the documented pattern. Each helper keeps its exact save/restore semantics; no test is weakened.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — in-scope list + the acceptance signal restated with the correct module path (`backend.settings.registry`, not `_setup`)
 
 ## Q-17 — The three subprocess-embedded writes
 - **Step:** P.2 Interrogate
