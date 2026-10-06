@@ -4,7 +4,8 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+  <!-- gate cleared 2026-10-07: spec PR #69 merged into main (merge commit 570bfbc, 2026-10-06) -> Phase 2 starts -->
 - **Change type:** FEATURE  <!-- new capability (a generator + a CLI + a CI gate); see the classification note below -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/structure-map.md`
