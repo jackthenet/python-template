@@ -563,12 +563,16 @@ def test_observability_tracing(session_settings: Any) -> None:
             f"{traced} must be traced"
         )
 
-    setup_logger()
+    # The registry must be installed — and its logging.* values set — BEFORE setup_logger():
+    # the autouse fixture above resets the settings singleton, and a no-arg setup_logger()
+    # with no logging.* registered is specified to fall back to the hardcoded defaults with
+    # a warning (settings-coverage REQ-014 v2 / EDGE-002) — which re-points the file sink at
+    # logs/app.log and drops the level to INFO, filtering the DEBUG record waited for below.
     registry = install_isolated_registry()
-    # No logging.* value is written here, so the session pipeline keeps its configuration:
-    # the session setup (tests/conftest.py) runs it at DEBUG, which is the level the
-    # settings feature logs its own operations at — the record below is observable only
-    # because of that.
+    register_settings(registry)
+    set_value_settled(registry, "logging.log_file", session_settings.log_file)
+    set_value_settled(registry, "logging.log_level", session_settings.log_level)
+    setup_logger()
     registry.register(SettingDefinition(key="probe.observed_key", kind=SettingKind.TEXT, default="x"))
     log_file = Path(session_settings.log_file)
     offset = file_size(log_file)
