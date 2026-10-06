@@ -2,12 +2,12 @@
 
 One question file per change, created at **P.1 Frame** from this template and named `settings-public-registry-setter.md`.
 
-- **Change:** settings-public-registry-setter (FEATURE, provisional — spec amendment to `docs/specs/settings.md` REQ-014)
+- **Change:** settings-public-registry-setter (**CROSS-CUTTING** — reclassified from FEATURE at P.3 on 2026-10-06: Q-2 = all five module singletons)
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
-- **Spec:** `docs/specs/settings.md` (amendment required)
+- **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
-- **Answer rounds:** 0
+- **Status:** OPEN  <!-- 4 of 29 answered (round 1, 2026-10-06) -->
+- **Answer rounds:** 1
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -68,10 +68,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) A public setter on the settings feature** (`set_settings_registry(...)`) — smallest diff; one new public symbol; all 10 outside-package writes become public-API calls; the global access point stays.
   - **Pure dependency injection (no global)** — every consumer takes the registry explicitly; removes the global entirely, but rewrites 7 features and their specs (CROSS-CUTTING, several spec amendments).
   - **A test-only override helper plus a documented exception for `src/main.py`** — fixes 9 of 10 sites with no spec amendment, but leaves the composition root's cross-feature private import, which is the finding's actual subject.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** A public setter on each feature's public API — `set_settings_registry(...)` and its four siblings (matching Q-2 = all five). Chosen over pure DI after weighing the measured cost: the construction cycles (`PermissionService` <-> `UserManager`, `SettingsRegistry` <-> `PermissionService`, `src/main.py:100-127`) survive DI, the globals are also in-feature fallbacks (`settings/registry.py:68`, `filemanagement/service.py:190`, `sessionmanagement/service.py:90,108`, `logging/_setup.py:127`, `mail/feature_settings.py:52`), and the singleton is specified behavior (REQ-013/REQ-014/REQ-020), so removing it is a behavior amendment, not a boundary fix. DI remains possible later as its own REFACTOR TODO.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — spec amendment shape: new REQ per affected spec (Q-4), classification CROSS-CUTTING (Q-2)
 
 ## Q-2 — Settings only, or the same setter for all five singletons (classification)
 - **Step:** P.2 Interrogate
@@ -82,10 +82,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Settings only (FEATURE)** — one spec amendment; the other four holders have no composition-root writer, so nothing forces them.
   - **All five now (CROSS-CUTTING)** — retires the pattern repo-wide in one change, but amends five specs (`settings`, `event-bus`, `user-roles-permissions`, `search`, `session-management`) and needs a per-feature Impact Analysis.
   - **Settings now + one backlog item per remaining feature** — keeps this change small and makes the rest explicit; the pattern stays until each item runs.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** All five module singletons now — `settings`, `eventbus`, `permissions`, `search`, `sessionmanagement`. **Reclassification: FEATURE -> CROSS-CUTTING** (five specs touched intentionally, new shared pattern). Consequences recorded in `docs/todo/settings-public-registry-setter.md`: Impact Analysis over the five features, an ADR for the public install operation, spec amendments in `settings.md`, `event-bus.md`, `user-roles-permissions.md`, `search.md`, `session-management.md`, and a `minor` version bump.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — TODO reclassified CROSS-CUTTING; P.4 drafts the spec with an Impact Analysis
 
 ## Q-3 — One spec PR or two (amendment mechanics)
 - **Step:** P.2 Interrogate
@@ -96,10 +96,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) One PR: the S1.4 approval PR carries the amended `settings.md`** (Changelog v5, new IDs), merged before Phase 2 — one human approval, matches how `structlog-logging` amended this same spec at v4.
   - **Two PRs: amendment-only PR merged first, then the change branch re-based** — follows the Spec Amendment Workflow literally; costs a second approval and a rebase, and the amendment PR has no tests to show.
   - **One PR with spec and code together** — cheapest, but implementation would precede spec approval (Spec Approval Gate violation).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** One PR: this change's own S1.4 approval PR carries the amended specs (Changelog v5 in `docs/specs/settings.md`, plus the four sibling amendments), merged before Phase 2. Precedent: `structlog-logging` amended the same spec at v4.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 writes the amended specs on the change branch; S1.4 opens the single approval PR
 
 ## Q-4 — Amend REQ-014 in place or add a new REQ beside it
 - **Step:** P.2 Interrogate
@@ -110,10 +110,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Add a new REQ-026 for the install operation (with its own AC/EDGE), and extend REQ-014's sentence only where it enumerates the singleton surface** — AC-018's existing row keeps describing the wording it was written against.
   - **Rewrite REQ-014 in place to name the setter** — one requirement carries the whole surface, but the dated AC-018 row then points at different wording.
   - **Add it to D8 and the §3 API block only, no new REQ** — cheapest, but fails the Self-Consistency Checklist ("every in-scope item has at least one REQ").
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Add a new REQ beside the existing singleton requirement (`REQ-026` in `docs/specs/settings.md`, next free IDs REQ-026 / AC-040 / INV-011 / EDGE-030 / NFR-005), with its own AC/EDGE, and extend REQ-014 only where it enumerates the singleton surface. The dated AC-018 row (`docs/verification/traceability.md:106`, `test_ac_018_singleton`) is left as a historical gate record (Convention B). Same pattern applied to the other four specs.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 drafts REQ-026 + AC/EDGE per spec
 
 ## Q-5 — What a second install does
 - **Step:** P.2 Interrogate
