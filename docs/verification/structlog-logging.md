@@ -2143,3 +2143,70 @@ Total **28** (14 DEBUG, 8 WARNING, 6 ERROR) — matches REQ-005's per-file count
 | f | Full suite | not run (Phase 5 gate; per-task targeted run only) | n/a |
 
 **Phase 4 (S4.1, T-004) gate: PASS — T-004 picked from the ready set, RED re-confirmed (1 failed, assertion naming the offending imports and all 28 statements), inventory measured, baselines recorded.** Next: S4.2 (T-004) — implement in the two settings files + confirm GREEN on the verbatim `green_command` (expect 88 passed).
+
+---
+
+### S4.2 T-004 — implement + confirm GREEN (2026-10-07)
+
+**Objective:** migrate the 28 direct loguru statements in `src/backend/settings/registry.py` (17) and `src/backend/settings/repository.py` (11) to the logging feature's `get_logger()` surface (REQ-005 / AC-009; `logging-coverage.md` v2 REQ-010 / AC-010). **Files changed: exactly the two `allowed_files.source_files`** — no test file, no `pyproject.toml`, no spec, no task-status file (`git status --short` before the commit: the two source files only, plus this record).
+
+#### What was implemented
+
+Two import lines and two module-level bindings replace the backend — the pattern T-001 established (`src/backend/logging/feature_settings.py:22`) and T-005 shipped (`src/backend/eventbus/eventbus.py:27`), one feature-named binding per module, never one `get_logger()` call per statement (`get_logger()` re-runs `_configure_structlog()` on every call, `_decorator.py:86`):
+
+```python
+from backend.logging import get_logger, logged, logged_class   # registry.py
+from backend.logging import get_logger, logged_class           # repository.py
+
+_logger = get_logger("settings")
+```
+
+Both modules use the **same feature name** (`"settings"`) — S4.1 note F: no test asserts a statement logger name, and the name travels in the `logger` field (`_renderers.LOGGER_NAME_FIELD`), so the records of the whole feature stay attributable to it. Import direction unchanged (`backend.settings → backend.logging`, spec §10 row 2 — the edge already existed in both files). `logged` / `logged_class` imports and all **8 decorators** (`registry.py:51, 388, 405`; `repository.py:104, 121, 170, 195, 223`) untouched (ADR-060).
+
+All 28 call sites converted to the proven form — **f-string event + the same values as keyword fields** (S4.1 note A: the chain has no `PositionalArgumentsFormatter`, so the brace/positional form would render the braces unfilled and drop the values). Wording is character-for-character the loguru text (spec §9 row 2), levels unchanged, `logger.error(...)` sites stay `.error(...)` — **not** `.exception(...)` (S4.1 note B: they are not exception records and `exception()` would add an `exception` field the current records do not carry).
+
+#### Statement inventory — before → after (the count is a gate)
+
+Re-parsed with the witness's own `_statement_calls` shape after the change:
+
+| File | Before (`86b9274` / `a06796e`) | After | Levels preserved |
+|---|---|---|---|
+| `src/backend/settings/registry.py` | 17 | **17** | 9 DEBUG, 8 WARNING |
+| `src/backend/settings/repository.py` | 11 | **11** | 5 DEBUG, 6 ERROR |
+| **Total** | **28** | **28** | 14 DEBUG, 8 WARNING, 6 ERROR |
+
+Nothing added, removed, folded into a helper, or moved (logging-coverage REQ-010 v2: statements stay statements). No new local/helper/function was introduced — the values are interpolated in the f-string and repeated as keyword fields, which is the whole delta (the values were already evaluated eagerly as loguru positional args).
+
+#### Rendered-output spot check (JSON file sink, `renderer` default, level DEBUG)
+
+Throwaway probe (not committed): register → duplicate → `register_feature` → invalid set → template create/duplicate/load/update/delete → corrupted template file → corrupted values file. Console = text, file sink = JSON; the file lines below are the migrated records (`logger` field = `settings`, `file`/`line` still point at the emitting statement):
+
+```json
+{"level":"DEBUG","logger":"settings","event":"setting registered: key=x.y kind=text","file":"registry.py","line":97,"key":"x.y","kind":"text"}
+{"level":"WARNING","logger":"settings","event":"duplicate registration: key=x.y","file":"registry.py","line":92,"key":"x.y"}
+{"level":"DEBUG","logger":"settings","event":"feature settings registered: feature=feat count=1","file":"registry.py","line":120,"feature":"feat","count":1}
+{"level":"WARNING","logger":"settings","event":"value set rejected (invalid): key=x.y","file":"registry.py","line":153,"key":"x.y"}
+{"level":"DEBUG","logger":"settings","event":"template created: name=t1 category=cat group=None","file":"registry.py","line":279,"name":"t1","category":"cat","group":null}
+{"level":"DEBUG","logger":"settings","event":"values saved to storage: count=1","file":"repository.py","line":145,"count":1}
+{"level":"ERROR","logger":"settings","event":"template storage failure: name=t2 reason=while parsing a flow node…","file":"repository.py","line":264,"name":"t2","reason":{"type":"ParserError","message":"while parsing a flow node…"}}
+{"level":"ERROR","logger":"settings","event":"value storage failure: reason=while parsing a flow node…","file":"repository.py","line":156,"reason":{"type":"ParserError","message":"while parsing a flow node…"}}
+```
+
+Wordings are identical to the pre-migration loguru output (`SettingKind` is a `StrEnum`, so `f"{definition.kind}"` renders `text` exactly as loguru's `{}` did; `f"{e}"` renders `str(e)` exactly as loguru's `{}` did). The `reason` field carries the exception object and `_renderers._orjson_default` serializes it to `{type, message}` — the pipeline's designed handling for a bound exception, no record lost, no locals leaked (INV-002).
+
+#### Gate table (S4.2, T-004)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | **T-004 GREEN** | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger tests/acceptance/settings tests/unit/settings tests/contract/settings tests/property/settings tests/integration/settings -v` | **88 passed, 0 failed (39.90 s)** — exactly the S4.1 baseline prediction (1 failed + 87 passed → 88 passed): the settings-half AC-009 witness PASSED and the five settings directories are the pre-implementation **87 passed** unchanged (no behavior delta) |
+| b | Cross-task witnesses | `uv run pytest tests/acceptance/logging_coverage/test_levels.py tests/acceptance/logging_coverage/test_direct_loguru_kept.py -v` | **2 passed (0.52 s)** — `test_levels` still sees the settings WARNING + `duplicate registration`, `test_direct_loguru_kept` still sees `setting registered: key=` and `value set: key=`; both now fed by **migrated** statements, which is the direct proof that wording and level survived |
+| c | Ruff (changed paths, the ruff gate) | `uv run ruff check src/backend/settings/registry.py src/backend/settings/repository.py` / `uv run ruff format src/backend/settings/registry.py src/backend/settings/repository.py` | **All checks passed!** / **2 files left unchanged** (already formatted) / re-check **All checks passed!** |
+| d | Types (T-004 completion gate 5) | `uv run mypy src/` | **Success: no issues found in 84 source files** (same file count as the baseline) |
+| e | Dependency check (T-004 completion gate 5) | `uv run deptry .` | **Success! No dependency issues found.** (90 files) — loguru still declared *and* still imported by `permissions/service.py` + the three test helpers: the interlock S4.1 note E describes, lifted by T-006 |
+| f | Full suite | not run (Phase 5 gate; per-task targeted run only) | n/a |
+
+T-004 completion gates from the DAG: (1) RED recorded ✓ (S4.1); (2) the settings-half AC-009 witness passes ✓; (3) **no `loguru` import remains anywhere under `src/backend/settings/`** ✓ — `grep -rn loguru src/backend/settings/` matches only stale `__pycache__` byte-code, and the witness's feature-wide clause (`_dir_backend_imports`) is green; (4) the settings feature's whole test directory passes unchanged, **87 → 87** ✓; (5) deptry / ruff / mypy clean ✓.
+
+Out of scope, untouched as required: `pyproject.toml` (loguru declaration → T-006), `src/backend/permissions/service.py` (→ T-006), every test file — including `tests/acceptance/logging_coverage/test_statements_via_feature.py`, listed in `allowed_files.test_files` but needing no edit (its helper was already fixed in T-005) — `docs/specs/`, `docs/tasks/`, `docs/todo/`, `docs/questions/`, and `.github/task-runner/tasks.json` (T-004's `status` stays `PENDING` — setting it is S4.4's job).
+
+**Phase 4 (S4.2, T-004) gate: PASS — GREEN confirmed (88 passed, 0 failed) and recorded.** Next: S4.3 (T-004) — refactor, keep GREEN.
