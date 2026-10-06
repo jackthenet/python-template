@@ -2559,3 +2559,196 @@ An `install_registry_with_logging_settings(session_settings)` helper in `tests/s
 Working tree after this step: `docs/verification/structlog-logging.md` only (this record). No `src/`, no `pyproject.toml`, no spec, no `docs/tasks/` or `.github/task-runner/tasks.json` (T-003 stays `PENDING` — S4.4's job), no `docs/todo/` / `docs/questions/`. Not committed (S4.4 commits).
 
 **S4.3 (T-003) gate: PASS — no structural changes needed (no existing helper covers the sequence; the 4-line setup reuses the suite's existing helpers and mirrors the module's established pattern), ruff clean, zero file changes, GREEN from S4.2 unchanged.** Next: S4.4 (T-003) — commit + set `VERIFIED`.
+
+---
+
+### S4.1 (T-006) — pick task + confirm RED (2026-10-07)
+
+**Objective:** pick the ready DAG task and confirm its `red_command` fails on behavior, before any implementation. This step wrote no `src/`, no test file, no `pyproject.toml` / `uv.lock`, no `tasks.json` change; the only file written is this record.
+
+#### 1. Task picked: T-006 — the last task, and the deptry interlock
+
+Working tree clean at HEAD `9f1449f`. Task states in `.github/task-runner/tasks.json` (identical in `docs/tasks/structlog-logging.tasks.json`, verified in this step): **T-001, T-002, T-003, T-004, T-005, T-007 `VERIFIED`; T-006 `PENDING`** — the only task left, and it is now ready: its `dependencies` (`T-001`…`T-005`) are all `VERIFIED`.
+
+T-006 is last **by construction**, not by scheduling choice: it is the only task allowed to drop `loguru` from `[project].dependencies`, and that removal is only legal once every importer in the deptry scan set is migrated (note E of S4.1 T-001, note of S4.1 T-004, gate (f) of S4.2 T-005 — all recorded the same interlock).
+
+Full entry, quoted verbatim from `.github/task-runner/tasks.json`:
+
+```json
+{
+  "task_id": "T-006",
+  "feature_group": "backend.permissions + tooling (pyproject.toml dependency set, part 2 - the deptry interlock)",
+  "title": "migrate the last backend statement in the scan set (src/backend/permissions/service.py) to get_logger(), remove loguru from the dependency set, delete the retired-policy test and update its traceability row",
+  "requirements": ["REQ-001", "REQ-005", "REQ-013"],
+  "acceptance_criteria": ["AC-001", "AC-009", "AC-018"],
+  "invariants": [],
+  "edge_cases": [],
+  "non_functional": ["NFR-004"],
+  "amended_ids": ["logging-coverage.md REQ-010 (restated)", "logging-coverage.md AC-010 (restated)"],
+  "tests_to_create": [
+    "tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger (the spec-named all-four-features witness)",
+    "tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain",
+    "tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean"
+  ],
+  "red_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean -v",
+  "implementation_steps": [
+    "Replace `from loguru import logger` in src/backend/permissions/service.py with the logging feature's exported get_logger(); same message and level (this is the LAST backend import in the deptry scan set).",
+    "Remove loguru from [project].dependencies in pyproject.toml and run `uv sync` so uv.lock drops it - in THIS task, the same one that removes the last import (deptry interlock).",
+    "Delete tests/acceptance/logging_coverage/test_direct_loguru_kept.py (authorized deletion: it enforces the retired logging-coverage REQ-010 / AC-010 policy) and record it in docs/verification/structlog-logging.md.",
+    "Update the logging-coverage REQ-010 / AC-010 row of docs/verification/traceability.md in this same task: its Test column still cites test_existing_direct_loguru_kept, which no longer exists, so scripts/check_traceability.py would fail; the row now cites the AC-009 witness test_ac_009_statements_go_through_get_logger and records the restated v2 wording.",
+    "Write the AC-001 witness as a repo-wide search (src/ and tests/) for a logging-backend import plus the stdlib-chain check (a foreign logger's record reaches both managed sinks through the forwarding handler)."
+  ],
+  "green_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean tests/acceptance/permissions tests/unit/permissions tests/contract/permissions tests/property/permissions tests/integration/permissions -v",
+  "inputs": [
+    "docs/specs/structlog-logging.md section 4 (REQ-001, REQ-005, REQ-013), section 5 (AC-001, AC-009, AC-018), section 8 (NFR-004), section 10 rows 2-4 and 6",
+    "docs/specs/logging-coverage.md v2 (REQ-010 / AC-010 restated)",
+    "docs/verification/traceability.md (the logging-coverage REQ-010 / AC-010 row)",
+    "T-001, T-002, T-003, T-004, T-005 handoffs (every other backend import is already gone)"
+  ],
+  "allowed_files": {
+    "source_files": [
+      "src/backend/permissions/service.py",
+      "pyproject.toml (dependencies only)",
+      "uv.lock"
+    ],
+    "test_files": [
+      "tests/acceptance/logging_coverage/test_statements_via_feature.py",
+      "tests/acceptance/logging_coverage/test_direct_loguru_kept.py (DELETED)",
+      "tests/acceptance/logging/test_pipeline_backend.py",
+      "tests/contract/logging/test_dependency_contract.py"
+    ],
+    "docs_files": ["docs/verification/traceability.md", "docs/verification/structlog-logging.md"]
+  },
+  "implementation_scope": "The last statement migration, the loguru removal from the dependency set, the one authorized test deletion and its traceability row. Nothing else in the dependency set changes.",
+  "design_constraints": [
+    "deptry interlock (S2.1 merged-main fact 1): the last loguru import in the deptry scan set (src/, migrations/, scripts/ - deptry does not scan tests/) and the loguru declaration must disappear in the SAME task, otherwise that intermediate state is DEP002 unused-dependency red at Phase 5 parity (quality_check, pyproject.toml:224).",
+    "The AC-001 witness searches src/ AND tests/, so this task may only run after T-001, T-002, T-003 (which remove the loguru imports from the logging, logging_coverage and settings_coverage test files and helpers).",
+    "The deletion is authorized per-ID by spec section 11 and the verification record's test re-derivation protocol; no other test may be deleted or weakened.",
+    "REQ-013: the dependency report must be clean - loguru absent from the dependency set, structlog and orjson declared and imported, no DEP002 entry for orjson."
+  ],
+  "completion_gates": [
+    "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+    "AC-001, AC-009 (all four features), AC-018 tests pass.",
+    "uv run deptry . reports no issues (NFR-004): loguru no longer declared and no longer imported anywhere in the scan set; structlog and orjson declared and imported; no DEP002 suppression for orjson.",
+    "uv run python scripts/check_traceability.py passes after the logging-coverage REQ-010 / AC-010 row update (no dangling test reference).",
+    "The deletion is recorded in docs/verification/structlog-logging.md.",
+    "uv run ruff check <changed paths> clean; uv run mypy src/ clean."
+  ],
+  "dependencies": ["T-001", "T-002", "T-003", "T-004", "T-005"],
+  "status": "PENDING"
+}
+```
+
+The DAG's `deptry_interlock` note, verbatim from the top level of `.github/task-runner/tasks.json`:
+
+> quality_check runs `uv run deptry .` at Phase 5 parity (pyproject.toml:224) and deptry scans src/, migrations/ and scripts/ but NOT tests/ (it reports 'Scanning 89 files', the 90 non-test .py files). The dependency set is therefore changed in exactly two tasks, each paired with the code that keeps deptry clean in the state it leaves behind: T-001 declares structlog in the same task that imports it and removes orjson from the DEP002 ignore in the same task that imports orjson (loguru stays declared because settings/eventbus/permissions still import it); T-006 removes the last loguru import in the scan set (src/backend/permissions/service.py) in the same task that removes loguru from `dependencies`. Every intermediate state passes deptry: after T-001, T-004 and T-005 loguru is still imported by a not-yet-migrated feature file, so it is neither missing (DEP001) nor unused (DEP002).
+
+#### 2. What constrains S4.2
+
+**(a) Writable files.** `allowed_files.source_files` = `src/backend/permissions/service.py`, `pyproject.toml` (**dependencies only** — the `[tool.deptry]` table, the `[tool.ruff]` / `[tool.mypy]` / `[tool.pytest]` tables and the version are out of scope; the version bump is Phase 6), and `uv.lock` (regenerated by `uv sync`, never hand-edited). `allowed_files.test_files` = the four paths above, one of them marked `DELETED`. `docs_files` = the two verification files. Nothing else in the dependency set changes (`implementation_scope`).
+
+**(b) The pyproject / uv.lock half is atomic.** `pyproject.toml:12` declares `"loguru>=0.7.3"` (with its comment at `:11`); `uv.lock` carries the package entry (`:916` name, `:923`/`:925` wheels) plus the two references from the project's own dependency list (`:1673` in the resolved package, `:1715` the specifier). Removing the declaration and running `uv sync` uninstalls loguru from the worktree environment, so **any remaining `import loguru` — including in `tests/`, which deptry never scans — becomes a `ModuleNotFoundError` at collection**, i.e. the whole suite errors, not just one test. The declaration removal and the last import removal must therefore land in the same commit (the DAG's design constraint 1), and so must the test-tree imports (see (d)).
+
+**(c) The test that is to be DELETED, and the spec text that retires its policy.** `tests/acceptance/logging_coverage/test_direct_loguru_kept.py::test_existing_direct_loguru_kept` is the sole enforcer of the retired `logging-coverage.md` REQ-010 / AC-010 policy. Deleting a test is legal here **only** because the approved spec retires the policy it enforces — the amended spec says so explicitly:
+
+- `docs/specs/logging-coverage.md` Changelog, v2 (2026-10-04), line 4: *"REQ-010 and AC-010 restated: the 'direct backend statements are kept' policy is retired — one-off statements stay, but they are written through the shared logging feature's exported logger instead of an imported backend. … `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` is deleted by the implementation PR (it exists solely to enforce the retired wording) and its replacement is `tests/acceptance/logging_coverage/test_statements_via_feature.py`."*
+- The restated IDs it enforced — REQ-010 (`:121`): *"All existing one-off statements are kept as statements, written through the shared logging feature's exported logger; no feature module imports a logging backend directly."* / AC-010 (`:145`): *"…**Then** all are kept, **And** each is written through the shared logging feature's exported logger, **And** no feature module imports a logging backend."*
+- `docs/specs/structlog-logging.md` §11, the amended/deleted-ID table: *"`logging-coverage.md` REQ-010 / AC-010 | acceptance | `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` | `test_existing_direct_loguru_kept` (**deleted**; replaced by this spec's AC-009)"*, and the authorization sentence below it: *"Deletions authorized by this change (each named in `docs/verification/structlog-logging.md`): the three tests marked **deleted** above — the sole enforcers of the retired `logging-coverage.md` REQ-010/AC-010 wording … **No other test may be deleted or weakened.**"* (the other two of the three were deleted in T-001; this is the third and last).
+
+The file is **currently GREEN** (measured: `uv run pytest tests/acceptance/logging_coverage/test_direct_loguru_kept.py -q` → **1 passed**) — it is deleted because its policy is retired, not because it fails. Its replacement witness is AC-009 (`test_ac_009_statements_go_through_get_logger`), which asserts the same "statements stay statements" clause plus the new "written through `get_logger()`" clause.
+
+**(d) Scope gap S4.2 must be given authority over (flagged, not acted on).** AC-001's witness searches **`src/` and `tests/`** (spec REQ-001: *"no module under `src/` or `tests/` imports one"*; AC-001: *"**When** `src/` and `tests/` are searched for an import of the removed logging backend, **Then** there is no match"*), and the measured inventory (§4 below) shows **three test-tree modules still import loguru**: `tests/acceptance/logging/test_logging.py:14`, `tests/conftest.py:16`, `tests/logging_coverage_test_helpers.py:22`. **None of the three is in T-006's `allowed_files.test_files`.** This is a DAG `allowed_files` gap, not a spec gap — the spec requires them loguru-free, and this record already assigns them to T-006 in three places: the S4.1 T-001 note D (*"drop the loguru import (T-006's AC-001 search covers `tests/` too)"*), the S4.1 T-004 inventory (*"three test files … the dual-capture half, T-006"*), and the fixture's own docstring (`tests/conftest.py:90-93`: *"T-006 removes the loguru half together with the last loguru statement"*). T-002's `allowed_files` named `tests/conftest.py` and `tests/logging_coverage_test_helpers.py` but its implementation deliberately kept the loguru half as the temporary dual capture.
+
+Consequence for S4.2: without those three files, `test_ac_001_no_backend_import_and_stdlib_chain` cannot pass and, once `uv sync` drops loguru, the suite cannot even be collected. **Recommendation for the orchestrator:** extend T-006's `allowed_files.test_files` with `tests/conftest.py`, `tests/logging_coverage_test_helpers.py` and `tests/acceptance/logging/test_logging.py` (removal of the loguru half of the dual capture and of the `logger._core.handlers` probe at `test_logging.py:49/52`, which is already vacuous) — an `allowed_files` correction inside the approved spec's scope, needing no spec amendment. Blast radius measured: the `log_records` fixture is used by **49 test definitions across 27 files**, and `capture_records()` has **5 call sites**; both keep their public signatures when the loguru half is dropped, and after this task **no** statement in `src/` emits through loguru, so the loguru sink is dead capture.
+
+**(e) Migration detail for the one statement.** `src/backend/permissions/service.py:432` is loguru-style positional brace formatting:
+
+```python
+logger.warning(
+    "permission check denied: user_id={} permission={} reason={}",
+    user_id, permission, reason,
+)
+```
+
+The feature logger does not interpolate `{}` positionally, so the message must be re-expressed in the established migrated shape — module-level `_logger = get_logger("<name>")` plus an f-string and structured kwargs (the pattern T-004/T-005 landed: `src/backend/eventbus/eventbus.py:27` `_logger = get_logger("eventbus")`, `:123` `_logger.debug(f"event bus: published event type '{event_name}'", event_type=event_name)`). Same level (WARNING) and same rendered content, per `implementation_steps` 1. No test asserts the denial wording (measured: `grep -rn "permission check denied" tests/` → **0 matches**; the only other hit in the repository is the prose of `docs/verification/session-lookup-unwired.md:147`, a historical record).
+
+#### 3. RED gate — the DAG's `red_command`, verbatim, at HEAD `9f1449f`
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean -v
+```
+
+→ **3 failed, 0 passed (1.96 s)**.
+
+| Test | Outcome | Failure (verbatim assertion message) | Why it is behavioral |
+|---|---|---|---|
+| `test_ac_009_statements_go_through_get_logger` (AC-009 / REQ-005, the spec-named all-four witness) | **FAILED** | `AC-009 / REQ-005 (logging-coverage REQ-010 v2): src/backend/permissions/service.py imports a logging backend: ['loguru.logger']; src/backend/permissions/service.py statements not written through get_logger(): line(s) [432]` (`test_statements_via_feature.py:184`) | AST clauses on the real module: the import exists, and the single statement at `:432` is not bound to a `get_logger()` result. The other three files (17 + 11 + 10 statements) report **no** violation — the witness is red only on the last file, exactly as the DAG's narrowing predicted |
+| `test_ac_001_no_backend_import_and_stdlib_chain` (AC-001 / REQ-001) | **FAILED** | `AC-001 / REQ-001: 4 module(s) import the removed logging backend: ["src/backend/permissions/service.py -> ['loguru.logger']", "tests/acceptance/logging/test_logging.py -> ['loguru.logger']", "tests/conftest.py -> ['loguru.logger']", "tests/logging_coverage_test_helpers.py -> ['loguru.logger']"]` (`test_pipeline_backend.py:185`) | Parsed (`ast`) search over `src/` and `tests/`; the stdlib-chain clause of the same test is **not** in the violation list, i.e. it already holds — the red is the import clause only, and it names the 1 source + 3 test modules of note (d) |
+| `test_ac_018_dependency_report_clean` (AC-018 / REQ-013 / NFR-004) | **FAILED** | `AC-018 / NFR-004 (REQ-013): loguru is still declared in [project].dependencies` (`test_dependency_contract.py:98`) | Reads the real `pyproject.toml` dependency list; the other clauses (structlog declared, orjson not DEP002-suppressed, orjson imported under `src/`, `deptry` exit code 0) are **not** in the violation list — the red is the declaration only |
+
+**Failure-mode sanity check (invalid test data is not a legal RED):** 3 `AssertionError`s, **0** collection / fixture / import errors, **0** `ValidationError` / `ValueError` from test data (`collected 3 items`, all three executed and asserted). Each message names the concrete violated clause with file and line, and each of the three is the clause this task's `implementation_steps` removes.
+
+#### 4. Current loguru inventory (measured at `9f1449f`, this step)
+
+Measured with the same AST walk the AC-001 witness uses (not a text grep, so prose mentions of the name are not counted):
+
+| Tree | Modules importing loguru | Detail |
+|---|---|---|
+| `src/` | **1** — `src/backend/permissions/service.py:38` `from loguru import logger` | its single statement: `:432` `logger.warning(...)` inside `PermissionService._deny` (WARNING). `grep -rn "get_logger" src/backend/permissions/` → **0** (the module has no feature logger yet) |
+| `migrations/`, `scripts/` | **0** | deptry's scan set is `src/` + `migrations/` + `scripts/` → the interlock lifts with this one file |
+| `tests/` | **3** — `tests/acceptance/logging/test_logging.py:14`, `tests/conftest.py:16`, `tests/logging_coverage_test_helpers.py:22` | the dual-capture half (conftest `:107` `logger.add(loguru_sink(records), …)`, helpers `:315` the same inside `capture_records`, plus `loguru_sink` `:268` / `capture_from_loguru` `:168`), and the vacuous `len(logger._core.handlers)` probe at `test_logging.py:49/52`. **Not in T-006's `allowed_files.test_files`** → note (d) |
+| **Total (AC-001's search)** | **4 modules** | matches the AC-001 failure message exactly |
+
+Dependency-set declaration, `pyproject.toml`:
+
+```toml
+dependencies = [
+    # Domain and request/response validation models.
+    "pydantic>=2.13.5",
+    # Structured application logging across backend and UI integrations.
+    "loguru>=0.7.3",                                    # ← line 12, removed by this task (comment at :11 too)
+    # Structured logging: processor/renderer and binding layer over stdlib handlers.
+    "structlog>=25.1.0",                                # declared and imported (T-001)
+    # High-performance JSON serialization/deserialization (logging file sink).
+    "orjson>=3.12.0",                                   # declared and imported, no DEP002 suppression (T-001)
+```
+
+`uv.lock` references to drop via `uv sync`: `:916` (`name = "loguru"`), `:923` / `:925` (sdist + wheel), `:1673` (the project's resolved dependency), `:1715` (`{ name = "loguru", specifier = ">=0.7.3" }`). One unrelated prose mention stays: `pyproject.toml:163` (a `[tool.ty]` comment listing packages that ship `py.typed`) — prose, not a declaration; AC-001's witness is parsed for the same reason.
+
+#### 5. The retired-policy test and its traceability row
+
+- File to delete: `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` (57 lines, one test, currently **1 passed**).
+- Matrix row, `docs/verification/traceability.md:343`, verbatim:
+
+```text
+| REQ-010 | AC-010 | `test_existing_direct_loguru_kept` — superseded by `structlog-logging` (the restated REQ-010 / AC-010 wording is witnessed by `test_ac_009_statements_go_through_get_logger`); the direct-backend witness is deleted in the implementation PR | GREEN (logging-coverage Phase 5) — superseded by structlog-logging S3.2, 2026-10-06 |
+```
+
+  The Test column still **cites** `test_existing_direct_loguru_kept`, so deleting the file without re-pointing the row breaks referential integrity (`scripts/check_traceability.py` fails on a row citing a test function that no longer exists under `tests/`). `implementation_steps` 4 re-points it to `test_ac_009_statements_go_through_get_logger` and records the restated v2 wording; the Status column keeps the historical-gate convention (AGENTS.md: the matrix records the state as observed by the change that wrote it). The deletion and the row update must be in the **same** commit as the file removal.
+
+#### 6. Measured baselines S4.2 must not regress (all measured in this step at `9f1449f`)
+
+| Set | Command (verbatim) | Measured now | S4.2 must end at |
+|---|---|---|---|
+| **T-006 `green_command`** | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean tests/acceptance/permissions tests/unit/permissions tests/contract/permissions tests/property/permissions tests/integration/permissions -v` | **3 failed, 70 passed** (11.06 s) — the 3 failures are exactly T-006's own reds; the 70 include the two per-feature AC-009 witnesses (T-004/T-005) and the whole permissions suite | **73 passed, 0 failed** |
+| T-006 `red_command` set | (as above) | 3 failed, 0 passed | 3 passed |
+| `tests/acceptance/logging_coverage` (neighbourhood check) | `uv run pytest tests/acceptance/logging_coverage -q` | **1 failed, 20 passed** — the only red is T-006's all-four witness; `test_direct_loguru_kept` is green inside it | 21 passed **minus** the deleted file's 1 test → 20 passed, 0 failed |
+| Dependency check (T-006 completion gate) | `uv run deptry .` | **Success! No dependency issues found** (Scanning 90 files) — loguru still declared *and* still imported by `permissions/service.py` | still Success, with loguru **absent** from the dependency set and from the scan set |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** (784 matrix rows, 129 spec IDs, 746 test functions) | still PASS after the deletion + row re-point (the test-function count drops by 1) |
+| Types | `uv run mypy src/` | **Success: no issues found in 84 source files** | still clean |
+| Full suite | not run (Phase 5 gate; per-task targeted runs only) | n/a | n/a |
+
+Task status is untouched by this step: `T-006` stays `PENDING` in both `.github/task-runner/tasks.json` and `docs/tasks/structlog-logging.tasks.json` (setting `VERIFIED` is S4.4's job).
+
+#### Gate table (S4.1, T-006)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | Task ready | task states in `.github/task-runner/tasks.json` / `docs/tasks/structlog-logging.tasks.json` | T-006 `PENDING`, dependencies T-001…T-005 all `VERIFIED` → ready; the only task left |
+| b | **RED observed** | the verbatim `red_command` | **3 failed, 0 passed** — all three of the task's `tests_to_create` red |
+| c | RED is behavioral | failure-mode scan of the run | 3 `AssertionError`s naming file/line clauses; 0 collection/fixture/import errors; 0 `ValidationError` on test data |
+| d | Ruff | n/a — this step wrote no tests or implementation code (only this record) | n/a |
+| e | Working tree | `git status --porcelain` | only `docs/verification/structlog-logging.md` (this record) |
+| f | Scope flag | inventory vs. `allowed_files.test_files` | **3 test-tree loguru importers are outside the DAG's `allowed_files`** — see note (d); needs an orchestrator decision before S4.2 |
+
+**Phase 4 (S4.1, T-006) gate: PASS — RED observed (3 failed / 0 passed, behavioral) and recorded.** Next: S4.2 (T-006) — implement + confirm GREEN (73 passed, 0 failed on the verbatim `green_command`), with the note-(d) `allowed_files` decision taken first, and the deletion + traceability row re-point in the same commit.
