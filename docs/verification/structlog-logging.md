@@ -589,3 +589,57 @@ Neighbours (no collateral): the same three directories at HEAD `1e1ec3b` (the tw
 | No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
 
 **Phase 3 (S3.1, T-006) gate: PASS.** Next: S3.1 for T-007.
+
+---
+
+## Phase 3 (S3.1) — T-007 test derivation (2026-10-06)
+
+Task **T-007 — rewrite the agent-facing logging guidance to the new surface** (`AGENTS.md` "Using the Logging Feature" + the tooling line, and the `python-best-practices` skill's logging entry point) (REQ-014; AC-019; Impact Analysis row 7 — guidance: `AGENTS.md` + 3 skill reference files). Its single `tests_to_create` function exists in the DAG's path, in the module T-006 created.
+
+### Tests created
+
+| Test | File | Requirement | Expected failure mode (RED) |
+|---|---|---|---|
+| `test_ac_019_guidance_names_feature_entry_points` | `tests/contract/logging/test_dependency_contract.py` (appended; T-006's `test_ac_018_dependency_report_clean` untouched) | AC-019 / REQ-014 | `AssertionError` naming 24 violated clauses with file and line: `loguru` named twice on `AGENTS.md:769` and once on `:771`; `context_getter` and `depth` named on `:767`; `get_logger` absent from `AGENTS.md`; three `setup_logger(…)` call shapes the amended signature rejects (`:765`, `:771`, `:776`); the four entry points absent from `SKILL.md` and from `modern-python.md`; three entry points absent from `errors-and-resources.md`, plus its four backend entry points (`import structlog` / `structlog.get_logger` at `:17`, `:19`, `:43`, `:45`) |
+
+### Witness design (derived from the spec, not from the current guidance text)
+
+- **The file set is REQ-014's own list, verbatim** — `AGENTS.md`, `.agents/skills/python-best-practices/SKILL.md`, `references/modern-python.md`, `references/errors-and-resources.md`. The scan is deliberately narrowed to those four rather than to the whole skill directory: T-007's design constraint is "no other guidance file changes", and the other five skill files carry no logging reference, so a directory-wide scan would demand entry points from files the change is forbidden to touch — a test that cannot go green.
+- **The forbidden tokens come from the spec, not from the text it judges.** `loguru` is the removed backend named by REQ-013 / NFR-004 (the module's existing `_REMOVED_BACKEND` constant, reused unchanged); `context_getter` and `depth` are the parameters REQ-007 removes and REQ-015 states have no compatibility shim. Both are matched as whole words, so the failure names the exact line that names them.
+- **The required names are §3 / REQ-015's public surface** — `setup_logger`, `logged`, `logged_class`, `get_logger` — the parenthesised list AC-019 itself gives, applied per file ("**each** names the shared logging feature's own entry points"). Word-boundary matching keeps the four independent: `\blogged\b` does not match `logged_class`, so a file naming only the class decorator is not credited with the function decorator.
+- **A name check alone would not close AC-019's third clause, so the backend-entry-point clause is part of it.** `errors-and-resources.md` already contains the string `get_logger` — as `structlog.get_logger()` — so a pure presence check would go green while the guidance still shows the backend's entry point, which is exactly the defect T-007's inputs name ("direct backend entry point in the skill files"). The clause bans an import of the backend/processor layer or a call through it (`import structlog`, `structlog.get_logger`, `loguru.logger`, …), per the DAG's own rationale that REQ-005 forbids a direct backend import even in guidance. structlog is *not* the removed backend (ADR-082 keeps it as the processor/renderer layer), so naming it as a library stays legal — only importing it or calling through it is a defect.
+- **The fourth clause is checked against the amended signature, not against the old call.** §3 fixes `setup_logger(*, renderer: str | None = None)`, so an accepted call is no argument at all or a single keyword-only `renderer` (`renderer="json"`, `renderer=…`); a positional argument, a `Settings` object, or more than one argument is a violation. The argument text is captured by a paren-balancing scan, so the rejected `setup_logger(Settings(log_level="INFO"))` shape is reported whole rather than truncated at its inner paren.
+- **Every clause is collected, not asserted one by one**, and each violation string carries `file:line`, so one run names every defect class in all four files and the implementation step can work down the list (same shape as the T-004 / T-005 / T-006 witnesses).
+- **Known ceiling, recorded deliberately:** `depth` is matched as a whole word because AC-019 reads "none names `context_getter` or `depth`". If future guidance ever needs the word in another sense, that is a spec-amendment conversation, not a test weakening.
+- **No behavioural duplicate.** The surface the guidance describes is asserted by AC-020 (`test_ac_020_public_export_surface`, T-002) and the accepted call shape by AC-010 / EDGE-005 (T-001); this witness asserts only what the *documents* say, which no runtime test can reach.
+- **Nothing of T-006's is rewritten** — `_REPO_ROOT`, `_REMOVED_BACKEND` and `_PROCESSOR_LAYER` are reused; `test_ac_018_dependency_report_clean` and its helpers are untouched.
+
+### S3.1 T-007 — RED
+
+`uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v` → **1 failed, 0 passed** (0.31 s), one `AssertionError` (no import, collection or test-data error):
+
+```text
+AssertionError: AC-019 / REQ-014: AGENTS.md:769 names the removed backend 'loguru'; AGENTS.md:769 names the removed backend 'loguru'; AGENTS.md:771 names the removed backend 'loguru'; AGENTS.md:767 names the removed parameter 'context_getter'; AGENTS.md:767 names the removed parameter 'depth'; AGENTS.md does not name the feature entry point 'get_logger'; AGENTS.md:765 shows setup_logger(settings), a call the amended signature rejects; AGENTS.md:771 shows setup_logger(Settings(...)), a call the amended signature rejects; AGENTS.md:776 shows setup_logger(Settings(log_level="INFO")), a call the amended signature rejects; .agents/skills/python-best-practices/SKILL.md does not name the feature entry point 'setup_logger'; … 'logged'; … 'logged_class'; … 'get_logger'; .agents/skills/python-best-practices/references/modern-python.md does not name the feature entry point 'setup_logger'; … 'logged'; … 'logged_class'; … 'get_logger'; .agents/skills/python-best-practices/references/errors-and-resources.md does not name the feature entry point 'setup_logger'; … 'logged'; … 'logged_class'; .agents/skills/python-best-practices/references/errors-and-resources.md:17 shows the backend entry point 'import structlog'; …:19 shows the backend entry point 'structlog.get_logger'; …:43 shows the backend entry point 'import structlog'; …:45 shows the backend entry point 'structlog.get_logger'
+```
+
+(Elided with `…` for width only — the run prints all 24 violation strings in full.)
+
+Failure mode: **assertion on uncorrected guidance** — all three REQ-014 defect classes are represented (removed backend, removed parameters, rejected `setup_logger(Settings(…))` shape), plus the missing entry points and the backend entry point in the skill examples. The witness reads only guidance text, builds no model instance and touches no `src/` file.
+
+Neighbours (no collateral): `uv run pytest tests/contract/logging -q` at HEAD `d52e821` with the modified file stashed → **5 failed, 2 passed**; with T-007's test in place → **6 failed, 2 passed** — exactly +1 failure, the new one, and no previously-green test changed state.
+
+### Gate table (S3.1, T-007)
+
+| Gate | Command | Result |
+|---|---|---|
+| Pre-flight collection | `git show HEAD:tests/contract/logging/test_dependency_contract.py` grepped for `test_ac_019_guidance_names_feature_entry_points` | **0** — T-007's `tests_to_create` name absent at HEAD `d52e821` |
+| Post-flight collection | `uv run pytest --collect-only -q tests/contract/logging/test_dependency_contract.py` | clean — **2 tests collected, 0 errors** |
+| Ruff (changed path) | `uv run ruff check tests/contract/logging/test_dependency_contract.py` | **All checks passed** |
+| Format | `uv run ruff format tests/contract/logging/test_dependency_contract.py` | **1 file left unchanged** |
+| RED (T-007 `red_command`) | `uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v` | **1 failed, 0 passed** — assertion failure, message quoted above |
+| Test contract / test-data validity | failure output | no `ValidationError` / `ValueError`, no fixture or collection error; the witness builds no model instance and runs no subprocess |
+| Guidance files untouched (Phase 4 scope) | `git status --short -- AGENTS.md .agents` | empty — the test only reads them |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** (765 matrix rows, 129 spec IDs, 745 test functions) — the AC-019 matrix row itself is S3.2's |
+| No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
+
+**Phase 3 (S3.1, T-007) gate: PASS.** Next: S3.2 (ruff + confirm RED across all derived tests + traceability rows).

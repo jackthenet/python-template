@@ -96,3 +96,107 @@ def test_ac_018_dependency_report_clean() -> None:
         violations.append(f"the dependency check reports issues{suffix}: {output}")
 
     assert not violations, "AC-018 / NFR-004 (REQ-013): " + "; ".join(violations)
+
+
+# ---------------------------------------------------------------------------
+# AC-019 / REQ-014 — the agent-facing guidance records
+# ---------------------------------------------------------------------------
+
+# The four guidance files REQ-014 names — the whole scope of the guidance correction.
+_GUIDANCE_FILES = (
+    "AGENTS.md",
+    ".agents/skills/python-best-practices/SKILL.md",
+    ".agents/skills/python-best-practices/references/modern-python.md",
+    ".agents/skills/python-best-practices/references/errors-and-resources.md",
+)
+
+# AC-019 clause 1: guidance must not name the removed backend (REQ-013 names it).
+_REMOVED_BACKEND_WORD = re.compile(rf"\b{_REMOVED_BACKEND}\b", re.IGNORECASE)
+
+# AC-019 clause 2: the decorator parameters REQ-007 removes with no compatibility shim (REQ-015).
+_REMOVED_PARAMETERS = ("context_getter", "depth")
+
+# AC-019 clause 3: the entry points of the feature's public surface (§3 / REQ-015).
+_FEATURE_ENTRY_POINTS = ("setup_logger", "logged", "logged_class", "get_logger")
+
+# REQ-005 covers guidance too: an example shows the feature's exported entry points, never a backend
+# import or a backend-qualified logger. The processor layer may still be named as a library, so only
+# an import of it or a call through it is a defect.
+_BACKEND_ENTRY_POINT = re.compile(
+    rf"\b(?:import|from)\s+(?:{_PROCESSOR_LAYER}|{_REMOVED_BACKEND})\b"
+    rf"|\b(?:{_PROCESSOR_LAYER}|{_REMOVED_BACKEND})\s*\.\s*(?:get_logger|getLogger|logger)\b"
+)
+
+# AC-019 clause 4: every shown call must match ``setup_logger(*, renderer: str | None = None)``.
+_SETUP_LOGGER_CALL = re.compile(r"setup_logger\s*\(")
+_KEYWORD_ONLY_RENDERER_ARGS = re.compile(r"renderer\s*=\s*\S.*", re.DOTALL)
+
+
+def _line_of(text: str, offset: int) -> int:
+    """The 1-based line of ``offset``, so a failure names the offending guidance line."""
+    return text.count("\n", 0, offset) + 1
+
+
+def _setup_logger_calls(text: str) -> list[tuple[int, str]]:
+    """Every ``setup_logger(...)`` call the guidance shows, as ``(line, argument text)``.
+
+    The arguments are read with a paren-balancing scan, so the rejected ``setup_logger(Settings(…))``
+    shape is captured whole instead of stopping at its inner closing paren.
+    """
+    calls: list[tuple[int, str]] = []
+    for match in _SETUP_LOGGER_CALL.finditer(text):
+        depth = 0
+        for index in range(match.end() - 1, len(text)):
+            if text[index] == "(":
+                depth += 1
+            elif text[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    calls.append((_line_of(text, match.start()), text[match.end() : index].strip()))
+                    break
+    return calls
+
+
+def _amended_signature_accepts(args: str) -> bool:
+    """Whether ``setup_logger(<args>)`` is a call the amended signature accepts (REQ-006, §3).
+
+    ``setup_logger(*, renderer: str | None = None)`` takes no positional argument and no ``Settings``
+    object: either no argument at all, or the single keyword-only ``renderer``.
+    """
+    if not args:
+        return True
+    return "," not in args and _KEYWORD_ONLY_RENDERER_ARGS.fullmatch(args) is not None
+
+
+def _guidance_violations(rel: str, text: str) -> list[str]:
+    """Every AC-019 clause the guidance text violates, each naming its file and line."""
+    violations: list[str] = []
+    for match in _REMOVED_BACKEND_WORD.finditer(text):
+        violations.append(f"{rel}:{_line_of(text, match.start())} names the removed backend {match.group(0)!r}")
+    for name in _REMOVED_PARAMETERS:
+        for match in re.finditer(rf"\b{name}\b", text):
+            violations.append(f"{rel}:{_line_of(text, match.start())} names the removed parameter {name!r}")
+    for name in _FEATURE_ENTRY_POINTS:
+        if not re.search(rf"\b{name}\b", text):
+            violations.append(f"{rel} does not name the feature entry point {name!r}")
+    for match in _BACKEND_ENTRY_POINT.finditer(text):
+        violations.append(f"{rel}:{_line_of(text, match.start())} shows the backend entry point {match.group(0)!r}")
+    for line, args in _setup_logger_calls(text):
+        if not _amended_signature_accepts(args):
+            violations.append(f"{rel}:{line} shows setup_logger({args}), a call the amended signature rejects")
+    return violations
+
+
+def test_ac_019_guidance_names_feature_entry_points() -> None:
+    """AC-019 / REQ-014: none of the four guidance files names the removed backend or a removed
+    decorator parameter, each names the shared logging feature's own entry points, and every
+    ``setup_logger`` call they show is a call the amended signature accepts."""
+    violations: list[str] = []
+    for rel in _GUIDANCE_FILES:
+        path = _REPO_ROOT / rel
+        if not path.is_file():
+            violations.append(f"{rel} does not exist")
+            continue
+        violations.extend(_guidance_violations(rel, path.read_text(encoding="utf-8")))
+
+    assert not violations, "AC-019 / REQ-014: " + "; ".join(violations)
