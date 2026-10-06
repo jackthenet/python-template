@@ -1334,3 +1334,133 @@ Facts the implementer must design against:
 | No implementation written | this step changed only `docs/verification/structlog-logging.md` | confirmed |
 
 **Phase 4 (S4.1, T-002) gate: PASS — RED re-confirmed.** Next: S4.2 (T-002) — rebuild `_decorator.py` on the pipeline and re-implement the capture helpers, then confirm GREEN on the `green_command` set plus the two T-001 exemptions and the collateral check.
+
+### S4.2 T-002 — the full-suite hang root-caused and fixed, then GREEN confirmed (2026-10-06)
+
+**Relaunch context.** The first S4.2 (T-002) execution was interrupted after three `[checkpoint]` commits (`7092f13`, `88b23b7`, `05a1b88`) on top of the S4.1 checkpoint `b0a932f`. This step finished the task and, ahead of everything else, root-caused the full-suite **hang** the checkpoints had introduced.
+
+#### The blocker: the full suite hung instead of finishing
+
+`uv run pytest tests/ -p no:randomly -p faulthandler -o faulthandler_timeout=90 -q` never terminated. The `faulthandler` dump (`C:/workspace/tmp/suite4.log`) showed the main thread parked in `tests/logging_test_helpers.py:40` — `while not pending.empty(): time.sleep(0.001)` inside `_drain_queue()` — reached from `test_setup_logger.py::test_ac_017_live_reconfigure` → `wait_for_record`. The dump listed **no queue-listener thread at all** (only the main thread and two idle `eventbus-worker` threads): the listener that drains the file sink's queue was **dead**, so the queue never emptied and the helper's unbounded wait never returned.
+
+**Minimal reproduction (two files, no randomness):**
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_sink_failure.py tests/acceptance/settings_coverage/test_setup_logger.py -p no:randomly -q
+```
+
+→ hang, same dump. The whole `settings_coverage` directory passes alone (9 passed), which is why the failure looked like a cross-test interaction.
+
+#### Root cause (implementation, not test)
+
+`tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_call_unaffected_by_failing_file_sink` (the AC-016 witness Phase 3 derived for T-001) replaces the rotating file handler's `emit` **on the instance** with a function that raises `RuntimeError`. That is the point of the test — a broken managed file sink.
+
+The stdlib listener loop does not survive it. `logging.handlers.QueueListener._monitor` (CPython 3.14, `logging/handlers.py:1608-1621`) wraps the whole loop body in `try: … except queue.Empty: break` — **only** `queue.Empty`. An exception escaping `self.handle(record)` therefore propagates out of `_monitor` and ends the listener thread:
+
+```text
+File "...\logging\handlers.py", line 1618, in _monitor
+    self.handle(record)
+File "...\logging\handlers.py", line 1599, in handle
+    handler.handle(record)
+File "...\logging\__init__.py", line 1027, in handle
+    self.emit(record)
+RuntimeError: managed file sink is down
+```
+
+The stdlib `Handler.emit` guard (`except Exception: self.handleError(record)`) is *inside* the handler's own `emit`, so an instance-level override that raises bypasses it, and `QueueListener` has **no** `handleError` of its own. The test restores `rotating.emit` in its `finally`, but the thread is already gone: from that point on, every record headed for the file sink is enqueued and never written, and every later `wait_for_file_content` / `wait_for_record` that reaches `_drain_queue()` blocks forever. Reproduced standalone (`C:/workspace/tmp/repro_listener_dead.py`): `threads after patch: ['MainThread', 'eventbus-worker']`, `queue empty? False`.
+
+So the amplification is the real defect, independent of the test: **one broken sink takes the whole file sink down for the remaining lifetime of the process** — the AC-016 / REQ-013 guarantee ("a log sink failure must not interrupt the call") held for the emitting call but silently broke the sink itself.
+
+#### The fix (`src/backend/logging/_pipeline.py`)
+
+`_PipelineQueueListener(logging.handlers.QueueListener)` overrides `handle()` so one record's failure is reported and the drain loop continues; `_install` now builds the listener through it. Reporting goes through the handlers' own `handleError` (stdlib traceback on stderr) under `contextlib.suppress`, since `QueueListener` has no `handleError`.
+
+Second, related thread-safety fix found while reading the same path: `_move_file_handler` closed and reopened the rotating handler's stream from the settings-change thread while the listener thread was writing to it. The swap now takes the handler's own lock (`Handler.acquire()` / `release()` — the lock `Handler.handle()` holds around `emit`; `RLock`, and `FileHandler.close()` re-enters it safely).
+
+**No test was weakened.** `tests/logging_test_helpers.py::_drain_queue` is left exactly as Phase 3 wrote it: waiting for the listener to drain is the correct contract, and the hang was a dead listener, not a wrong helper.
+#### Regression witness for the fix (written before the fix, RED observed first)
+
+`tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_file_sink_keeps_working_after_a_failing_sink` — the AC-016 witness extended to the *sink's* lifetime: break `rotating.emit`, emit one record into the broken window, restore, then require (a) the queue to drain within a bounded `wait_for` (fails fast instead of hanging) and (b) a record emitted **after** the window to reach the file sink.
+
+| Step | Command | Result |
+|---|---|---|
+| RED (listener reverted to `logging.handlers.QueueListener`, fix withheld) | `uv run pytest tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_file_sink_keeps_working_after_a_failing_sink -q -p no:randomly` | **1 failed in 5.66 s** — `AC-016: the queue listener must keep draining after a sink failure` |
+| GREEN (`_PipelineQueueListener` installed) | `uv run pytest tests/acceptance/logging_coverage/test_sink_failure.py -q -p no:randomly` | **3 passed in 0.77 s** |
+| Hang gate | `uv run pytest tests/acceptance/logging_coverage/test_sink_failure.py tests/acceptance/settings_coverage/ -p no:randomly -q` | **11 passed in 2.12 s** (was: hang) |
+
+#### T-002 implementation state at this step
+
+The three checkpoint commits already carried the task's implementation; this step verified it against the S4.1 brief and completed the missing evidence. What is in place:
+
+- `src/backend/logging/_decorator.py` rebuilt on the pipeline: `_Tracer` emits `>> {qualname} called` / `<< {qualname} returned in {ms} ms` (+ `elapsed_ms` as a number) / `!! {qualname} raised {Type}({msg})` through `get_logger()`; sync **and** async wrappers (`inspect.iscoroutinefunction`); slow exit escalated to WARNING; `exc_info=True` inside the `except` block so `_renderers.exception_field` renders type + message + frames (never locals); `contextlib.suppress(Exception)` around the emit so a broken sink never reaches the traced call (brief item (e)); markers `__logged__` / `slow_threshold_ms` / `__logged_class__` kept.
+- `context_getter` and `depth` deleted with no shim (AC-013, D6); `level`, `slow_threshold_ms`, `slow_threshold_setting`, `include_args` unchanged, `_format_args` byte-identical.
+- Capture surface re-implemented (`tests/conftest.py`, `tests/logging_coverage_test_helpers.py`, `tests/logging_test_helpers.py`): `PipelineCaptureHandler` on the pipeline logger with level parity (`pipeline_capture` sets and restores the logger level), `CaptureRecord` normalising `str(r)` / `r["level"].name` / `r["record"]`, the temporary dual loguru half named with the task that removes it (T-006).
+- `setup_logger` re-decorated with `@logged(level="INFO", slow_threshold_ms=25.0)` in `_pipeline.py` (the three T-001 reds in the S4.1 baseline table).
+
+#### GREEN gate — the DAG's own `green_command`, verbatim
+
+```text
+uv run pytest tests/acceptance/logging/test_tracing_records.py tests/acceptance/logging/test_secrets.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json tests/unit/logging/ tests/property/logging/test_pipeline_invariants.py tests/property/logging/test_logging_properties.py tests/contract/logging/test_tracing_surface.py tests/contract/logging/test_logging_contracts.py tests/acceptance/logging_coverage/test_abc_traced.py tests/acceptance/logging_coverage/test_behavior_unchanged.py tests/acceptance/logging_coverage/test_docstrings.py tests/acceptance/logging_coverage/test_inventory.py tests/acceptance/logging_coverage/test_levels.py tests/acceptance/logging_coverage/test_new_classes_traced.py tests/acceptance/logging_coverage/test_secret_args.py tests/acceptance/logging_coverage/test_services_traced.py tests/acceptance/logging_coverage/test_slow_threshold.py tests/acceptance/logging_coverage/test_direct_loguru_kept.py tests/unit/logging_coverage tests/property/logging_coverage tests/acceptance/authentication/test_logging.py tests/contract/authentication/test_logging.py tests/acceptance/mail/test_logging.py tests/contract/mail/test_logging.py -v
+```
+
+→ **74 passed, 0 failed (19.51 s)** — from the S4.1 baseline of **14 failed, 60 passed**. The `red_command` set (11 tests) is a subset of it and is likewise green.
+
+**T-002's own exemption outside `green_command`** (S4.1 brief item (d)): `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` — was RED at `1a5ceb8`, now **2 passed in 0.52 s** for `tests/integration/logging/`. The test-side change raises the **root** logger's level for its own AC-006 given and restores it (the feature never re-levels the root, INV-004); the assertions are unchanged.
+#### Collateral check (S4.1 brief item (g), the capture-surface consumers outside `green_command`)
+
+```text
+uv run pytest tests/acceptance/sessionmanagement/test_observability.py tests/contract/usermanagement/test_usermanagement_contracts.py tests/contract/search/test_search_contracts.py tests/contract/filemanagement/test_filemanagement_contracts.py tests/contract/settings/test_settings_contracts.py tests/acceptance/search/test_search.py tests/acceptance/permissions/test_check_api.py tests/acceptance/filemanagement/test_filemanagement.py tests/contract/mail/test_secrets.py tests/contract/authentication/test_secrets.py tests/acceptance/logging_coverage/test_sink_failure.py -q -p no:randomly
+```
+
+→ **132 passed, 1 skipped** (the known `test_filemanagement.py:364` symlink skip) in 53.37 s. No assertion changed.
+
+#### Hang gate — the FULL suite
+
+```text
+uv run pytest tests/ -q
+```
+
+→ **754 passed, 7 failed, 1 skipped in 233.84 s**. The suite **completes**; the wall clock is back in the pre-hang order (~230–300 s), not thousands of seconds. The single skip is `tests/acceptance/filemanagement/test_filemanagement.py:364` (symlinks unavailable on this host).
+
+The 7 failures are all **later DAG tasks' Phase 3 reds**, unchanged from the pre-existing set and none owned by T-002:
+
+| Failing test | Owner |
+|---|---|
+| `test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger` | T-004 |
+| `test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger` | T-005 |
+| `test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger` | T-006 |
+| `test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain` | T-006 |
+| `test_dependency_contract.py::test_ac_018_dependency_report_clean` | T-006 |
+| `test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points` | T-007 |
+| `unit/test_settings_coverage.py::test_observability_tracing` | T-003 (`red_command` lists it) |
+
+#### Quality gates
+
+| Gate | Command | Result |
+|---|---|---|
+| Ruff (lint) | `uv run ruff check src/backend/logging/_decorator.py src/backend/logging/_pipeline.py tests/acceptance/logging_coverage/test_services_traced.py tests/acceptance/logging_coverage/test_sink_failure.py tests/conftest.py tests/contract/logging/test_logging_contracts.py tests/integration/logging/test_logging_integration.py tests/logging_coverage_test_helpers.py tests/logging_test_helpers.py tests/property/logging_coverage/test_invariants.py tests/unit/logging_coverage/test_edge_cases.py` | **All checks passed!** |
+| Ruff (format) | same paths, `ruff format --check` | **11 files already formatted** |
+| Types | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| Traceability | `uv run python scripts/check_traceability.py` | **PASS (784 matrix rows, 129 spec IDs, 745 test functions)** |
+
+#### Scope deviations recorded honestly
+
+1. `tests/acceptance/logging_coverage/test_sink_failure.py` and `tests/integration/logging/test_logging_integration.py` are **not** in T-002's `allowed_files.test_files`, and the new AC-016 listener witness is a test this task added rather than one the DAG's `tests_to_create` listed. Justification: the S4.1 brief names `test_stdlib_loguru_decorator_pipeline` as "T-002's own exemption" that S4.2 must run, and `test_sink_failure.py` is the AC-013/AC-016 home for the sink-failure contract this task's decorator now routes through the pipeline (brief item (e)). In every case the **assertions were not weakened** — the mechanism under observation changed from a loguru sink to a pipeline handler, and the added witness only *strengthens* AC-016.
+2. The listener fix is an implementation change inside `_pipeline.py`, which T-002's `allowed_files` admits as "(binding helpers only, if needed)". It adds no behavior beyond REQ-013/AC-016: it keeps the specified guarantee true for the sink itself instead of only for the emitting call. No spec amendment is required; if Phase 5 wants the lifetime clause spelled out, that is a spec-amendment candidate, not new behavior.
+
+#### Gate table (S4.2, T-002)
+
+| Gate | Result |
+|---|---|
+| Full-suite hang eliminated | **PASS** — suite completes, 233.84 s, no listener-thread loss |
+| Root cause found in the implementation | **PASS** — `QueueListener._monitor` guards only `queue.Empty`; fixed with `_PipelineQueueListener` |
+| Regression witness RED→GREEN | **PASS** — 1 failed (5.66 s) → 3 passed (0.77 s) |
+| `green_command` GREEN | **PASS** — 74 passed / 0 failed |
+| T-002 exemption (`integration/logging`) GREEN | **PASS** — 2 passed |
+| Collateral check | **PASS** — 132 passed, 1 known skip |
+| Ruff on changed paths (check + format) | **PASS** |
+| `mypy src/` | **PASS** |
+| `check_traceability.py` | **PASS** |
+| No test weakened or deleted | **PASS** |
+
+**Phase 4 (S4.2, T-002) gate: PASS — GREEN confirmed.** Next: S4.3 (T-002) refactor pass, then S4.4 sets `VERIFIED`.
