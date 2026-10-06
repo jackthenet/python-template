@@ -149,3 +149,95 @@ root, deferred by Q-11).
 - No test or implementation file was created or modified, so the ruff gate is `n/a` for this step.
 - `docs/todo/` and `docs/questions/` were **not** touched in this worktree (orchestrator-owned,
   `main`-only).
+
+## P.5 — Self-Consistency Checklist + Dependency Smoke-Test (2026-10-06)
+
+The spec under test is `docs/specs/settings-public-registry-setter.md` as drafted at P.4 (`1dbddb6`).
+Every failure below was fixed **in the spec text**; nothing in `src/` or `tests/` was written, and no
+requirement was weakened to make the spec self-consistent. The six amended approved specs were **not**
+edited (P.5's file set is the change spec, this record, and `docs/workflow/PROBLEMS.md`) — where an
+amendment is inconsistent, the divergence is recorded here as a finding for the S1.4 reviewer.
+
+### Checklist, item by item
+
+| Item | Verdict on the P.4 draft | Fix applied to the spec |
+|---|---|---|
+| **Configurability** | PASS. The spec makes no "configurable X" claim: the install operations take no configuration, no settings key is added or changed, and the only new parameter is the instance itself. | — |
+| **Parameter coverage** | PASS. Each `set_*(instance)` has exactly one parameter, typed as the concrete class, with **no** default and no `None` acceptance — stated by REQ-004 / AC-007 / AC-008 and D5/D6/D7 (Q-7, Q-9, Q-23). `@logged(slow_threshold_ms=5)` names its parameter and its value; `include_args` is explicitly left at the decorator default (D9). | Added to D9 the sentence that Q-14 governs over Q-5's passing mention of `include_args=False`, so an implementer does not flip it. |
+| **REQ↔AC wording** | **FAIL ×3.** (1) REQ-012 required "no existing test is weakened, converted or deleted" with no AC able to evidence it. (2) REQ-008 / INV-001 / AC-009 / AC-010 / AC-011 asserted "no read raises" and "exactly one default instance was constructed" for **all five** features, but `get_session_service()` with no `repository` argument raises `ValueError` (`session-management.md` EDGE-003, AC-042) — those assertions are unsatisfiable for session-management. (3) INV-001 ("no install is ever silently lost") read as contradicting EDGE-010 ("no lost update beyond the last writer"). | (1) REQ-012 now cites its evidence path (AC-017 + the Phase 5 full-suite regression + the Phase 6 no-weakening review) instead of implying an untestable AC — no new ID was invented, so §10/§11 and `docs/verification/traceability.md` stay ID-stable. (2) The lazy-create assertions are scoped to the four features whose `get_*()` builds a default; session-management is covered by an injected-repository variant, and AC-010's final slot value may also be a lazily created default. (3) INV-001 now reads "no install is lost **without a WARNING record** — last writer wins", which is exactly EDGE-010. |
+| **Terminology drift** | **FAIL.** The draft mixed "install operation", "public setter" and "installer" (including in the test name `test_ac_019_agents_md_names_installer`). | §3.1 now declares **install operation** the normative term, with "setter"/"installer" as prose and test-name shorthand. |
+| **Test strategy coverage** | PASS (measured). All 53 of the spec's own IDs (REQ-001…016, AC-001…020, INV-001…003, EDGE-001…010, NFR-001…004) appear in §10 with a category and a test function. §11 covers EDGE-002…006 and NFR-002/003 by range rows (`EDGE-001 … EDGE-007`, `NFR-001 … NFR-004`); Phase 5 expands those range rows when the rows land in `docs/verification/traceability.md`. | — |
+| **ID references** | **FAIL ×2.** (1) NFR-002 benchmarked install latency against "the existing logging **NFR-002** budget", but `logging-coverage.md` NFR-002 is *Security* (no raw tokens/passwords/hashes in any log record); the performance NFR is **NFR-001**. (2) EDGE-005 cited "the **four** subprocess-embedded test sites"; `rg` measures **three** (`tests/acceptance/settings_coverage/test_wiring.py:18`, `tests/acceptance/settings_coverage/test_setup_logger.py:31,55`). | (1) NFR-002 now cites `logging-coverage.md` NFR-001 and `settings.md` NFR-001. (2) EDGE-005 and AC-017 now say three, and REQ-012 / §1 state the measured total of **12** outside-owner write sites. |
+| **Scope consistency** | PASS after fix. Every in-scope item has a REQ; every §13 out-of-scope item (composition-root factory, runtime type validation, install events, lifecycle of the replaced instance, catalog actions, ADR) is excluded by a REQ/decision that does not accidentally cover it. The §12 Impact Analysis named the features but **omitted IDs the amendments actually introduce**. | §12 row 4 now names `search.md` REQ-015 and NFR-003, row 5 now names `session-management.md` REQ-022 and NFR-003; row 1 records the `settings.md` §3/§9 additions and the AC-042 divergence below. |
+| **Performance budget vs. observability** | **FAIL.** NFR-002's < 1 ms budget has to hold with the mandated `@logged` tracing plus the WARNING record, and its measurement context was mis-described as "console + queue sinks" — `src/backend/logging/sinks` configures a **console sink on `sys.stderr`** plus a **rotating file sink with `enqueue=True`**; there is no queue sink. | NFR-002 now covers *either* path (empty-slot install, or a replace including its WARNING record) and states the logging context as the console (stderr) sink plus the enqueued rotating file sink, at DEBUG. NFR-003 keeps the lock short and puts the WARNING **after** the lock is released, so the budget does not pay for sink I/O under the lock. |
+
+### Dependency Smoke-Test
+
+No new dependency is named (stdlib `threading`; already-installed ruff / pytest / mypy; §12 row 9 records
+"no new dependency"). Per the skill's *capability, not library* rule, the newly named **tooling
+capability** — a ruff `TID251` banned-api guard — was smoke-tested on the host before being baked into the
+spec. Measured on this host with the repository's own ruff, against temporary fixture files outside the
+repository (nothing left behind):
+
+| Probe | Result | Consequence for the spec |
+|---|---|---|
+| `banned-api` entry keyed by the **bare slot name** (`"_registry"`) | `All checks passed!` — flags **nothing** | §3.4 keys MUST be fully qualified (`backend.settings.registry._registry`, …); EDGE-009 states this. |
+| Fully-qualified key + `from backend.settings.registry import _registry` | `TID251` reported | AC-018 (import form). |
+| Fully-qualified key + `import backend.settings.registry as reg` then `reg._registry[0] = …` | `TID251` reported | AC-018 now names **both** reference forms. |
+| Fully-qualified key, violation written **inside the owner module** (a probe `backend/search/service.py` writing its own `_singleton`) | **not** reported (only unrelated `PLW0602` from the probe's `global`) | EDGE-008 holds as written: the five owner modules keep their direct slot writes and need no `noqa`. |
+| The project's real `[tool.ruff.lint] select` (`I,E,W,B,F,UP,RUF,PL,Q,SIM,C4,DTZ`) + a `banned-api` table, **without** `TID251` selected | the violation is **not** reported (only `F401`) | **Material fix:** §3.4 and §12 row 9 now require adding `TID251` to `[tool.ruff.lint] select` — without it the guard is inert and AC-018 would pass vacuously. |
+| `uv run ruff check --isolated --select TID src tests` (whole TID family) | `All checks passed!` — zero pre-existing violations | Selecting the rule cannot break the lint gate by itself; §10 records it. |
+| `uv run ruff check --isolated --select TID252 src tests` | `All checks passed!` | Not needed: only `TID251` is selected, keeping Q-19's ban width. |
+
+### Facts re-measured at P.5 (they bind Phase 2–4)
+
+- **Outside-owner singleton-slot writes: 12, not 14.** `rg` over `src/` and `tests/` for the five slot names
+  gives `src/main.py:138` plus 11 test sites (`tests/settings_test_helpers.py:132,160,180`;
+  `tests/eventbus_test_helpers.py:77,84`; `tests/acceptance/settings_coverage/test_setup_logger.py:31,55`;
+  `tests/acceptance/settings_coverage/test_wiring.py:18`; `tests/contract/logging/test_logging_contracts.py:35`;
+  `tests/property/logging/test_logging_properties.py:42`; `tests/unit/logging/test_logging_edges.py:32`).
+  `docs/todo/settings-public-registry-setter.md` says **14** because it counts the 3 subprocess-embedded
+  writes separately from the 9 settings sites, although they are inside those 9. P.5 may not edit the TODO
+  file, so the correction lives here and in the handoff; the spec states 12.
+- **Inside-owner writes: 10** (`settings/registry.py:373,380`; `eventbus/eventbus.py:221,232`;
+  `search/service.py:560,572`; `sessionmanagement/service.py:364,371`; `permissions/service.py:524,530`) —
+  all stay, under the module lock (Q-13).
+- **`tests/unit/architecture/` does not exist**, and neither does `tests/architecture/`: the
+  `architecture-tests-missing` change (merged, `4f684f8`) removed that path from the workflow, and its own
+  architecture checks were `rg` scans recorded in its verification record, not test files. The new scan test
+  therefore creates a new package and needs an `__init__.py` (every other test package has one). §10 records
+  this and points at the only existing source-scanning test,
+  `tests/acceptance/logging_coverage/test_new_classes_traced.py` (`ast.parse` over
+  `pathlib.Path("src/backend").rglob("*.py")`, CWD-relative because pytest runs from the repository root).
+- **`src/main.py` order measured:** `_settings_registry = SettingsRegistry(...)` at `:137`, the private-slot
+  write at `:138`, then `register_*_settings(_settings_registry)` at `:173-178` and the service-construction
+  sites at `:161,198,204,214` — all passing the **local handle**, never `get_settings_registry()`. REQ-011,
+  D10 and AC-016 now state the read-back rule *and* the install-before-register ordering that makes
+  `settings-coverage.md` REQ-002 literally true, instead of describing the read-back as if it already happened.
+
+### Findings recorded, not silently resolved
+
+1. **`settings.md` AC-042 is narrower than its four siblings.** As amended by P.4 it covers concurrent
+   install + read; `event-bus.md` AC-015, `user-roles-permissions.md` AC-043, `search.md` AC-040 and
+   `session-management.md` AC-048 cover install + read + **reset**, and Q-10/Q-11 require the module lock to
+   guard all three operations in every feature. The change spec's AC-010 is the stronger rule (all five
+   features, all three operations) and its test covers reset, so the change is self-consistent as specified.
+   Widening `settings.md` AC-042 is an edit to an approved spec, outside P.5's file set — **the S1.4 reviewer
+   should widen it in the same approval PR**; §12 row 1 records the divergence.
+2. **`docs/todo` says 14 write sites; measurement says 12** (see above). The orchestrator may correct the TODO
+   text on `main`; the spec and this record use 12.
+3. **`settings.md` §3's simplified `get_settings_registry()` signature block** (no `required`, non-nullable
+   return) remains unamended — carried over from the P.4 findings list, unchanged by P.5.
+
+### P.5 gate evidence
+
+- `uv run python scripts/verify_spec.py` (in the change worktree, 2026-10-06) — **PASS** for all seven
+  touched specs: `settings-public-registry-setter`, `settings`, `event-bus`, `user-roles-permissions`,
+  `search`, `session-management`, `logging-coverage` (plus `settings-coverage`, cited but unamended).
+- `uv run python scripts/check_traceability.py` — **PASS (796 matrix rows, 136 spec IDs, 714 test
+  functions)**. P.5 added, removed and renumbered **no** ID, so the P.4 rows still cover every ID.
+- Ruff: `n/a` — no test or implementation file was written; the ruff probes ran on temporary fixture files
+  outside the repository.
+- Files changed by P.5: `docs/specs/settings-public-registry-setter.md`, this record,
+  `docs/workflow/PROBLEMS.md`. `docs/todo/`, `docs/questions/`, `src/`, `tests/` and the six amended specs
+  were not touched.
