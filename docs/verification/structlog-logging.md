@@ -818,3 +818,109 @@ Traceability: PASS (784 matrix rows, 129 spec IDs, 745 test functions)
 
 **Phase 3 (S3.2) gate: PASS — RED observed for T-001..T-007.** Next: Phase 4, S4.1 (T-001).
 
+---
+
+## Phase 4 (S4.1) — T-001 picked, RED re-confirmed (2026-10-06)
+
+**Task picked: T-001** — *pipeline core: dedicated non-propagating feature logger owning two managed stdlib sinks (colorized text console + queue-fed rotating JSON file via orjson), root forwarding handler, renderer selection, `get_logger()`, public export surface; declare structlog and retire the orjson DEP002 suppression*.
+
+### Readiness check
+
+| Check | Evidence | Result |
+|---|---|---|
+| Only ready task | `dependencies: []` for T-001; T-002..T-007 all list `T-001` (T-003 also `T-002`) in `.github/task-runner/tasks.json` | T-001 is the only unblocked task |
+| Status still `PENDING` | `.github/task-runner/tasks.json` → `"status": "PENDING"` for T-001 | confirmed |
+| Its tests exist | derived at `fcce934` ("S3.1 T-001 pipeline-core tests (+2 authorized per-ID deletions)"), present at HEAD `aba98f8`; the two authorized deletions (`test_ac_005_intercept_handler_skips_bootstrap`, `test_edge_005_intercept_unknown_level`) are already absent from `tests/` | confirmed |
+| Working tree | `git status --short` clean at `aba98f8` | confirmed |
+
+### RED re-confirmed (the DAG's own `red_command`, verbatim)
+
+```text
+uv run pytest tests/acceptance/logging/test_pipeline_backend.py::test_ac_002_two_managed_handlers tests/acceptance/logging/test_third_party_records.py::test_ac_006_third_party_reaches_both_sinks tests/acceptance/logging/test_get_logger.py::test_ac_008_get_logger_emits_to_sinks tests/acceptance/logging/test_renderer.py::test_ac_010_renderer_selection tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_call_unaffected_by_failing_file_sink tests/unit/logging/test_sink_ownership.py::test_ac_004_foreign_handlers_untouched tests/unit/logging/test_sink_ownership.py::test_ac_005_no_duplicate_records tests/unit/logging/test_third_party_records.py::test_ac_007_location_of_emitting_call tests/unit/logging/test_pipeline_edges.py tests/integration/logging/test_external_reconfiguration.py tests/property/logging/test_pipeline_invariants.py::test_inv_001_concurrent_setup_owns_two_handlers tests/property/logging/test_pipeline_invariants.py::test_inv_004_other_loggers_untouched tests/contract/logging/test_tracing_surface.py::test_ac_020_public_export_surface tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records tests/property/logging/test_logging_properties.py::test_inv_001_concurrent_setup_logger_sinks tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget -v
+```
+
+→ **20 failed, 2 passed (19.49 s)** at HEAD `aba98f8` — **identical to the S3.2 gate (20 failed / 2 passed)**; no drift between Phase 3 and Phase 4 entry. 22 items collected, 0 collection/fixture/import errors, every failure an `AssertionError` on unimplemented behavior (the two subprocess witnesses die with `ImportError: cannot import name 'get_logger' from 'backend.logging'` *inside* the subprocess and the test itself asserts).
+
+Already green at the RED gate (unchanged from S3.2, expected-GREEN guards, not a missing RED): `tests/unit/logging/test_sink_ownership.py::test_ac_004_foreign_handlers_untouched` (INV-004/AC-004 ownership regression guard) and `tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget` (the < 25 ms ceiling; it must **stay** green after the rebuild).
+
+### Scope the implementation step may touch (`allowed_files.source_files`)
+
+```text
+src/backend/logging/_setup.py
+src/backend/logging/__init__.py
+src/backend/logging/feature_settings.py
+src/backend/logging/_pipeline.py      (new; the module split inside src/backend/logging/ is the implementer's choice, no new package)
+src/backend/logging/_renderers.py     (new; same note)
+pyproject.toml                        (dependencies + [tool.deptry.per_rule_ignores] DEP002 only)
+uv.lock
+```
+
+Test paths it may also touch are the 20 entries in T-001's `allowed_files.test_files` (notably `tests/logging_test_helpers.py`, `tests/unit/logging/test_logging_sink_ownership.py`, `tests/integration/logging/test_logging_integration.py`, `tests/unit/logging/test_logging.py`). `_decorator.py` is **not** in T-001's file set — the tracing decorators stay loguru-based until T-002.
+
+### Completion gates (T-001, verbatim from the DAG)
+
+1. RED observed on the `red_command` set before implementation; recorded here. **← this step**
+2. AC-002, AC-004, AC-005, AC-006, AC-007, AC-008, AC-010, AC-016, AC-020 tests pass.
+3. Property tests for INV-001 (concurrent setup owns exactly two handlers) and INV-004 (other loggers untouched) pass.
+4. Unit/integration tests for EDGE-001…EDGE-006 and NFR-005 pass.
+5. Contract gate NFR-001: `setup_logger()` < 25 ms (median of 3 fresh processes).
+6. `uv run deptry .` clean in the state this task leaves behind (structlog declared + imported; orjson declared, imported, no longer in DEP002; loguru still declared and still imported by the three not-yet-migrated feature files).
+7. `uv run ruff check <changed paths>` / `uv run ruff format <changed paths>` clean; `uv run mypy src/` clean.
+8. `uv run python scripts/check_traceability.py` stays green.
+9. Both authorized deletions recorded here (done at S3.1, § *Authorized per-ID deletions*).
+
+### Implementation risk notes for S4.2 (read from the current `src/backend/logging/` against spec §2–§8)
+
+**A. What must exist for the 20 red tests to go green** — the observable contract the helpers in `tests/logging_test_helpers.py` enforce (they locate the pipeline through public `logging` machinery only, so the implementation is free internally):
+
+- Exactly **one non-root logger** in `logging.Logger.manager.loggerDict` owns a `StreamHandler` whose stream is `sys.stderr` or fd 2 (`pipeline_logger()` / `_is_console_handler`); that logger owns **exactly `MANAGED_HANDLER_COUNT` = 2 handlers**, one console + one `QueueHandler` **or** `RotatingFileHandler` (`managed_sinks()`). The rotating handler is found by `gc` scan (`rotating_file_handlers()`), i.e. D4 may attach it to the listener, not the logger — but its `maxBytes == log_max_bytes`, `backupCount == log_backup_count`, `encoding == "utf-8"` are read from the handler itself (AC-002).
+- The feature logger must **not propagate** (AC-005: one record, exactly once per sink).
+- One **forwarding handler on the root logger** hands foreign records to the two managed handlers with level, logger name and `file`/`line` of the *emitting* call intact (AC-006, AC-007, EDGE-004 — the numeric level survives, no `_LEVEL_NAMES` mapping).
+- File records are **one JSON object per line** with the §3 field names (`level`, `logger`, `event`, `timestamp`, `file`, `line`) and never `filename`/`lineno` or the formatter's bookkeeping keys; console records are human-readable text, not JSON (AC-010 selects the pair: `renderer="json"` → JSON console, `renderer="text"` → text file, no argument → text console + JSON file).
+- `setup_logger(*, renderer: str | None = None)` must **accept the keyword** (`inspect.signature` is asserted in `test_edge_005_unknown_renderer`) and raise `ValueError` **before** installing anything; setup stays idempotent + thread-safe + settings-driven with no argument.
+- `get_logger(name=None)` must be **exported from `backend.logging`** and usable **before** `setup_logger()` without raising (EDGE-006); the export set must be exactly §3's eight names (AC-020) — `setup_logger`, `logged`, `logged_class`, `get_logger`, `Settings`, `get_settings`, `register_settings`, `_read_setting`.
+- A `QueueHandler` must be discoverable among all loggers' handlers (`test_nfr_005_single_listener_thread` counts them and asserts setup adds **at most one thread** and emitting adds none).
+- EDGE-001: the log file's parent directory is created; EDGE-002: rotation with an open handle produces a backup file matching the log-path glob, every probe record present, and **no `--- Logging error ---`** on the subprocess stderr (the stdlib swallows handler errors through `Handler.handleError`, so a non-zero returncode proves nothing).
+- EDGE-003 (`tests/integration/logging/test_external_reconfiguration.py`): after a `logging.config.fileConfig(..., disable_existing_loggers=True)` replay, the two managed handlers survive on the feature logger, a later `logging.*` change **re-enables the feature's own logger and re-installs the root forwarding handler**, and a foreign logger disabled by `fileConfig` stays disabled. `migrations/env.py` is not touched; the autouse `tests/conftest.py::_stdlib_root_logging_restored` fixture stays.
+- AC-016 sabotages both the `QueueHandler` (raises in the caller's thread) and the rotating handler (raises on the listener thread) — the implementation must not let either escape the traced call, and must keep the console sink live.
+- ADR-082's six pinned structlog-26 facts are binding (do not re-discover them): `serializer=` is the JSON renderer option; the serializer returns **bytes** (adapter must decode to `str` and tolerate the renderer's forwarded kwargs); the formatter injects two bookkeeping keys nothing strips by default (a processor must drop them); the stdlib `QueueHandler` **formats while enqueueing** — override `prepare()` to pass the record through unformatted; the callsite step must run at the emitting call site (inside the formatter chain it resolves in the listener thread) and names its fields `filename`/`lineno`, which the feature maps to `file`/`line`; `log.exception()` puts the exception on the record, not the event dict — render it into `exception` and suppress the stdlib's own exception formatting so a JSON record stays one line.
+
+**B. Pre-existing tests inside T-001's `green_command` that are GREEN today and will flip when the loguru pipeline is removed** (all in `allowed_files.test_files`; the current `green_command` baseline is **22 failed / 26 passed**):
+
+| Test | Why it breaks | Adaptation |
+|---|---|---|
+| `tests/unit/logging/test_logging_sink_ownership.py` (all 3) | walks `logger._core.handlers` and matches loguru sink class names `StreamSink` / `FileSink` | re-express against the two stdlib managed handlers (the settings-coverage REQ-015/AC-020 semantics it guards stay) |
+| `tests/unit/logging/test_logging.py::test_ac_003_setup_logger_thread_safe` | asserts `len(logger._core.handlers) == _EXPECTED_HANDLER_COUNT` | re-express as INV-001-style handler ownership on the feature logger |
+| `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` | emits a raw `loguru.logger.info` line and asserts loguru's `<<` marker in the file | see risk note D — its traced-call clause is a T-002 dependency |
+| `tests/acceptance/logging/test_logging.py::test_ac_002_setup_logger_idempotent` | compares `len(logger._core.handlers)` before/after — stays vacuously true (0 == 0), but the module keeps `from loguru import logger` | drop the loguru import (T-006's AC-001 search covers `tests/` too) |
+| `tests/unit/logging/test_logging_edges.py::test_edge_001_log_file_parent_created` | subprocess only asserts the file exists — expected to survive | no change expected |
+
+**Still safe in the T-001 intermediate state** (because `_decorator.py` keeps emitting through loguru and `log_records` / `capture_records` install their **own** loguru sink): the `log_records`-based decorator tests — `tests/unit/logging/test_logging.py::test_ac_006…test_ac_013`, `tests/unit/logging/test_logging_edges.py::test_edge_002/003`, `tests/property/logging/test_logging_properties.py::test_inv_002/003`, and the whole `logging_coverage` suite plus the cross-feature `log_records` users (27 modules). They break in **T-002**, not here. Do **not** re-implement `capture_records` / `log_records` in T-001.
+
+**C. Helper interlock.** `tests/logging_test_helpers.py` keeps two loguru-era helpers that T-001 must re-implement with the same public signatures (implementation step 10): `_console_sink_fd()` (walks `logger._core.handlers` — dead once no loguru sink is installed) and `wait_for_file_content()` (drains via `logger.complete()` — a no-op once the file sink is the stdlib listener, so the flush must come from the `QueueListener`). `captured_stderr()` is used only inside that module (measured: no other test imports it), so its blast radius is small; `wait_for_file_content` has two external users — `tests/integration/logging/test_logging_integration.py` and `tests/contract/logging/test_logging_contracts.py` (the NFR contract file; only `test_nfr_001_setup_time_budget` is in T-001's gate, `test_nfr_003_diagnose_false` drives loguru's `logger.exception` and is T-002's problem). New-era helpers (`managed_sinks`, `pipeline_logger`, `captured_console`, `json_records`, `wait_for_record`, `bound_logger`, `rotating_file_handlers`) already exist and are what the T-001 tests use.
+
+**D. Gate conflict to resolve before S4.2 (found by reading `green_command` against the task scope).** Three tests are inside T-001's `green_command` but cannot be GREEN with T-001's declared scope:
+
+1. `tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain` — the AC-001 witness is **T-006's** task; it AST-searches **all of `src/` and `tests/`** for a `loguru` import, and loguru imports necessarily remain in `src/backend/settings/`, `src/backend/eventbus/`, `src/backend/permissions/` (deptry interlock) and in the not-yet-adapted test helpers until T-004/T-005/T-006.
+2. `tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json` — the AC-003 witness is **T-002's** task; it needs a *traced* call, and the decorator stays loguru-based until T-002.
+3. `tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline` — its `@logged` clause (`integration_work_fn` + `<<` in the file) needs T-002's rebuilt decorator; its raw-loguru clause needs the removed backend. Weakening either clause is prohibited.
+
+Both (1) and (2) are pulled in only because `green_command` names the whole file `tests/acceptance/logging/test_pipeline_backend.py` (the DAG's gate-scoping constraint excludes later tasks at **file** granularity, and these two live in a file T-001 also owns). Recommended reading for the S4.2 GREEN gate: T-001's gate is its own `tests_to_create` set plus the pre-existing tests it can honestly fix; these three are recorded as expected-red-at-T-001 and go green in T-002 (AC-003, the integration test) and T-006 (AC-001). The orchestrator must confirm this scoping before S4.2, since the DAG's `completion_gates` list does not name them.
+
+**E. Dependency-set change + deptry interlock (measured baseline).** `uv run deptry .` at HEAD `aba98f8` → **Success! No dependency issues found** (Scanning 89 files). `structlog` is **not installed** in this worktree (`ModuleNotFoundError`), so step 1 is: add `structlog>=26` to `[project].dependencies` and `uv sync` (which also writes `uv.lock`) **in the same task that imports it**; remove `"orjson"` from `[tool.deptry.per_rule_ignores] DEP002` (`pyproject.toml:120-123`) **in the same task that imports orjson** (the file renderer). `loguru` (`pyproject.toml:12`) **stays declared** — `src/backend/settings/registry.py`, `src/backend/settings/repository.py`, `src/backend/eventbus/eventbus.py`, `src/backend/permissions/service.py` still import it, so it is neither DEP001 nor DEP002 in the state T-001 leaves behind; its removal is T-006. Do not touch the rest of `[tool.deptry]` (`pyproject-tooling-gaps` owns that table). The logging feature's own 2 statements in `src/backend/logging/feature_settings.py` (`logger.warning` / `logger.debug`) migrate to `get_logger()` here — part of REQ-001 (no backend import under `src/`); no test asserts those two statements through `log_records`, so the migration is behavior-neutral.
+
+**F. Intermediate-state noise.** `_configure()` currently calls loguru's `logger.remove()` to drop its default stderr sink. Once `_setup.py` stops touching loguru, **loguru's default stderr sink stays installed** for the whole session, so every still-loguru-based `@logged` record prints to stderr. `captured_console()` dup2s the *managed console handler's* fd, so it is unaffected, but any assertion that reads raw stderr of a subprocess (`run_python`) may see loguru lines; `test_edge_002_rotation_with_open_handle` only greps for `--- Logging error ---`, which loguru does not emit.
+
+**Gate table (S4.1)**
+
+| Gate | Command | Result |
+|---|---|---|
+| Task ready | `.github/task-runner/tasks.json` — T-001 `dependencies: []`, `status: PENDING` | confirmed |
+| Tests present | derived at `fcce934`, HEAD `aba98f8`; both authorized deletions already absent | confirmed |
+| RED re-observed | T-001 `red_command` verbatim | **20 failed, 2 passed (19.49 s)** — same as S3.2, all `AssertionError` |
+| deptry baseline (pre-implementation) | `uv run deptry .` | **Success! No dependency issues found** (89 files) |
+| green_command baseline (pre-implementation) | T-001 `green_command` | **22 failed, 26 passed (38.56 s)** — the 2 extra failures are the two later-task witnesses in note D |
+| No implementation written | this step changed only `docs/verification/structlog-logging.md` | confirmed |
+
+**Phase 4 (S4.1, T-001) gate: PASS — RED re-confirmed.** Next: S4.2 (T-001) — implement + confirm GREEN.
+
