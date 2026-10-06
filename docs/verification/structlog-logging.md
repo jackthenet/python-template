@@ -1464,3 +1464,71 @@ The 7 failures are all **later DAG tasks' Phase 3 reds**, unchanged from the pre
 | No test weakened or deleted | **PASS** |
 
 **Phase 4 (S4.2, T-002) gate: PASS — GREEN confirmed.** Next: S4.3 (T-002) refactor pass, then S4.4 sets `VERIFIED`.
+
+### S4.3 (T-002) — Refactor pass (keep GREEN)
+
+**Objective:** improve the structure of T-002's changed code without changing specified behaviour.
+
+#### What was reviewed
+
+T-002's changed paths: `src/backend/logging/_decorator.py`, `src/backend/logging/_pipeline.py`,
+`tests/conftest.py`, `tests/logging_coverage_test_helpers.py`, `tests/logging_test_helpers.py`,
+`tests/acceptance/logging_coverage/test_sink_failure.py`, `tests/acceptance/logging_coverage/test_services_traced.py`,
+`tests/contract/logging/test_logging_contracts.py`, `tests/integration/logging/test_logging_integration.py`,
+`tests/property/logging_coverage/test_invariants.py`, `tests/unit/logging_coverage/test_edge_cases.py`.
+
+**Source side: no change needed.** S4.2's `_Tracer` already removed the sync/async duplication that
+`_wrap_sync`/`_wrap_async` carried (the level resolution, the record text and the sink-failure guard now
+live in one place), and `_pipeline.py` shares its formatter construction (`_formatter_for`) and its
+renderer-pair default (`_renderer_pair`) between `_install` and `_reconfigure`. The two level helpers are
+not duplicates: `_decorator._level_method` maps a level *name* to the bound-logger method (AC-011), while
+`_pipeline._level_of` maps the configured level to a stdlib *number* (REQ-002). The three emit guards
+(`_PipelineQueueHandler.emit`, `_PipelineQueueListener.handle`, `_ForwardingHandler.emit`, plus
+`_Tracer._emit`) sit at four different boundaries of the emission path — collapsing any one of them would
+drop the AC-016 guarantee for the others. No source file was touched.
+
+**Test side: two real duplications introduced by S4.2 were removed.**
+
+1. **The failing-sink harness block, three copies.** `FailingHandler()` + `pipeline_logger().addHandler(...)`
+   + `try:` + `finally: removeHandler(...)` appeared verbatim in `test_sink_failure.py`
+   (`test_sink_failure_does_not_interrupt`), `test_edge_cases.py` (`test_sink_failure_graceful`) and
+   `test_invariants.py` (`test_tracing_never_interrupts_call`). Replaced by one context manager,
+   `failing_sink_attached()`, next to `FailingHandler` in `logging_coverage_test_helpers.py` — the same
+   shape the neighbouring `pipeline_capture` already uses. The handler-attach ordering rule (the capture
+   handler must be attached first, because stdlib does not guard one handler's `emit` from the next) is now
+   stated once, in the helper's docstring, instead of being re-explained at each call site. The
+   `pipeline_logger` import dropped out of `test_invariants.py` and `test_edge_cases.py` (the latter keeps
+   `managed_sinks`) and out of `test_sink_failure.py`.
+2. **`exploding_emit` defined twice in one file.** `test_sink_failure.py` defined the identical nested
+   `exploding_emit` in both AC-016 tests and repeated the `handler.emit = ...` / `finally: del handler.emit`
+   dance. Replaced by one module-local `broken_emit(handler)` context manager, used as
+   `with broken_emit(queue_handler), broken_emit(rotating):` and `with broken_emit(rotating):`.
+
+#### What was deliberately NOT changed
+
+- `_PipelineQueueHandler.emit` re-states the guard stdlib's `QueueHandler.emit` already performs. It is
+  redundant by construction, but it is **pre-existing T-001 code with an explicit rationale comment**
+  (the AC-016 guarantee must not depend on a stdlib implementation detail), and it is outside T-002's
+  refactor scope. Left as is.
+- `_CAPTURED_DROP` (capture side) vs `_renderers.PROCESSOR_META_FIELDS` / `INTERNAL_FIELDS` (render side)
+  look like duplicates but are not: the capture reads the event dict *before* the render chain runs, so it
+  drops a different set (`exc_info`/`stack_info` markers, not the callsite fields the render chain adds).
+  Coupling the test helper to the renderer's private constants would be a false sharing.
+- No test assertion was weakened, added or removed; the only test edits are structural (context managers
+  and imports). No new dependency, no new abstraction beyond the two context managers that replace the
+  duplicated blocks.
+
+#### Evidence (S4.3, T-002)
+
+| Gate | Command | Result |
+|---|---|---|
+| Baseline before refactor | `green_command` | 74 passed in 19.66 s |
+| GREEN after refactor | `green_command` + `tests/acceptance/logging_coverage/test_sink_failure.py` | **77 passed in 19.87 s** (74 + the 3 sink-failure tests, which the `green_command` set does not list) |
+| Lint | `uv run ruff check <4 changed paths>` | **All checks passed** |
+| Format | `uv run ruff format <4 changed paths>` | **4 files left unchanged** |
+| Types | `uv run mypy src/` | **Success: no issues found in 84 source files** (no source file touched) |
+
+Diff: 4 test files, `+49 / −44`. Behaviour: unchanged — the same handlers are attached and detached in the
+same order, and the same `emit` overrides are installed and removed.
+
+**S4.3 (T-002) gate: PASS — refactored, GREEN maintained.** Next: S4.4 (T-002) commit + set `VERIFIED`.

@@ -222,6 +222,25 @@ class FailingHandler(logging.Handler):
 
 
 @contextmanager
+def failing_sink_attached() -> Iterator[None]:
+    """Attach a :class:`FailingHandler` to the pipeline logger for a block (REQ-013 witness).
+
+    Enter it *after* any capture handler is already attached: stdlib does not guard one
+    handler's emit from the next, so the capture must be earlier in the chain to observe
+    the records the failing sink does not stop.
+    """
+    from logging_test_helpers import pipeline_logger
+
+    feature = pipeline_logger()
+    handler = FailingHandler()
+    feature.addHandler(handler)
+    try:
+        yield
+    finally:
+        feature.removeHandler(handler)
+
+
+@contextmanager
 def pipeline_capture(records: list[Any], level: str = "DEBUG") -> Iterator[None]:
     """Attach a :class:`PipelineCaptureHandler` to the pipeline logger for a block.
 

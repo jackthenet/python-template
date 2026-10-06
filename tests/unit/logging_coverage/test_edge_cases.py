@@ -13,13 +13,13 @@ from typing import Any
 import pytest
 from logging_coverage_test_helpers import (
     INVENTORY_CLASSES,
-    FailingHandler,
     entry_records,
     exception_records,
     exit_records,
+    failing_sink_attached,
     level_name,
 )
-from logging_test_helpers import managed_sinks, pipeline_logger
+from logging_test_helpers import managed_sinks
 
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.logging import logged, setup_logger
@@ -55,14 +55,10 @@ def test_sink_failure_graceful(log_records: list[Any], tmp_path: Any) -> None:
     logger — the backend the records actually travel through — in place of the removed
     backend's ``logger.add(failing_sink, catch=True)``. The assertion is unchanged.
     """
-    failing = FailingHandler()
-    pipeline_logger().addHandler(failing)
-    try:
+    with failing_sink_attached():
         repo = SqliteUserRepository(f"sqlite:///{tmp_path}/edge.db")
         result = repo.get_by_username("probe")  # must not raise
         assert result is None
-    finally:
-        pipeline_logger().removeHandler(failing)
     # The traced call still produced an entry record (via the working sink).
     assert any("SqliteUserRepository.get_by_username" in str(r) for r in entry_records(log_records))
 

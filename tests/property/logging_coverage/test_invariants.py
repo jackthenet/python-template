@@ -18,14 +18,13 @@ from typing import Any
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from logging_coverage_test_helpers import (
-    FailingHandler,
     capture_records,
     entry_records,
     exit_records,
+    failing_sink_attached,
     for_qualname,
     parse_elapsed_ms,
 )
-from logging_test_helpers import pipeline_logger
 
 from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
@@ -118,18 +117,11 @@ def test_tracing_never_interrupts_call(sleep_ms: int) -> None:
         time.sleep(sleep_ms / 1000.0)
 
     with tempfile.TemporaryDirectory() as tmp:
-        with capture_records() as records:
-            # structlog-logging (REQ-013): the failing sink is a handler on the pipeline's own
-            # logger, in place of the removed backend's ``logger.add(failing_sink, catch=True)``.
-            # It is added after the capture handler: stdlib does not guard one handler's emit
-            # from the next, so the capture must be earlier in the chain to observe the records.
-            failing = FailingHandler()
-            pipeline_logger().addHandler(failing)
-            try:
-                slow()  # slow call completes despite the failing sink
-                _qualname, invoke = _subjects(Path(tmp))[0]
-                invoke()  # inventory call completes despite the failing sink
-            finally:
-                pipeline_logger().removeHandler(failing)
+        # structlog-logging (REQ-013): the failing sink is a handler on the pipeline's own
+        # logger, in place of the removed backend's ``logger.add(failing_sink, catch=True)``.
+        with capture_records() as records, failing_sink_attached():
+            slow()  # slow call completes despite the failing sink
+            _qualname, invoke = _subjects(Path(tmp))[0]
+            invoke()  # inventory call completes despite the failing sink
         # Both completed; the inventory call is traced.
         assert any("new_token" in str(r) for r in records)

@@ -7,21 +7,22 @@ REQ-013: a log sink failure MUST NOT interrupt the traced call.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from logging_coverage_test_helpers import (
     INVENTORY_CLASSES,
-    FailingHandler,
     entry_records,
     exit_records,
+    failing_sink_attached,
     for_qualname,
 )
 from logging_test_helpers import (
     bound_logger,
     captured_console,
     managed_sinks,
-    pipeline_logger,
     rotating_file_handlers,
     session_log_path,
     wait_for_record,
@@ -30,6 +31,20 @@ from settings_test_helpers import wait_for
 
 from backend.logging import setup_logger
 from backend.usermanagement.repository import SqliteUserRepository
+
+
+@contextmanager
+def broken_emit(handler: logging.Handler) -> Iterator[None]:
+    """Make ``handler.emit`` raise for the block: the AC-016 broken-sink witness."""
+
+    def exploding_emit(record: logging.LogRecord) -> None:
+        raise RuntimeError("managed file sink is down")
+
+    handler.emit = exploding_emit  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        del handler.emit
 
 
 def test_sink_failure_does_not_interrupt(log_records: list[Any], tmp_path: Any) -> None:
@@ -45,14 +60,10 @@ def test_sink_failure_does_not_interrupt(log_records: list[Any], tmp_path: Any) 
 
     setup_logger()
 
-    failing = FailingHandler()
-    pipeline_logger().addHandler(failing)
-    try:
+    with failing_sink_attached():
         repo = SqliteUserRepository(f"sqlite:///{tmp_path}/sink.db")
         result = repo.get_by_username("probe")  # must not raise
         assert result is None
-    finally:
-        pipeline_logger().removeHandler(failing)
 
     # The traced call still produced entry + exit records (via the working sink).
     entries = for_qualname(entry_records(log_records), "SqliteUserRepository.get_by_username")
@@ -74,19 +85,12 @@ def test_ac_016_call_unaffected_by_failing_file_sink(tmp_path: Path) -> None:
     _console, queue_handler = managed_sinks()
     rotating = rotating_file_handlers()[0]
 
-    def exploding_emit(record: logging.LogRecord) -> None:
-        raise RuntimeError("managed file sink is down")
-
-    queue_handler.emit = exploding_emit  # type: ignore[method-assign]
-    rotating.emit = exploding_emit  # type: ignore[method-assign]
     token = "ac016 file sink down probe"
-    try:
+    with broken_emit(queue_handler), broken_emit(rotating):
         repo = SqliteUserRepository(f"sqlite:///{tmp_path}/ac016.db")
         assert repo.get_by_username("probe") is None, "AC-016: the traced call must return its normal result"
         with captured_console() as console_path:
             logging.getLogger("ac_016_probe").warning(token)  # must not raise
-    finally:
-        del queue_handler.emit, rotating.emit
 
     assert token in console_path.read_text(encoding="utf-8"), "AC-016: the console sink must keep working"
 
@@ -105,15 +109,9 @@ def test_ac_016_file_sink_keeps_working_after_a_failing_sink() -> None:
     _console, queue_handler = managed_sinks()
     rotating = rotating_file_handlers()[0]
 
-    def exploding_emit(record: logging.LogRecord) -> None:
-        raise RuntimeError("managed file sink is down")
-
     recovered = "ac016 file sink recovered probe"
-    rotating.emit = exploding_emit  # type: ignore[method-assign]
-    try:
+    with broken_emit(rotating):
         bound_logger("ac_016").info("ac016 file sink down probe")  # queued while the sink is down
-    finally:
-        del rotating.emit
 
     assert wait_for(queue_handler.queue.empty), "AC-016: the queue listener must keep draining after a sink failure"
     bound_logger("ac_016").info(recovered)
