@@ -14,9 +14,9 @@ except TypeError:
 
 Prefer:
 ```python
-import structlog
+from backend.logging import get_logger
 
-log = structlog.get_logger()
+log = get_logger()
 
 try:
     do()
@@ -27,7 +27,7 @@ except (ValueError, TypeError) as exc:
 
 Rules:
 - Catch the narrowest exceptions that you can actually handle.
-- Log with the logger, not `print`. Re-raise (`raise`) unless you truly recover.
+- Log through the shared logging feature (`get_logger()`; the sinks are installed once at startup by `setup_logger()`), never with `print`. Re-raise (`raise`) unless you truly recover. If the function is already traced with `@logged` / `@logged_class`, the exception is already recorded — log only what the trace does not say.
 - Keep different handlers separate when the recovery differs.
 - Never write `except Exception: pass`.
 
@@ -40,9 +40,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from time import perf_counter
 
-import structlog
+from backend.logging import get_logger
 
-log = structlog.get_logger()
+log = get_logger()
 
 
 @contextmanager
@@ -60,3 +60,4 @@ with timer("squares"):
 
 Why not `time.time()`: it is not monotonic and can jump (clock changes).
 Always use `with` for files, locks, DB sessions and HTTP clients instead of manual open/close.
+For a plain function call, `@logged(slow_threshold_ms=...)` already measures the elapsed time; write a timer only to time a block.

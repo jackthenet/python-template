@@ -1856,3 +1856,52 @@ Notes for S4.2:
 Out of scope, untouched: `AGENTS.md`, the three `.agents/skills/python-best-practices/` files, `tests/contract/logging/test_dependency_contract.py`, `pyproject.toml`, `src/`, the spec, and `.github/task-runner/tasks.json` / `docs/tasks/` (T-007's `status` stays `PENDING` — setting it to `VERIFIED` is S4.4's job).
 
 **Phase 4 (S4.1, T-007) gate: PASS — a ready task is picked (easiest of T-003/T-004/T-007) and RED is observed on its `red_command` (1 failed, 24 AC-019 violations).** Next: S4.2 (T-007) — rewrite the four guidance files to the new surface, confirm GREEN on the same command.
+
+
+### S4.2 T-007 — implement + confirm GREEN (2026-10-06)
+
+**Objective:** rewrite the four agent-facing guidance files to the implemented logging surface so the AC-019 witness passes. Guidance text only — no `src/`, no test change, no dependency change (`implementation_scope` in `.github/task-runner/tasks.json` → T-007).
+
+#### What changed, per file
+
+| File | Change (the defect class it clears) |
+|---|---|
+| `AGENTS.md` — "Using the Logging Feature" (9 lines rewritten, 1 bullet added, 18 ±) | **Setup bullet**: `setup_logger(settings)` → `setup_logger()`, and the idempotence wording now states what is actually idempotent (two managed sinks; a later call reconfigures them) instead of "later calls are no-ops" (clauses 1/5). **New bullet**: the `renderer` keyword — `setup_logger(renderer="json")` / `setup_logger(renderer="text")` / default `None` = text console + JSON file, `ValueError` before anything is installed (matches `_validate_renderer`, `src/backend/logging/_pipeline.py:209`, and `RENDERERS = ("text", "json")`, `:45`). **Settings bullet**: "Build a `Settings` instance" → the live settings-registry surface (`register_settings(registry)` + the five `logging.*` keys, fallback to the `Settings` default, `get_settings()`), which is how `setup_logger` actually reads its values (`_settings_from_registry`, `_settings.py:26`). **`@logged` bullet**: parameter list is now exactly `level`, `slow_threshold_ms`, `slow_threshold_setting`, `include_args` — `context_getter` and `depth` deleted (clause 2, matches `_decorator.logged`, `:189`). **New "One-off statements" bullet** replaces the removed loguru sentence: `get_logger()` / `get_logger("eventbus")` + keyword fields, usable before setup (clause 1 + clause 3's missing `get_logger`; matches `get_logger`, `_pipeline.py:178` and the T-005 call pattern `src/backend/eventbus/eventbus.py:27`). **Conventions bullet**: the loguru-only `diagnose=False` wording replaced by the specified invariant ("records never contain local variable values; pass what should be recorded as keyword fields" — INV-002), the public-import list extended with `get_logger` / `register_settings`, and the private-module list corrected to the modules that exist (`_pipeline` / `_decorator` / `_renderers` / `_settings` — `_setup.py` no longer exists), plus the REQ-005 rule that feature code never imports or calls a backend directly. **Tracing-policy bullet**: "Direct loguru (`logger.info(...)`)" → "`get_logger()`"; the closing sentence's `setup_logger(Settings(...))` → `setup_logger()` (clauses 1 + 5). ADR-060's tracing-policy content (which classes are traced, `include_args=False` for secrets, semantic levels) is unchanged, per `design_constraints`. **Example block**: `from backend.logging import get_logger, logged, setup_logger` + `setup_logger()` + `log = get_logger("myfeature")` (clause 5's rejected `setup_logger(Settings(log_level="INFO"))` is gone). |
+| `.agents/skills/python-best-practices/SKILL.md:16` | "Use the project logger (structlog) instead of `print`." → the feature's own entry points: `setup_logger()` once at startup, `get_logger()` for one-off statements, `@logged` / `@logged_class` to trace calls, never a backend import. Clears clause 3 (all four names were missing). |
+| `.agents/skills/python-best-practices/references/modern-python.md:85` | "Logging: structlog events, …" → the shared feature's entry points with keyword fields, still "not f-string messages and not `print`". Clears clause 3. |
+| `.agents/skills/python-best-practices/references/errors-and-resources.md:17,19,43,45` | Both examples now import the feature (`from backend.logging import get_logger` → `log = get_logger()`) instead of `import structlog` / `structlog.get_logger()` — clears clause 4 (4 violations). The "Rules" bullet names `setup_logger()` and `@logged` / `@logged_class` and states that a traced function's exception is already recorded; a closing line notes `@logged(slow_threshold_ms=...)` already measures a call's elapsed time, so a hand-written timer is for blocks — clears clause 3. |
+
+**No-op recorded:** `allowed_files` names "the tooling line [in AGENTS.md] that names loguru". There is no such line — `grep -ni loguru AGENTS.md` matched only lines 769 and 771 (both inside "Using the Logging Feature", both removed by this step), and the "Tooling & Execution Environment" section names no logging backend. Nothing to change there (confirmed again after the edit: `grep -ni "loguru|structlog|depth|context_getter" AGENTS.md` → no match).
+
+#### GREEN gate — verbatim `green_command`
+
+```text
+uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v
+```
+
+```text
+collecting ... collected 1 item
+tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points PASSED [100%]
+============================== 1 passed in 0.21s ==============================
+```
+
+**AC-019 violation count: 24 → 0.** Re-measured with the witness's own scanner (not only the pass/fail line), so the count is evidence and not an inference:
+
+```text
+uv run python -c "…m._guidance_violations(rel, text) for rel in m._GUIDANCE_FILES…"  →  violations after: 0
+```
+
+All five clauses are satisfied by real content, not by inserted magic strings: every entry-point name appears in a sentence that describes what that entry point does, the two backend call sites are replaced by the feature's own import, and the three rejected `setup_logger(...)` call shapes in `AGENTS.md` are replaced by calls the amended signature (`setup_logger(*, renderer: str | None = None)`, `_pipeline.py:240`) accepts. The witness test was not touched (`git status` shows only the four guidance files + this record).
+
+#### Gate table (S4.2, T-007)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | **GREEN observed** | `uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v` | **1 passed in 0.21 s** (was 1 failed, 24 violations) |
+| b | AC-019 clause count | the witness's `_guidance_violations` over the four files | **0 violations** (before: AGENTS.md 9, `SKILL.md` 4, `modern-python.md` 4, `errors-and-resources.md` 7) |
+| c | **Ruff (changed paths)** | `uv run ruff check AGENTS.md .agents/skills/python-best-practices/SKILL.md .agents/skills/python-best-practices/references/modern-python.md .agents/skills/python-best-practices/references/errors-and-resources.md` | **All checks passed!** (exit 0) — `warning: No Python files found under the given path(s)`: every changed path is Markdown, so ruff has nothing to check and `ruff format` does not apply |
+| d | Published site unaffected | `uv run --group docs mkdocs build --strict` | succeeds (2.92 s, exit 0) — `docs_dir: userdocs`, so neither `AGENTS.md` nor `.agents/skills/` is in the site; the gate confirms no regression, per `design_constraints` |
+| e | Scope | `git status --short` | exactly the four `allowed_files.source_files` + `docs/verification/structlog-logging.md`; `src/`, `tests/`, `pyproject.toml`, specs, `docs/todo/`, `docs/questions/`, `docs/verification/traceability.md`, `.github/task-runner/tasks.json` untouched (T-007 stays `PENDING` — S4.4's job) |
+| f | Full suite | not run (Phase 5 gate; per-task targeted run only) | n/a |
+
+**Phase 4 (S4.2, T-007) gate: PASS — GREEN confirmed (AC-019 witness passes, 24 → 0 violations) and recorded; ruff clean on the changed paths (Markdown-only, nothing to check).** Next: S4.3 (T-007) — refactor (keep GREEN; the no-op fast-path is expected, there is no code in this task's diff), then S4.4 commit + set T-007 `VERIFIED`.
