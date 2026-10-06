@@ -1532,3 +1532,60 @@ Diff: 4 test files, `+49 / −44`. Behaviour: unchanged — the same handlers ar
 same order, and the same `emit` overrides are installed and removed.
 
 **S4.3 (T-002) gate: PASS — refactored, GREEN maintained.** Next: S4.4 (T-002) commit + set `VERIFIED`.
+
+---
+
+### S4.1 (T-005) — RED re-confirmed at 2b047e4 (2026-10-06)
+
+**Re-entry.** T-005 was picked once before (commit `1a5ceb8`, HEAD `1dc155c`). That observation predates **T-002** — decorators rebuilt on the pipeline, capture helpers re-implemented, `QueueListener` fix — so RED is re-observed here before S4.2 (T-005) implements. The DAG entry was re-read verbatim: `task_id: "T-005"`, `feature_group: backend.eventbus`, REQ-005 / AC-009, amended `logging-coverage.md` v2 REQ-010 / AC-010, and its `red_command`, `green_command`, `implementation_steps`, `design_constraints`, `completion_gates` are unchanged.
+
+#### Readiness check (re-run)
+
+| Check | Evidence at `2b047e4` | Result |
+|---|---|---|
+| Dependencies satisfied | `dependencies: ["T-001"]` → `VERIFIED`; T-002 also `VERIFIED` (S4.4, `2b047e4`) | satisfied |
+| Status still `PENDING` | `.github/task-runner/tasks.json`: T-001 `VERIFIED`, T-002 `VERIFIED`, T-003..T-007 `PENDING` | confirmed |
+| Its test exists | `tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger` — collected and run below | confirmed |
+| Migration target unchanged | no commit since `1dc155c` touches `src/backend/eventbus/` or any `tests/*/eventbus` directory; the only backend import is still line 20 `from loguru import logger`, `from backend.logging import logged, logged_class` still line 22 | confirmed |
+| Working tree | `git status --short` clean at HEAD `2b047e4` | confirmed |
+
+#### RED re-confirmed (the DAG's own `red_command`, verbatim)
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger -v
+```
+
+→ **1 failed, 0 passed (0.32 s)** — identical to the S3.2 gate and to the `1a5ceb8` re-confirmation: **no drift** from T-001/T-002 landing. One `AssertionError` at `test_statements_via_feature.py:149`; **no import, collection, fixture or test-data error** (the witness builds no model instance):
+
+```text
+AssertionError: AC-009 / REQ-005 (logging-coverage REQ-010 v2): src/backend/eventbus/eventbus.py imports a logging backend: ['loguru.logger']; src/backend/eventbus/eventbus.py statements not written through get_logger(): line(s) [86, 96, 115, 120, 136, 176, 197, 205, 222, 233]; a module under src/backend/eventbus/ imports a logging backend: ['src/backend/eventbus/eventbus.py']
+```
+
+Failure reason per clause: (1) the file still imports a logging backend (`loguru.logger`); (2) all **10** statement receivers are the backend-bound `logger`, not a `get_logger()`-bound one — the same 10 line numbers as at `1dc155c`, so the scope did not move; (3) the feature-wide clause repeats (1). The **count clause contributes no violation** (the file already holds exactly REQ-005's 10 statements), so the witness is red exactly on what T-005 fixes.
+
+#### Neighborhood and baselines at `2b047e4`
+
+| Measurement | Command | Result |
+|---|---|---|
+| `green_command` set minus the witness (no-delta guard) | the five eventbus test directories (`-q`) | **31 passed (4.05 s)** — unchanged from `1dc155c`; must still be 31 after T-005 |
+| deptry | `uv run deptry .` | **Success! No dependency issues found** (90 files) — loguru still declared *and* still imported by settings/permissions (T-006 interlock) |
+| `tests/acceptance/logging_coverage` (`-q`) | same directory | **3 failed, 18 passed** — red: T-005's eventbus witness, T-004's settings witness, T-006's all-four-features witness `test_ac_009_statements_go_through_get_logger`. AC-016's witness is GREEN since T-002 (red at S3.2) |
+| Cross-task tests note B flagged (`test_levels.py`, `test_direct_loguru_kept.py`) | `-q` on those two files | **2 passed (0.52 s)** — green baseline T-005 must not break |
+
+#### What changed since the `1a5ceb8` observation (T-002 landed)
+
+- **Note B is resolved.** `log_records` (`tests/conftest.py:84`) is now **dual-backend** (`loguru_sink` + `pipeline_capture`, T-002), so a bus statement migrated to `get_logger()` is still captured: `test_semantic_log_levels` (ERROR from the bus's `logger.exception`) and `test_existing_direct_loguru_kept` (asserts the wording `event bus: published event type` / `event bus: shutdown initiated`) stay green **provided wording and levels are preserved exactly**. They are no longer scheduled to go red at T-005; S4.2 runs them as a collateral check.
+- **Note D is obsolete.** `_decorator.py` is pipeline-based since T-002, so after T-005 `eventbus.py` emits through **one** backend — no dual-backend intermediate state.
+- **Worker-thread statements (176 / 197 / 205)** are covered by T-002's `_PipelineQueueListener` fix (the full-suite hang root cause); the AC-016 guarantee holds at both handler boundaries, so no `try/except` around the emits.
+- **Risk A stands unchanged**: `_EMITTING_CHAIN` has no `PositionalArgumentsFormatter`, so the 8 `'{}'`-style positional messages must become the keyword-field form (`implementation_steps` item 1) or their values are dropped from every rendered record.
+
+#### Gate table (S4.1, T-005 re-entry)
+
+| Gate | Command | Result |
+|---|---|---|
+| Task ready | T-005 `dependencies: ["T-001"]` VERIFIED, `status: "PENDING"` | confirmed |
+| Its test present | collected and executed | confirmed |
+| RED re-observed at `2b047e4` | T-005 `red_command` verbatim | **1 failed, 0 passed (0.32 s)** — one `AssertionError`, no import/collection/fixture error |
+| Nothing implemented | only `docs/verification/structlog-logging.md` changed in this step | confirmed |
+
+**Phase 4 (S4.1, T-005) gate: PASS — RED re-confirmed at `2b047e4`.** Next: S4.2 (T-005) — implement + confirm GREEN.
