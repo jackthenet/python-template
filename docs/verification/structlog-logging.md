@@ -428,3 +428,53 @@ Task **T-003 — live reconfiguration on a `logging.*` settings change** (REQ-01
 
 **Phase 3 (S3.1, T-003) gate: PASS.** Next: S3.1 for T-004.
 
+
+---
+
+## Phase 3 (S3.1) — T-004 test derivation (2026-10-06)
+
+Task **T-004 — migrate the 28 direct backend statements in `src/backend/settings/registry.py` (17) and `src/backend/settings/repository.py` (11) to `get_logger()`** (REQ-005; AC-009; amended `logging-coverage.md` v2 REQ-010 / AC-010). Its single `tests_to_create` function exists in the DAG's path.
+
+### Tests created
+
+| Test | File | Requirement | Expected failure mode (RED) |
+|---|---|---|---|
+| `test_ac_009_settings_statements_go_through_get_logger` | `tests/acceptance/logging_coverage/test_statements_via_feature.py` (new module) | AC-009 / REQ-005 + `logging-coverage.md` REQ-010 / AC-010 v2 | `AssertionError` naming every violated clause: both modules import `loguru.logger`, and all 17 + 11 statement call sites are written on a backend-bound `logger` instead of a `get_logger()`-bound logger |
+
+### Witness design (derived from the spec, not from the current implementation)
+
+- **AC-009 is a source-level witness by construction** — "**Then** none of them imports a logging backend, **And** each of the 39 one-off statements is written through `get_logger()`". The import clause is not observable from any record, so the test parses the module with `ast` rather than driving it.
+- **Three clauses, one assertion.** `_statement_violations(path, count)` returns violation strings for (1) an import of a logging backend (`loguru` / `structlog`), (2) the per-file statement count REQ-005 fixes (17 / 11 — `logging-coverage.md` REQ-010 v2: statements stay statements, none added, none removed), and (3) every statement call site whose receiver does not resolve to a `get_logger()` call or to a name bound to one. The test asserts the combined list is empty, so one run names every violation in both files, and a clause that already holds is visible by its absence.
+- **The count clause holds pre-change, which validates the detector.** The scan finds exactly 17 and 11 `<logger>.<level>(…)` call sites today, and no other `.debug` / `.info` / `.warning` / `.error` call in either file, so the RED is specifically the "written through `get_logger()`" clause — not a miscount.
+- **Implementation-agnostic.** The witness accepts any shape that satisfies REQ-005 — `get_logger("settings").info(…)`, a module-level `_LOG = get_logger("settings")`, or a per-method local — and pins no logger name, no placement, no message wording and no keyword-field form, so T-004's `implementation_steps` (message + fields instead of brace formatting) stay free.
+- **The feature-wide gate is included.** T-004's completion gate is "no `loguru` import remains anywhere under `src/backend/settings/`", so the test also scans every module of the settings feature for a backend import (REQ-001's "no module under `src/` imports one", scoped to this task's feature).
+- **No behavioural duplicate.** The behavioural half — a settings operation's record arriving in the managed file sink — is already derived in T-003 (`test_observability_tracing`, `tests/unit/test_settings_coverage.py`), and AC-008 covers `get_logger()`'s own record contract; this module deliberately re-asserts neither. The record-capture helpers (`json_records`, `wait_for_record`, `bound_logger`) are therefore not needed by this witness.
+- **Helpers are module-local and parameterised** because `tests/logging_coverage_test_helpers.py` is not in T-004's `allowed_files`. T-005 appends `test_ac_009_eventbus_statements_go_through_get_logger` and T-006 appends the spec-named all-four witness `test_ac_009_statements_go_through_get_logger` to this same module and reuse `_statement_violations` / `_backend_imports` unchanged.
+
+### S3.1 T-004 — RED
+
+`uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger -v` → **1 failed, 0 passed** (0.35 s), one `AssertionError` (no import, collection or test-data error):
+
+```text
+AssertionError: AC-009 / REQ-005 (logging-coverage REQ-010 v2): src/backend/settings/registry.py imports a logging backend: ['loguru.logger']; src/backend/settings/registry.py statements not written through get_logger(): line(s) [89, 94, 113, 142, 146, 160, 173, 244, 248, 255, 259, 264, 283, 295, 299, 308, 317]; src/backend/settings/repository.py imports a logging backend: ['loguru.logger']; src/backend/settings/repository.py statements not written through get_logger(): line(s) [140, 151, 154, 156, 248, 259, 262, 264, 281, 284, 286]; a module under src/backend/settings/ imports a logging backend: ['src/backend/settings/registry.py', 'src/backend/settings/repository.py']
+```
+
+Failure mode: **assertion on unimplemented behaviour** — the 17 + 11 statement line numbers are named, and the count clause contributes no violation (both counts already match REQ-005), so the test is red exactly on the migration AC-009 requires.
+
+Neighbours (no collateral): `uv run pytest tests/acceptance/logging_coverage -q` → **2 failed, 16 passed** — the new AC-009 test plus `test_ac_016_call_unaffected_by_failing_file_sink` (T-001's, still red awaiting the pipeline); nothing else in the directory changed state.
+
+### Gate table (S3.1, T-004)
+
+| Gate | Command | Result |
+|---|---|---|
+| Pre-flight collection | `uv run pytest --collect-only -q tests/acceptance/logging_coverage/test_statements_via_feature.py` | the module did not exist at HEAD `f2490a0`; none of T-004's `tests_to_create` names present |
+| Post-flight collection | same command | clean — **1 test collected, 0 errors** |
+| Ruff (changed path) | `uv run ruff check tests/acceptance/logging_coverage/test_statements_via_feature.py` | **All checks passed** |
+| Format | `uv run ruff format tests/acceptance/logging_coverage/test_statements_via_feature.py` | **1 file left unchanged** |
+| RED (T-004 `red_command`) | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger -v` | **1 failed** — assertion failure, message quoted above |
+| Test contract / test-data validity | failure output | no `ValidationError` / `ValueError`, no fixture or collection error — the witness builds no model instance |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** (765 matrix rows, 129 spec IDs, 740 test functions) — the AC-009 matrix row itself is S3.2's |
+| No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
+
+**Phase 3 (S3.1, T-004) gate: PASS.** Next: S3.1 for T-005.
+
