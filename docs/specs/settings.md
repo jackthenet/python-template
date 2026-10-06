@@ -1,6 +1,7 @@
 # Spec: Settings
 
 ## Changelog
+- v5 (2026-10-06): REQ-026 added — public install operation for the shared default registry (`set_settings_registry()`), with REQ-014's singleton-surface enumeration extended to name it, and AC-040..AC-043, INV-011, EDGE-030..EDGE-033 added. Change `settings-public-registry-setter` (CROSS-CUTTING); see `docs/specs/settings-public-registry-setter.md`. No existing ID was renumbered, restated or deleted.
 - v4 (2026-10-04): Wording amendment only (change `structlog-logging`, ADR-082) — no ID changed. The Scope row, the Dependencies row and the §9 Observability paragraph no longer name a logging backend: the feature writes one-off statements through the shared logging feature's exported logger (`get_logger()`), per `docs/specs/structlog-logging.md` REQ-005.
 - v3 (2026-09-21): NFR-001 amended — mutating-op budget made environment-aware: < 50 ms (median) locally, or < 100 ms (median) on CI (detected via the `CI` environment variable), with 1000 registered settings. Was: < 50 ms (median) for all environments. Reason: the budget is environment-sensitive (AC-013's synchronous full-value persistence is I/O-bound); a slower CI runner observed 65.4 ms, beyond the ~2× headroom the 50 ms budget had over the 28 ms CI baseline at v2. Read-only ops (< 1 ms) and all other budgets unchanged.
 - v2 (2026-09-11): NFR-001 amended — single-setting op budgets split: read-only ops (`get_value`, `to_view`, `get_status`) < 1 ms (median) with 1000 registered settings (unchanged); mutating ops (`register`, `set_value`, `reset`), which persist all current values to the value repository (AC-013), < 50 ms (median) with 1000 registered settings. Was: all six ops < 1 ms — unachievable given AC-013's synchronous full-value persistence (observed 13.6 ms local / 28.06 ms CI).
@@ -174,6 +175,7 @@ class SettingsRegistry:
 
 
 def get_settings_registry() -> SettingsRegistry: ...   # shared default (singleton)
+def set_settings_registry(registry: SettingsRegistry) -> None: ...  # install an instance as the shared default
 def reset_settings_registry() -> None: ...            # reset the default (tests)
 
 
@@ -232,7 +234,7 @@ Semantics notes:
 | REQ-011 | The settings feature exposes the settings hierarchy: settings are organized by category then group; `grouped_views()` returns the category -> group -> views structure. |
 | REQ-012 | The settings feature provides renderable metadata for a future frontend: `to_view(key)` and `views()` produce `SettingView` objects combining the setting's metadata, its current value, and its status. |
 | REQ-013 | Each setting exposes a default status derived from its value: `get_status(key)` returns `MODIFIED` when the current value differs from the default, otherwise `DEFAULT`; the status is included in `SettingView`. |
-| REQ-014 | The settings feature provides a shared default registry: `get_settings_registry()` returns a singleton for features, `SettingsRegistry` is instantiable for tests/DI, and `reset_settings_registry()` resets the default for tests. |
+| REQ-014 | The settings feature provides a shared default registry: `get_settings_registry()` returns a singleton for features, `SettingsRegistry` is instantiable for tests/DI, `set_settings_registry()` installs a configured instance as the shared default (REQ-026), and `reset_settings_registry()` resets the default for tests. |
 | REQ-015 | Templates are named value profiles scoped to a single category (and optionally one group); a template's values form a complete map of its scope at creation and update time (the scope may grow afterwards; loads leave settings not in the template as-is). |
 | REQ-016 | The settings feature supports template creation: `create_template(name, category, group, values=None)`; when `values` is None the template captures the current values of all settings in the scope; when given, `values` must exactly cover the scope with valid values; names are unique; violations raise `TemplateValidationError`. |
 | REQ-017 | The settings feature supports template loading: `load_template(name)` sets each of the template's values (validated); settings in the current scope that are not in the template are left as-is; unknown names raise `TemplateNotFoundError`. |
@@ -244,6 +246,7 @@ Semantics notes:
 | REQ-023 | Storage errors are handled: a corrupted or schema-invalid template file raises `TemplateStorageError` on `get`/`list`; `get` for a missing file returns None; `delete` for a missing file is a no-op. |
 | REQ-024 | Value changes publish a `SettingChanged` event (key, value, previous) to the event bus: `set_value`, `reset`, `reset_all`, and the `set_value` calls triggered by template loads. |
 | REQ-025 | The settings registry accepts an explicit event bus: `SettingsRegistry(event_bus=...)`; when omitted, the shared default bus from `get_event_bus()` is used. |
+| REQ-026 | The settings feature provides a public install operation: `set_settings_registry(registry)` installs the given `SettingsRegistry` as the shared default, so a later `get_settings_registry()` returns exactly that instance. It replaces a non-empty default unconditionally and logs one WARNING when it does (none when the slot was empty); it is not retroactive (objects already constructed with an instance keep it); it accepts no `None` (clearing stays `reset_settings_registry()`); it performs no runtime type check (the annotation and `mypy src/` are the check); it publishes no event; and install, lazy create and reset are mutually exclusive under one module-level lock. |
 
 ## 5. Acceptance Criteria
 
@@ -288,6 +291,10 @@ Semantics notes:
 | AC-037 | REQ-025 | **Given** `SettingsRegistry(event_bus=custom_bus)`, **When** `set_value(key, value)` is called, **Then** the event is published on `custom_bus`, not on the shared bus. |
 | AC-038 | REQ-005 | **Given** a registry, **When** `register(definition)` is called concurrently from multiple threads with distinct keys, **Then** every setting is registered, **And** no thread crashes. |
 | AC-039 | REQ-024 | **Given** a setting set to a non-default value, **When** `reset(key)` is called, **Then** a `SettingChanged` is published with `value == default` and `previous ==` the old value; **And** **Given** multiple settings set to non-default values, **When** `reset_all()` is called, **Then** a `SettingChanged` is published for each setting, with `value` equal to its default. |
+| AC-040 | REQ-026 | **Given** the shared default is unset and a `SettingsRegistry` built with isolated repositories, **When** `set_settings_registry(registry)` is called, **Then** it returns `None`, **And** `get_settings_registry()` returns that exact instance. |
+| AC-041 | REQ-026 | **Given** the shared default already holds a registry, **When** `set_settings_registry(other)` is called, **Then** no exception is raised, **And** `get_settings_registry()` returns `other`, **And** exactly one WARNING record is logged naming the shared default; **And** **Given** the shared default is unset, **When** `set_settings_registry(registry)` is called, **Then** no WARNING record is logged. |
+| AC-042 | REQ-026 | **Given** the shared default is unset, **When** 8 threads call `get_settings_registry()` concurrently, **Then** all return the same instance; **And** **Given** the shared default holds a registry, **When** threads install and read concurrently, **Then** every read returns a whole instance (never a half-written slot) and no thread crashes. |
+| AC-043 | REQ-026 | **Given** a registry installed with `set_settings_registry(a)`, **When** `reset_settings_registry()` is called and then `get_settings_registry()`, **Then** the returned registry is a freshly created default and is not `a`. |
 
 ## 6. Invariants
 
@@ -303,6 +310,7 @@ Semantics notes:
 | INV-008 | For any value-change operation (`set_value`, `reset`, `reset_all`, template load): exactly one `SettingChanged` is published per setting the operation sets — including when the new value equals the previous value. |
 | INV-009 | For any valid `Template`: `repository.save(t)` followed by `repository.get(t.name)` returns a template equal to t (YAML round-trip). |
 | INV-010 | For any registered setting: `get_status(key) == MODIFIED` if and only if `get_value(key) != default`. |
+| INV-011 | For any sequence of `set_settings_registry` / `reset_settings_registry` / `get_settings_registry` operations: every `get_settings_registry()` call returns exactly the registry installed by the most recent install in the sequence, or a freshly created default when the slot was empty at that call — no install is ever lost. |
 
 ## 7. Edge Cases & Error Conditions
 
@@ -337,6 +345,10 @@ Semantics notes:
 | EDGE-027 | `load_template` when the template's settings are not registered in this registry | Raises `SettingsNotFoundError` for the first missing key. |
 | EDGE-028 | `create_template` with a name that violates the name format (e.g., `"bad name"`, `"1name"`) | Raises `TemplateValidationError`. |
 | EDGE-029 | `SliderSpec` with `max` off the step grid (e.g., `min=0, max=11, step=2`) | Raises `SettingsValidationError` at construction. |
+| EDGE-030 | `set_settings_registry()` over a non-empty shared default (including installing the same instance twice) | The default is replaced, exactly one WARNING is logged, no exception is raised. |
+| EDGE-031 | `set_settings_registry(a)` then `reset_settings_registry()` then `get_settings_registry()` | A freshly created default is returned; it is not `a`. |
+| EDGE-032 | `get_settings_registry(required=False)` after an install / after a reset | Returns the installed registry; after a reset returns `None` and creates nothing (`docs/specs/settings-coverage.md` REQ-012 / EDGE-011 unchanged). |
+| EDGE-033 | Two threads lazily create the shared default at the same moment | Exactly one instance becomes the shared default and both callers receive it (the create race is closed by the module lock). |
 
 ## 8. Non-Functional Requirements
 
@@ -357,6 +369,8 @@ The feature writes one-off statements through the shared logging feature's expor
 | Feature settings registered | DEBUG | feature, count |
 | Value set | DEBUG | key |
 | Value reset | DEBUG | key |
+| Shared default registry installed (into an empty slot) | DEBUG | tracing entry/exit only (function name, elapsed ms) |
+| Shared default registry replaced (non-empty slot) | WARNING | the shared default's name; never the instance contents |
 | Validation failure | WARNING | key, reason |
 | Duplicate registration | WARNING | key |
 | Template created | DEBUG | name, category, group |
@@ -414,6 +428,11 @@ The feature writes one-off statements through the shared logging feature's expor
 | AC-037 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_037_custom_bus` |
 | AC-038 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_038_thread_safe_registration` |
 | AC-039 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_039_reset_publishes_events` |
+| REQ-026 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_040_set_settings_registry_installs_default` |
+| AC-040 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_040_set_settings_registry_installs_default` |
+| AC-041 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_041_replace_logs_one_warning` |
+| AC-042 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_042_concurrent_install_and_read` |
+| AC-043 | acceptance | `tests/acceptance/settings/test_settings.py` | `test_ac_043_install_then_reset_then_default` |
 | INV-001 | property | `tests/property/settings/test_settings_properties.py` | `test_inv_001_set_get_roundtrip` |
 | INV-002 | property | `tests/property/settings/test_settings_properties.py` | `test_inv_002_get_value_always_valid` |
 | INV-003 | property | `tests/property/settings/test_settings_properties.py` | `test_inv_003_reset_to_default` |
@@ -424,6 +443,7 @@ The feature writes one-off statements through the shared logging feature's expor
 | INV-008 | property | `tests/property/settings/test_settings_properties.py` | `test_inv_008_exactly_one_event_per_change` |
 | INV-009 | property | `tests/property/settings/test_settings_properties.py` | `test_inv_009_yaml_roundtrip` |
 | INV-010 | property | `tests/property/settings/test_settings_properties.py` | `test_inv_010_status_derivation` |
+| INV-011 | property | `tests/property/settings/test_settings_properties.py` | `test_inv_011_last_install_wins` |
 | EDGE-001 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_001_unknown_key_lookups` |
 | EDGE-002 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_002_duplicate_registration` |
 | EDGE-003 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_003_wrong_type` |
@@ -453,6 +473,10 @@ The feature writes one-off statements through the shared logging feature's expor
 | EDGE-027 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_027_load_unregistered_settings` |
 | EDGE-028 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_028_invalid_template_name` |
 | EDGE-029 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_029_slider_max_off_grid` |
+| EDGE-030 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_030_install_over_nonempty_default` |
+| EDGE-031 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_031_install_then_reset_creates_default` |
+| EDGE-032 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_032_required_false_after_install` |
+| EDGE-033 | unit | `tests/unit/settings/test_settings_edges.py` | `test_edge_033_concurrent_lazy_create` |
 | NFR-001 | contract | `tests/contract/settings/test_settings_contracts.py` | `test_nfr_001_performance_budgets` |
 | NFR-002 | contract | `tests/contract/settings/test_settings_contracts.py` | `test_nfr_002_api_and_repository_contract` |
 | NFR-003 | contract | `tests/contract/settings/test_settings_contracts.py` | `test_nfr_003_resource_contract` |
@@ -505,6 +529,10 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | REQ-025 | AC-037 | `test_ac_037_custom_bus` | PENDING |
 | REQ-005 | AC-038 | `test_ac_038_thread_safe_registration` | PENDING |
 | REQ-024 | AC-039 | `test_ac_039_reset_publishes_events` | PENDING |
+| REQ-026 | AC-040 | `test_ac_040_set_settings_registry_installs_default` | PENDING |
+| REQ-026 | AC-041 | `test_ac_041_replace_logs_one_warning` | PENDING |
+| REQ-026 | AC-042 | `test_ac_042_concurrent_install_and_read` | PENDING |
+| REQ-026 | AC-043 | `test_ac_043_install_then_reset_then_default` | PENDING |
 | REQ-001 | AC-016 | `test_ac_016_to_view` | PENDING |
 | REQ-015 | AC-019 | `test_ac_019_create_template_explicit` | PENDING |
 | INV-001 | — | `test_inv_001_set_get_roundtrip` | PENDING |
@@ -517,6 +545,7 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | INV-008 | — | `test_inv_008_exactly_one_event_per_change` | PENDING |
 | INV-009 | — | `test_inv_009_yaml_roundtrip` | PENDING |
 | INV-010 | — | `test_inv_010_status_derivation` | PENDING |
+| INV-011 | — | `test_inv_011_last_install_wins` | PENDING |
 | EDGE-001 | — | `test_edge_001_unknown_key_lookups` | PENDING |
 | EDGE-002 | — | `test_edge_002_duplicate_registration` | PENDING |
 | EDGE-003 | — | `test_edge_003_wrong_type` | PENDING |
@@ -546,6 +575,10 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | EDGE-027 | — | `test_edge_027_load_unregistered_settings` | PENDING |
 | EDGE-028 | — | `test_edge_028_invalid_template_name` | PENDING |
 | EDGE-029 | — | `test_edge_029_slider_max_off_grid` | PENDING |
+| EDGE-030 | — | `test_edge_030_install_over_nonempty_default` | PENDING |
+| EDGE-031 | — | `test_edge_031_install_then_reset_creates_default` | PENDING |
+| EDGE-032 | — | `test_edge_032_required_false_after_install` | PENDING |
+| EDGE-033 | — | `test_edge_033_concurrent_lazy_create` | PENDING |
 | NFR-001 | — | `test_nfr_001_performance_budgets` | PENDING |
 | NFR-002 | — | `test_nfr_002_api_and_repository_contract` | PENDING |
 | NFR-003 | — | `test_nfr_003_resource_contract` | PENDING |
