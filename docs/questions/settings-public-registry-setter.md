@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 24 of 29 answered (round 8, 2026-10-06) -->
-- **Answer rounds:** 8
+- **Status:** OPEN  <!-- 28 of 29 answered (round 9, 2026-10-06) -->
+- **Answer rounds:** 9
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -401,10 +401,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) `minor` → 0.7.0** — the type's mapping (a new public API symbol is externally observable to consumers of the package).
   - **`patch` → 0.6.2** — argues no user-visible behavior; contradicts the bump mapping for FEATURE.
   - **None** — only defensible after reclassifying to REFACTOR, which the new public symbol rules out.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** `minor` → 0.7.0. The change is CROSS-CUTTING and AGENTS.md maps CROSS-CUTTING → minor (`major` only if breaking); the new public symbols (`set_settings_registry` + four siblings) are externally observable to package consumers while nothing breaks (NFR-002 keeps the old surface). Run `bump-my-version bump minor` at S6.4 with a clean tree; `tag = false`, so no tag on the change branch.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded in the verification record for S6.4; `pyproject.toml:4` version is the only file bumped
 
 ## Q-26 — Does `AGENTS.md` gain a "how to use this" note
 - **Step:** P.2 Interrogate
@@ -414,10 +414,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) Yes — one bullet** (install the wired registry once at the composition root; tests use the helper, never the slot) — future changes copy the right pattern.
   - **No — the spec's API block is the reference** — smaller diff, and the next composition root may reach for the private slot again.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Yes — one bullet per feature in AGENTS.md, in each of the five 'Using the …' sections (Settings, Event Bus, User Roles & Permissions, Search, Session Management): install the wired instance once at the composition root with `set_<thing>(...)`; tests use the isolation helper, never the slot. Phase 6 step 9 requires documenting reusable shared capabilities, and AGENTS.md is what the agent reads before writing code — today those sections name only the `get_*` accessor, which is what led `main.py` to the private slot.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — AGENTS.md is in the change's in-scope list (5 bullets, one per feature section)
 
 ## Q-27 — The event-bus test helper's two writes
 - **Step:** P.2 Interrogate
@@ -428,10 +428,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Out of scope — record a follow-up backlog item** — the event-bus spec needs its own amendment; keeps this change to one spec.
   - **In scope (this change becomes CROSS-CUTTING)** — retires both leaks at once; two spec amendments and an Impact Analysis.
   - **In scope as a test-only change that keeps the private write behind one helper** — no spec change, but the pattern survives.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** In scope — migrate both `tests/eventbus_test_helpers.py:77,84` writes to `set_event_bus(...)`. The question's original premise (one spec only) is gone: Q-2 put all five singletons in scope, so the event-bus setter exists and these are the event-bus equivalents of the 9 settings sites; Q-16 already decided 'all sites'. A follow-up item would duplicate this change.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — added to the in-scope test migration list (9 settings sites + 2 event-bus sites + the 3 embedded subprocess writes from Q-17)
 
 ## Q-28 — Is `reset_settings_registry()` still test-only
 - **Step:** P.2 Interrogate
@@ -442,10 +442,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Stays the documented test-oriented clear; the amendment names install/reset as the pair with one AC for install → reset → lazy default** — no new semantics, and the sequence stops being unspecified.
   - **Becomes a supported production operation too** — REQ-014's "for tests" wording changes, and the existing AC-018 row's context shifts.
   - **Left as REQ-014 already words it** — smallest spec change, but the install/reset interaction stays untested.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** `reset_settings_registry()` stays the documented test-oriented clear (REQ-014's 'for tests' wording unchanged), and the amendment names install/reset as the pair with one new AC for the sequence install → reset → next `get_settings_registry()` builds a **default** instance (`registry.py:373`). That sequence is currently unspecified and untested, and the Q-11 lock plus the Q-18 guard make it newly relevant. Not promoted to a production operation.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — new AC per affected spec (install/reset pair + lazy-default), REQ-014 wording otherwise untouched
 
 ## Q-29 — Does an install publish an event
 - **Step:** P.2 Interrogate
