@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 20 of 29 answered (round 6, 2026-10-06) -->
-- **Answer rounds:** 6
+- **Status:** OPEN  <!-- 24 of 29 answered (round 8, 2026-10-06) -->
+- **Answer rounds:** 8
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -345,10 +345,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) Yes — same position, module import time** — AC-003's subprocess test keeps proving the same wiring; zero ordering risk.
   - **Allow moving it into a `create_app()`/`main()` body** — cleaner composition, but changes when the singleton exists for every import of `main` and needs AC-003 re-derived.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Keep the install at module-import time in its current position (`src/main.py:137-138`, before the `register_*_settings(...)` calls at `:173-178` and before the `PermissionService` construction at `:150-161`). Rationale recorded at answer time: `src/main.py` is 221 lines of pure module-level wiring with no `create_app()` and no `main()` body, so moving the install means introducing an app factory for the whole composition root; that changes when the singleton exists for every `import main` and would force settings-coverage AC-003 (the subprocess test asserting import-time wiring) to be re-derived. The app-factory option is **opened as a separate TODO** — `composition-root-factory`.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the REQ keeps the wiring position; AC-003 stays the evidence; new TODO `composition-root-factory` created at P.3 on 2026-10-06
 
 ## Q-22 — Consumers constructed before an install
 - **Step:** P.2 Interrogate
@@ -359,10 +359,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Yes — state it in the REQ (and one AC)** — honest and cheap; documents the difference between live readers and constructor-injected ones.
   - **Make the install propagate to already-built consumers** — would need a new registry-identity mechanism and API in other features.
   - **Say nothing** — no spec cost now, a surprise later.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** State it in the REQ plus one AC: an install affects **later** `get_settings_registry()` calls; objects already constructed with a registry keep the instance they were given. This documents the real split in the code — live readers (`filemanagement/service.py:190`, `sessionmanagement/service.py:108`, `register_*_settings()`, `setup_logger`) see the new instance, constructor-injected consumers (`search/service.py:551`, `sessionmanagement/service.py:348`, `main.py:198,204,214`) do not. No propagation mechanism, and no event (D7's closed event surface stands).
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — one sentence in the install REQ + one new AC per affected spec, mapped to an acceptance test
 
 ## Q-23 — Does the setter validate its argument
 - **Step:** P.2 Interrogate
@@ -373,10 +373,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) No runtime check — the annotation plus mypy** — matches the feature's existing style; no new exception path.
   - **Reject a non-`SettingsRegistry` argument with a typed error** — a guard on a global mutation, but a new error case to specify and test.
   - **Also reject a registry using the shared default `settings/` value repository** — enforces the AGENTS.md isolation rule, but inspects private state and is fragile.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** No runtime check — the annotation plus `mypy src/` (the repo's existing style; `quality.yml:23`). Recorded trade-off: mypy covers `src/` only, so tests and the embedded `python -c` programs are not type-checked, but an `isinstance` guard would add a new exception to specify/test/trace in six specs and still miss the failure that actually bites (a type-correct `SettingsRegistry` wired with the wrong repositories). The unenforced AGENTS.md isolation rule is left as-is (Q-23's third option declined).
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the setter's signature; no new exception type in any spec
 
 ## Q-24 — Is "no private-slot write remains" itself a requirement
 - **Step:** P.2 Interrogate
@@ -387,10 +387,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) No — keep it a plain-language signal in the verification record** — the spec specifies behavior, not import hygiene of other packages.
   - **Yes, as an NFR (Contract)** — gives a Q-18 guard a requirement to trace to, and makes the boundary durable.
   - **Yes, as an AC in Given/When/Then form** — same effect, phrased as behavior.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** No — 'no private-slot write remains' stays a plain-language acceptance signal recorded in `docs/verification/settings-public-registry-setter.md`. The spec specifies behavior, not the import hygiene of other packages. The Q-18 guard (pytest scan + ruff `TID251`) is the enforcement; `scripts/check_traceability.py` therefore has no hygiene REQ to demand a test for.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the signal stays out of the spec; the guard test is the enforcement, cited in the verification record
 
 ## Q-25 — Version bump
 - **Step:** P.2 Interrogate
