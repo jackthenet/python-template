@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 18 of 29 answered (round 5, 2026-10-06) -->
-- **Answer rounds:** 5
+- **Status:** OPEN  <!-- 20 of 29 answered (round 6, 2026-10-06) -->
+- **Answer rounds:** 6
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -305,10 +305,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **ruff `TID251` banned-api entries in `pyproject.toml`** — CI-enforced and automatic, but adds a lint rule family the repo has deliberately kept out (the `pyproject-tooling-gaps` precedent puts lint additions in their own change).
   - **A `scripts/` check added to `quality_check`** — matches the traceability-check pattern, but touches CI.
   - **None — the manual Phase 6 checks 3–4 stay the only guard** — consistent with the ATM decision, but leaves the regression open.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Both guard forms. (1) A pytest guard under `tests/unit/` that scans `src/` and `tests/` for a cross-package write to a private singleton slot — CI-enforced for free (`quality.yml:59` `pytest tests/ --cov` and `spec-validation.yml:84` `pytest tests/ -v` already collect everything under `tests/`), and it catches the attribute-write form (`_reg_mod._registry[0] = ...`) that a lint ban cannot see. (2) ruff `TID251` banned-api entries in `pyproject.toml` for `backend.settings.registry._registry` and the four sibling slots — enforced by the existing lint job (`lint.yml:37`, `ruff check .` repo-wide) and by pre-commit, at the import line. Recorded deviation: this adds a lint rule family the repo declined twice (architecture-tests-missing Q-4 offered TID251 and did not take it; `pyproject-tooling-gaps` Q-9 kept ruff `D` out of `select`), so the `[tool.ruff.lint.flake8-tidy-imports.banned-api]` block is in this change's scope and the whole-repo ruff sweep at Phase 5 must stay clean.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — new REQ/AC for the guard + the in-scope list now names `pyproject.toml`; the P.4 spec must state both the banned import and the forbidden write
 
 ## Q-19 — How wide is the guard's ban
 - **Step:** P.2 Interrogate
@@ -319,10 +319,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Only the private-name slot (`_registry`)** — exactly the finding's subject; the 6 public-symbol imports stay as they are.
   - **Also the 6 public-symbol imports from `backend.settings.registry`** — satisfies "import the public API only" for this feature, +6 file edits in the logging-coverage suite.
   - **Every feature's private module path, repo-wide** — a general rule, much larger, and it collides with each feature's own tests and with `structlog-logging`'s work in `src/backend/logging/`.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Only the private singleton slot (`_registry` and the four siblings) — exactly the finding's subject, no self-exemption machinery, no extra file edits. The 6 logging-coverage test imports of public symbols from `backend.settings.registry` stay as they are. The wider convention (the package `__init__` as the only import surface for every feature, with a self-import exemption) is **opened as a separate TODO** — `public-api-import-boundary` — so it can be decided once, repo-wide, on its own merits.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the guard's scope is fixed to the private slot; a new TODO `public-api-import-boundary` was created at P.3 on 2026-10-06 for the wider rule
 
 ## Q-20 — Does `src/main.py` keep its local reference or read the global back
 - **Step:** P.2 Interrogate
