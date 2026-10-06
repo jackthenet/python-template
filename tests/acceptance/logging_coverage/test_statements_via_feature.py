@@ -128,3 +128,22 @@ def test_ac_009_settings_statements_go_through_get_logger() -> None:
         violations.append(f"a module under src/backend/settings/ imports a logging backend: {offenders}")
 
     assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
+
+
+def test_ac_009_eventbus_statements_go_through_get_logger() -> None:
+    """AC-009 (event bus half): the 10 statements in ``eventbus.py`` are written through
+    ``get_logger()``, and no module of the event bus feature imports a logging backend."""
+    # REQ-005 fixes the statement count per file; logging-coverage REQ-010 v2 keeps each of them a statement.
+    violations = _statement_violations("src/backend/eventbus/eventbus.py", 10)
+
+    # T-005's completion gate: the whole event bus feature is backend-free.
+    eventbus_dir = _REPO_ROOT / "src" / "backend" / "eventbus"
+    offenders = sorted(
+        relative
+        for relative in (path.relative_to(_REPO_ROOT).as_posix() for path in eventbus_dir.rglob("*.py"))
+        if _backend_imports(_parse(relative))
+    )
+    if offenders:
+        violations.append(f"a module under src/backend/eventbus/ imports a logging backend: {offenders}")
+
+    assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)

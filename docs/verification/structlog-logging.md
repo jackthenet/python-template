@@ -478,3 +478,51 @@ Neighbours (no collateral): `uv run pytest tests/acceptance/logging_coverage -q`
 
 **Phase 3 (S3.1, T-004) gate: PASS.** Next: S3.1 for T-005.
 
+
+
+---
+
+## Phase 3 (S3.1) — T-005 test derivation (2026-10-06)
+
+Task **T-005 — migrate the 10 direct backend statements in `src/backend/eventbus/eventbus.py` to `get_logger()`** (REQ-005; AC-009; amended `logging-coverage.md` v2 REQ-010 / AC-010; Impact Analysis row 3 — `backend.eventbus`, "no spec ID change"). Its single `tests_to_create` function exists in the DAG's path.
+
+### Tests created
+
+| Test | File | Requirement | Expected failure mode (RED) |
+|---|---|---|---|
+| `test_ac_009_eventbus_statements_go_through_get_logger` | `tests/acceptance/logging_coverage/test_statements_via_feature.py` (appended) | AC-009 / REQ-005 + `logging-coverage.md` REQ-010 / AC-010 v2 | `AssertionError` naming every violated clause: `eventbus.py` imports `loguru.logger`, and all 10 statement call sites are written on the backend-bound `logger` instead of a `get_logger()`-bound logger |
+
+### Witness design (derived from the spec, not from the current implementation)
+
+- **The T-004 helpers are reused unchanged** — `_statement_violations(path, count)`, `_backend_imports`, `_statement_calls`, `_feature_logger_names`, `_written_via_get_logger`, `_parse`. AC-009's three clauses are identical for every named file, so the event bus witness differs only in its argument: `_statement_violations("src/backend/eventbus/eventbus.py", 10)`. Nothing is duplicated and no helper is rewritten.
+- **The count 10 comes from the spec, not from the code** — REQ-005 names `src/backend/eventbus/eventbus.py` (10) and Impact Analysis row 3 restates "10 direct statements migrate to `get_logger()`". `logging-coverage.md` REQ-010 v2 keeps each of them a statement: none added, none removed.
+- **The feature-wide clause mirrors T-004's** — T-005's completion gate is "no `loguru` import remains anywhere under `src/backend/eventbus/`", so the test also scans every module of the event bus feature (`__init__.py`, `eventbus.py`, `feature_settings.py`) for a backend import, per REQ-001's "no module under `src/` imports one" scoped to this task's feature.
+- **Implementation-agnostic.** The witness pins no logger name, no placement (module-level binding vs. per-call `get_logger(...)`), no message wording and no keyword-field form — T-005's `implementation_steps` ("same messages and levels", worker-thread statements unchanged) stay free. Spec section 9 fixes only that the statements' levels stay "DEBUG/INFO/WARNING as today" and the wording is unchanged; the level/message half of that is not observable from the source witness and is covered by the event bus's own existing test directory (T-005's `green_command` runs it unchanged — no behavior delta).
+- **No behavioural duplicate.** AC-008 (`test_ac_008_get_logger_emits_to_sinks`) already covers `get_logger()`'s record contract; the event bus's records are asserted by `tests/acceptance/eventbus` / `tests/unit/eventbus`. This witness re-asserts neither.
+
+### S3.1 T-005 — RED
+
+`uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger -v` → **1 failed, 0 passed** (0.31 s), one `AssertionError` (no import, collection or test-data error):
+
+```text
+AssertionError: AC-009 / REQ-005 (logging-coverage REQ-010 v2): src/backend/eventbus/eventbus.py imports a logging backend: ['loguru.logger']; src/backend/eventbus/eventbus.py statements not written through get_logger(): line(s) [86, 96, 115, 120, 136, 176, 197, 205, 222, 233]; a module under src/backend/eventbus/ imports a logging backend: ['src/backend/eventbus/eventbus.py']
+```
+
+Failure mode: **assertion on unimplemented behaviour** — the 10 statement line numbers are named, and the count clause contributes no violation (the count already matches REQ-005's 10), so the test is red exactly on the migration AC-009 requires.
+
+Neighbours (no collateral): `uv run pytest tests/acceptance/logging_coverage -q` → **3 failed, 16 passed** — the new AC-009 event bus test plus the two already-red ones (`test_ac_009_settings_statements_go_through_get_logger` from T-004, `test_ac_016_call_unaffected_by_failing_file_sink` from T-001); nothing else in the directory changed state.
+
+### Gate table (S3.1, T-005)
+
+| Gate | Command | Result |
+|---|---|---|
+| Pre-flight collection | `uv run pytest --collect-only -q tests/acceptance/logging_coverage/test_statements_via_feature.py` | clean — **1 test collected, 0 errors**; T-005's `tests_to_create` name not present |
+| Post-flight collection | same command | clean — **2 tests collected, 0 errors** |
+| Ruff (changed path) | `uv run ruff check tests/acceptance/logging_coverage/test_statements_via_feature.py` | **All checks passed** |
+| Format | `uv run ruff format tests/acceptance/logging_coverage/test_statements_via_feature.py` | **1 file left unchanged** |
+| RED (T-005 `red_command`) | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger -v` | **1 failed** — assertion failure, message quoted above |
+| Test contract / test-data validity | failure output | no `ValidationError` / `ValueError`, no fixture or collection error — the witness builds no model instance |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** (765 matrix rows, 129 spec IDs, 741 test functions) — the AC-009 matrix row itself is S3.2's |
+| No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
+
+**Phase 3 (S3.1, T-005) gate: PASS.** Next: S3.1 for T-006.
