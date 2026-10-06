@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 28 of 29 answered (round 9, 2026-10-06) -->
-- **Answer rounds:** 9
+- **Status:** ALL ANSWERED  <!-- 29 of 29 answered (round 10, 2026-10-06) -->
+- **Answer rounds:** 10
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -455,10 +455,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) No — installing is wiring, not a value change; D7 stays** — no new event ID, no consumer changes.
   - **Yes — publish a `SettingsRegistryInstalled` event** — lets features re-read wiring after an install, but contradicts D7 and adds an event ID plus consumers.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** No — installing is wiring, not a value change; `docs/specs/settings.md:31` D7 stays ('no other events are published') and REQ-024's closed list is unchanged. Recorded rationale: there is no clean publisher (at `main.py:137` the new registry's own bus is not wired yet), live readers already re-read through `get_settings_registry()`, and per Q-22 the only consumers an event could help — constructor-injected ones — have no API to swap their instance.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the install REQ states explicitly that no event is published; no new event ID in any spec
 
 ## Late questions (Phases 2–6)
 
