@@ -1,5 +1,8 @@
 # Spec: User Roles & Permissions (RBAC, Cross-Cutting)
 
+## Changelog
+- v2 (2026-10-06): REQ-030 added — public install operation for the shared default permission service (`set_permission_service()`), with REQ-023's singleton-surface enumeration and the §3 Public API list extended to name it, and AC-041..AC-044, EDGE-027, EDGE-028 added. Change `settings-public-registry-setter` (CROSS-CUTTING); see `docs/specs/settings-public-registry-setter.md`. No existing ID was renumbered, restated or deleted; the static permission catalog (REQ-004, REQ-005, AC-006) is unchanged.
+
 ## 1. Overview & Objectives
 - **Feature Name:** User Roles & Permissions (RBAC)
 - **Target Component:** `src/backend/permissions/` (new feature) + amendments to `src/backend/usermanagement/`, `src/backend/authentication/`, `src/backend/settings/`, `src/backend/filemanagement/`, `src/backend/mail/`, `src/backend/sessionmanagement/`, and new enforcement plumbing in `src/backend/shared/`.
@@ -478,14 +481,14 @@ src/backend/permissions/
 ├── events.py              # PermissionEvent + lifecycle events, EventPublisher (structural)
 ├── errors.py              # AuthorizationError hierarchy
 ├── repositories.py        # RoleRepository/GrantRepository/SystemPrincipalRepository ABCs + SQLite + in-memory
-├── service.py             # PermissionService, get_permission_service, reset_permission_service
+├── service.py             # PermissionService, get_permission_service, set_permission_service, reset_permission_service
 └── feature_settings.py    # register_settings (permissions.system_principal)
 
 src/backend/shared/
 └── principal.py           # Principal, PermissionChecker (protocol), requires_permission (decorator)
 ```
 
-**Public API (permissions; the NFR-003 contract):** `PermissionService`, `get_permission_service`, `reset_permission_service`, `PermissionCatalog`, `Role`, `RolePermission`, `SystemPrincipalPermission`, `RoleRead`, `PermissionRead`, `RoleRepository`, `SqliteRoleRepository`, `MemoryRoleRepository`, `GrantRepository`, `SqliteGrantRepository`, `MemoryGrantRepository`, `SystemPrincipalRepository`, `SqliteSystemPrincipalRepository`, `MemorySystemPrincipalRepository`, `register_settings`, `BOOTSTRAP_SYSTEM_PERMISSIONS`, `PermissionEvent`, `PermissionDenied`, `RoleCreated`, `RoleDeleted`, `RolePermissionsChanged`, `AuthorizationError`, `PermissionDeniedError`, `RoleNotFoundError`, `RoleAlreadyExistsError`, `RoleInUseError`, `RoleProtectedError`, `UnknownPermissionError`. Shared: `Principal`, `PermissionChecker`, `requires_permission`.
+**Public API (permissions; the NFR-003 contract):** `PermissionService`, `get_permission_service`, `set_permission_service`, `reset_permission_service`, `PermissionCatalog`, `Role`, `RolePermission`, `SystemPrincipalPermission`, `RoleRead`, `PermissionRead`, `RoleRepository`, `SqliteRoleRepository`, `MemoryRoleRepository`, `GrantRepository`, `SqliteGrantRepository`, `MemoryGrantRepository`, `SystemPrincipalRepository`, `SqliteSystemPrincipalRepository`, `MemorySystemPrincipalRepository`, `register_settings`, `BOOTSTRAP_SYSTEM_PERMISSIONS`, `PermissionEvent`, `PermissionDenied`, `RoleCreated`, `RoleDeleted`, `RolePermissionsChanged`, `AuthorizationError`, `PermissionDeniedError`, `RoleNotFoundError`, `RoleAlreadyExistsError`, `RoleInUseError`, `RoleProtectedError`, `UnknownPermissionError`. Shared: `Principal`, `PermissionChecker`, `requires_permission`.
 
 ## 4. Requirements
 
@@ -516,13 +519,14 @@ Each normative requirement MUST have a stable ID. These IDs propagate through th
 | REQ-020 | Events: `PermissionDenied` (on every denial), `RoleCreated`, `RoleDeleted`, `RolePermissionsChanged`; role assignment reuses user-management's `UserRoleChanged`; events carry non-sensitive data only; the publisher is optional (None → no events, no errors). |
 | REQ-021 | Errors: a structured exception hierarchy in `backend.permissions.errors` rooted at `AuthorizationError` (no collision with the built-in `PermissionError`); `PermissionDeniedError` context: `user_id`, `permission`, `reason`; role errors carry `role`. |
 | REQ-022 | Persistence: the `roles`, `role_permissions`, and `system_principal_permissions` tables (SQLModel/SQLite) behind the repository ABCs; an alembic migration creates them and seeds the built-in roles and the bootstrap system set. |
-| REQ-023 | Construction and testing: constructor DI with the repository ABCs + `UserManager`; in-memory repositories for tests/DI; a module singleton `get_permission_service()` + `reset_permission_service()`. |
+| REQ-023 | Construction and testing: constructor DI with the repository ABCs + `UserManager`; in-memory repositories for tests/DI; a module singleton `get_permission_service()` + `set_permission_service()` (REQ-030) + `reset_permission_service()`. |
 | REQ-024 | Enforcement wiring: every enforced public service method of the six features takes a trailing `principal: Principal = Principal()` parameter and enforces `require_permission("<feature>.<method>")` at entry (via `@requires_permission`); the exempt set (authentication's session-establishment/teardown/introspection operations) is declared but not enforced. |
 | REQ-025 | The principal model: `Principal(user_id: UUID | None = None, session_token: str | None = None)`; `Principal()` is the system principal. |
 | REQ-026 | User-management amendment: multiple roles per user (`User.roles: list[str]`, `UserCreate.roles`, `UserRead.roles`), role existence validated against an injected `RoleStore` (default `StaticRoleStore(("admin", "user"))`), new assignment methods `set_roles` / `add_role` / `remove_role` with `set_role` preserved as `set_roles([role])`, event field changes (`UserRoleChanged.old_roles`/`new_roles`, `UserCreated.roles`), the `member` → `user` rename, and a data migration. |
 | REQ-027 | Thread safety: the check path, repositories, and internal state are safe for concurrent use from multiple threads. |
 | REQ-028 | Observability: `PermissionService` is traced via the shared logging feature (`@logged_class`, `include_args=False`); denials are logged at WARNING with the reason; session tokens never appear in any log record. |
 | REQ-029 | Performance: a check completes in < 5 ms (median) in-process, including the user/role/grant SQLite lookups and `@logged` tracing, measured with the synchronous console sink active. |
+| REQ-030 | The permissions feature provides a public install operation: `set_permission_service(service)` installs the given `PermissionService` as the shared default, so a later `get_permission_service()` returns exactly that instance. It replaces a non-empty default unconditionally and logs one WARNING when it does (none when the slot was empty); it is not retroactive (a service that was injected somewhere keeps that instance); it accepts no `None` (clearing stays `reset_permission_service()`); it performs no runtime type check; it publishes no event; and install, lazy create and reset are mutually exclusive under one module-level lock. It is a wiring function, not a permission catalog entry (REQ-004, REQ-005 unchanged). |
 
 ## 5. Acceptance Criteria
 
@@ -570,6 +574,10 @@ Each acceptance criterion MUST have a stable ID and MUST reference at least one 
 | AC-038 | REQ-027 | **Given** concurrent checks and role/grant changes from multiple threads, **When** they are executed, **Then** no exception is raised **And** no partial state is left **And** the results are consistent with the final state. |
 | AC-039 | REQ-028 | **Given** the traced service, **When** a check with a session token is denied, **Then** the WARNING log contains `user_id`, `permission`, `reason` **And** no log record contains the session token. |
 | AC-040 | REQ-029 | **Given** the measurement context (local SQLite, the shared logging feature at default INFO level with the synchronous console sink active, `@logged` tracing on), **When** a check is measured, **Then** it completes in < 5 ms (median). |
+| AC-041 | REQ-030 | **Given** the shared default is unset and a `PermissionService` built with in-memory repositories, **When** `set_permission_service(service)` is called, **Then** it returns `None`, **And** `get_permission_service()` returns that exact instance. |
+| AC-042 | REQ-030 | **Given** the shared default already holds a service, **When** `set_permission_service(other)` is called, **Then** no exception is raised, **And** `get_permission_service()` returns `other`, **And** exactly one WARNING record is logged naming the shared default; **And** **Given** the shared default is unset, **When** `set_permission_service(service)` is called, **Then** no WARNING record is logged. |
+| AC-043 | REQ-030 | **Given** the shared default is unset, **When** 8 threads call `get_permission_service()` concurrently, **Then** all return the same instance (exactly one default is built); **And** **Given** the shared default holds a service, **When** threads install, read and reset concurrently, **Then** every read returns a whole instance and no thread crashes. |
+| AC-044 | REQ-030 | **Given** a service installed with `set_permission_service(a)`, **When** `reset_permission_service()` is called and then `get_permission_service()`, **Then** the returned service is a freshly created default and is not `a`. |
 
 ## 6. Invariants
 
@@ -614,6 +622,8 @@ State invariants that hold over a large input space. These become Hypothesis pro
 | EDGE-024 | A session token for a user deleted after login | Deny (reason `unknown_user`) — the user lookup precedes session validation |
 | EDGE-025 | A check with a token for a user whose session is expired | Deny (reason `invalid_session`) |
 | EDGE-026 | An assignment pass-through with an unknown role (e.g., `add_role(u, "nonexistent")`) | A `RoleNotFoundError` is raised (the service validates against the role store before delegation) |
+| EDGE-027 | `set_permission_service(other)` replacing a non-empty shared default | The default is replaced, exactly one WARNING is logged, no exception is raised; the replaced service keeps working for every object that holds it (no lifecycle effect) |
+| EDGE-028 | Two threads lazily create the shared default service at the same moment | Exactly one instance becomes the shared default and both callers receive it (the create race is closed by the module lock) |
 
 ## 8. Non-Functional Requirements
 
@@ -680,6 +690,7 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | REQ-027 | integration | `tests/integration/permissions/test_thread_safety.py` | `test_concurrent_checks_and_changes` |
 | REQ-028 | acceptance | `tests/acceptance/permissions/test_check_api.py` | `test_denial_log_and_no_token_leak` |
 | REQ-029 | contract | `tests/contract/permissions/test_performance.py` | `test_check_latency_under_5ms_median` |
+| REQ-030 | acceptance | `tests/acceptance/permissions/test_singleton_install.py` | `test_ac_041_set_permission_service_installs_default` |
 | AC-001 | acceptance | `tests/acceptance/permissions/test_check_api.py` | `test_granted_permission_allowed` |
 | AC-002 | acceptance | `tests/acceptance/permissions/test_check_api.py` | `test_denied_permission_raises_with_context` |
 | AC-003 | acceptance | `tests/acceptance/permissions/test_check_api.py` | `test_malformed_permission_denied` |
@@ -720,6 +731,10 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | AC-038 | integration | `tests/integration/permissions/test_thread_safety.py` | `test_concurrent_checks_and_changes` |
 | AC-039 | acceptance | `tests/acceptance/permissions/test_check_api.py` | `test_denial_log_and_no_token_leak` |
 | AC-040 | contract | `tests/contract/permissions/test_performance.py` | `test_check_latency_under_5ms_median` |
+| AC-041 | acceptance | `tests/acceptance/permissions/test_singleton_install.py` | `test_ac_041_set_permission_service_installs_default` |
+| AC-042 | acceptance | `tests/acceptance/permissions/test_singleton_install.py` | `test_ac_042_replace_logs_one_warning` |
+| AC-043 | acceptance | `tests/acceptance/permissions/test_singleton_install.py` | `test_ac_043_concurrent_install_read_reset` |
+| AC-044 | acceptance | `tests/acceptance/permissions/test_singleton_install.py` | `test_ac_044_install_then_reset_then_default` |
 | INV-001 | property | `tests/property/permissions/test_invariants.py` | `test_check_true_iff_granted_and_active` |
 | INV-002 | property | `tests/property/permissions/test_invariants.py` | `test_undeterminable_never_true` |
 | INV-003 | property | `tests/property/permissions/test_invariants.py` | `test_last_admin_invariant` |
@@ -752,6 +767,8 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | EDGE-024 | unit | `tests/unit/permissions/test_edge_cases.py` | `test_token_deleted_user_denied` |
 | EDGE-025 | unit | `tests/unit/permissions/test_edge_cases.py` | `test_expired_session_denied` |
 | EDGE-026 | unit | `tests/unit/permissions/test_edge_cases.py` | `test_assignment_unknown_role` |
+| EDGE-027 | unit | `tests/unit/permissions/test_edge_cases.py` | `test_install_over_nonempty_default` |
+| EDGE-028 | unit | `tests/unit/permissions/test_edge_cases.py` | `test_concurrent_lazy_create` |
 | NFR-001 | contract | `tests/contract/permissions/test_performance.py` | `test_check_latency_under_5ms_median` |
 | NFR-002 | property | `tests/property/permissions/test_invariants.py` | `test_undeterminable_never_true` |
 | NFR-003 | integration | `tests/integration/permissions/test_persistence.py` | `test_in_memory_repos_and_singleton` |
@@ -804,6 +821,12 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | REQ-027 | AC-038 | `test_concurrent_checks_and_changes` | PENDING |
 | REQ-028 | AC-039 | `test_denial_log_and_no_token_leak` | PENDING |
 | REQ-029 | AC-040 | `test_check_latency_under_5ms_median` | PENDING |
+| REQ-030 | AC-041 | `test_ac_041_set_permission_service_installs_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-030 | AC-042 | `test_ac_042_replace_logs_one_warning` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-030 | AC-043 | `test_ac_043_concurrent_install_read_reset` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-030 | AC-044 | `test_ac_044_install_then_reset_then_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| EDGE-027 | — | `test_install_over_nonempty_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| EDGE-028 | — | `test_concurrent_lazy_create` | PENDING (settings-public-registry-setter 2026-10-06) |
 | INV-001 | — | `test_check_true_iff_granted_and_active` | PENDING |
 | INV-002 | — | `test_undeterminable_never_true` | PENDING |
 | INV-003 | — | `test_last_admin_invariant` | PENDING |

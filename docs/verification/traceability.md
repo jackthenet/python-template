@@ -904,6 +904,61 @@ Rows for `docs/specs/structlog-logging.md` (CROSS-CUTTING, ADR-082). The tests a
 | EDGE-001 … EDGE-006 | — | — | PENDING (structlog-logging P.4, 2026-10-04) |
 | NFR-001 … NFR-005 (NFR-001/NFR-002 budgets amended in logging.md) | — | — | PENDING (re-measured locally, gate amended in the implementation PR) |
 
+## Settings Public Registry Setter Matrix (spec amendment PR, 2026-10-06)
+
+Rows for `docs/specs/settings-public-registry-setter.md` (CROSS-CUTTING) and for the new IDs the
+change adds to the six amended specs (`settings.md` v5, `event-bus.md` v2,
+`user-roles-permissions.md` v2, `search.md` v4, `session-management.md` v2,
+`logging-coverage.md` v3). The tests are derived in Phase 3 of the implementation change; the Test
+column is filled then (P.4 records the rows, not the tests). **No existing row of any affected
+feature is rewritten or refreshed** (convention B) — the cited IDs (`settings.md` REQ-014/AC-018,
+`event-bus.md` REQ-006/AC-011/REQ-005, `user-roles-permissions.md` REQ-023/AC-028,
+`search.md` REQ-017/AC-032, `session-management.md` REQ-020/AC-041/AC-042/AC-043,
+`logging-coverage.md` REQ-001/REQ-007, `settings-coverage.md` REQ-002/REQ-012) keep their dated
+records; only the enumeration wording of the singleton requirements and the public-API lists is
+extended.
+
+### The change spec (`docs/specs/settings-public-registry-setter.md`)
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001, AC-002 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-002 | AC-003, AC-004 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-003 | AC-005, AC-006 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-004 | AC-007 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-005 | AC-008 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-006 | AC-009, AC-010 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-007 | AC-011 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-008 | AC-012 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-009 | AC-013 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-010 | AC-014, AC-015 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-011 | AC-016 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-012 | AC-017 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-013 | AC-017, AC-018 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-014 | AC-007 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-015 | AC-019 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-016 | AC-020 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| INV-001, INV-002, INV-003 | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| EDGE-001 … EDGE-010 | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| NFR-001 … NFR-004 | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+
+### The amended feature specs (new IDs only)
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-026 (`settings.md` v5) | AC-040, AC-041, AC-042, AC-043 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| INV-011 (`settings.md` v5) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| EDGE-030 … EDGE-033 (`settings.md` v5) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-008 (`event-bus.md` v2) | AC-013, AC-014, AC-015, AC-016 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| EDGE-011, EDGE-012 (`event-bus.md` v2) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-030 (`user-roles-permissions.md` v2) | AC-041, AC-042, AC-043, AC-044 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| EDGE-027, EDGE-028 (`user-roles-permissions.md` v2) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-024 (`search.md` v4) | AC-038, AC-039, AC-040, AC-041 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| EDGE-022, EDGE-023 (`search.md` v4) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-023 (`session-management.md` v2) | AC-046, AC-047, AC-048, AC-049 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| EDGE-013, EDGE-014 (`session-management.md` v2) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
+| REQ-001 (`logging-coverage.md` v3 — inventory rows only, no new ID) | — | — | N/A (inventory-only amendment; covered by the change spec's AC-015) |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:
