@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 8 of 29 answered (round 2, 2026-10-06) -->
-- **Answer rounds:** 2
+- **Status:** OPEN  <!-- 12 of 29 answered (round 3, 2026-10-06) -->
+- **Answer rounds:** 3
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -180,10 +180,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) `SettingsRegistry` (the concrete class)** — matches the spec's API block and every existing use; no new interface.
   - **A structural protocol/ABC for "something registry-shaped"** — lets fakes be installed, but adds a new public interface and a second spec-level concept nothing else uses.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** The concrete class (`SettingsRegistry`, and each feature's own concrete service class for the four siblings). Matches each spec's §3 API block and every existing use; no new public interface. A fake is still installable by constructing a real instance with the existing repository ABCs / structural protocols.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the setter signature in each spec's API block
 
 ## Q-10 — Thread-safety of the setter itself
 - **Step:** P.2 Interrogate
@@ -193,10 +193,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) Yes — a module-level `threading.Lock`, matching `search`** — one lock, no observable change single-threaded, and it makes the REQ's thread-safety claim true for the slot too.
   - **No — a single list assignment is atomic under CPython** — smallest code, but leaves the spec's thread-safety sentence unqualified.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Yes — a module-level `threading.Lock` per owning feature, matching the only existing precedent (`search/service.py:547,558,571`). No observable change single-threaded, and it makes each spec's existing thread-safety claim (`settings.md:22`) true of the slot as well as the instance. Applies to all five holders (Q-2), which also retires the settings/eventbus/permissions/sessionmanagement inconsistency.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the setter's REQ text + the concurrency AC (Q-12) in each of the five specs
 
 ## Q-11 — Does this change also guard the lazy creation in `get_settings_registry()`?
 - **Step:** P.2 Interrogate
@@ -207,10 +207,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Yes — the same lock around the create-and-write** — closes the race the setter would otherwise leave open; a 3-line change in the owner module.
   - **No — out of scope; record it as a follow-up finding** — keeps the diff to the new function, but the race stays.
   - **Yes, and also guard `reset_settings_registry()`** — full symmetry across the three slot operations, slightly larger diff.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Yes — and guard `reset_settings_registry()` too: all three slot operations (install / lazy create / reset) take the same lock, mirroring `search/service.py:558-563`. Closes the create-race the setter alone would leave open (two threads each create an instance, one silently discarded). Slightly larger diff than the recommended option; `reset` has only 3 call sites (`tests/settings_test_helpers.py:126,158,178`), so the blast radius is small. Applied per feature for the five holders.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the singleton REQ in each spec now names the guarded slot; a new AC covers the create-race
 
 ## Q-12 — How thread-safety is made normative
 - **Step:** P.2 Interrogate
@@ -221,10 +221,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) An AC in Given/When/Then form** (install from N threads → every reader sees one of the installed instances, never a half-written slot) — executable, no property-test machinery.
   - **An `INV-XXX` + a Hypothesis property test** — matches the invariant convention, but a property test over installs is awkward and flaky.
   - **Prose in the REQ text only, no ID** — cheapest, but the checklist then flags an untestable normative claim.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** An AC in Given/When/Then form (e.g. 'install from N threads → every reader sees one of the installed instances, never a half-written slot'), one per affected spec. Executable as a plain acceptance test; no Hypothesis machinery, so the INV convention (`AGENTS.md`: a property test per INV-XXX) is not bent to cover concurrency.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — new AC IDs in the five specs, mapped to acceptance tests in the P.4 test strategy
 
 ## Q-13 — Does the package's own lazy creation call the setter?
 - **Step:** P.2 Interrogate
