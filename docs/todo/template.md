@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
 - **Change type:** <ISSUE | FEATURE | CROSS-CUTTING | REFACTOR | DOCS/CHORE>
 - **Created:** <YYYY-MM-DD>
 - **Question file:** `docs/questions/<change-name>.md`
@@ -30,6 +30,13 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 
 ## Constraints and risks
 - <bullet>
+
+## Value triage (<YYYY-MM-DD>, pre-workflow)
+- **Overlap:** <what in this repository already covers it — name the file/function; "none">. If it overlaps: <the existing feature to extend instead of a new one>
+- **Beneficiary:** <who benefits and how (the end user of this project); "unclear" / "too vague to judge" instead of guessing>
+- **Score: <1-5>/5** — <one sentence explaining the score>  <!-- 5 = clear user value, new, small change · 3 = some value, or partly overlapping, or moderate effort · 1 = no clear value, duplicate, or large/risky change -->
+- **Recommendation:** implement / merge into <existing feature> / drop
+- **Decision:** <the user's answer + date>  <!-- recorded when the user answers; a dropped TODO moves to docs/todo/archive/ with its question file -->
 
 ## Acceptance signal (plain language)
 <how we will know it works when it is done — the observable outcome, not the AC IDs>

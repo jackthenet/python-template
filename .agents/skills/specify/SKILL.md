@@ -61,10 +61,10 @@ The FEATURE/CROSS-CUTTING path is decomposed into atomic steps. Each has a **sin
 
 ### P.1 Frame (orchestrator)
 
-- **Objective:** Classify the change type (Phase 0) and open the change's planning record.
-- **Inputs:** the change idea; `docs/todo/template.md`; `docs/questions/template.md`; the existing TODO files in `docs/todo/`.
-- **Outputs:** `docs/todo/<name>.md` and `docs/questions/<name>.md` created from their templates **on `main`** and committed directly to `main` (git skill, "Commit planning artifacts and status advances (orchestrator, `main`)"); the change's todo set.
-- **Done-criteria:** both files exist on `main` with the orchestrator having set TODO `Status: PREPARING` and question file `Status: OPEN`; the change type is recorded in the TODO file. No worktree yet — it is created at P.4.
+- **Objective:** Classify the change type (Phase 0) and open the change's planning record; value-triage the change (overlap, beneficiary, 1–5 score, recommendation).
+- **Inputs:** the change idea; `docs/todo/template.md`; `docs/questions/template.md`; the existing TODO files in `docs/todo/`; the codebase (to check for existing functionality that covers the idea).
+- **Outputs:** `docs/todo/<name>.md` and `docs/questions/<name>.md` created from their templates **on `main`** and committed directly to `main` (git skill, "Commit planning artifacts and status advances (orchestrator, `main`)"); the change's todo set; the TODO's `## Value triage` section filled in.
+- **Done-criteria:** both files exist on `main` with the orchestrator having set TODO `Status: PREPARING` and question file `Status: OPEN`; the change type is recorded in the TODO file; the `## Value triage` section is filled in, and the user's implement / merge / drop decision is recorded in it **before P.4** creates the branch and worktree. No worktree yet — it is created at P.4.
 
 ### P.2 Interrogate
 
@@ -166,9 +166,9 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 - A change branch **and its worktree** MUST be created at **P.4**, before any normative artifact is written (all types); before P.4 the work happens in the primary worktree and touches only `docs/todo/` and `docs/questions/`.
 - The change type MUST be classified (**P.1**) before any other work, and recorded in the TODO file and in `docs/verification/<name>.md`.
-- The TODO file's `Status:` field MUST be updated at each Phase P step: **PREPARING** (P.1) → **QUESTIONS-ANSWERED** (P.3) → **READY** (after the verified **P.5 handoff** — FEATURE/CROSS-CUTTING — or the verified **P.4 artifact** — ISSUE/REFACTOR/DOCS/CHORE) → **IN-WORKFLOW** / **WAITING** / **MERGED**. The **orchestrator** owns that write: it sets each status in the **primary worktree** and commits it to `main`; step subagents never edit the TODO file — they report the gate in their handoff (AGENTS.md, "Planning records (owner: the orchestrator)").
+- The TODO file's `Status:` field MUST be updated at each Phase P step: **PREPARING** (P.1) → **QUESTIONS-ANSWERED** (P.3) → **READY** (after the verified **P.5 handoff** — FEATURE/CROSS-CUTTING — or the verified **P.4 artifact** — ISSUE/REFACTOR/DOCS/CHORE) → **IN-WORKFLOW** / **WAITING** / **MERGED** / **DROPPED** (the user's value-triage decision is **drop**; the orchestrator then moves both records to the archive folders). The **orchestrator** owns that write: it sets each status in the **primary worktree** and commits it to `main`; step subagents never edit the TODO file — they report the gate in their handoff (AGENTS.md, "Planning records (owner: the orchestrator)").
 - A change is **READY** only when **every** question in its question file is `ANSWERED` **and** the P.4 artifact exists (draft spec / triage / baseline / scope) and — for **FEATURE/CROSS-CUTTING** — passed P.5. Only a READY change may enter the normal workflow.
-- `docs/todo/` and `docs/questions/` are the **only** files committed directly to `main`, and only by the **orchestrator** from the primary worktree; everything normative reaches `main` through a merged PR from the change worktree. A change branch never edits those two files and its PR never contains them.
+- `docs/todo/` and `docs/questions/` are the **only** files committed directly to `main`, and only by the **orchestrator** from the primary worktree; everything normative reaches `main` through a merged PR from the change worktree. A change branch never edits those two files and its PR never contains them. The orchestrator also moves a dead or finished change's two records **together** into `docs/todo/archive/` and `docs/questions/archive/` (at the drop decision and at post-merge cleanup); the move is a planning-record commit, still `main`-only and still orchestrator-only.
 - Stay strictly on the change's branch/worktree. Do not modify unrelated changes, branches, or worktrees. Keep all changes isolated to this change.
 - Ask MORE questions than feels necessary during interrogation (FEATURE/CROSS-CUTTING).
 - Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). **Record each in the change's question file `docs/questions/<name>.md`** and return the **complete batch in a single** `BLOCKED-USER` handoff (the orchestrator presents the batch in as few `ask_user_question` rounds as possible — ≤ 4 per round, most blocking first — records the answers in that file, and relaunches this step **once** with the full answer set). Do not return partial batches across multiple round-trips.
@@ -194,8 +194,9 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 **Phase P (the prepared change):**
 
 - `docs/todo/<name>.md` (from `docs/todo/template.md`), committed to `main`, its `Status:` advanced to **READY** by the **orchestrator** (on `main`, after it verifies the **P.5 handoff** (FEATURE/CROSS-CUTTING) or the **P.4 artifact** (ISSUE/REFACTOR/DOCS/CHORE)).
+- the TODO's `## Value triage` section — overlap, beneficiary, 1–5 score, recommendation, and the user's implement / merge / drop decision.
 - `docs/questions/<name>.md` (from `docs/questions/template.md`), committed to `main`, **every** entry `ANSWERED` and incorporated.
-- A change branch `<type>/<name>` and its worktree at `<repo-name>-worktrees/<type>/<name>`, created at **P.4** from `main` (so the branch carries the TODO file and the answered questions).
+- A change branch `<type>/<name>` and its worktree at `<repo-name>-worktrees/<type>/<name>`, created at **P.4** from `main` (so the branch carries the TODO file and the answered questions) — only after that change's own value-triage decision is recorded.
 - A recorded change type in the TODO file and in `docs/verification/<name>.md`.
 - FEATURE/CROSS-CUTTING: the draft specification at `docs/specs/<name>.md` (committed on the change branch), self-consistent per the checklist.
 - ISSUE: a triage record in `docs/verification/<name>.md` (affected REQ/AC, defect confirmation, reproduction plan).
@@ -208,7 +209,7 @@ A spec/ADR should name the **CAPABILITY** (e.g., "content-based type detection")
 
 **Phase P — the READY gate (all types):**
 
-- The TODO file exists on `main` with `Status: READY` — set and committed by the **orchestrator** on `main` after it verifies the **P.5 handoff** (FEATURE/CROSS-CUTTING) or the **P.4 artifact** (ISSUE/REFACTOR/DOCS/CHORE) — and the question file exists with **every** question `ANSWERED` and incorporated.
+- The TODO file exists on `main` with `Status: READY` — set and committed by the **orchestrator** on `main` after it verifies the **P.5 handoff** (FEATURE/CROSS-CUTTING) or the **P.4 artifact** (ISSUE/REFACTOR/DOCS/CHORE) — and the question file exists with **every** question `ANSWERED` and incorporated. The TODO's `## Value triage` section records the overlap check, the beneficiary, the 1–5 score with its one-sentence reason, the recommendation, and the user's decision.
 - The change branch and its worktree exist (created at P.4).
 - The change type is classified and recorded in the TODO file and in `docs/verification/<name>.md`.
 - FEATURE/CROSS-CUTTING:
