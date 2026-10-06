@@ -643,3 +643,178 @@ Neighbours (no collateral): `uv run pytest tests/contract/logging -q` at HEAD `d
 | No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
 
 **Phase 3 (S3.1, T-007) gate: PASS.** Next: S3.2 (ruff + confirm RED across all derived tests + traceability rows).
+
+---
+
+## Phase 3 gate (S3.2) — RED confirmed for T-001..T-007 (2026-10-06)
+
+Inputs: the tests derived by S3.1 for all seven DAG tasks — T-001 `fcce934`, T-002 `d82cc1e`, T-003 `f2490a0`, T-004 `28d3d40`, T-005 `1e1ec3b`, T-006 `d52e821`, T-007 `cc7894f` — observed at HEAD `cc7894f`. This step wrote no `src/`, `pyproject.toml` or `uv.lock` change and modified no test assertion.
+
+### Ruff on every path Phase 3 wrote
+
+Path list derived with `git diff --name-only main...HEAD -- tests/` — 23 files:
+
+```text
+tests/acceptance/logging/test_get_logger.py
+tests/acceptance/logging/test_logging.py
+tests/acceptance/logging/test_pipeline_backend.py
+tests/acceptance/logging/test_renderer.py
+tests/acceptance/logging/test_secrets.py
+tests/acceptance/logging/test_third_party_records.py
+tests/acceptance/logging/test_tracing_records.py
+tests/acceptance/logging_coverage/test_sink_failure.py
+tests/acceptance/logging_coverage/test_statements_via_feature.py
+tests/acceptance/settings_coverage/test_setup_logger.py
+tests/contract/logging/test_dependency_contract.py
+tests/contract/logging/test_logging_contracts.py
+tests/contract/logging/test_tracing_surface.py
+tests/integration/logging/test_external_reconfiguration.py
+tests/logging_test_helpers.py
+tests/property/logging/test_logging_properties.py
+tests/property/logging/test_pipeline_invariants.py
+tests/unit/logging/test_logging.py
+tests/unit/logging/test_logging_edges.py
+tests/unit/logging/test_pipeline_edges.py
+tests/unit/logging/test_sink_ownership.py
+tests/unit/logging/test_third_party_records.py
+tests/unit/test_settings_coverage.py
+```
+
+| Gate | Command | Result |
+|---|---|---|
+| Lint (changed paths) | `uv run ruff check <the 23 paths above>` | **All checks passed!** |
+| Format (changed paths) | `uv run ruff format --check <the 23 paths above>` | **23 files already formatted** — no formatting fix was needed, so no test file was rewritten by this step |
+| Pre-flight collection | `uv run pytest --collect-only -q tests/acceptance/logging tests/acceptance/logging_coverage tests/acceptance/settings_coverage tests/contract/logging tests/property/logging tests/unit/logging tests/unit tests/unit/test_settings_coverage.py tests/integration/logging` | **117 tests collected in 0.46 s, 0 errors** — no import/collection blocker |
+| Working tree before the step | `git status --short` | clean (HEAD `cc7894f`) |
+
+### Per-task RED gate (the DAG's own `red_command`, verbatim)
+
+Each command is copied verbatim from `.github/task-runner/tasks.json` and was run one by one in the change worktree.
+
+**T-001** — backend.logging (owner) + tooling (pyproject.toml dependency set, part 1)
+
+```text
+uv run pytest tests/acceptance/logging/test_pipeline_backend.py::test_ac_002_two_managed_handlers tests/acceptance/logging/test_third_party_records.py::test_ac_006_third_party_reaches_both_sinks tests/acceptance/logging/test_get_logger.py::test_ac_008_get_logger_emits_to_sinks tests/acceptance/logging/test_renderer.py::test_ac_010_renderer_selection tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_call_unaffected_by_failing_file_sink tests/unit/logging/test_sink_ownership.py::test_ac_004_foreign_handlers_untouched tests/unit/logging/test_sink_ownership.py::test_ac_005_no_duplicate_records tests/unit/logging/test_third_party_records.py::test_ac_007_location_of_emitting_call tests/unit/logging/test_pipeline_edges.py tests/integration/logging/test_external_reconfiguration.py tests/property/logging/test_pipeline_invariants.py::test_inv_001_concurrent_setup_owns_two_handlers tests/property/logging/test_pipeline_invariants.py::test_inv_004_other_loggers_untouched tests/contract/logging/test_tracing_surface.py::test_ac_020_public_export_surface tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records tests/property/logging/test_logging_properties.py::test_inv_001_concurrent_setup_logger_sinks tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget -v
+```
+→ **20 failed, 2 passed (19.20 s)** — RED observed.
+- failure mode (test contract sanity check): 20 `AssertionError`s, 0 collection/fixture/import errors. Two failures (`test_ac_010_renderer_selection`, `test_edge_006_get_logger_before_setup`) run their witness in a subprocess that dies with `ImportError: cannot import name 'get_logger' from 'backend.logging'` — the unimplemented export surfacing **inside** the witness; the test itself crashes on `AssertionError` (`renderer='json': setup or emit failed:` / `EDGE-006: using get_logger() before setup must not raise:`), re-checked with `--tb=line`. `test_inv_004_other_loggers_untouched` fails on the helper's explicit `raise AssertionError("expected exactly one logger owning the managed console sink, found {}")`.
+- already green at the RED gate: `test_ac_004_foreign_handlers_untouched`, `test_nfr_001_setup_time_budget`
+
+**T-002** — backend.logging (owner)
+
+```text
+uv run pytest tests/acceptance/logging/test_tracing_records.py tests/acceptance/logging/test_secrets.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json tests/contract/logging/test_tracing_surface.py::test_ac_013_removed_parameters tests/property/logging/test_pipeline_invariants.py::test_inv_002_no_local_value_ever_recorded tests/property/logging/test_pipeline_invariants.py::test_inv_003_elapsed_non_negative tests/property/logging/test_pipeline_invariants.py::test_inv_005_required_fields_present tests/contract/logging/test_logging_contracts.py::test_nfr_002_decorator_overhead_budget tests/contract/logging/test_logging_contracts.py::test_nfr_004_backward_compatible_api -v
+```
+→ **11 failed, 0 passed (75.43 s)** — RED observed.
+- failure mode (test contract sanity check): 11 `AssertionError`s, 0 errors. The one `ValueError` string in the log is the test's own propagation probe (`ac_012_boom raised ValueError(ac_012 exception propagation probe)`) that AC-012 requires to propagate — not a test-data error.
+- already green at the RED gate: none
+
+**T-003** — backend.settings (amended settings-coverage IDs; the reconfigure code lives in the logging feature's _setup.py)
+
+```text
+uv run pytest tests/acceptance/settings_coverage/test_setup_logger.py tests/unit/test_settings_coverage.py::test_logging_stub_removed tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/test_settings_coverage.py::test_observability_tracing -v
+```
+→ **5 failed, 1 passed (15.75 s)** — RED observed.
+- failure mode (test contract sanity check): 5 `AssertionError`s, 0 errors.
+- already green at the RED gate: `test_logging_stub_removed` (settings-coverage AC-021, re-derived and already holding)
+
+**T-004** — backend.settings
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger -v
+```
+→ **1 failed, 0 passed (0.33 s)** — RED observed.
+- failure mode (test contract sanity check): 1 `AssertionError` (the settings feature's statements are not written through `backend.logging.get_logger()`), 0 errors.
+- already green at the RED gate: none
+
+**T-005** — backend.eventbus
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger -v
+```
+→ **1 failed, 0 passed (0.31 s)** — RED observed.
+- failure mode (test contract sanity check): 1 `AssertionError` (the event bus feature's statements are not written through `get_logger()`), 0 errors.
+- already green at the RED gate: none
+
+**T-006** — backend.permissions + tooling (pyproject.toml dependency set, part 2 - the deptry interlock)
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean -v
+```
+→ **3 failed, 0 passed (0.87 s)** — RED observed.
+- failure mode (test contract sanity check): 3 `AssertionError`s (dependency report still names the removed backend; the all-four witness statement test; the no-backend-import chain test), 0 errors.
+- already green at the RED gate: none
+
+**T-007** — guidance (AGENTS.md + .agents/skills/python-best-practices/)
+
+```text
+uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v
+```
+→ **1 failed, 0 passed (0.31 s)** — RED observed.
+- failure mode (test contract sanity check): 1 `AssertionError` naming 24 violated guidance clauses, 0 errors.
+- already green at the RED gate: none
+
+### Directory-level counts (before / after)
+
+Identical command in both worktrees: `uv run pytest tests/acceptance/logging tests/acceptance/logging_coverage tests/acceptance/settings_coverage tests/contract/logging tests/property/logging tests/unit/logging tests/unit -q --tb=line -rf`
+
+| Worktree | Revision | Result |
+|---|---|---|
+| primary (`main`) | `cb5d92f` | **271 passed, 0 failed** (35.54 s) — the before-number |
+| change worktree | `cc7894f` | **41 failed, 261 passed** (138.93 s) — the after-number |
+| collection | `cb5d92f` → `cc7894f` | 271 → **302** collected: **+33** new test functions, **−2** deleted (`test_ac_005_intercept_handler_skips_bootstrap`, `test_edge_005_intercept_unknown_level` — the two per-ID deletions authorized by the merged `logging.md` v3 amendment and named in spec §11) |
+
+**No previously-green test flipped to red.** The 41 failures decompose as:
+
+- **32** are new test functions (absent from `main`'s collection);
+- **9** exist on `main` and were green there — every one is a test this change **re-derived from an amended spec ID**, in a file the change modified:
+
+| Flipped test | Amended ID it was re-derived from |
+|---|---|
+| `tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks` | `logging.md` AC-001 |
+| `tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records` | `logging.md` AC-004 |
+| `tests/property/logging/test_logging_properties.py::test_inv_001_concurrent_setup_logger_sinks` | `logging.md` INV-001 |
+| `tests/contract/logging/test_logging_contracts.py::test_nfr_002_decorator_overhead_budget` | `logging.md` NFR-002 |
+| `tests/contract/logging/test_logging_contracts.py::test_nfr_004_backward_compatible_api` | `logging.md` REQ-005 / NFR-004 |
+| `tests/acceptance/settings_coverage/test_setup_logger.py::test_setup_logger_reads_registry` | `settings-coverage.md` AC-019 / REQ-014 |
+| `tests/acceptance/settings_coverage/test_setup_logger.py::test_sink_reconfigured_on_change` | `settings-coverage.md` AC-020 / REQ-015 |
+| `tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation` | `settings-coverage.md` EDGE-008 |
+| `tests/unit/test_settings_coverage.py::test_observability_tracing` | `settings.md` §9 (no ID) |
+
+- **0** failures in a file the change did not touch — the failed node IDs were cross-checked against `git diff --name-only main...HEAD -- tests/`: no collateral damage to any untouched test.
+
+### Test-data validity (AGENTS.md Phase 3 item 6)
+
+No failing test fails with a `ValidationError` / `ValueError` from constructing test data. Across the seven task logs and the directory run, the only exception type reported at test level is `AssertionError` (82 occurrences in the directory run, 0 of any other type). The `ImportError` / `ValueError` strings that appear in the T-001 and T-002 logs are (a) inside the repr of a subprocess the witness itself spawns — the missing `get_logger` export, i.e. the unimplemented behavior — and (b) the test's own deliberate propagation probe `ac_012_boom raised ValueError(...)`. No fixture builds a model instance out of domain; no fixture or collection error occurred. Nothing had to be fixed, so this step changed no test data and no assertion.
+
+### Traceability matrix
+
+`docs/verification/traceability.md` § *Structlog Logging Matrix*: the 18 `PENDING` rows recorded at P.4 were replaced by **37 rows** (one per REQ/AC pair, plus the INV / EDGE / NFR rows), each citing the concrete test function that now exists, with `RED` status and `structlog-logging S3.2, 2026-10-06` inside the cell — except the three witnesses that already hold at the RED gate (`test_ac_004_foreign_handlers_untouched`, `test_nfr_001_setup_time_budget`, and the re-derived `test_logging_stub_removed`), recorded `GREEN` as observed (convention B: a row records the gate as observed). Amended rows updated in place: `logging-coverage` REQ-010 / AC-010 (superseded by this change's AC-009 witness; the direct-backend witness is deleted in the implementation PR), and `settings-coverage` REQ-014/AC-019, REQ-015/AC-020, REQ-016/AC-021, EDGE-008, NFR-004. Net matrix change: **765 → 784 rows (+19)**.
+
+```text
+Traceability: PASS (784 matrix rows, 129 spec IDs, 745 test functions)
+```
+
+### Gate table (S3.2)
+
+| Gate | Command | Result |
+|---|---|---|
+| Ruff lint, 23 phase paths | `uv run ruff check <paths>` | **All checks passed!** |
+| Ruff format, 23 phase paths | `uv run ruff format --check <paths>` | **23 files already formatted** |
+| Collection clean | `uv run pytest --collect-only -q <affected dirs>` | **117 collected, 0 errors** |
+| RED, T-001 | its `red_command` | **20 failed, 2 passed** — all assertion failures |
+| RED, T-002 | its `red_command` | **11 failed, 0 passed** — all assertion failures |
+| RED, T-003 | its `red_command` | **5 failed, 1 passed** — all assertion failures |
+| RED, T-004 | its `red_command` | **1 failed, 0 passed** — assertion failure |
+| RED, T-005 | its `red_command` | **1 failed, 0 passed** — assertion failure |
+| RED, T-006 | its `red_command` | **3 failed, 0 passed** — all assertion failures |
+| RED, T-007 | its `red_command` | **1 failed, 0 passed** — assertion failure |
+| Directory run (after) | `uv run pytest <affected dirs> -q --tb=line -rf` | **41 failed, 261 passed** |
+| Directory run (before, `main`) | same command in the primary worktree | **271 passed, 0 failed** |
+| No green test flipped | failed node IDs × `main` collection × the phase path list | 32 new + 9 intentional re-derivations, **0 in an untouched file** |
+| Test-data validity | failure output of all 41 failures | only `AssertionError` at test level; no `ValidationError` / `ValueError`, no fixture or collection error |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** (784 matrix rows, 129 spec IDs, 745 test functions) |
+| No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
+
+**Phase 3 (S3.2) gate: PASS — RED observed for T-001..T-007.** Next: Phase 4, S4.1 (T-001).
+

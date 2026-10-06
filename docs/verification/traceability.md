@@ -340,7 +340,7 @@ The logging-coverage feature (`docs/specs/logging-coverage.md`) traces all exist
 | REQ-007 | AC-007 | `test_traced_classes_have_concrete_threshold` | GREEN |
 | REQ-008 | AC-008 | `test_semantic_log_levels` | GREEN |
 | REQ-009 | AC-009 | `test_traced_class_docstrings_mention_tracing` | GREEN |
-| REQ-010 | AC-010 | `test_existing_direct_loguru_kept` | GREEN |
+| REQ-010 | AC-010 | `test_existing_direct_loguru_kept` — superseded by `structlog-logging` (the restated REQ-010 / AC-010 wording is witnessed by `test_ac_009_statements_go_through_get_logger`); the direct-backend witness is deleted in the implementation PR | GREEN (logging-coverage Phase 5) — superseded by structlog-logging S3.2, 2026-10-06 |
 | REQ-011 | AC-011 | `test_entrypoint_calls_setup_logger_once` | GREEN |
 | REQ-012 | AC-012 | `test_new_public_classes_traced_by_default` | GREEN |
 | REQ-013 | AC-013 | `test_sink_failure_does_not_interrupt` | GREEN |
@@ -387,9 +387,9 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | REQ-012 | AC-016 | `test_guarded_read_no_side_effect` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-013 | AC-017 | `test_eventbus_no_registry_default` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-013 | AC-018 | `test_eventbus_registry_value` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
-| REQ-014 | AC-019 | `test_setup_logger_reads_registry`; `tests/unit/logging/test_logging_sink_ownership.py` (item E — the reconfigure touches only the sinks it owns) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
-| REQ-015 | AC-020 | `test_sink_reconfigured_on_change`; `tests/settings_test_helpers.py::set_value_settled` (item G — awaits the write's dispatch) and `isolated_event_bus` (item H — the publish is no longer dropped by a shut-down bus) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
-| REQ-016 | AC-021 | `test_logging_stub_removed` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-014 | AC-019 | `test_setup_logger_reads_registry` (re-derived from settings-coverage v2 by structlog-logging T-003); `tests/unit/logging/test_logging_sink_ownership.py` (item E — the reconfigure touches only the sinks it owns) | RED (structlog-logging S3.2, 2026-10-06 — re-derived against the amended REQ-014 wording; assertion on the live reconfigure contract) |
+| REQ-015 | AC-020 | `test_sink_reconfigured_on_change` (re-derived from settings-coverage v2 by structlog-logging T-003); `tests/settings_test_helpers.py::set_value_settled` (item G — awaits the write's dispatch) and `isolated_event_bus` (item H — the publish is no longer dropped by a shut-down bus) | RED (structlog-logging S3.2, 2026-10-06 — re-derived against the amended REQ-015 wording) |
+| REQ-016 | AC-021 | `test_logging_stub_removed` (re-derived from settings-coverage v2 by structlog-logging T-003: `Settings` must be a plain container of the five `logging.*` values, not a validation model) | GREEN (structlog-logging S3.2, 2026-10-06 — the re-derived witness already holds; assertion strengthened, not weakened) |
 | REQ-017 | AC-022 | `test_key_prefix` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-018 | AC-023 | `test_category_group` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-019 | AC-024 | `test_inventory_matches` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
@@ -408,7 +408,7 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | EDGE-005 | — | `test_list_item_pattern_mismatch` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | EDGE-006 | — | `test_list_min_gt_max` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | EDGE-007 | — | `test_setup_logger_idempotent` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
-| EDGE-008 | — | `test_sink_reconfigured_rotation` (routes its `logging.*` write through `set_value_settled` — issue main-ci-green item G) | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| EDGE-008 | — | `test_sink_reconfigured_rotation` (re-derived from settings-coverage v2 by structlog-logging T-003: exactly one managed rotating file sink, every current value re-applied; routes its `logging.*` write through `set_value_settled` — issue main-ci-green item G) | RED (structlog-logging S3.2, 2026-10-06 — assertion on the strengthened rotation contract) |
 | EDGE-009 | — | `test_persist_all_values` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | EDGE-010 | — | `test_live_read_no_trace_on_same` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | EDGE-011 | — | `test_guarded_read_none` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
@@ -416,7 +416,7 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | NFR-001 | — | `test_live_read_in_memory` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | NFR-002 | — | `test_no_secret_settings` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | NFR-003 | — | `test_inventory_backward_compatible` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
-| NFR-004 | — | `test_observability_tracing` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| NFR-004 | — | `test_observability_tracing` (re-derived from settings.md v4 §9 by structlog-logging T-003: the settings feature's operations are logged through the logging feature's pipeline) | RED (structlog-logging S3.2, 2026-10-06 — assertion: the value change is not logged through the shared logging feature) |
 | NFR-005 | — | `test_atomic_write` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | NFR-006 | — | `test_thread_safety` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 
@@ -881,28 +881,47 @@ The change wires existing features' content as search sources via additive `sear
 
 ## Structlog Logging Matrix (amendment PR, 2026-10-04)
 
-Rows for `docs/specs/structlog-logging.md` (CROSS-CUTTING, ADR-082). The tests are derived in Phase 3 of the implementation change; the Test column is filled then (P.4 records the rows, not the tests).
+Rows for `docs/specs/structlog-logging.md` (CROSS-CUTTING, ADR-082). P.4 recorded the rows, Phase 3 (S3.1 per DAG task, gate S3.2, 2026-10-06) filled the Test column and observed the RED gate. Test paths are given where a function name is shared with another spec's matrix (e.g. `test_edge_001_log_file_parent_created` exists both in `tests/unit/logging/test_logging_edges.py` for `logging.md` EDGE-001 and in `tests/unit/logging/test_pipeline_edges.py` for this spec's EDGE-001).
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
-| REQ-001 | AC-001 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-002 | AC-002, AC-003 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-003 | AC-004, AC-005 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-004 | AC-006, AC-007 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-005 | AC-008, AC-009 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-006 | AC-010 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-007 | AC-011, AC-012, AC-013 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-008 | AC-014 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-009 | AC-015 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-010 | AC-016 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-011 | AC-003 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-012 | AC-017 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-013 | AC-018 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-014 | AC-019 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| REQ-015 | AC-020 | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| INV-001, INV-002, INV-003, INV-004, INV-005 | — | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| EDGE-001 … EDGE-006 | — | — | PENDING (structlog-logging P.4, 2026-10-04) |
-| NFR-001 … NFR-005 (NFR-001/NFR-002 budgets amended in logging.md) | — | — | PENDING (re-measured locally, gate amended in the implementation PR) |
+| REQ-001 | AC-001 | `test_ac_001_no_backend_import_and_stdlib_chain` (`tests/acceptance/logging/test_pipeline_backend.py`) | RED (structlog-logging S3.2, 2026-10-06 — assertion: the pipeline still imports a logging backend) |
+| REQ-002 | AC-002 | `test_ac_002_two_managed_handlers` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the feature logger does not own exactly two managed sinks) |
+| REQ-002 | AC-003 | `test_ac_003_file_record_fields_as_json` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the file record is not the required JSON field set) |
+| REQ-003 | AC-004 | `test_ac_004_foreign_handlers_untouched` | GREEN (structlog-logging S3.2, 2026-10-06 — the re-derived witness already holds on the current pipeline; it is the no-collateral guard, not new behavior) |
+| REQ-003 | AC-005 | `test_ac_005_no_duplicate_records` | RED (structlog-logging S3.2, 2026-10-06 — assertion: a third-party record reaches a sink twice) |
+| REQ-004 | AC-006 | `test_ac_006_third_party_reaches_both_sinks` | RED (structlog-logging S3.2, 2026-10-06 — assertion: a stdlib-logger record does not reach both managed sinks) |
+| REQ-004 | AC-007 | `test_ac_007_location_of_emitting_call` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the record names the wrapper, not the emitting call) |
+| REQ-005 | AC-008 | `test_ac_008_get_logger_emits_to_sinks` | RED (structlog-logging S3.2, 2026-10-06 — assertion: `backend.logging` exports no `get_logger()`) |
+| REQ-005 | AC-009 | `test_ac_009_statements_go_through_get_logger`; per-feature witnesses `test_ac_009_settings_statements_go_through_get_logger`, `test_ac_009_eventbus_statements_go_through_get_logger` (`tests/acceptance/logging_coverage/test_statements_via_feature.py`) | RED (structlog-logging S3.2, 2026-10-06 — assertion: feature statements bypass the feature logger and name a backend import in the modules) |
+| REQ-006 | AC-010 | `test_ac_010_renderer_selection` | RED (structlog-logging S3.2, 2026-10-06 — assertion: `setup_logger(renderer=…)` is not accepted / the selected renderer is not applied) |
+| REQ-007 | AC-011 | `test_ac_011_sync_and_async_traced_records` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the traced entry/exit records lack the required fields) |
+| REQ-007 | AC-012 | `test_ac_012_exception_record_and_propagation` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the exception record does not carry the required fields) |
+| REQ-007 | AC-013 | `test_ac_013_removed_parameters`; `test_nfr_004_backward_compatible_api` (`tests/contract/logging/`) | RED (structlog-logging S3.2, 2026-10-06 — assertion: `context_getter` / `depth` are still accepted parameters) |
+| REQ-008 | AC-014 | `test_ac_014_logged_class_records` | RED (structlog-logging S3.2, 2026-10-06 — assertion: `@logged_class` records do not match the required shape) |
+| REQ-009 | AC-015 | `test_ac_015_no_local_values_in_exception_record` | RED (structlog-logging S3.2, 2026-10-06 — assertion: local variable values appear in the exception record) |
+| REQ-010 | AC-016 | `test_ac_016_call_unaffected_by_failing_file_sink` | RED (structlog-logging S3.2, 2026-10-06 — assertion: a failing file sink still interrupts the call) |
+| REQ-011 | AC-003 | `test_ac_003_file_record_fields_as_json` | RED (structlog-logging S3.2, 2026-10-06 — same witness as REQ-002 / AC-003) |
+| REQ-012 | AC-017 | `test_ac_017_live_reconfigure` | RED (structlog-logging S3.2, 2026-10-06 — assertion: a `logging.*` registry change does not reconfigure the live pipeline) |
+| REQ-013 | AC-018 | `test_ac_018_dependency_report_clean` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the removed backend is still a declared/imported dependency) |
+| REQ-014 | AC-019 | `test_ac_019_guidance_names_feature_entry_points` | RED (structlog-logging S3.2, 2026-10-06 — assertion: 24 violated guidance clauses, `AGENTS.md` + 3 skill files) |
+| REQ-015 | AC-020 | `test_ac_020_public_export_surface` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the export surface lacks `get_logger` and still exports removed names) |
+| INV-001 | — | `test_inv_001_concurrent_setup_owns_two_handlers` | RED (structlog-logging S3.2, 2026-10-06 — Hypothesis, assertion on handler ownership) |
+| INV-002 | — | `test_inv_002_no_local_value_ever_recorded` | RED (structlog-logging S3.2, 2026-10-06 — Hypothesis, assertion: a local value reaches a record) |
+| INV-003 | — | `test_inv_003_elapsed_non_negative` | RED (structlog-logging S3.2, 2026-10-06 — Hypothesis, assertion on the elapsed field) |
+| INV-004 | — | `test_inv_004_other_loggers_untouched` | RED (structlog-logging S3.2, 2026-10-06 — Hypothesis, assertion: no logger owns the managed console sink) |
+| INV-005 | — | `test_inv_005_required_fields_present` | RED (structlog-logging S3.2, 2026-10-06 — Hypothesis, assertion on the required record fields) |
+| EDGE-001 | — | `test_edge_001_log_file_parent_created` (`tests/unit/logging/test_pipeline_edges.py`) | RED (structlog-logging S3.2, 2026-10-06 — assertion: the log-file parent directory is not created) |
+| EDGE-002 | — | `test_edge_002_rotation_with_open_handle` | RED (structlog-logging S3.2, 2026-10-06 — assertion on rotation with an open handle) |
+| EDGE-003 | — | `test_edge_003_file_config_keeps_managed_handlers` (`tests/integration/logging/test_external_reconfiguration.py`) | RED (structlog-logging S3.2, 2026-10-06 — assertion: an external `fileConfig` drops the managed handlers) |
+| EDGE-004 | — | `test_edge_004_unknown_numeric_level` | RED (structlog-logging S3.2, 2026-10-06 — assertion on the unknown-numeric-level case) |
+| EDGE-005 | — | `test_edge_005_unknown_renderer` | RED (structlog-logging S3.2, 2026-10-06 — assertion: an unknown renderer name is not rejected as specified) |
+| EDGE-006 | — | `test_edge_006_get_logger_before_setup` | RED (structlog-logging S3.2, 2026-10-06 — assertion: `get_logger()` before setup raises / is absent) |
+| NFR-001 | — | `test_nfr_001_setup_time_budget` (`tests/contract/logging/test_logging_contracts.py`) | GREEN (structlog-logging S3.2, 2026-10-06 — the amended budget already holds on the current pipeline; re-measured, no regression) |
+| NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | RED (structlog-logging S3.2, 2026-10-06 — assertion: the amended DEBUG-sinks budget is exceeded) |
+| NFR-003 | — | `test_inv_002_no_local_value_ever_recorded` (same witness as INV-002) | RED (structlog-logging S3.2, 2026-10-06) |
+| NFR-004 | — | `test_ac_018_dependency_report_clean` | RED (structlog-logging S3.2, 2026-10-06 — dependency report still names the removed backend) |
+| NFR-005 | — | `test_nfr_005_single_listener_thread` | RED (structlog-logging S3.2, 2026-10-06 — assertion: no single queue listener thread exists) |
 
 ## Drift Checks
 
