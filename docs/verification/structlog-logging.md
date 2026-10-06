@@ -2210,3 +2210,59 @@ T-004 completion gates from the DAG: (1) RED recorded ✓ (S4.1); (2) the settin
 Out of scope, untouched as required: `pyproject.toml` (loguru declaration → T-006), `src/backend/permissions/service.py` (→ T-006), every test file — including `tests/acceptance/logging_coverage/test_statements_via_feature.py`, listed in `allowed_files.test_files` but needing no edit (its helper was already fixed in T-005) — `docs/specs/`, `docs/tasks/`, `docs/todo/`, `docs/questions/`, and `.github/task-runner/tasks.json` (T-004's `status` stays `PENDING` — setting it is S4.4's job).
 
 **Phase 4 (S4.2, T-004) gate: PASS — GREEN confirmed (88 passed, 0 failed) and recorded.** Next: S4.3 (T-004) — refactor, keep GREEN.
+
+### S4.3 T-004 — refactor, keep GREEN (2026-10-07)
+
+**Objective:** improve the structure of the T-004 diff (duplication, naming, complexity, feature boundaries) without changing observable behavior or the wording/levels the spec freezes, keeping the task's targeted tests GREEN. Diff reviewed: `git show 09de5b4 -- src/backend/settings/` — `src/backend/settings/registry.py` (+17 statements migrated) and `src/backend/settings/repository.py` (+11), T-004's two `allowed_files.source_files`.
+
+**Result: no structural changes needed — the no-op fast-path (AGENTS.md Phase 4 step 6).** The migration is already the minimal form of the T-001/T-005 pattern, and every remaining "smell" in it is forced by this task's own gates, not by the code. Zero `src/` files were changed in this step.
+
+#### 1. No logging helper / wrapper for the 28 sites (the only real duplication)
+
+The 28 sites repeat one shape — *f-string message + the same values again as keyword fields*. Folding that into a helper is forbidden, for three independent reasons:
+
+- **The AC-009 witness counts the call sites.** `_statement_calls` (`test_statements_via_feature.py:82`) counts every `<recv>.<level>(...)` call in the module and `_statement_violations` asserts **exactly 17** in `registry.py` and **exactly 11** in `repository.py` (spec REQ-005 freezes those counts; AC-009 says "each of the 39 one-off statements is written through `get_logger()`"). A wrapper that emits on the callers' behalf collapses the count and fails the very witness that gates T-004. Same conclusion T-005's S4.3 reached for `eventbus.py`.
+- **It would move the record's callsite.** The JSON sink adds `file`/`line` through the pipeline's callsite adder, so a helper would report the helper's line instead of the emitting statement's — an observable delta in every record.
+- **The dual capture itself is spec-mandated, not duplication to remove.** Spec §9 row 2 requires "through `get_logger()`, **message + keyword fields, unchanged wording**", and the processor chain has no `PositionalArgumentsFormatter`, so the old positional form would silently drop the values (measured in S4.2, "Correction to note A"). The interpolated copy and the field copy are two different requirements, not one redundant one.
+
+#### 2. The three `except`-pair log calls in `repository.py` stay as they are
+
+`YamlValueRepository.load`, `YamlTemplateRepository.get` and `YamlTemplateRepository.list_all` each log the *same* message in two adjacent `except` arms — the most tempting consolidation in the diff. It is not available:
+
+- Merging the arms (`except (YAMLError, ValueStorageError) as e:`) would drop the statement count **11 → 10** and fail the AC-009 witness (reason 1).
+- The two arms are **not** behaviorally identical: the `YAMLError` arm re-raises with `from e` (exception chaining, `__cause__` set), the `ValueStorageError` arm re-raises bare (`__cause__` preserved from the original). One arm would lose its chaining — an observable behavior change, forbidden in a refactor step.
+- The shape is pre-existing (it is exactly what the loguru version had); T-004 changed only the receiver and the argument form.
+
+#### 3. A shared settings logger module for the two files is forbidden too
+
+Both modules bind their own `_logger = get_logger("settings")`. Hoisting that into one settings-level module and importing it would break the witness's third clause: `_feature_logger_names` (`:62`) accepts only a name **bound to a `get_logger()` call inside the same module**, so an imported receiver is reported as "statements not written through `get_logger()`". Per-module binding is also the established pattern (`src/backend/logging/feature_settings.py:22`, `src/backend/eventbus/eventbus.py:27`).
+
+#### 4. Naming, boundaries and complexity — already correct
+
+- **Naming:** `_logger` in both modules, feature-named (`"settings"` in both, so the records stay attributable to the settings feature), module-level, one binding per module — identical to T-001/T-005.
+- **Boundaries:** the import is the logging feature's **public** API only (`from backend.logging import get_logger, logged, logged_class` / `from backend.logging import get_logger, logged_class`); the direction is still `backend.settings → backend.logging` (spec §10 row 3); no new module, export, abstraction or `shared/` code; the 8 `@logged`/`@logged_class` decorators and the class docstrings are untouched.
+- **Complexity:** no site gained a branch or a loop; the only multi-line calls are the 3-field ones, wrapped by `ruff format` at 120 cols. The repeated `len(...)` inside a site (`len(definitions)`, `len(values)`, `len(result)`, `len(templates)`, `len(template.values)`) is O(1) on a dict/list — a local would add a line and buy nothing, and the site stays one statement either way.
+- **Cosmetic nit, deliberately left:** `repository.py` carries two blank lines between the `_logger` binding and the following comment block (`eventbus.py` uses one). `ruff format --check` accepts it; "fixing" it is a whitespace-only edit that would force a full 88-test re-run for zero structural value — recorded here instead.
+
+#### Invariants re-measured at `09de5b4` (read-only, the witness's own AST shape)
+
+| File | Statements | Level split | Receivers | Backend imports |
+|---|---|---|---|---|
+| `src/backend/settings/registry.py` | **17** (expected 17) | 9 `debug` / 8 `warning` — unchanged from the S4.1 inventory | all 17 on the module's own `_logger` | none |
+| `src/backend/settings/repository.py` | **11** (expected 11) | 5 `debug` / 6 `error` — unchanged | all 11 on the module's own `_logger` | none |
+
+No `loguru`/`structlog` import anywhere under `src/backend/settings/` (source scan matches only the two `REQ-005` comment markers and stale `__pycache__` byte-code).
+
+#### Gate table (S4.3, T-004)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | **T-005-style GREEN re-run** | the verbatim `green_command` | **skipped — zero file changes in this step** (implement skill S4.4 done-criteria: "if the step made zero file changes (nothing to refactor), the `green_command` re-run is skipped — the GREEN from S4.2/S4.3 still holds"); the S4.2 result stands: **88 passed, 0 failed** |
+| b | Ruff (changed paths) | `uv run ruff check src/backend/settings/registry.py src/backend/settings/repository.py` | **All checks passed!** |
+| c | Formatting | `uv run ruff format --check src/backend/settings/registry.py src/backend/settings/repository.py` | **2 files already formatted** |
+| d | Types | `uv run mypy src/` | n/a — no `src/` file was changed in this step; the S4.2 result stands (*Success: no issues found in 84 source files*) |
+| e | Working tree | `git status --porcelain` | empty before the step; the only file this step touches is `docs/verification/structlog-logging.md` (this record) |
+
+Out of scope, untouched: every test file, `pyproject.toml`, `src/backend/permissions/service.py` (→ T-006), `docs/specs/`, `docs/tasks/`, `.github/task-runner/tasks.json` (T-004's `status` stays `PENDING` — setting it is S4.4's job), `docs/todo/`, `docs/questions/`.
+
+**Phase 4 (S4.3, T-004) gate: PASS — no structural changes needed (reasons 1–4), zero `src/` edits, statement counts and level split unchanged (17 = 9 DEBUG + 8 WARNING; 11 = 5 DEBUG + 6 ERROR), ruff clean, GREEN from S4.2 intact.** Next: S4.4 (T-004) — commit + set status `VERIFIED`.
