@@ -2512,3 +2512,50 @@ Extra probe (not a gate): running the T-003 `green_command` set together with th
 Working tree after this step: `tests/unit/test_settings_coverage.py` (the fix) + `docs/verification/structlog-logging.md` (this record). No `src/`, no `pyproject.toml` / `uv.lock`, no spec, no `docs/tasks/` or `.github/task-runner/tasks.json` (T-003 stays `PENDING` — S4.4's job), no `docs/todo/` / `docs/questions/`.
 
 **Phase 4 (S4.2, T-003) gate: PASS — GREEN (6 passed on the verbatim `red_command`; 51 passed / 0 failed on the verbatim `green_command`, 3/3 randomized re-runs), ruff clean on the changed path, mypy / deptry / traceability clean.** Next: S4.3 (T-003) — refactor (keep GREEN; expected no-op: the change is a 4-line test setup following the existing `tests/conftest.py` pattern).
+
+### S4.3 T-003 — refactor, keep GREEN (2026-10-07)
+
+**Objective:** review the T-003 diff (`tests/unit/test_settings_coverage.py::test_observability_tracing`, commit `785f48e`) for structure only — does the reordered setup duplicate a pattern that an **existing** helper/fixture already provides, and can it reuse it without weakening anything?
+
+**Result: no structural changes needed — zero file changes.**
+
+#### 1. Reuse check against the existing helpers (the only thing this step had to answer)
+
+The 4-line setup is `install_isolated_registry()` → `register_settings(registry)` → two `set_value_settled()` writes → `setup_logger()`. Every one of those calls is an **existing** helper of this suite; nothing was re-implemented:
+
+| Helper | Location | Status |
+|---|---|---|
+| `install_isolated_registry()` | `tests/settings_test_helpers.py:94` | reused — 11th call site in the suite (7 pre-existing in this module, 3 elsewhere) |
+| `register_settings(registry)` | `src/backend/logging/feature_settings.py:49` (public API) | reused |
+| `set_value_settled()` | `tests/settings_test_helpers.py:35` | reused (not a bare `set_value`) |
+| `isolated_registry` / `restore_singleton` / `make_registry` | `tests/settings_test_helpers.py:137` / `:167` / `:75` | exist, not applicable (see 2) |
+| `subprocess_setup_code()` | `tests/logging_test_helpers.py:259` | exists, **not applicable** — it builds setup code for a *subprocess* (`run_python`), and this witness needs the in-process pipeline that writes `session_settings.log_file` |
+| `logging_level_change` fixture | `tests/unit/logging/test_logging_sink_ownership.py:109` | exists, **not reusable** — it writes on the *session* registry (`get_settings_registry()`, no isolated install), sets only `logging.log_level`, and restores it on teardown; this witness needs a fresh isolated registry it can register `probe.observed_key` on |
+
+**No existing helper does the combination** (install an isolated registry + register the logging settings + apply the session's `logging.*` values). Verified by grep over `tests/`: the sequence appears **only inline** — `tests/conftest.py:41-45` (the session-scoped `_logging_session_setup` fixture) and `tests/unit/test_settings_coverage.py:425-440` (`test_sink_reconfigured_rotation`, EDGE-008 v2). The new code mirrors those two, using the same helpers in the same order with the same settled-write discipline — i.e. it follows the module's established pattern rather than inventing one.
+
+#### 2. Why no new helper was extracted (the only available "improvement")
+
+An `install_registry_with_logging_settings(session_settings)` helper in `tests/settings_test_helpers.py` (in T-003's `allowed_files.test_files`) would collapse 3 lines at 2 call sites — net ≈ 0 lines, and it is rejected:
+
+- **It would hide the ordering that is the thing under test.** `test_sink_reconfigured_rotation` calls `setup_logger()` **before** the install (EDGE-008 exercises a reconfigure of an already-installed pipeline); `test_observability_tracing` calls it **after** (REQ-014 v2: `setup_logger()` reads the registry). A shared setup helper would make that difference invisible at the call site — the least readable place to hide it.
+- Two call sites in one module, plus one (`tests/conftest.py`) that is **outside** T-003's `allowed_files.test_files` and differs anyway (it builds a `Settings(...)` instance and uses plain `set_value` before any bus subscription exists).
+- AGENTS.md: no abstraction that was not requested, deletion over addition, fewest files — a new shared test helper for 2 call sites is addition, not reuse.
+
+**Nothing to delete either:** the reordered setup is load-bearing, not dead. `setup_logger()` on an already-installed pipeline takes the `_reconfigure` branch (`src/backend/logging/_pipeline.py:251`), so it re-reads the registry — which is exactly why the values must be installed first (S4.2 §1). Removing the `setup_logger()` call would weaken the witness ("the shared logging feature is actually set up in-process", S4.2 §2 table) and is not done.
+
+**Assertion-strength check:** no test file was touched in this step; the assertion set from S4.2 is unchanged (no weakening, no deletion, no conversion to a weaker form).
+
+#### 3. Gates
+
+| Gate | Command (verbatim) | Result |
+|---|---|---|
+| `green_command` re-run | `uv run pytest tests/acceptance/settings_coverage tests/unit/test_settings_coverage.py tests/contract/settings_coverage tests/property/test_settings_coverage.py -v` | **skipped — no-op fast-path** (AGENTS.md Phase 4 step 6 / implement skill S4.4: zero file changes in this step, so the GREEN from S4.2 — 51 passed — still holds) |
+| Ruff (changed path) | `uv run ruff check tests/unit/test_settings_coverage.py` | **All checks passed!** (re-confirmed, unchanged file) |
+| Ruff format | `uv run ruff format --check tests/unit/test_settings_coverage.py` | **1 file already formatted** |
+| mypy / deptry / traceability | not re-run | n/a — no `src/`, no `pyproject.toml`, no test-function name changed |
+| Full suite | not run | Phase 5 gate |
+
+Working tree after this step: `docs/verification/structlog-logging.md` only (this record). No `src/`, no `pyproject.toml`, no spec, no `docs/tasks/` or `.github/task-runner/tasks.json` (T-003 stays `PENDING` — S4.4's job), no `docs/todo/` / `docs/questions/`. Not committed (S4.4 commits).
+
+**S4.3 (T-003) gate: PASS — no structural changes needed (no existing helper covers the sequence; the 4-line setup reuses the suite's existing helpers and mirrors the module's established pattern), ruff clean, zero file changes, GREEN from S4.2 unchanged.** Next: S4.4 (T-003) — commit + set `VERIFIED`.
