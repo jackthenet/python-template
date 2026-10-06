@@ -526,3 +526,66 @@ Neighbours (no collateral): `uv run pytest tests/acceptance/logging_coverage -q`
 | No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
 
 **Phase 3 (S3.1, T-005) gate: PASS.** Next: S3.1 for T-006.
+
+
+---
+
+## Phase 3 (S3.1) — T-006 test derivation (2026-10-06)
+
+Task **T-006 — migrate the last backend statement in the deptry scan set (`src/backend/permissions/service.py`) to `get_logger()`, remove loguru from the dependency set, delete the retired-policy test and update its traceability row** (REQ-001, REQ-005, REQ-013; AC-001, AC-009, AC-018; NFR-004; Impact Analysis rows 2–4 and 6 — `backend.permissions` + tooling, dependency set part 2). All three `tests_to_create` functions exist in the DAG's paths.
+
+### Tests created
+
+| Test | File | Requirement | Expected failure mode (RED) |
+|---|---|---|---|
+| `test_ac_009_statements_go_through_get_logger` | `tests/acceptance/logging_coverage/test_statements_via_feature.py` (appended) | AC-009 / REQ-005 + `logging-coverage.md` REQ-010 / AC-010 v2 | `AssertionError` naming all four named files' backend import and all 39 statement line numbers (17 + 11 + 10 + 1) |
+| `test_ac_001_no_backend_import_and_stdlib_chain` | `tests/acceptance/logging/test_pipeline_backend.py` (appended) | AC-001 / REQ-001 | `AssertionError` naming the 18 modules under `src/` and `tests/` that still import the removed backend, **and** the missing standard-library chain (no logger owns the managed console sink, so `get_logger()` has nothing to emit through) |
+| `test_ac_018_dependency_report_clean` | `tests/contract/logging/test_dependency_contract.py` (new module) | AC-018 / REQ-013 + NFR-004 | `AssertionError` naming four violated dependency-set clauses: loguru still declared, structlog not declared, orjson still `DEP002`-suppressed, no module under `src/` imports orjson |
+
+### Witness design (derived from the spec, not from the current implementation)
+
+- **The all-four witness is AC-009 as the spec states it.** AC-009 names *the four files* and *the 39 statements*; T-004's and T-005's witnesses each cover one feature, so neither alone is the criterion. `_AC_009_STATEMENTS` is REQ-005's own per-file table (17 / 11 / 10 / 1) and `_AC_009_TOTAL_STATEMENTS = 39` is AC-009's own total, so the table cannot silently drift from the spec. The witness reuses `_statement_violations` / `_backend_imports` / `_statement_calls` / `_feature_logger_names` / `_written_via_get_logger` **unchanged** — no per-file witness is rewritten.
+- **It deliberately stops at AC-009's scope.** REQ-001's repo-wide half ("no module under `src/` or `tests/` imports one") is AC-001's witness, which is strictly wider than the per-feature directory scans T-004 and T-005 carry; repeating it here would add no gate.
+- **AC-001's search is parsed, not grepped.** REQ-001 forbids an *import*, and the repository keeps the removed backend's name in prose (docstrings in `src/backend/logging/_setup.py`, superseded ADR-002's title, this record), so a text search would report false matches forever. The scan walks `ast.Import` / `ast.ImportFrom` over every `.py` under `src/` and `tests/` — both trees, because REQ-001 names both and T-006's design constraint pins the test half of the migration.
+- **The search is for the removed backend, not for every third-party logging package.** AC-001 says "an import of the removed logging backend", and REQ-013 names it: loguru. structlog is not a backend in this spec's vocabulary — ADR-082 keeps it as the processor/renderer layer the logging feature itself owns — so a repo-wide structlog ban would be a test that can never go green. The feature-side ban (feature modules import neither loguru nor structlog and call `get_logger()` instead) is exactly what the AC-009 witnesses enforce through `_BACKEND_PACKAGES`.
+- **AC-001's second clause is the chain, not the format.** "a record emitted by the feature passes through the standard-library handler chain (a handler attached to the feature logger observes it)": a plain `logging.Handler` is attached to the feature logger (the non-propagating logger owning the managed sinks, D1), one statement is emitted through the public `get_logger()`, and the clause asserts the handler saw a record carrying the message. Format, fields and level are AC-003 / AC-011 / AC-008's territory (T-001's tests) and are not re-asserted.
+- **Both AC-001 clauses are collected, not asserted one by one**, so one run names every violated clause. The chain clause's dependency (the managed pipeline, `get_logger()`) does not exist yet, and `pipeline_logger()` / `bound_logger()` report that as an `AssertionError`; collecting it into the violation list keeps the import clause's evidence visible instead of letting a helper error mask it.
+- **AC-018 runs the check the repository already gates on.** `uv run deptry .` is part of `quality_check` (`pyproject.toml`) and of the CI quality job, and deptry scans `src/`, `migrations/` and `scripts/` but not `tests/` — so the contract test runs that same checker (`python -m deptry .`, 0.6 s) and asserts its exit status, plus the clauses the checker alone cannot show: loguru absent from `[project].dependencies`, structlog present, and orjson both de-suppressed (`DEP002`) and actually imported under `src/` (the file renderer is what makes it used).
+- **The deptry interlock decides where this RED sits.** T-001 declares structlog and de-suppresses orjson in the state it leaves behind, so by the time T-006 runs the open clauses are loguru's removal from the dependency set and the orjson import — which is why the task pairs the last import with the last declaration (S2.1 merged-main fact 1).
+
+### S3.1 T-006 — RED
+
+`uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean -v` → **3 failed, 0 passed** (0.89 s), three `AssertionError`s (no import, collection or test-data error):
+
+```text
+AssertionError: AC-009 / REQ-005 (logging-coverage REQ-010 v2): src/backend/settings/registry.py imports a logging backend: ['loguru.logger']; src/backend/settings/registry.py statements not written through get_logger(): line(s) [89, 94, 113, 142, 146, 160, 173, 244, 248, 255, 259, 264, 283, 295, 299, 308, 317]; src/backend/settings/repository.py imports a logging backend: ['loguru.logger']; src/backend/settings/repository.py statements not written through get_logger(): line(s) [140, 151, 154, 156, 248, 259, 262, 264, 281, 284, 286]; src/backend/eventbus/eventbus.py imports a logging backend: ['loguru.logger']; src/backend/eventbus/eventbus.py statements not written through get_logger(): line(s) [86, 96, 115, 120, 136, 176, 197, 205, 222, 233]; src/backend/permissions/service.py imports a logging backend: ['loguru.logger']; src/backend/permissions/service.py statements not written through get_logger(): line(s) [432]
+```
+
+```text
+AssertionError: AC-001 / REQ-001: 18 module(s) import the removed logging backend: ["src/backend/eventbus/eventbus.py -> ['loguru.logger']", "src/backend/logging/_decorator.py -> ['loguru.logger']", "src/backend/logging/_setup.py -> ['loguru.logger']", "src/backend/logging/feature_settings.py -> ['loguru.logger']", "src/backend/permissions/service.py -> ['loguru.logger']", "src/backend/settings/registry.py -> ['loguru.logger']", "src/backend/settings/repository.py -> ['loguru.logger']", "tests/acceptance/logging/test_logging.py -> ['loguru.logger']", "tests/acceptance/logging_coverage/test_sink_failure.py -> ['loguru.logger']", "tests/conftest.py -> ['loguru.logger']", "tests/contract/logging/test_logging_contracts.py -> ['loguru.logger']", "tests/integration/logging/test_logging_integration.py -> ['loguru.logger']", "tests/logging_coverage_test_helpers.py -> ['loguru.logger']", "tests/logging_test_helpers.py -> ['loguru.logger']", "tests/property/logging_coverage/test_invariants.py -> ['loguru.logger']", "tests/unit/logging/test_logging.py -> ['loguru.logger']", "tests/unit/logging/test_logging_sink_ownership.py -> ['loguru.logger']", "tests/unit/logging_coverage/test_edge_cases.py -> ['loguru.logger']"]; stdlib handler chain: expected exactly one logger owning the managed console sink, found {}
+```
+
+```text
+AssertionError: AC-018 / NFR-004 (REQ-013): loguru is still declared in [project].dependencies; structlog is not declared in [project].dependencies; orjson is still suppressed as an unused dependency (DEP002); no module under src/ imports orjson, so it is unused
+```
+
+Failure mode per test: **assertion on unimplemented behaviour** in all three. AC-009 names 17 + 11 + 10 + 1 = 39 statement line numbers and contributes no count violation (the counts already match REQ-005), so it is red exactly on the migration. AC-001 is red on both clauses — 18 importing modules, and no managed pipeline for the chain clause. AC-018 is red on four clauses; its deptry-run clause already holds (the check is clean at HEAD: "Success! No dependency issues found."), which is the honest shape — the contract is about the dependency *set*, not about the checker being broken.
+
+Test-contract fix inside this step: the first draft of the all-four witness built `violations` as a list of lists, so the gate raised `TypeError: sequence item 0: expected str instance, list found` — a test-contract bug, not a RED. Flattened and re-checked in the same execution; the quoted AC-009 message is the corrected run.
+
+Neighbours (no collateral): the same three directories at HEAD `1e1ec3b` (the two modified files stashed, the new module moved aside) → **17 failed, 20 passed**; with T-006's tests in place → **20 failed, 20 passed** — exactly +3 failures, all three new, and no previously-green test changed state.
+
+### Gate table (S3.1, T-006)
+
+| Gate | Command | Result |
+|---|---|---|
+| Pre-flight collection | `uv run pytest --collect-only -q <the three files>` | the three `tests_to_create` names are absent at HEAD `1e1ec3b` (`git show HEAD:<path>` greps → `0`, `0`; the contract module is not in `HEAD`) |
+| Post-flight collection | same command | clean — **7 tests collected, 0 errors** |
+| Ruff (changed paths) | `uv run ruff check tests/acceptance/logging_coverage/test_statements_via_feature.py tests/acceptance/logging/test_pipeline_backend.py tests/contract/logging/test_dependency_contract.py` | **All checks passed** |
+| Format | `uv run ruff format <the same three paths>` | **1 file reformatted, 2 files left unchanged**; ruff re-checked after formatting: **All checks passed** |
+| RED (T-006 `red_command`) | the command quoted above | **3 failed, 0 passed** — three assertion failures, messages quoted above |
+| Test contract / test-data validity | failure output | no `ValidationError` / `ValueError`, no fixture or collection error; the one `TypeError` of the first draft was fixed and re-run (see above) |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** (765 matrix rows, 129 spec IDs, 744 test functions) — the AC-001 / AC-009 / AC-018 matrix rows are S3.2's; the retired `logging-coverage` REQ-010 / AC-010 row is re-pointed in T-006's implementation |
+| No implementation code written | `git status --short -- src pyproject.toml uv.lock migrations` | empty |
+
+**Phase 3 (S3.1, T-006) gate: PASS.** Next: S3.1 for T-007.

@@ -8,10 +8,14 @@ and how they are configured.
 
 from __future__ import annotations
 
+import ast
+import logging
 import logging.handlers
+from pathlib import Path
 
 from logging_test_helpers import (
     STDERR_FD,
+    bound_logger,
     managed_sinks,
     pipeline_logger,
     rotating_file_handlers,
@@ -79,3 +83,103 @@ def test_ac_003_file_record_fields_as_json() -> None:
 
     leaked = _PIPELINE_INTERNAL_KEYS & record.keys()
     assert not leaked, f"AC-003/D3/D7: a rendered record must not carry {sorted(leaked)}: {record!r}"
+
+
+# --------------------------------------------------------------------------
+# AC-001: no import of the removed backend anywhere, and the stdlib handler chain
+#
+# REQ-001 forbids a third-party logging *backend*; the one that is removed is loguru
+# (REQ-013). structlog is not a backend in this spec's vocabulary — ADR-082 keeps it as
+# the processor/renderer layer the feature itself owns — so the repo-wide search is for
+# the removed backend, while the AC-009 witnesses keep forbidding a backend import
+# (loguru *or* structlog) in the feature modules that must go through get_logger().
+# --------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# AC-001: "searched for an import of the removed logging backend" — loguru (REQ-013).
+_REMOVED_BACKEND_PACKAGES = frozenset({"loguru"})
+
+# REQ-001 names both trees, so the search is not limited to the shipped package.
+_SEARCHED_TREES = ("src", "tests")
+
+
+def _backend_import_offenders() -> list[str]:
+    """Every module under ``src/`` or ``tests/`` that imports the removed logging backend.
+
+    Parsed, not grepped: REQ-001 forbids an *import*, and the repository keeps the removed
+    backend's name in prose (docstrings, the superseded ADR's title), which a text search
+    would report as a false match once the migration is complete.
+    """
+    offenders: list[str] = []
+    for tree in _SEARCHED_TREES:
+        for path in sorted((_REPO_ROOT / tree).rglob("*.py")):
+            module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(module):
+                if isinstance(node, ast.Import):
+                    names = [
+                        alias.name for alias in node.names if alias.name.split(".")[0] in _REMOVED_BACKEND_PACKAGES
+                    ]
+                elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
+                    _REMOVED_BACKEND_PACKAGES
+                ):
+                    names = [f"{node.module}.{alias.name}" for alias in node.names]
+                else:
+                    continue
+                if names:
+                    offenders.append(f"{path.relative_to(_REPO_ROOT).as_posix()} -> {sorted(names)}")
+                    break
+    return offenders
+
+
+class _ObservingHandler(logging.Handler):
+    """A plain standard-library handler that keeps what the feature logger's chain delivers."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def _observed_feature_record(token: str) -> logging.LogRecord | None:
+    """Emit one feature statement and return the record a handler on the feature logger saw.
+
+    AC-001's second clause is exactly this: the record must travel the standard-library
+    handler chain, so a handler attached to the feature logger (the non-propagating logger
+    owning the managed sinks, D1) observes it. ``get_logger()`` is the emitting entry point
+    (REQ-005); the clause says nothing about the record's format, so nothing is asserted here
+    beyond "it arrived, carrying the message".
+    """
+    feature_logger = pipeline_logger()
+    observer = _ObservingHandler()
+    feature_logger.addHandler(observer)
+    try:
+        bound_logger("ac_001").info(token)
+    finally:
+        feature_logger.removeHandler(observer)
+    return observer.records[0] if observer.records else None
+
+
+def test_ac_001_no_backend_import_and_stdlib_chain() -> None:
+    """AC-001: no module under ``src/`` or ``tests/`` imports the removed backend, and a record
+    emitted by the feature passes through the standard-library handler chain."""
+    setup_logger()
+    violations: list[str] = []
+
+    if offenders := _backend_import_offenders():
+        violations.append(f"{len(offenders)} module(s) import the removed logging backend: {offenders}")
+
+    token = "ac_001_stdlib_handler_chain"
+    try:
+        record = _observed_feature_record(token)
+    except AssertionError as exc:  # the pipeline / get_logger() this clause rides on is absent
+        violations.append(f"stdlib handler chain: {exc}")
+    else:
+        if record is None:
+            violations.append("stdlib handler chain: a handler on the feature logger observed no record")
+        elif token not in record.getMessage():
+            violations.append(f"stdlib handler chain: the observed record lost the message: {record.getMessage()!r}")
+
+    assert not violations, "AC-001 / REQ-001: " + "; ".join(violations)

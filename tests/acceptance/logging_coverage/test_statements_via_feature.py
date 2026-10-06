@@ -147,3 +147,34 @@ def test_ac_009_eventbus_statements_go_through_get_logger() -> None:
         violations.append(f"a module under src/backend/eventbus/ imports a logging backend: {offenders}")
 
     assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
+
+
+# AC-009's four named files, with the statement count REQ-005 fixes in each.
+_AC_009_STATEMENTS: dict[str, int] = {
+    "src/backend/settings/registry.py": 17,
+    "src/backend/settings/repository.py": 11,
+    "src/backend/eventbus/eventbus.py": 10,
+    "src/backend/permissions/service.py": 1,
+}
+
+# REQ-005 / AC-009 state the total explicitly ("each of the 39 one-off statements").
+_AC_009_TOTAL_STATEMENTS = 39
+
+
+def test_ac_009_statements_go_through_get_logger() -> None:
+    """AC-009 (the spec-named all-four witness): none of the four files REQ-005 names imports a
+    logging backend, and each of the 39 one-off statements is written through ``get_logger()``.
+
+    The two witnesses above cover one feature each; this is the criterion as the spec states it —
+    the four files and the 39 statements together — so it goes green only when the last of them
+    (``src/backend/permissions/service.py``) is migrated. REQ-001's repo-wide half ("no module
+    under ``src/`` or ``tests/`` imports one") is AC-001's witness, not this one's.
+    """
+    # Guards the table against drifting from REQ-005's per-file counts (17 + 11 + 10 + 1).
+    assert sum(_AC_009_STATEMENTS.values()) == _AC_009_TOTAL_STATEMENTS, (
+        "REQ-005 fixes 39 one-off statements across the four named files"
+    )
+
+    violations = [v for path, count in _AC_009_STATEMENTS.items() for v in _statement_violations(path, count)]
+
+    assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
