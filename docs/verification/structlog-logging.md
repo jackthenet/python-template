@@ -1938,3 +1938,208 @@ One file, two lines (`git diff --stat` → `AGENTS.md | 4 ++--`): the "One-off s
 | f | Full suite | not run (Phase 5 gate; per-task targeted run only, per the skill's S4.4 no-op/re-run rule) | n/a |
 
 **Phase 4 (S4.3, T-007) gate: PASS — two text defects fixed (one contradiction with the implemented pipeline, one duplicated mandate), GREEN maintained, ruff n/a (markdown).** Next: S4.4 (T-007) — commit + set T-007 `VERIFIED`.
+
+
+---
+
+### S4.1 (T-004) — pick task + confirm RED (2026-10-07)
+
+**Task picked: T-004** — *"migrate the 28 direct backend statements in `src/backend/settings/registry.py` (17) and `src/backend/settings/repository.py` (11) to `get_logger()`"* — `REQ-005` / `AC-009` (amended `logging-coverage.md` v2 `REQ-010` / `AC-010`), feature group `backend.settings`, Impact Analysis row 2.
+
+#### Ready set at pick time (`.github/task-runner/tasks.json`, HEAD `86b9274`)
+
+`T-001` `T-002` `T-005` `T-007` `VERIFIED`; **ready** (every `dependency` `VERIFIED`) = **T-003** (`deps T-001, T-002`) and **T-004** (`deps T-001`); **not ready** = **T-006** (`deps T-003, T-004` still `PENDING`).
+
+**Why T-004 (easiest-first among the two ready tasks):**
+
+| Task | Scope | Why it is (not) the easiest ready task |
+|---|---|---|
+| **T-004** | 28 statement call sites in 2 modules: swap one import per module, re-express each call in keyword-field form. No new API, no new pattern — the exact shape **T-005 just proved and verified** on the event bus (`src/backend/eventbus/eventbus.py:27` + its 10 sites, `VERIFIED` at `e595e04`) | **Picked.** Purely mechanical, the target surface is frozen (T-001 `get_logger`, T-002 decorators/capture both `VERIFIED`), and the witness's own helper (`_dir_backend_imports`) is already shared, so nothing has to be designed here. |
+| T-003 | Live reconfiguration: mutate the managed handlers in place, `setup_logger()` with no arguments, **settings-coverage tests re-derived** (amended REQ-014/015/016, AC-019/020/021, EDGE-008) | Heavier: it changes behavior (not a statement swap), it re-derives tests from four amended IDs, and it owns the rotation/level semantics the settings suites assert. |
+| T-006 | last statement + remove loguru from the dependency set + delete the retired-policy test + traceability row | **Stays last by construction** — its `dependencies` are `T-003, T-004` (and it is the only task allowed to drop `loguru` from `pyproject.toml`, which needs every importer gone). |
+
+#### The task entry, verbatim from `.github/task-runner/tasks.json`
+
+```json
+{
+  "task_id": "T-004",
+  "feature_group": "backend.settings",
+  "title": "migrate the 28 direct backend statements in src/backend/settings/registry.py (17) and src/backend/settings/repository.py (11) to get_logger()",
+  "requirements": ["REQ-005"],
+  "acceptance_criteria": ["AC-009"],
+  "invariants": [],
+  "edge_cases": [],
+  "non_functional": [],
+  "amended_ids": [
+    "logging-coverage.md REQ-010 (restated: statements stay statements, written through the feature's exported logger)",
+    "logging-coverage.md AC-010 (restated)"
+  ],
+  "tests_to_create": [
+    "tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger (per-file AC-009 witness: the two settings files import no backend and every one-off statement is written through get_logger())"
+  ],
+  "red_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger -v",
+  "implementation_steps": [
+    "Replace `from loguru import logger` in src/backend/settings/registry.py and src/backend/settings/repository.py with the logging feature's exported get_logger(); keep the same message wording and level (spec section 9: the observability policy does not change).",
+    "Convert the 28 call sites to the feature logger's keyword-field form (message + fields) instead of the backend's brace-formatting form; no statement added, none removed, no level change.",
+    "Leave the settings feature's tracing decorators untouched (ADR-060).",
+    "Leave the loguru declaration in pyproject.toml in place (eventbus and permissions still import it - deptry interlock, T-006)."
+  ],
+  "green_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger tests/acceptance/settings tests/unit/settings tests/contract/settings tests/property/settings tests/integration/settings -v",
+  "inputs": [
+    "docs/specs/structlog-logging.md section 4 (REQ-005), section 5 (AC-009), section 9, section 10 row 2",
+    "docs/specs/logging-coverage.md v2 (REQ-010 / AC-010 restated)",
+    "T-001 handoff (get_logger is exported)"
+  ],
+  "allowed_files": {
+    "source_files": ["src/backend/settings/registry.py", "src/backend/settings/repository.py"],
+    "test_files": ["tests/acceptance/logging_coverage/test_statements_via_feature.py"]
+  },
+  "implementation_scope": "Statement migration only, in the two settings files. No behavior, level or message-semantics change.",
+  "design_constraints": [
+    "REQ-005: get_logger() is the only supported entry point for one-off statements; a feature must not import a logging backend.",
+    "The statement count stays 17 + 11 (logging-coverage REQ-010 restated: statements stay statements).",
+    "Import direction unchanged: backend.settings -> backend.logging is the allowed direction (spec section 10 row 2).",
+    "deptry interlock: loguru stays declared here - src/backend/eventbus and src/backend/permissions still import it.",
+    "Gate scoping (Phase 3 derives every task's tests before Phase 4 starts): green_command lists this task's own tests plus the pre-existing tests this task must fix, and deliberately EXCLUDES test files owned by a later DAG task, so this task's GREEN gate is honest and satisfiable with only this task and its declared dependencies. The full suite is the Phase 5 gate."
+  ],
+  "completion_gates": [
+    "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+    "The settings-half AC-009 witness passes.",
+    "No `loguru` import remains anywhere under src/backend/settings/.",
+    "The settings feature's whole test directory passes unchanged (no behavior delta).",
+    "uv run deptry . clean; uv run ruff check <changed paths> clean; uv run mypy src/ clean."
+  ],
+  "dependencies": ["T-001"],
+  "status": "PENDING"
+}
+```
+
+**What constrains S4.2** (read off the entry, no interpretation added):
+
+1. **Only two files may change** — `allowed_files.source_files` = `src/backend/settings/registry.py`, `src/backend/settings/repository.py`. `pyproject.toml` is **not** in the set (the loguru declaration stays; removing it is T-006). The one test file in `allowed_files.test_files` needs **no** change (see "the witness helper is already shared" below).
+2. **The count is a gate, not a style preference** — 17 + 11 statement call sites must still be there after the migration; folding sites into a helper or dropping one fails the witness's count clause and logging-coverage REQ-010 v2.
+3. **Wording and level are frozen** — spec §9 row 2: "DEBUG/INFO/WARNING as today … through `get_logger()`, message + keyword fields, **unchanged wording**". So the migration may change *how* the values travel (keyword fields), never *what* the record says.
+4. **Decorators untouched** (ADR-060) — `@logged_class(slow_threshold_ms=250)` on `SettingsRegistry` (`registry.py:48`), `@logged(slow_threshold_ms=5)` at `registry.py:360, 377`, and the five `@logged_class(slow_threshold_ms=100)` classes in `repository.py` (`:99, 116, 165, 190, 218`) stay exactly as they are; the `logged` / `logged_class` imports must stay.
+5. **No new import direction** — `backend.settings → backend.logging` already exists in both files (`registry.py:12`, `repository.py:28`), so `get_logger` joins an existing edge (spec §10 row 2).
+
+#### Readiness check
+
+| Check | Evidence | Result |
+|---|---|---|
+| Dependency satisfied | T-004 `"dependencies": ["T-001"]`; T-001 `"status": "VERIFIED"` | satisfied |
+| Status still `PENDING` | `.github/task-runner/tasks.json` and `docs/tasks/structlog-logging.tasks.json` agree: T-001/T-002/T-005/T-007 `VERIFIED`, T-003/T-004/T-006 `PENDING` | confirmed |
+| Its test exists | `tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger` (derived at S3.1 T-004, commit `28d3d40`) — collected and run below | confirmed |
+| The pipeline it migrates to exists | `get_logger(name=None) -> BoundLogger` at `src/backend/logging/_pipeline.py:178`, exported from `backend.logging`; already used by T-005 (`src/backend/eventbus/eventbus.py:27`) and T-001 (`feature_settings.py`) | confirmed |
+| Working tree | `git status --short` clean at HEAD `86b9274` | confirmed |
+
+#### RED re-confirmed (the DAG's own `red_command`, verbatim)
+
+```text
+uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger -v
+```
+
+→ **1 failed, 0 passed (0.32 s)** at HEAD `86b9274` — **identical to the S3.2 gate (1 failed / 0 passed)**; no drift between Phase 3 and Phase 4 entry. One `AssertionError` naming the offending imports and statements — **not** a collection, import, fixture or test-data error:
+
+```text
+AssertionError: AC-009 / REQ-005 (logging-coverage REQ-010 v2): src/backend/settings/registry.py imports a logging backend: ['loguru.logger']; src/backend/settings/registry.py statements not written through get_logger(): line(s) [89, 94, 113, 142, 146, 160, 173, 244, 248, 255, 259, 264, 283, 295, 299, 308, 317]; src/backend/settings/repository.py imports a logging backend: ['loguru.logger']; src/backend/settings/repository.py statements not written through get_logger(): line(s) [140, 151, 154, 156, 248, 259, 262, 264, 281, 284, 286]; a module under src/backend/settings/ imports a logging backend: ['src/backend/settings/registry.py', 'src/backend/settings/repository.py']
+```
+
+The **count clause contributes no violation** — both files already hold exactly REQ-005's 17 and 11 statement call sites — so the witness is red exactly on the three clauses T-004 fixes: the two backend imports, the 28 unmigrated receivers, and the feature-wide "no module under `src/backend/settings/` imports a backend" clause (which the same two files satisfy once migrated).
+
+#### The witness helper is already shared — no test change needed in T-004
+
+The feature-wide clause is produced by `_dir_backend_imports` (`test_statements_via_feature.py:50`), the helper extracted **once** in **T-005's S4.3** (commit `e595e04`, recorded under "S4.3 T-005 — refactor, keep GREEN") out of the copy-pasted inline scan that both per-feature witnesses carried. The settings witness already calls it (`:137`), and T-005's S4.3 re-measured that the settings witness still failed with a **byte-identical** violation string after the extraction. Consequence for S4.2: `allowed_files.test_files` is listed but **must not need editing** — the witness is final, and any change to it would be a test weakening under the Phase 6 review check.
+
+#### Pre-implementation baselines for this task's gates (all measured at `86b9274`)
+
+| Baseline | Command | Result |
+|---|---|---|
+| `green_command` set as a whole | the verbatim `green_command` | **1 failed, 87 passed (40.26 s)** — the 1 failure is the witness; after T-004 the set must be **88 passed** |
+| The settings feature's five test directories (gate 4, "passes unchanged") | `uv run pytest tests/acceptance/settings tests/unit/settings tests/contract/settings tests/property/settings tests/integration/settings -q` | **87 passed (40.19 s)** |
+| The retired-policy test that asserts two settings wordings | `uv run pytest tests/acceptance/logging_coverage/test_direct_loguru_kept.py -q` | **1 passed** — it asserts `"setting registered: key="` and `"value set: key="` (`:51-54`) and must stay green (T-006 deletes the file, not T-004) |
+| The level witness (asserts a settings WARNING) | `uv run pytest tests/acceptance/logging_coverage/test_levels.py -q` | **1 passed** — `:66` asserts `WARNING` + `"duplicate registration"`; its eventbus ERROR assertion is already satisfied by a **migrated** statement, which is the proof that the dual capture carries pipeline statements at their level and wording |
+| The three AC-009 witnesses together | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py -q` | **2 failed, 1 passed** — settings half (T-004) and all-four half (T-006) red, eventbus half (T-005) green |
+| Dependency gate (gate 5) | `uv run deptry .` | **Success! No dependency issues found.** (90 files) — loguru still declared *and* still imported, so neither DEP001 nor DEP002 |
+| Type gate (gate 5) | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+
+Remaining `loguru` importers at `86b9274` — `src/backend/settings/registry.py:10`, `src/backend/settings/repository.py:22` (**T-004**), `src/backend/permissions/service.py` (**T-006**), and three test files (`tests/acceptance/logging/test_logging.py`, `tests/conftest.py`, `tests/logging_coverage_test_helpers.py` — the dual-capture half, T-006).
+
+#### Freshly measured inventory — the 28 statements to migrate (as they stand at `86b9274`)
+
+Parsed from the two files with the witness's own `_statement_calls` shape (`<recv>.<level>(...)`); every receiver is the module-level loguru `logger`. **Levels and wording are the values that must survive the migration** (spec §9 row 2).
+
+`src/backend/settings/registry.py` — 17 statements (**9 DEBUG, 8 WARNING**), import at line 10:
+
+| Line | Level | Message (current loguru brace form) | Positional args |
+|---|---|---|---|
+| 89 | `warning` | `duplicate registration: key={}` | `definition.key` |
+| 94 | `debug` | `setting registered: key={} kind={}` | `definition.key`, `definition.kind` |
+| 113 | `debug` | `feature settings registered: feature={} count={}` | `feature`, `len(definitions)` |
+| 142 | `warning` | `value set rejected (invalid): key={}` | `key` |
+| 146 | `debug` | `value set: key={}` | `key` |
+| 160 | `debug` | `value reset: key={}` | `key` |
+| 173 | `debug` | `value reset: key={}` | `key` |
+| 244 | `warning` | `template create rejected (invalid name): name={}` | `name` |
+| 248 | `warning` | `template create rejected (duplicate): name={}` | `name` |
+| 255 | `warning` | `template create rejected (scope): name={}` | `name` |
+| 259 | `warning` | `template create rejected (invalid value): name={} key={}` | `name`, `k` |
+| 264 | `debug` | `template created: name={} category={} group={}` | `name`, `category`, `group` |
+| 283 | `debug` | `template loaded: name={} count={}` | `name`, `len(template.values)` |
+| 295 | `warning` | `template update rejected (scope): name={}` | `name` |
+| 299 | `warning` | `template update rejected (invalid value): name={} key={}` | `name`, `k` |
+| 308 | `debug` | `template updated: name={}` | `name` |
+| 317 | `debug` | `template deleted: name={}` | `name` |
+
+`src/backend/settings/repository.py` — 11 statements (**5 DEBUG, 6 ERROR**), import at line 22:
+
+| Line | Level | Message (current loguru brace form) | Positional args |
+|---|---|---|---|
+| 140 | `debug` | `values saved to storage: count={}` | `len(values)` |
+| 151 | `error` | `value storage failure: reason={}` | `e` |
+| 154 | `error` | `value storage failure: reason={}` | `e` |
+| 156 | `debug` | `values loaded from storage: count={}` | `len(result)` |
+| 248 | `debug` | `template saved to storage: name={}` | `template.name` |
+| 259 | `error` | `template storage failure: name={} reason={}` | `name`, `e` |
+| 262 | `error` | `template storage failure: name={} reason={}` | `name`, `e` |
+| 264 | `debug` | `template loaded from storage: name={}` | `name` |
+| 281 | `error` | `template storage failure: reason={}` | `e` |
+| 284 | `error` | `template storage failure: reason={}` | `e` |
+| 286 | `debug` | `templates loaded from storage: count={}` | `len(templates)` |
+
+Total **28** (14 DEBUG, 8 WARNING, 6 ERROR) — matches REQ-005's per-file counts and the witness's `17` / `11` arguments.
+
+#### What the witness accepts (read from its own helpers)
+
+- `_backend_imports` flags a `loguru` **or `structlog`** import — the migration must not reach for structlog directly (REQ-005: `get_logger()` is the only entry point).
+- `_statement_calls` counts every `<recv>.<level>(...)` call (`debug|info|warning|warn|error|exception|critical|fatal|log`): the count must stay **exactly 17 and 11** — none added, none removed, none folded into a helper.
+- `_written_via_get_logger` accepts an inline `get_logger(...).debug(...)` receiver **or** a name bound by an assignment (`_x = get_logger(...)`). The established pattern is the module-level binding: T-001's `src/backend/logging/feature_settings.py` (`_feature_logger = get_logger("logging")`) and T-005's `src/backend/eventbus/eventbus.py:27` (`_logger = get_logger("eventbus")`) — one feature-named binding per module. `get_logger()` with no name falls back to the caller's `__name__` (`_caller_module`, `_pipeline.py:188`), which the witness also accepts; the feature-named form is the one the two precedents use, and the name travels in the `logger_name` field (`_renderers.LOGGER_NAME_FIELD`).
+
+#### Risk notes for S4.2
+
+**A. The brace form must not be copied with positional args — this is why `implementation_steps` 2 says "keyword-field form".** The pipeline's chain is `_EMITTING_CHAIN = (callsite_adder(), exception_field)` + `ProcessorFormatter.wrap_for_formatter` (`_pipeline.py:202`); there is **no `PositionalArgumentsFormatter`**. Measured in T-005's S4.2 against structlog 26.1.0: positional args land in `event_kw["positional_args"]`, which `_renderers.INTERNAL_FIELDS` drops from every rendered record — so `get_logger("settings").debug("value set: key={}", key)` would emit the braces **unfilled** and discard the value. The proven form (T-005, `VERIFIED`) is an f-string event plus the same values as keyword fields, e.g. `_logger.debug(f"value set: key={key}", key=key)`. Keep the wording **character-for-character** (T-005's messages carry quotes only because the original eventbus wording did); only the interpolation mechanism changes.
+**B. `reason={e}` keeps its wording under an f-string.** Loguru's `{}` and `f"{e}"` both render `str(e)`, so the six `error` sites in `repository.py` keep the same text; they stay `.error(...)` — **not** `.exception(...)` — because they are not exception records and `exception()` would add an `exc_info` field the current records do not carry (the spec forbids a level/semantics change).
+**C. The record-capture path is already migrated, so the settings suites should not need touching.** Since T-002 the `log_records` fixture is **dual-backend** (`tests/conftest.py:84`: loguru sink + `pipeline_capture`), the tracing decorators already emit through the pipeline, and the pipeline capture sets the feature logger to `DEBUG` for the block (`logging_coverage_test_helpers.pipeline_capture`, which exists precisely because the pipeline gates level on the *logger*). The three settings-wording/level assertions that could break — `test_direct_loguru_kept.py:51-54`, `test_levels.py:66`, `tests/contract/settings/test_settings_contracts.py:193-210` (DEBUG for `app.name` / `t1`, ERROR for a storage failure) — are all in the `green_command` set and all currently green, two of them already fed by **migrated** eventbus statements. If any of them goes red, the fix belongs in the migrated **source** (wording/level), never in the test.
+**D. Live reconfiguration can re-level the pipeline mid-test — already true today, not introduced here.** A `logging.*` `SettingChanged` event triggers `_reconfigure` → `pipeline_logger().setLevel(level)` (`_pipeline.py:303-318`), and the settings suites are the ones that write `logging.log_level` / `logging.log_file` (visible in the RED run's captured stderr). The suite is green today because traced settings records already travel on that logger and `conftest._drain_event_bus()` drains stale events before the sinks attach. T-004 must not "fix" any such flake by changing the capture; T-003 owns live reconfiguration.
+**E. `pyproject.toml` and `src/backend/permissions/service.py` are out of scope.** After T-004, `loguru` is still declared and still imported by `permissions/service.py` plus the three test helpers — that is the deptry interlock (`design_constraints` 4) and resolves in T-006. `uv run deptry .` must stay clean at T-004's gate.
+**F. Two modules, one feature name.** Both files bind their own module-level logger; using the same feature name (`get_logger("settings")`) in both keeps the `logger_name` field feature-scoped, matching T-005's `get_logger("eventbus")`. No test asserts a specific statement logger name, so this is a consistency choice, not a gate.
+
+#### Completion gates (T-004, verbatim from the DAG)
+
+1. RED observed on the `red_command` set; recorded here. **← this step**
+2. The settings-half AC-009 witness passes.
+3. No `loguru` import remains anywhere under `src/backend/settings/`.
+4. The settings feature's whole test directory passes unchanged (no behavior delta) — baseline **87 passed**.
+5. `uv run deptry .` clean; `uv run ruff check <changed paths>` clean; `uv run mypy src/` clean.
+
+#### Gate table (S4.1, T-004)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | Task ready | T-004 `dependencies: ["T-001"]` (`VERIFIED`), `status: "PENDING"`; ready set {T-003, T-004} | confirmed |
+| b | Its test present | collected and executed below | confirmed |
+| c | **RED re-observed** | T-004 `red_command` verbatim | **1 failed, 0 passed (0.32 s)** — same as the S3.2 gate, one `AssertionError` naming the 2 backend imports + 28 statement lines |
+| d | `green_command` baseline (pre-implementation) | the verbatim `green_command` | **1 failed, 87 passed (40.26 s)** |
+| e | Scope | `git status --short` | only `docs/verification/structlog-logging.md` (this record); `src/`, `tests/`, `pyproject.toml`, specs, `docs/todo/`, `docs/questions/`, `.github/task-runner/tasks.json` (T-004 stays `PENDING` — S4.4's job) untouched |
+| f | Full suite | not run (Phase 5 gate; per-task targeted run only) | n/a |
+
+**Phase 4 (S4.1, T-004) gate: PASS — T-004 picked from the ready set, RED re-confirmed (1 failed, assertion naming the offending imports and all 28 statements), inventory measured, baselines recorded.** Next: S4.2 (T-004) — implement in the two settings files + confirm GREEN on the verbatim `green_command` (expect 88 passed).
