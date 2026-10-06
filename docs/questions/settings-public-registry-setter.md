@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/settings-public-registry-setter.md`
 - **Spec:** `docs/specs/settings.md` + `event-bus.md` + `user-roles-permissions.md` + `search.md` + `session-management.md` (all five amended)
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- 4 of 29 answered (round 1, 2026-10-06) -->
-- **Answer rounds:** 1
+- **Status:** OPEN  <!-- 8 of 29 answered (round 2, 2026-10-06) -->
+- **Answer rounds:** 2
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, ≤ 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set.
 
@@ -125,10 +125,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **Replace, and log a WARNING when the slot was non-empty** — same semantics, plus an audit trail for accidental double installs.
   - **Install only when the slot is empty and return the existing instance** — makes a second install a no-op, but breaks the test save/restore pattern.
   - **Raise if the slot is already occupied** — strongest guard, but every helper then has to reset first (3 reset sites).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** Replace unconditionally, and log a WARNING when the slot was non-empty. Same semantics every current call site already relies on (`registry.py:373`, `src/main.py:138`, the save/restore helpers at `tests/settings_test_helpers.py:132,160,180`), plus an audit trail for an accidental double install. The WARNING is a one-off log statement (semantic level WARNING), not a new mechanism; `include_args=False` so no wired instance is formatted into the record.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — new EDGE + the setter's REQ text in each of the five specs; a WARNING-level assertion in the acceptance test
 
 ## Q-6 — The setter's name
 - **Step:** P.2 Interrogate
@@ -139,10 +139,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) `set_settings_registry(registry)`** — mirrors `get_`/`reset_` and the feature's `set_value`; the name the F-1 record and the TODO already use.
   - **`install_settings_registry(registry)`** — reads as a one-time wiring step, but introduces a second verb family for the singleton.
   - **`use_settings_registry(registry)`** — short, but says nothing about replace-vs-if-absent.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** `set_settings_registry(registry)` and its four siblings (`set_event_bus`, `set_permission_service`, `set_search_service`, `set_session_service`). Mirrors the existing `get_`/`reset_` pair and the feature's own `set_value`; the name already used in the F-1 record and this TODO. Renaming later would break NFR-002.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — named in each spec's §3 API block + `__all__` + the AGENTS.md usage notes
 
 ## Q-7 — Does the setter accept `None` to clear?
 - **Step:** P.2 Interrogate
@@ -153,10 +153,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) No — the parameter is a `SettingsRegistry`; clearing stays `reset_settings_registry()`** — one clear path, no new semantics.
   - **Yes — `set_settings_registry(None)` clears** — one entry point for install and clear, but two supported ways to clear unless reset is then deprecated.
   - **Yes, and deprecate `reset_settings_registry()`** — fewer names, but breaks NFR-002 backward compatibility and the 3 existing call sites.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** No — the parameter is the concrete instance; clearing stays `reset_settings_registry()`. One clear path, no new semantics, and REQ-014's existing wording (and its dated AC-018 row) is left as written.
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the setter's signature and the parameter type in each spec
 
 ## Q-8 — What the setter returns
 - **Step:** P.2 Interrogate
@@ -167,10 +167,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) `None`** — mirrors `reset_settings_registry()`; the caller already holds the object.
   - **The installed `SettingsRegistry`** — chainable, and makes an install-if-absent result usable.
   - **The previously installed instance (`SettingsRegistry | None`)** — turns the helpers' save/restore into one call, but is a new concept in the API.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** `None` — mirrors `reset_settings_registry() -> None`; the caller already holds the object it installed. The test helpers keep their explicit save/restore shape (`settings_test_helpers.py:176-180`).
+- **Date:** 2026-10-06
+- **Status:** ANSWERED
+- **Incorporated:** yes — the signature in each spec's API block
 
 ## Q-9 — Parameter type: the concrete class or a protocol
 - **Step:** P.2 Interrogate
