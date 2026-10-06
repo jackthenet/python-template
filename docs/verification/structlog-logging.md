@@ -1740,3 +1740,119 @@ and both call sites became `if offenders := _dir_backend_imports("src/backend/se
 Out of scope, untouched: `pyproject.toml`, `src/backend/settings/`, `src/backend/permissions/`, every other test file, the spec, and `.github/task-runner/tasks.json` / `docs/tasks/` (T-005's `status` stays `PENDING` — setting it to `VERIFIED` is S4.4's job).
 
 **Phase 4 (S4.3, T-005) gate: PASS — source needs no structural change (reasons above), the test-side duplication removed once, GREEN maintained (32 passed), ruff clean.** Next: S4.4 (T-005) — commit + set status `VERIFIED`.
+
+### S4.1 (T-007) — pick task + confirm RED (2026-10-06)
+
+#### Picked task
+
+**T-007** — *"rewrite the agent-facing logging guidance to the new surface: AGENTS.md 'Using the Logging Feature' (backend named, removed @logged parameters, setup_logger(Settings(...)) shape) and the python-best-practices skill's direct backend entry point"* — `REQ-014` / `AC-019`, feature group `guidance (AGENTS.md + .agents/skills/python-best-practices/)`.
+
+**Ready set at pick time** (`.github/task-runner/tasks.json`, HEAD `4f66028`): T-001/T-002/T-005 `VERIFIED`; **ready** (all `dependencies` VERIFIED) = **T-003** (`deps T-001, T-002`), **T-004** (`deps T-001`), **T-007** (`deps T-001, T-002`); **not ready** = T-006 (`deps T-003, T-004` still `PENDING`).
+
+**Why T-007 (easiest-first among the three ready tasks):**
+
+| Task | Scope | Why it is (not) the easiest ready task |
+|---|---|---|
+| **T-007** | Guidance text only — 4 markdown files, **no Python source**, one contract witness | **Picked.** Zero `src/` change, zero mypy surface, one test to flip, and the API it documents is already final (T-001 `setup_logger(*, renderer: str \| None = None)` at `src/backend/logging/_pipeline.py:240`, T-002 decorators — both `VERIFIED`), so the target of the rewrite cannot move under the step. |
+| T-004 | 28 direct backend statements in `src/backend/settings/registry.py` (17) + `repository.py` (11) | Bigger mechanical diff, touches two live service modules (mypy + settings-suite regression surface). |
+| T-003 | Live reconfiguration mutating the managed handlers in `src/backend/logging/_setup.py` | Deepest of the three: 5 implementation steps, timing/rotation semantics, and the settings-coverage suites (`test_setup_logger.py`, `unit/`, `property/`, `contract/`) may need re-derivation. |
+
+T-007's `dependencies` (`T-001`, `T-002`) are both `VERIFIED`, so nothing blocks it; the DAG gives it no ordering against T-003/T-004, so the ease ordering applies.
+
+#### Task-definition constraints that bind S4.2
+
+Quoted from `.github/task-runner/tasks.json` → `T-007`:
+
+- **`allowed_files.source_files`** — `AGENTS.md` (the *"Using the Logging Feature"* section and the tooling line that names loguru), `.agents/skills/python-best-practices/SKILL.md`, `.agents/skills/python-best-practices/references/errors-and-resources.md`, `.agents/skills/python-best-practices/references/modern-python.md`. **`allowed_files.test_files`** — `tests/contract/logging/test_dependency_contract.py` only. *"Implementation MUST only touch `allowed_files.source_files`"* (implement skill, Rules).
+- **`implementation_scope`** — *"Guidance text only - no Python source, no test assertion weakened. The AC-019 contract test is the only code this task adds."* (the test already exists from S3.1, so S4.2 adds no code at all).
+- **`design_constraints`** — *"REQ-014: agent-facing guidance must describe the new surface; guidance must not name a removed backend or a removed parameter."* · *"REQ-005 applies to guidance too: an example must show the feature's exported entry points, never a backend import."* · *"Keep the ADR-060 tracing-policy wording (which classes are traced, include_args=False for secrets) - only the backend and the removed parameters change."* · *"No userdocs/ change: mkdocs.yml sets docs_dir: userdocs and userdocs/ … contains no loguru or setup_logger reference, so the published site is unaffected."* · *"No other guidance file changes (README.md, userdocs/, .agents/skills/{specify,test,implement,verify,review,decompose,git}/ are out of scope for this change)."*
+- **`implementation_steps`** (4) — rewrite the AGENTS.md *"Using the Logging Feature"* section (drop the loguru backend sentence, drop `context_getter`/`depth` from the `@logged` parameter list, replace the `setup_logger(Settings(...))` example with `setup_logger()` / `setup_logger(renderer=...)`, `get_logger()`, `@logged`, `@logged_class`); rewrite the python-best-practices skill's logging guidance at `SKILL.md:16`, `references/errors-and-resources.md:19` and `:45`, `references/modern-python.md:85` to the feature's own entry points *"because REQ-005 forbids a direct backend import even in guidance"*; keep the ADR-060 tracing-policy wording; no `userdocs/` change.
+- **`completion_gates`** — RED observed + recorded (this section) · *"AC-019 passes: AGENTS.md and the python-best-practices skill name the feature's entry points and no removed backend or parameter"* · `uv run --group docs mkdocs build --strict` succeeds (published-site regression guard only) · `uv run python scripts/check_traceability.py` passes (the AC-019 row cites the new contract test — already added in S3.1) · `uv run ruff check tests/contract/logging/test_dependency_contract.py` clean.
+
+#### RED gate — verbatim `red_command`
+
+```text
+uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v
+```
+
+``text
+collecting ... collected 1 item
+tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points FAILED [100%]
+============================== 1 failed in 0.31s ==============================
+```
+
+**RED is a behavior failure, not a collection/import error**: the test is collected and executed, and fails on its own assertion (`tests/contract/logging/test_dependency_contract.py:202: AssertionError`) —
+
+```python
+assert not violations, "AC-019 / REQ-014: " + "; ".join(violations)
+```
+
+with **24 violations** listed in the assertion message (AGENTS.md 9, `SKILL.md` 4, `modern-python.md` 4, `errors-and-resources.md` 8). The witness (`_guidance_violations`, `tests/contract/logging/test_dependency_contract.py:171`) checks five clauses over the four files in `_GUIDANCE_FILES` (`:106`):
+
+1. no `\bloguru\b` (case-insensitive, `_REMOVED_BACKEND_WORD`, `:114`);
+2. no `\bcontext_getter\b` / `\bdepth\b` (`_REMOVED_PARAMETERS`, `:117`);
+3. each file names **all four** feature entry points `setup_logger`, `logged`, `logged_class`, `get_logger` (`_FEATURE_ENTRY_POINTS`, `:120`);
+4. no backend entry point — `import|from structlog|loguru`, or `structlog|loguru . get_logger|getLogger|logger` (`_BACKEND_ENTRY_POINT`, `:125`; naming structlog as a *library* is allowed);
+5. every `setup_logger(` call shown must be accepted by the amended signature — no argument, or the single keyword-only `renderer` (`_amended_signature_accepts`, `:163`, against `setup_logger(*, renderer: str | None = None)`).
+
+Failure output (verbatim, one line per violation group):
+
+```text
+E   AssertionError: AC-019 / REQ-014: AGENTS.md:769 names the removed backend 'loguru';
+E   AGENTS.md:769 names the removed backend 'loguru'; AGENTS.md:771 names the removed backend
+E   'loguru'; AGENTS.md:767 names the removed parameter 'context_getter'; AGENTS.md:767 names the
+E   removed parameter 'depth'; AGENTS.md does not name the feature entry point 'get_logger';
+E   AGENTS.md:765 shows setup_logger(settings), a call the amended signature rejects;
+E   AGENTS.md:771 shows setup_logger(Settings(...)), a call the amended signature rejects;
+E   AGENTS.md:776 shows setup_logger(Settings(log_level="INFO")), a call the amended signature
+E   rejects; .agents/skills/python-best-practices/SKILL.md does not name the feature entry point
+E   'setup_logger'; … 'logged'; … 'logged_class'; … 'get_logger';
+E   .agents/skills/python-best-practices/references/modern-python.md does not name the feature
+E   entry point 'setup_logger'; … 'logged'; … 'logged_class'; … 'get_logger';
+E   .agents/skills/python-best-practices/references/errors-and-resources.md does not name the
+E   feature entry point 'setup_logger'; … 'logged'; … 'logged_class';
+E   .agents/skills/python-best-practices/references/errors-and-resources.md:17 shows the backend
+E   entry point 'import structlog'; …:19 shows the backend entry point 'structlog.get_logger';
+E   …:43 shows the backend entry point 'import structlog'; …:45 shows the backend entry point
+E   'structlog.get_logger'
+```
+
+#### Exact guidance locations that must change (grep evidence, HEAD `4f66028`)
+
+| File:line | Current text (the string the witness rejects) | Clause |
+|---|---|---|
+| `AGENTS.md:765` | "Call `setup_logger(settings)` exactly once in the application entrypoint" — the rejected `Settings`-passing call shape | 5 |
+| `AGENTS.md:766` | "**Configure with `Settings`.** Build a `Settings` instance (or use `get_settings()`) to set `log_level`, `log_file`, …" — not itself a violation, but it is the sentence that makes the `setup_logger(settings)` shape coherent and must be rewritten to the settings-registry/live-reconfiguration surface (T-003) | — |
+| `AGENTS.md:767` | "…with parameters: `level`, `slow_threshold_ms`, `slow_threshold_setting`, `include_args`, **`context_getter`**, **`depth`**" | 2 |
+| `AGENTS.md:769` | "The feature configures **loguru**'s sinks, so feature code may also use **loguru**'s `logger` directly" (2 occurrences) | 1 |
+| `AGENTS.md:770` | "`diagnose=False` is enforced … `from backend.logging import logged, logged_class, setup_logger, Settings, get_settings`" — the import list names three of the four entry points, **not `get_logger`** | 3 |
+| `AGENTS.md:771` | "Direct **loguru** (`logger.info(...)`) is reserved for one-off statements … `setup_logger(Settings(...))` MUST be called exactly once" | 1 + 5 |
+| `AGENTS.md:774` | `from backend.logging import Settings, logged, setup_logger` — example import, missing `get_logger` | 3 |
+| `AGENTS.md:776` | `setup_logger(Settings(log_level="INFO"))` — rejected call shape | 5 |
+| `.agents/skills/python-best-practices/SKILL.md:16` | "Use the project logger (structlog) instead of `print`." — names none of the four entry points | 3 |
+| `.agents/skills/python-best-practices/references/errors-and-resources.md:17` | `import structlog` | 4 |
+| `.agents/skills/python-best-practices/references/errors-and-resources.md:19` | `log = structlog.get_logger()` | 4 |
+| `.agents/skills/python-best-practices/references/errors-and-resources.md:43` | `import structlog` (the `timer()` example) | 4 |
+| `.agents/skills/python-best-practices/references/errors-and-resources.md:45` | `log = structlog.get_logger()` | 4 |
+| `.agents/skills/python-best-practices/references/modern-python.md:85` | "Logging: structlog events, not f-string messages and not `print`." — names none of the four entry points | 3 |
+
+Notes for S4.2:
+
+- `AGENTS.md` already satisfies clause 3 for `setup_logger` / `logged` / `logged_class` (line 770) — only **`get_logger`** is missing there, so the AGENTS.md fix is clauses 1, 2, 3 (one name) and 5.
+- The three skill files each need **all four** entry-point names present (clause 3) *and* the two `structlog` call sites replaced (clause 4) — `errors-and-resources.md` is the only skill file with a backend import.
+- `AGENTS.md` names `loguru` **only** at 769 and 771 (`grep -ni loguru AGENTS.md`): the "Tooling & Execution Environment" section has no loguru line, so the `allowed_files` parenthetical *"the tooling line that names loguru"* is already satisfied — nothing to change there.
+- The public surface the guidance must name is final (`src/backend/logging/__init__.py:__all__`): `setup_logger`, `get_logger`, `logged`, `logged_class`, `Settings`, `get_settings`, `register_settings`.
+
+#### Gate table (S4.1, T-007)
+
+| # | Gate | Command (verbatim) | Result |
+|---|---|---|---|
+| a | Task is ready in the DAG | `python -c "…print(task_id, status, dependencies)…"` on `.github/task-runner/tasks.json` | T-007 `PENDING`, `dependencies` `T-001` + `T-002` both `VERIFIED` → **ready** |
+| b | **RED observed** | `uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v` | **1 failed in 0.31 s** — assertion failure at `test_dependency_contract.py:202`, **24 violations**, collected and executed (not a collection/import error) |
+| c | No file changed by this step | `git status --short` | clean before the step; only `docs/verification/structlog-logging.md` modified by this evidence commit |
+| d | Ruff | n/a — this step writes no tests or implementation code (guidance files untouched, `red_command` only) | n/a |
+| e | Full suite | not run (Phase 5 gate; per-task targeted runs only) | n/a |
+
+Out of scope, untouched: `AGENTS.md`, the three `.agents/skills/python-best-practices/` files, `tests/contract/logging/test_dependency_contract.py`, `pyproject.toml`, `src/`, the spec, and `.github/task-runner/tasks.json` / `docs/tasks/` (T-007's `status` stays `PENDING` — setting it to `VERIFIED` is S4.4's job).
+
+**Phase 4 (S4.1, T-007) gate: PASS — a ready task is picked (easiest of T-003/T-004/T-007) and RED is observed on its `red_command` (1 failed, 24 AC-019 violations).** Next: S4.2 (T-007) — rewrite the four guidance files to the new surface, confirm GREEN on the same command.
