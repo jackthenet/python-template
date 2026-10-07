@@ -4,6 +4,8 @@
 
 **Phase P status:** prepared at P.4 (draft spec + amendments + superseding ADR + re-measured NFR budgets). P.5 (self-consistency + dependency smoke-test) has not run.
 
+**Workflow state (S5.4, 2026-10-07): `VERIFIED`** — `PREPARED → SPECIFIED → TESTS_WRITTEN → RED_CONFIRMED → IMPLEMENTING → GREEN → REFACTORED → **VERIFIED**`. All 7 DAG tasks `VERIFIED`, spec coverage 100%, every Phase 5 gate clean (see § *S5.4 — Verification report*). Handed to Phase 6 (S6.1).
+
 **Branch / worktree:** `crosscut/structlog-logging` at `python-template_kopie-worktrees/crosscut/structlog-logging`, created from `main` at commit `869d309d569ff6df97cf5cc04803eaf45e924ec1` ("chore(update-readme): status WAITING (PR #66 open) + Phase 6 recorded").
 
 **Normative basis:** `docs/specs/structlog-logging.md` (new, v1) + the amendment PR touching `docs/specs/logging.md` (v3), `docs/specs/logging-coverage.md` (v2), `docs/specs/settings-coverage.md` (v2), `docs/specs/settings.md` (v4) + `docs/decisions/ADR-082-structlog-processor-layer-over-stdlib.md` (supersedes ADR-002).
@@ -3239,3 +3241,198 @@ rewritten. Nothing was pushed.
 
 **Phase 5 (S5.3) gate: PASS — `uv run python scripts/check_traceability.py` → Traceability: PASS (822 matrix rows, 136 spec IDs, 745 test functions) (exit 0).** Next:
 S5.4 — the verification report (spec coverage, acceptance coverage, branch coverage).
+
+---
+
+### S5.4 — Verification report (2026-10-07)
+
+**Phase 5 VERIFY, step 4 of 4 — the Phase 5 gate ◆.** Objective: produce the verification report and confirm **spec coverage = 100%** (AGENTS.md "Phase 5: VERIFY": *"Spec coverage = 100% is required. Code coverage is a secondary quality signal, not evidence that the specification has been implemented."*). Inputs: the S5.1 suite evidence, the S5.2 lint/type/dependency/docs/complexity gates, the S5.3 traceability matrix. No test file, no `src/` file, no spec, no `pyproject.toml`/`uv.lock`, no task file, no `docs/todo/`, no `docs/questions/` was modified; **no dependency was added** (`pytest-cov` is already a declared dev dependency); nothing was pushed.
+
+**CWD pin (the P-57 lesson).** Every command below was run after an absolute `cd C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/structlog-logging`, and `git rev-parse --show-toplevel` → `C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/structlog-logging` was printed beside every count that enters this record. State at entry and at exit: branch `crosscut/structlog-logging`, HEAD `34184a0`, `git status --porcelain` empty apart from this record.
+
+#### 1. Spec coverage — **100%**
+
+Every normative ID of `docs/specs/structlog-logging.md` — **15 REQ + 20 AC + 5 INV + 6 EDGE + 5 NFR = 51 IDs** — has at least one GREEN witness, and every witness is a test that passed in the S5.1 full-suite run. The witness column is the spec's own §11 test-strategy mapping; the matrix column is the row in `docs/verification/traceability.md` § *Structlog Logging Matrix* (37 rows, all `GREEN` as of S5.3).
+
+**Requirements (15 IDs).**
+
+| ID | GREEN witness test(s) | Matrix row | Status |
+|---|---|---|---|
+| REQ-001 | `test_ac_001_no_backend_import_and_stdlib_chain` | REQ-001 / AC-001 | GREEN |
+| REQ-002 | `test_ac_002_two_managed_handlers`, `test_ac_003_file_record_fields_as_json` | REQ-002 / AC-002, REQ-002 / AC-003 | GREEN |
+| REQ-003 | `test_ac_004_foreign_handlers_untouched`, `test_ac_005_no_duplicate_records` | REQ-003 / AC-004, REQ-003 / AC-005 | GREEN |
+| REQ-004 | `test_ac_006_third_party_reaches_both_sinks`, `test_ac_007_location_of_emitting_call` | REQ-004 / AC-006, REQ-004 / AC-007 | GREEN |
+| REQ-005 | `test_ac_008_get_logger_emits_to_sinks`, `test_ac_009_statements_go_through_get_logger` (+ per-feature witnesses `test_ac_009_settings_statements_go_through_get_logger`, `test_ac_009_eventbus_statements_go_through_get_logger`) | REQ-005 / AC-008, REQ-005 / AC-009 | GREEN |
+| REQ-006 | `test_ac_010_renderer_selection` | REQ-006 / AC-010 | GREEN |
+| REQ-007 | `test_ac_011_sync_and_async_traced_records`, `test_ac_012_exception_record_and_propagation`, `test_ac_013_removed_parameters` (+ `test_nfr_004_backward_compatible_api`) | REQ-007 / AC-011, /AC-012, /AC-013 | GREEN |
+| REQ-008 | `test_ac_014_logged_class_records` | REQ-008 / AC-014 | GREEN |
+| REQ-009 | `test_ac_015_no_local_values_in_exception_record` | REQ-009 / AC-015 | GREEN |
+| REQ-010 | `test_ac_016_call_unaffected_by_failing_file_sink` (+ `test_ac_016_file_sink_keeps_working_after_a_failing_sink`, the surviving-sink half) | REQ-010 / AC-016 | GREEN |
+| REQ-011 | `test_ac_003_file_record_fields_as_json` (same witness as REQ-002 / AC-003) | REQ-011 / AC-003 | GREEN |
+| REQ-012 | `test_ac_017_live_reconfigure` | REQ-012 / AC-017 | GREEN |
+| REQ-013 | `test_ac_018_dependency_report_clean` | REQ-013 / AC-018 | GREEN |
+| REQ-014 | `test_ac_019_guidance_names_feature_entry_points` | REQ-014 / AC-019 | GREEN |
+| REQ-015 | `test_ac_020_public_export_surface` | REQ-015 / AC-020 | GREEN |
+
+Every REQ has ≥ 1 AC and every AC has an executable GREEN test — the machine check of that relation is `uv run python scripts/verify_spec.py docs/specs/structlog-logging.md` → **`Traceability: PASS`, exit 0** (15 "REQ-XXX has acceptance criteria" checks + 21 "AC-XXX has executable test" checks + 5 "INV-XXX has property test" checks, all ✓).
+
+**Acceptance criteria (20 IDs) — the spec §11 category mapping.**
+
+| ID | Test category (spec §11) | GREEN witness test | Matrix row | Status |
+|---|---|---|---|---|
+| AC-001 | acceptance | `test_ac_001_no_backend_import_and_stdlib_chain` | REQ-001 / AC-001 | GREEN |
+| AC-002 | acceptance | `test_ac_002_two_managed_handlers` | REQ-002 / AC-002 | GREEN |
+| AC-003 | acceptance | `test_ac_003_file_record_fields_as_json` | REQ-002 / AC-003, REQ-011 / AC-003 | GREEN |
+| AC-004 | unit | `test_ac_004_foreign_handlers_untouched` | REQ-003 / AC-004 | GREEN |
+| AC-005 | unit | `test_ac_005_no_duplicate_records` | REQ-003 / AC-005 | GREEN |
+| AC-006 | acceptance | `test_ac_006_third_party_reaches_both_sinks` | REQ-004 / AC-006 | GREEN |
+| AC-007 | unit | `test_ac_007_location_of_emitting_call` | REQ-004 / AC-007 | GREEN |
+| AC-008 | acceptance | `test_ac_008_get_logger_emits_to_sinks` | REQ-005 / AC-008 | GREEN |
+| AC-009 | acceptance | `test_ac_009_statements_go_through_get_logger` | REQ-005 / AC-009 | GREEN |
+| AC-010 | acceptance | `test_ac_010_renderer_selection` | REQ-006 / AC-010 | GREEN |
+| AC-011 | acceptance | `test_ac_011_sync_and_async_traced_records` | REQ-007 / AC-011 | GREEN |
+| AC-012 | acceptance | `test_ac_012_exception_record_and_propagation` | REQ-007 / AC-012 | GREEN |
+| AC-013 | contract | `test_ac_013_removed_parameters` | REQ-007 / AC-013 | GREEN |
+| AC-014 | acceptance | `test_ac_014_logged_class_records` | REQ-008 / AC-014 | GREEN |
+| AC-015 | acceptance | `test_ac_015_no_local_values_in_exception_record` | REQ-009 / AC-015 | GREEN |
+| AC-016 | acceptance | `test_ac_016_call_unaffected_by_failing_file_sink` | REQ-010 / AC-016 | GREEN |
+| AC-017 | acceptance | `test_ac_017_live_reconfigure` | REQ-012 / AC-017 | GREEN |
+| AC-018 | contract | `test_ac_018_dependency_report_clean` | REQ-013 / AC-018 | GREEN |
+| AC-019 | contract | `test_ac_019_guidance_names_feature_entry_points` | REQ-014 / AC-019 | GREEN |
+| AC-020 | contract | `test_ac_020_public_export_surface` | REQ-015 / AC-020 | GREEN |
+
+**Invariants, edge cases, NFRs (16 IDs).**
+
+| ID | Test category | GREEN witness test | Matrix row | Status |
+|---|---|---|---|---|
+| INV-001 | property | `test_inv_001_concurrent_setup_owns_two_handlers` | INV-001 | GREEN |
+| INV-002 | property | `test_inv_002_no_local_value_ever_recorded` | INV-002 | GREEN |
+| INV-003 | property | `test_inv_003_elapsed_non_negative` | INV-003 | GREEN |
+| INV-004 | property | `test_inv_004_other_loggers_untouched` | INV-004 | GREEN |
+| INV-005 | property | `test_inv_005_required_fields_present` | INV-005 | GREEN |
+| EDGE-001 | unit | `test_edge_001_log_file_parent_created` (`tests/unit/logging/test_pipeline_edges.py`) | EDGE-001 | GREEN |
+| EDGE-002 | unit | `test_edge_002_rotation_with_open_handle` | EDGE-002 | GREEN |
+| EDGE-003 | integration | `test_edge_003_file_config_keeps_managed_handlers` | EDGE-003 | GREEN |
+| EDGE-004 | unit | `test_edge_004_unknown_numeric_level` | EDGE-004 | GREEN |
+| EDGE-005 | unit | `test_edge_005_unknown_renderer` | EDGE-005 | GREEN |
+| EDGE-006 | unit | `test_edge_006_get_logger_before_setup` | EDGE-006 | GREEN |
+| NFR-001 | contract | `test_nfr_001_setup_time_budget` (budget < 25 ms) | NFR-001 | GREEN |
+| NFR-002 | contract | `test_nfr_002_decorator_overhead_budget` (budget < 1 ms, sinks active at DEBUG) | NFR-002 | GREEN |
+| NFR-003 | property | `test_inv_002_no_local_value_ever_recorded` (same witness as INV-002, per spec §11) | NFR-003 | GREEN |
+| NFR-004 | contract | `test_ac_018_dependency_report_clean` (same witness as AC-018) | NFR-004 | GREEN |
+| NFR-005 | unit | `test_nfr_005_single_listener_thread` | NFR-005 | GREEN |
+
+**Amended IDs from the approved specs (spec §4 amendment table, §12: these count toward this change's coverage).** 21 IDs — 19 with a live GREEN witness in the affected feature's own matrix, 2 deleted by the approved amendment with their case re-witnessed GREEN by this spec.
+
+| Spec / ID | GREEN witness test | Matrix section | Status |
+|---|---|---|---|
+| `logging.md` REQ-001 / AC-001 | `test_ac_001_setup_logger_adds_sinks` | Logging Matrix | GREEN |
+| `logging.md` REQ-003 / AC-004 | `test_ac_004_intercept_handler_routes_records` (re-derived as the forwarding-handler case) | Logging Matrix | GREEN |
+| `logging.md` REQ-005 / NFR-004 | `test_nfr_004_backward_compatible_api` (asserts the reduced parameter set) | Logging Matrix | GREEN |
+| `logging.md` INV-001 | `test_inv_001_concurrent_setup_logger_sinks` | Logging Matrix | GREEN |
+| `logging.md` NFR-001 | `test_nfr_001_setup_time_budget` (amended budget) | Logging Matrix | GREEN |
+| `logging.md` NFR-002 | `test_nfr_002_decorator_overhead_budget` (amended context: sinks active at DEBUG) | Logging Matrix | GREEN |
+| `logging.md` NFR-003 | `test_nfr_003_diagnose_false` | Logging Matrix | GREEN |
+| `logging.md` AC-005 (**deleted** by the approved v3 amendment) | witness `test_ac_005_intercept_handler_skips_bootstrap` deleted in T-001 `fcce934`; the surviving case is this spec's AC-007 `test_ac_007_location_of_emitting_call` | Logging Matrix (retired row, annotated) | N/A — deleted; case GREEN via AC-007 |
+| `logging.md` EDGE-005 (**deleted**, restated in capability terms) | witness `test_edge_005_intercept_unknown_level` deleted in T-001 `fcce934`; the case is this spec's EDGE-004 `test_edge_004_unknown_numeric_level` | Logging Matrix (retired row, annotated) | N/A — deleted; case GREEN via EDGE-004 |
+| `logging-coverage.md` REQ-010 / AC-010 | `test_ac_009_statements_go_through_get_logger` (row re-pointed in T-006; the retired `test_existing_direct_loguru_kept` witness deleted with the retired wording) | Logging Coverage Matrix | GREEN |
+| `settings-coverage.md` REQ-014 / AC-019 | `test_setup_logger_reads_registry` | Settings-Coverage Matrix | GREEN |
+| `settings-coverage.md` REQ-015 / AC-020 | `test_sink_reconfigured_on_change` | Settings-Coverage Matrix | GREEN |
+| `settings-coverage.md` REQ-016 / AC-021 | `test_logging_stub_removed` | Settings-Coverage Matrix | GREEN |
+| `settings-coverage.md` EDGE-008 | `test_sink_reconfigured_rotation` | Settings-Coverage Matrix | GREEN |
+| `settings.md` (wording only, no ID) | `test_observability_tracing` | Settings-Coverage Matrix | GREEN |
+
+**Coverage arithmetic.** 51 own IDs + 21 amended IDs = **72 IDs in this change's normative basis**; 70 have a live GREEN witness, 2 (`logging.md` AC-005, `logging.md` EDGE-005) were **deleted by the approved amendment PR** and their behaviour is witnessed GREEN by this spec's AC-007 and EDGE-004. **Spec coverage = 70 / 70 live IDs = 100%**; no ID is uncovered, no REQ lacks a GREEN test, no AC lacks an executable test, no INV lacks a property test.
+
+**Direct re-observation at this step (not inferred from S5.1).** The 34 unique witness node IDs derived from the spec §11 own-ID table were run together: `uv run pytest <34 node ids> -v` → **`34 passed in 8.64s`**. The 11 live amended-ID witness node IDs from §11's second table: **`11 passed in 7.08s`**. The two remaining amended witnesses: `uv run pytest tests/contract/logging/test_logging_contracts.py::test_nfr_003_diagnose_false tests/integration/logging/test_logging_integration.py::test_stdlib_loguru_decorator_pipeline -v` → **`2 passed in 0.41s`**. (The 34-node set already contains the re-pointed `test_ac_009_statements_go_through_get_logger`.)
+
+#### 2. Acceptance coverage
+
+Every AC/INV/EDGE/NFR is mapped by spec §11 to a test category and a named test function; the mapping is realised exactly — the category column of the two tables above is the spec's own category, and each named function exists in the file the spec names (verified by parsing the spec table and resolving every function name against `tests/`: **0 missing**).
+
+| Category (spec §11 rows) | This change's strategy rows | Unique witness functions | Targeted run | Suite-wide count (S5.1) |
+|---|---|---|---|---|
+| acceptance | 13 | 13 | 13 passed | 365 collected, 364 passed, 1 skipped |
+| unit | 9 | 9 | 9 passed | 244 collected, 244 passed |
+| contract | 7 | 6 (`NFR-004` shares `AC-018`'s witness) | 6 passed | 51 collected, 51 passed |
+| property | 6 | 5 (`NFR-003` shares `INV-002`'s witness) | 5 passed | 71 collected, 71 passed |
+| integration | 1 | 1 | 1 passed | 30 collected, 30 passed |
+| **Total** | **36 rows** | **34 functions** | **34 passed in 8.64s** | **761 collected, 760 passed, 1 skipped** |
+
+No orphaned tests: `uv run python scripts/check_traceability.py` → **PASS (822 matrix rows, 136 spec IDs, 745 test functions)** — it fails on a row citing a test function that no longer exists and on a spec ID with no row, and it exits 0 (S5.3). No acceptance test was weakened, converted or skipped to reach GREEN; the only deletions are the three authorized by spec §11, recorded in the S4.2 (T-001/T-006) sections and in the S5.3 "Deleted witnesses" table.
+
+#### 3. Per-feature impact (CROSS-CUTTING, spec §10)
+
+| # | Affected feature / area | Evidence it is satisfied | Status |
+|---|---|---|---|
+| 1 | `backend.logging` (owner) | the 37 GREEN rows of the *Structlog Logging Matrix*; the `logging.md` rows REQ-001/AC-001 … NFR-004 refreshed at S5.3; the integration witness `test_stdlib_loguru_decorator_pipeline` GREEN; `src/backend/logging/*` at **93%** statement+branch coverage | GREEN |
+| 2 | `backend.settings` | 28 statements (registry 17, repository 11) now go through `get_logger("backend.settings")` — witnessed by `test_ac_009_settings_statements_go_through_get_logger` and AC-017 `test_ac_017_live_reconfigure`; `settings-coverage.md` rows REQ-014/AC-019, REQ-015/AC-020, REQ-016/AC-021, EDGE-008, NFR-004 GREEN; `registry.py` 97%, `repository.py` 94% | GREEN |
+| 3 | `backend.eventbus` | 10 statements through `get_logger("backend.eventbus")` — witnessed by `test_ac_009_eventbus_statements_go_through_get_logger`; no event-bus REQ/AC touched, so no event-bus row rewritten (convention B); the feature's suite is GREEN in the S5.1 full run; `eventbus.py` 98% | GREEN |
+| 4 | `backend.permissions` | 1 statement through `get_logger("backend.permissions")`; no permissions REQ/AC touched, no row rewritten; the feature's suite is GREEN in the S5.1 full run; `service.py` 96% | GREEN |
+| 5 | `migrations` / alembic | no code change; EDGE-003 witnessed by `test_edge_003_file_config_keeps_managed_handlers` (integration, GREEN); the `migrations` CI job reproduced locally — `ALEMBIC_DATABASE_URL="sqlite:////tmp/alembic-ci-s54.db" uv run alembic upgrade head` → **exit 0** | GREEN |
+| 6 | Tooling (`pyproject.toml`, `uv.lock`) | REQ-013/AC-018 and NFR-004 witnessed by `test_ac_018_dependency_report_clean`; `uv run deptry .` → **Success! No dependency issues found.** (90 files) — `loguru` absent, `structlog` used, `orjson` used and its `DEP002` suppression removed | GREEN |
+| 7 | Guidance (`AGENTS.md` + 3 `python-best-practices` skill files) | REQ-014/AC-019 witnessed by `test_ac_019_guidance_names_feature_entry_points` (no removed backend, no `context_getter`/`depth`, no `setup_logger(Settings(...))` call shape) | GREEN |
+| 8 | Test suite | 761 collected / 760 passed / 1 pre-existing environmental skip; 3 authorized deletions only (spec §11); helpers adapted without weakening (S3.1/S4.2 records) | GREEN |
+
+#### 4. Code coverage (secondary signal, not the gate)
+
+`pytest-cov` is **already a declared dev dependency** (`pyproject.toml`, dev group: `"pytest-cov>=7.1.0"`), so no dependency was added for this step.
+
+| Command (verbatim) | Result (verbatim) |
+|---|---|
+| `uv run pytest tests/ --cov=src --cov-report=term-missing -q` | `760 passed, 1 skipped in 231.30s (0:03:51)` → `TOTAL 4750 306 988 115 92%` → **`Required test coverage of 92.0% reached. Total coverage: 92.35%`**, exit **0** |
+| `uv run coverage report --precision=2` (same run's data, CI's configured `source = ["src/backend", "src/frontend"]`) | **`TOTAL … 93.67%`** — the figure the CI `coverage` job sees |
+| `uv run coverage report --include="src/backend/logging/*"` | `TOTAL 465 25 82 12 **93%**` — `_pipeline.py` 92%, `_decorator.py` 93%, `_renderers.py` 93%, `_settings.py` 100%, `feature_settings.py` 100% |
+
+Branch coverage is on (`[tool.coverage.run] branch = true`), so the figure is statement+branch. The `[tool.coverage.report] fail_under = 92` floor is **reached** (92.35% with `--cov=src`, 93.67% under CI's source config). The one 0% file is `src/main.py` (81 statements, the process entrypoint) — pre-existing, and excluded by CI's configured `source`, which is why the CI figure is 93.67%. Coverage is reported here as a quality signal only: the gate this change is verified against is **spec coverage = 100%** (§1).
+
+#### 5. Gate summary (S5.1 → S5.4) and CI parity
+
+Every gate is the verbatim command from the step that ran it, matched to the CI job it reproduces (the P-56 lesson: the gate set is read from `.github/workflows/`, not from memory).
+
+| Step | Gate | Command (verbatim) | Result | CI job it matches |
+|---|---|---|---|---|
+| S5.1 | full suite | `uv run pytest tests/ -v` | **760 passed, 1 skipped** (761 collected, 0 failed) | `spec-validation.yml` → `tests` |
+| S5.1 | acceptance | `uv run pytest tests/acceptance/ -v` | 364 passed, 1 skipped | (Phase 5 item 2) |
+| S5.1 | property | `uv run pytest tests/property/ -v` | 71 passed | (Phase 5 item 3) |
+| S5.1 | contract | `uv run pytest tests/contract/ -v` | 51 passed | (Phase 5 item 4) |
+| S5.2 | lint (whole-repo sweep) | `uv run ruff check .` | **All checks passed!** | `lint.yml` → `lint` |
+| S5.2 | formatting | `uv run ruff format --check .` | **338 files already formatted** | `lint.yml` → `lint` (Check formatting) |
+| S5.2 | types (gate) | `uv run mypy src/` | **Success: no issues found in 84 source files** | `quality.yml` → `type-check` (gate) |
+| S5.2 | types (informational) | `uv run ty check src/` | 153 diagnostics (`main` 152) — classified, non-gate | `quality.yml` → `type-check` (informational) |
+| S5.2 | dependencies | `uv run deptry .` | **Success! No dependency issues found.** (90 files) | `quality.yml` → `dependencies` |
+| S5.2 | docs | `uv run --group docs mkdocs build --strict` | exit **0**, no warnings | `quality.yml` → `docs` |
+| S5.2 | complexity | `uv run complexipy src tests --max-complexity-allowed 15` | exit **0**, 0 `FAILED` (after one in-scope test-side decomposition) | `quality.yml` → `complexity` |
+| S5.3 | traceability | `uv run python scripts/check_traceability.py` | **PASS (822 matrix rows, 136 spec IDs, 745 test functions)**, exit **0** | `spec-validation.yml` → `traceability` |
+| **S5.4** | spec validation | `uv run python scripts/verify_spec.py docs/specs/structlog-logging.md` | **Traceability: PASS**, exit **0** | `spec-validation.yml` → `spec-validation` |
+| **S5.4** | spec validation, all specs (the job loops over every spec) | `for s in docs/specs/*.md; do uv run python scripts/verify_spec.py "$s"; done` (15 specs, `template.md` skipped) | **0 failures** — incl. the four amended specs `logging.md`, `logging-coverage.md`, `settings-coverage.md`, `settings.md` | `spec-validation.yml` → `spec-validation` |
+| **S5.4** | task DAG shape | `uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json` | **Task DAG validation PASSED: 7 tasks, acyclic, well-formed**, exit **0** | `spec-validation.yml` → `spec-validation` (Validate task DAG) |
+| **S5.4** | coverage | `uv run pytest tests/ --cov=src --cov-report=term-missing -q` | **92.35%** (CI source config: **93.67%**), `fail_under = 92` reached, exit **0** | `quality.yml` → `coverage` |
+| **S5.4** | security — audit | `uv run pip-audit` | **No known vulnerabilities found** (own package `python-template 0.6.1` skipped: not on PyPI — pre-existing, informational), exit **0** | `quality.yml` → `security` |
+| **S5.4** | security — bandit | `uv run bandit -r src/` | **0 issues** at every severity, 0 files skipped, exit **0** | `quality.yml` → `security` |
+| **S5.4** | migrations | `ALEMBIC_DATABASE_URL="sqlite:////tmp/alembic-ci-s54.db" uv run alembic upgrade head` | exit **0** (both revisions applied to a temp SQLite DB) | `quality.yml` → `migrations` |
+
+**CI parity: complete.** All nine gate jobs across the three workflows (`lint`, `type-check`, `security`, `coverage`, `dependencies`, `docs`, `migrations`, `complexity`, `spec-validation` + `traceability`) are reproduced clean locally; `dependency-review` is a PR-event action, not a command, and is not reproducible locally. The four gates the S5.2 brief had not enumerated (`coverage`, `security` ×2, `migrations`) plus the two `spec-validation` scripts were run here, closing the gap P-56 describes — no gate is skipped between here and the PR.
+
+**Suite re-confirmations taken during this step** (no source or test changed after S5.2, so these are confirmations, not new gates): the coverage run (`760 passed, 1 skipped in 231.30s`) and an incidental full-suite re-run (`760 passed, 1 skipped in 223.62s`) — both byte-for-byte the S5.1 result, same single pre-existing environmental skip.
+
+#### 6. Problem Log entries produced by this change (`docs/workflow/PROBLEMS.md`)
+
+| ID | Friction | What it changed in this change |
+|---|---|---|
+| **P-55** | T-006's DAG `allowed_files.test_files` omitted three test modules its own AC-001 witness searches (`tests/conftest.py`, `tests/logging_coverage_test_helpers.py`, `tests/acceptance/logging/test_logging.py`), so the task was unsatisfiable as written; found at the S4.1 pick step, not at S2.2 | the orchestrator extended T-006's `allowed_files` in both task files; recorded in the S4.2 (T-006) section. Renumbered from P-48 on the `origin/main` merge |
+| **P-56** | the S5.2 launch brief omitted CI's `complexity` job; `complexipy` failed on two functions this change introduced (28 and 21) and would have gone red only on the Phase 6 PR | both functions decomposed with every assertion kept; the S5.2 gate table now names the CI job beside each command, and this step's §5 table extends that to the whole gate set |
+| **P-57** | a step subagent's shell CWD drifted to the **primary worktree on `main`** during S5.3 and it measured `main`'s matrix (432 rows) as the change's | every count in this record is taken after an absolute `cd` into the change worktree with `git rev-parse --show-toplevel` printed beside it (see the CWD pin above); the authoritative figures are 822 rows / 136 spec IDs / 745 test functions |
+
+#### 7. Verdict — **VERIFIED**
+
+- **All 7 DAG tasks `VERIFIED`** — `python -c` over `.github/task-runner/tasks.json`: T-001 … T-007 all `VERIFIED`; `uv run python scripts/validate_task_dag.py` → PASSED (7 tasks, acyclic, well-formed).
+- **Spec coverage = 100%** (70/70 live IDs GREEN; 2 IDs deleted by the approved amendment, their cases GREEN via AC-007 / EDGE-004).
+- **Every Phase 5 gate clean**: full suite 760 passed / 1 pre-existing environmental skip / 0 failed; whole-repo ruff clean; mypy clean (84 files); deptry clean; mkdocs `--strict` clean; complexipy clean; traceability PASS; `verify_spec.py` PASS for this spec and for all 15 specs; coverage 92.35% ≥ the 92 floor; pip-audit and bandit clean; `alembic upgrade head` exit 0.
+- **No prohibition breached**: no acceptance test weakened, converted or skipped; no test deleted outside the three spec §11 authorizations; no behavior introduced that is not represented in the approved spec; feature boundaries and architecture rules respected (the pipeline lives in `src/backend/logging/`, the one exported entry point is `get_logger()`, `shared/` untouched); no dependency added by this step; nothing pushed.
+
+**State machine:** `PREPARED → SPECIFIED → TESTS_WRITTEN → RED_CONFIRMED → IMPLEMENTING → GREEN → REFACTORED → **VERIFIED**` — recorded in the header block above. **Phase 5 (VERIFY) is complete.**
+
+**Handed to Phase 6 (REVIEW):** the review is bounded per AGENTS.md Phase 6 to the approved spec (`docs/specs/structlog-logging.md` v1 + the four amended specs), this verification artifact, and the final code state at HEAD `34184a0` — **not** the commit-by-commit diff, and **not** another full-suite run (S5.1/S5.2/S5.4 already hold the gate clean). Version bump at S6.4 is **`major`** (spec §2 D6 / Q-22: breaking decorator-parameter removal, no shim).
+
+**Phase 5 (S5.4) gate: PASS — spec coverage 100% (70/70 live IDs, 51 own + 19 amended, 2 deleted-by-amendment), all CI gates reproduced clean, verdict VERIFIED.** Next: **S6.1 — review vs. the normative basis.**
