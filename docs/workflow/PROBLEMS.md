@@ -561,3 +561,10 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 `git reset --soft` + 2 re-commits to rebuild `aeda963` (S2.1) and `f8c3cc1` (S2.2).
 - **Resolution:** history rebuilt; each step now commits exactly once, on its own, and **never amends a previous step's commit** — the verification record cites commit shas per step, so an amend invalidates the evidence trail. If a step needs to fix its own output, it adds a follow-up commit or amends **only its own** commit before the next step starts.
 - **Date:** 2026-10-07
+
+## P-65 — a single-shot write of a 7-task DAG JSON exceeded the model output limit and was discarded (S2.2)
+- **Problem:** the S2.2 subagent wrote `docs/tasks/structure-map.tasks.json` (596 lines, 7 tasks × 20 keys) in **one** file-write call; the call exceeded the model's output-token limit and the whole write was discarded, so the step had to rewrite the file in 4 chunks (one write + three marker-anchored edits). The same shape appeared in P-61, where a DAG regeneration also cost a full write/abort cycle.
+- **Step / Phase:** S2.2 Decompose into task DAG (change structure-map / FEATURE)
+- **Duration / iterations:** 1 discarded 596-line write + 4-chunk rewrite; the step ran 2891 s / 39 tool uses / ~2.0 M tokens, of which the retry accounted for roughly a third.
+- **Resolution:** the file was written task-group by task-group with the file-write tool plus marker-anchored edits, then verified by hash against its `.github/task-runner/` copy (`sha256 520a1958…e2dc` both) and by `validate_task_dag.py` (`PASSED: 7 tasks, acyclic, well-formed`). **Durable rule:** an S2.2 DAG above ~4 tasks is written **in per-task chunks by default**, never in one write; the byte-identity hash and the validator run are the completion check, not the write's return value.
+- **Date:** 2026-10-07
