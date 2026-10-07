@@ -471,7 +471,7 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(Recommended) Add the two missing sections** — `## Using the Permissions Feature` and `## Using the Session Management Feature` in the existing house form (heading + bullets + code block), one naming `set_permission_service`, the other `set_session_service`. Satisfies AC-019 as written; costs two short sections; **amends D13's "no new section" clause**, so it needs a one-line spec amendment (D13 wording) in this change's PR.
   - **Put both bullets in existing sections** — e.g. extend `Using the User Management Feature` (permissions) and `Using the Authentication Feature` (session-management). Honours D13's "no new section", but AC-019's "its feature's section" then names a section that does not exist for that feature, so the spec must be amended to name the host sections instead.
   - **Drop the two features from REQ-015/AC-019** — guidance for permissions and session-management stays undocumented; smallest diff, but leaves two of the five install operations undiscoverable, which is what Q-17 wanted to prevent.
-- **Answer:** (pending)
+- **Answer:** **Add the two missing sections.** `AGENTS.md` gains `## Using the Permissions Feature` and `## Using the Session Management Feature`, each in the existing house form (heading + bullets + code block), one naming `set_permission_service`, the other `set_session_service`. AC-019 stays as written ("its feature's section"); REQ-015 keeps all five features. D13's "no new section" clause is **amended** — the spec file gains a one-line D13 correction (two new sections) plus a `## Changelog` entry, made in this change's own PR (Spec Amendment Workflow applied to the change's own spec, merge gate = the change PR).
 - **Date:** 2026-10-07
-- **Status:** PENDING
-- **Incorporated:** no — T-012 is not derived and not implemented; the change is WAITING on this answer
+- **Status:** ANSWERED
+- **Incorporated:** yes — T-012 unblocked: `AGENTS.md` scope = 5 bullets + 2 new sections; `docs/specs/settings-public-registry-setter.md` D13 amended with a changelog line in the same PR
