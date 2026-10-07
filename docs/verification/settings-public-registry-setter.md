@@ -330,3 +330,278 @@ renumbered or restated by this step.
 - Done-criteria check: an ADR exists for every decision that passes the threshold (2), the below-threshold
 decisions are listed with reasons above, and both ADRs plus this record are committed on the change branch.
 S2.2 (task DAG, grouped by affected feature per §12) is the next step and was **not** run here.
+
+---
+
+## S2.2 — Task DAG (2026-10-07)
+
+CROSS-CUTTING, so the DAG is grouped by affected feature (spec §12): one group per singleton-owning
+feature, then the cross-cutting groups. 12 tasks, all `status: "PENDING"`.
+
+### Artifacts
+
+| File | Role | sha256 |
+|---|---|---|
+| `docs/tasks/settings-public-registry-setter.tasks.json` | the task DAG (12 tasks, 109,619 bytes) | `abdc38efeb81aadcf655c3c9735c342c421021ea0cc7a36517506a9aab43e255` |
+| `.github/task-runner/tasks.json` | the active build environment (byte-identical copy, 109,619 bytes) | `abdc38efeb81aadcf655c3c9735c342c421021ea0cc7a36517506a9aab43e255` |
+
+`cmp docs/tasks/settings-public-registry-setter.tasks.json .github/task-runner/tasks.json` → no output
+(byte-identity, the repo invariant). Both files were written from one builder run
+(`build_dag_sprs.py`, kept in a temp directory **outside both worktrees**, so the two copies cannot
+drift and no build script is committed).
+
+### Validator output (recorded, because CI does not enforce it)
+
+```text
+$ uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json
+Task DAG validation PASSED: 12 tasks, acyclic, well-formed.            exit 0
+
+$ uv run python scripts/validate_task_dag.py docs/tasks/settings-public-registry-setter.tasks.json
+Task DAG validation PASSED: 12 tasks, acyclic, well-formed.            exit 0
+```
+
+The second invocation also runs the script's docs↔runner sync check (task-id sets + per-task
+`status`). `.github/workflows/spec-validation.yml:54` runs the validator with `|| true` (and
+downgrades `scripts/verify_spec.py` to a message at `:50`), so a DAG failure never fails CI —
+which is exactly why the validator result and the coverage result are recorded here.
+
+### Schema
+
+Per-task keys, in this order: `task_id, feature_group, title, description, requirements,
+acceptance_criteria, invariants, edge_cases, non_functional, amended_spec_ids, tests_to_create,
+red_command, implementation_steps, green_command, inputs, allowed_files{source_files,test_files},
+implementation_scope, design_constraints, completion_gates, dependencies, status`.
+
+- The dependency field is **`dependencies`**, not `depends_on`: `scripts/validate_task_dag.py:29`
+  requires it (`required_fields = ["task_id", "title", "status", "dependencies", "requirements",
+  "acceptance_criteria"]`) and every existing DAG uses it.
+- The shape matches `docs/tasks/structlog-logging.tasks.json` (the most recent DAG, in the
+  `crosscut/structlog-logging` worktree) so Phase 4/5 reads one form.
+- Top level: `feature, spec, branch, change_type, version, adrs, spec_approval, grouping,
+  amended_specs, ci_gates_read_from, interlock, open_findings, id_coverage, tasks`. The cached
+  Spec Approval Gate result (PR #73 → `a1a15db`, 2026-10-06T20:07:48Z) is carried in `spec_approval`
+  so no later step re-runs the check.
+
+### Task list — IDs per task
+
+| Task | Feature group | REQ | AC | INV / EDGE / NFR | depends on |
+|---|---|---|---|---|---|
+| T-001 | settings | 001,002,004–010,014 | 001 | — | — |
+| T-002 | eventbus | 001–010,014 | — | — | T-001 |
+| T-003 | permissions | 001,002,004–010,014,016 | — | — | T-001, T-002 |
+| T-004 | search | 001,002,004–010,014 | — | — | T-001…T-003 |
+| T-005 | session-management | 001,002,004–010,014 | — | — | T-001…T-004 |
+| T-006 | composition root (`src/main.py`) | 011,012 | 016 | — | T-001 |
+| T-007 | test infrastructure (11 write sites) + the architecture scan guard | 012,013 | 017 | EDGE-008 | T-001, T-002, T-006 |
+| T-008 | tooling — `pyproject.toml` ruff configuration | 013 | 018 | EDGE-009, NFR-004 | T-007 |
+| T-009 | cross-feature witness set — install semantics, API contract, catalog, latency | 001–005,009,014,016 | 002–008,013,020 | INV-002, INV-003, EDGE-001–007, NFR-001, NFR-002 | T-001…T-005 |
+| T-010 | cross-feature witness set — the module lock | 006,007,008 | 009–012 | INV-001, EDGE-010, NFR-003 | T-001…T-005, T-009 |
+| T-011 | logging coverage — the five install operations in the §3.1 inventory | 010 | 014,015 | — | T-001…T-005, T-009 |
+| T-012 | guidance — AGENTS.md “Using the …” sections | 015 | 019 | — | T-001…T-005, T-008, T-009 |
+
+(REQ/AC columns abbreviate the change spec's own `REQ-`/`AC-` IDs.)
+
+### One-line scope per task
+
+- **T-001 settings** — `set_settings_registry()` + a module lock guarding install, lazy create (both
+  `required` modes) and reset in `src/backend/settings/registry.py`; package re-export.
+- **T-002 eventbus** — `set_event_bus()` + module lock in `src/backend/eventbus/eventbus.py`; reset
+  still shuts the slot's bus down; the replaced bus never is.
+- **T-003 permissions** — `set_permission_service()` + module lock in `src/backend/permissions/service.py`;
+  `get_permission_service`/`reset_permission_service` stay untraced (out of scope).
+- **T-004 search** — `set_search_service()` guarded by the module's **existing** `_singleton_lock`
+  (`src/backend/search/service.py:547/558/571`) — no new lock (search.md v4).
+- **T-005 session-management** — `set_session_service()` + module lock in
+  `src/backend/sessionmanagement/service.py`; no lazy-create path exists, so the repository-argument
+  rule (`ValueError`) is unchanged.
+- **T-006 composition root** — `src/main.py` installs through `set_settings_registry()` at its current
+  module-import-time position (`:137-138`), imports no private slot (`:68`), and reads the shared
+  instance back through `get_settings_registry()` at `:161`, `:173-178`, `:198`, `:204`, `:214`.
+  Write site 1 of the 12.
+- **T-007 test infrastructure + scan guard** — migrate the remaining **11** private-slot writes
+  (3 in `tests/settings_test_helpers.py`, 2 in `tests/eventbus_test_helpers.py`, 6 in the logging /
+  settings-coverage witnesses, three of them code strings handed to subprocess) to the public
+  operations, and add `tests/unit/architecture/test_singleton_slots.py`, which flags foreign slot
+  writes both as real statements and inside subprocess strings while owner writes stay allowed.
+- **T-008 tooling** — add `TID251` to `[tool.ruff.lint].select` (only TID251) and the five fully
+  qualified `banned-api` entries; the contract test runs ruff on a `tmp_path` fixture and asserts
+  `uv run ruff check .` stays clean.
+- **T-009 cross-feature semantics** — the parametrized witnesses over all five singletons: install →
+  get, replace → exactly one WARNING naming the shared default, not retroactive, never `None`, no
+  `isinstance`, no event, replaced instance neither started nor shut down, the public API contract,
+  the unchanged 60-key permission catalog, and NFR-001/NFR-002.
+- **T-010 cross-feature lock** — concurrent lazy create (one instance), concurrent
+  install/read/reset (never a torn slot), the lazy path emitting exactly one traced pair, and
+  install → reset → default for the four features whose `get_*()` builds a default.
+- **T-011 logging coverage** — each install operation traced with `@logged(slow_threshold_ms=5)` and
+  present as a module-function row in the logging-coverage inventory
+  (`tests/logging_coverage_test_helpers.py:76 INVENTORY_MODULE_FUNCTIONS`).
+- **T-012 guidance** — one AGENTS.md bullet per feature naming its install operation, the
+  replace-plus-WARNING semantics and `reset_*()` as the test seam, plus the guidance contract test.
+
+### Dependency graph
+
+```text
+T-001 ─┬─ T-002 ─┬─ T-003 ─┬─ T-004 ─┬─ T-005
+       │         │         │         └──────────────┐
+       │         │         └─ T-006 (main.py)       │
+       │         └─ T-007 (11 sites + scan) ─ T-008 (ruff)
+       └────────────────────────────────────────────┼─ T-009 ─┬─ T-010
+                                                    │         ├─ T-011
+                                                    └─────────┴─ T-012 (also needs T-008)
+```
+
+The five feature tasks are chained (T-001 → T-005) rather than independent: no task calls a later
+task's service method, but they share the `tests/*/singleton_install/` packages and the singleton
+semantics must converge in one order, so the chain fixes the order instead of leaving it to chance.
+
+### ID coverage
+
+- **Change spec** `docs/specs/settings-public-registry-setter.md`: **53** normative IDs
+  (16 REQ, 20 AC, 3 INV, 10 EDGE, 4 NFR) → **53 assigned, 0 unassigned, 0 unknown**. The builder
+  computes this and aborts the write if any ID is unassigned or any assigned ID is undefined, so the
+  number is measured, not asserted by hand. The full ID → task map is in the JSON under
+  `id_coverage.by_id`.
+- **Amended feature specs**: 40 IDs, listed per task under `amended_spec_ids` and aggregated per file
+  under `id_coverage.amended_specs` — `settings.md` v5: 10 (REQ-026, AC-040…043, INV-011,
+  EDGE-030…033) → T-001; `event-bus.md` v2: 7 → T-002; `user-roles-permissions.md` v2: 7 → T-003;
+  `search.md` v4: 7 → T-004; `session-management.md` v2: 7 → T-005; `logging-coverage.md` v3: 1
+  (five new §3.1 rows, no new ID) → T-011; `settings-coverage.md`: 1 (REQ-002 cited unchanged) → T-006.
+- **IDs are namespaced per spec file and collide across the six specs** (`AC-041` is settings.md
+  AC-041 in T-001 and user-roles-permissions.md AC-041 in T-003). Change-spec IDs are written bare;
+  feature-spec IDs are always qualified by the file name — in the DAG and in this record.
+- T-002…T-005 carry an empty change-spec `acceptance_criteria` list **by design**: their evidence is
+  their own feature's amended-spec ACs, whose test functions are named in `tests_to_create`
+  (e.g. `tests/acceptance/eventbus/test_eventbus.py::test_ac_013_set_event_bus_installs_default`).
+  No normative ID of any spec involved is left without an executable test.
+
+### Gate satisfiability (decompose skill check)
+
+Every test in a task's `tests_to_create` can pass using only that task plus its declared
+`dependencies`:
+
+- T-001…T-005 need only their own module (each feature's install operation and lock).
+- T-006 needs `set_settings_registry` (T-001) — the only operation `src/main.py` calls.
+- T-007 needs `set_settings_registry` (T-001) and `set_event_bus` (T-002) — the only two operations
+  its 11 migrated sites call — plus T-006, because its scan test asserts the whole repository is free
+  of foreign slot writes and `src/main.py` is one of the 12 sites.
+- T-008 needs T-007: with every private-slot import migrated, enabling TID251 cannot break
+  `uv run ruff check .`.
+- T-009 needs T-001…T-005. T-010 and T-011 additionally depend on T-009 because they extend files
+  T-009 owns (`tests/singleton_install_test_helpers.py`,
+  `tests/acceptance/singleton_install/test_install.py`,
+  `tests/property/singleton_install/test_install_properties.py`).
+- T-012 needs T-008 (owner of `tests/contract/singleton_install/__init__.py`) and T-009.
+
+No test was moved or deleted to satisfy the rule, and no task's gate calls a later task's API.
+
+### allowed_files = each task's own witness scope (PROBLEMS.md P-55)
+
+- T-001 **creates** `tests/singleton_install_test_helpers.py` (the five
+  `(module, installer, getter, reset, instance-factory)` tuples the parametrized witnesses run over)
+  and names `tests/settings_test_helpers.py` read-only (its writes belong to T-007).
+- T-002 names `tests/eventbus_test_helpers.py` read-only; T-004 `tests/search_test_helpers.py`;
+  T-005 `tests/sessionmanagement_test_helpers.py` + `tests/unit/sessionmanagement/conftest.py`.
+- T-007 lists all 11 migrated sites by path **and line**, plus the new `tests/unit/architecture/`
+  package (`__init__.py` + the scan test).
+- T-008 owns `pyproject.toml` — the `[tool.ruff.lint].select` and
+  `[tool.ruff.lint.flake8-tidy-imports.banned-api]` tables and nothing else in it.
+- T-011 names `tests/logging_coverage_test_helpers.py` (the inventory data it must extend).
+- T-009/T-010/T-011 list the five owner modules as **fix-only** entries: their witnesses may expose a
+  uniformity or lock-scope defect, and the fix belongs in the owning module, recorded against that
+  feature.
+
+### CI gates named in completion_gates (PROBLEMS.md P-56, read from the workflow files)
+
+- `.github/workflows/lint.yml:37` `uv run ruff check .`, `:39` `uv run ruff format --check .`
+- `.github/workflows/quality.yml:23` mypy (gate); `:25-26` `uv run ty check src/` is
+  **informational** (`continue-on-error: true`) and is named as such, never as a gate; `:41`
+  pip-audit; `:43` bandit; `:59` `uv run pytest tests/ --cov --cov-report=xml` with the floor
+  `fail_under = 92` (`pyproject.toml:110`); `:94` deptry; `:109` `mkdocs build --strict`; `:127`
+  `alembic upgrade head`; `:144` `uv run complexipy src tests --max-complexity-allowed 15` (gate).
+- `.github/workflows/spec-validation.yml:48` `verify_spec.py`, `:54` `validate_task_dag.py`
+  (`|| true`), `:68` `check_traceability.py`, `:84` `pytest tests/ -v`.
+- Only **T-008** carries the repository-wide ruff sweep (it changes the lint configuration); every
+  other task's ruff gate is scoped to its own changed paths.
+
+### red_command / green_command are targeted (PROBLEMS.md P-56)
+
+Every command names individual pytest **node IDs** for that task's own tests — never the full suite
+(the full suite is a Phase 5 gate). Node IDs rather than whole files are required by this change's
+layout: Phase 3 derives every task's tests before Phase 4 starts, so the shared files
+(`tests/acceptance/singleton_install/test_install.py`,
+`tests/property/singleton_install/test_install_properties.py`) will already hold other tasks'
+failing tests, and a file-level command could never go GREEN for one task.
+
+### Breaking-change rule (decompose skill)
+
+- T-007 rewrites 7 pre-existing test files; its `green_command` includes all of them plus
+  `tests/unit/test_settings_test_isolation.py` (the helpers' isolation contract), so the break is
+  repaired in-task and never deferred to Phase 5.
+- T-006 changes the composition root's mechanism; its `green_command` includes
+  `tests/acceptance/settings_coverage/test_wiring.py`.
+- No public API is removed (NFR-001 additive-only), so no other task breaks existing tests.
+
+### Narrowed gates
+
+The repository-wide ruff sweep is narrowed to T-008, and each feature task's gate exercises only its
+own module's lazy path; the paths a narrowed gate does not exercise are covered by the tasks that do
+(T-009 semantics across all five, T-010 the locks across all five, T-011 the tracing across all
+five), and Phase 5's full gate set covers the remainder.
+
+### Test layout the DAG produces
+
+22 distinct test files, of which 12 are new: `tests/{acceptance,unit,property,contract,integration}/
+singleton_install/` (6 new packages, 7 new files), `tests/unit/architecture/` (new package,
+`test_singleton_slots.py`), and three new files inside existing packages —
+`tests/acceptance/permissions/test_singleton_install.py`,
+`tests/acceptance/search/test_singleton_install.py`, `tests/unit/sessionmanagement/test_validation.py`
+(that directory currently holds only `__init__.py` and `conftest.py`). The remaining 10 are existing
+per-feature files extended with `test_ac_*` / `test_edge_*` / `test_inv_*` functions named by the
+amended specs' test-strategy sections.
+
+### Findings recorded (not silently resolved)
+
+- **F-1 — D13 vs AC-019 (AGENTS.md).** D13/REQ-015 assume AGENTS.md already has a “Using the …”
+  section for each of the five features. Measured on this branch (2026-10-07): it has eight such
+  sections and **none** for the permissions or the session-management feature. AC-019 is normative and
+  names five sections, so T-012 adds the two missing sections in the existing house form — the
+  requirement wins over the design note. Recorded in the DAG (`open_findings`) and here rather than
+  raised as a late question: both readings deliver the same guidance, the difference is two short
+  sections, and the user can reject it at the change PR (S6.4) without blocking Phase 3.
+- **F-2 — interlock with `crosscut/structlog-logging`.** That change (PR #74 open, not yet merged)
+  edits `tests/contract/logging/test_logging_contracts.py`,
+  `tests/property/logging/test_logging_properties.py` and `tests/unit/logging/test_logging_edges.py`
+  — three of T-007's files — and `tests/acceptance/logging_coverage/*`, which T-011 extends.
+  Whichever branch merges second rebases and keeps both edits; neither may overwrite the other's test
+  content. Recorded in the DAG under `interlock`.
+
+### S2.2 gate evidence
+
+- Worktree (printed with the counts, per P-57): `git rev-parse --show-toplevel` →
+  `C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`;
+  branch `crosscut/settings-public-registry-setter`.
+- Branch state after this step's commit: `git log --oneline origin/main..HEAD` → `aeda963` (S2.1
+  ADRs) + the **S2.2 commit** (this step, the branch tip — its sha is in the S2.2 handoff, not
+  repeated here because amending this record would change it), i.e.
+  `git rev-list --left-right --count origin/main...HEAD`
+  → **7 behind / 2 ahead**. The spec-approval merge `a1a15db` (PR #73) is an ancestor of
+  `origin/main` (`git merge-base --is-ancestor a1a15db origin/main` → true), and the branch carries
+  the approved spec because its P.4/P.5 commits are ancestors of that merge. The cached approval
+  result is unchanged. The behind-count is reported for the orchestrator (a rebase before the change
+  PR is its decision, not this step's). Nothing was pushed.
+- Files created: `docs/tasks/settings-public-registry-setter.tasks.json`,
+  `.github/task-runner/tasks.json`. File modified: this record only.
+- Untouched by this step: `src/`, `tests/`, `pyproject.toml`, `AGENTS.md`, `docs/specs/`,
+  `docs/decisions/`, `docs/todo/`, `docs/questions/`, `.github/workflows/`.
+- Ruff: `uv run ruff check .` → **All checks passed** (exit 0); no Python file was written by this
+  step. Passing the JSON paths explicitly makes ruff parse them as Python and report `B018` at 1:1 —
+  the identical report appears for the pre-existing `docs/tasks/search.tasks.json`, and the CI sweep
+  (`lint.yml:37`) does not lint JSON. Recorded so a later step does not “fix” a non-issue.
+- Validator: PASSED for both invocations (output above). ID coverage: 53/53, 0 unassigned.
+  Byte-identity: `cmp` clean, sha256 `abdc38ef…e255` for both files.
+- Not done in this step (by instruction): no test or implementation code, no full test suite run, no
+  write to `docs/todo/` or `docs/questions/`, no subagent, no push, no todo-list change.
+
+**Next step: S3.1** — derive tests per DAG task (one fresh subagent per task's `tests_to_create`),
+then S3.2 (ruff on the changed paths + confirm RED, targeted).
