@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 The repository's documented architecture is false. `AGENTS.md` *Project Structure* (measured at
-`AGENTS.md:1112` on this branch) prescribes `src/frontend/` and per-feature `model/` + `services/`
+`AGENTS.md:1120` on this branch) prescribes `src/frontend/` and per-feature `model/` + `services/`
 subdirectories; none of it exists — there is no `src/frontend/` directory, no feature has a `model/`
 or `services/` subdirectory, and the only nested directory under `src/backend/` is
 `src/backend/filemanagement/assets/` (an asset directory, not an architecture layer). Every change
@@ -21,9 +21,9 @@ Two facts make this a decision and not a restatement of the spec:
    `uv sync --only-group dev`, not `--locked`). A committed artifact produced by the repository's own
    generator, whose freshness is machine-checkable, is a new element in this repository.
 2. **The repository's quality model is the opposite of advisory.** There are **12 CI jobs across 3
-   workflows** (`lint.yml` 1, `quality.yml` 8, `spec-validation.yml` 3) and two `repo: local`
-   pre-commit hooks (`deptry`, `mkdocs-build`); the two formatter hooks (`ruff-check --fix`,
-   `ruff-format`) **rewrite files** during a commit. A hook that only *checks*, and a mechanism that
+   workflows** (`lint.yml` 1, `quality.yml` 8, `spec-validation.yml` 3) and two hooks in the
+   `repo: local` block (`deptry` at the `pre-commit` stage, `mkdocs-build` at `pre-push`); the two
+   formatter hooks (`ruff-check --fix`, `ruff-format`) **rewrite files** during a commit. A hook that only *checks*, and a mechanism that
    is deliberately **not** a CI job and **not** a workflow gate, depart from that convention on both
    axes at once — that departure has to be recorded, because the default assumption in this repo is
    "if it matters, it is a gate".
@@ -70,9 +70,10 @@ workflow gate**:
     This is chosen knowingly — the map is documentation-grade, not correctness-grade, and a wrong map
     costs a re-read, not a broken build (REQ-026).
   - **A per-change tax and a guaranteed conflict point.** Any change that adds, deletes or renames a
-    `.py` file also changes `STRUCTURE.md` (the hook fires on `\.py$`), so parallel worktrees — four
-    are in flight at measurement — will conflict on it. The resolution is regeneration, and it is
-    cheap and lossless precisely because the file is never hand-edited (REQ-027, EDGE-010).
+    `.py` file also changes `STRUCTURE.md` (the hook fires on `\.py$`), so parallel worktrees — three
+    change worktrees are in flight at measurement — will conflict on it. The resolution is
+    regeneration, and it is cheap and lossless precisely because the file is never hand-edited
+    (REQ-027, EDGE-010).
   - **Untracked files leak into the committed map.** The file set is index *plus* untracked-but-not-ignored
     (REQ-003), so a file that is generated-and-never-committed makes the committed map stale for the
     next clone (EDGE-009); regeneration is the fix, and the skill states it.

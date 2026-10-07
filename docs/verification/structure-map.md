@@ -328,3 +328,32 @@ All measured in this worktree (`git rev-parse --show-toplevel` =
   to `.github/task-runner/tasks.json`**, with ADR-085/ADR-086 as design constraints (regenerate the map
   last; no CI map job; `mypy scripts/` + the `verify_spec.py` fix in one task; no coverage/complexipy
   scope change).
+
+### Re-entry re-verification (second S2.1 execution, 2026-10-08)
+
+The step was re-entered (the launch brief reported HEAD as `313d058`, which does not exist as an object in
+this repository — the branch had instead been fast-forwarded onto `origin/main`). The S2.1 output was
+already committed as **`e54b4ec`**; this execution **verified that output against the done criteria and
+corrected three loose measured claims in ADR-085** rather than rewriting it. All measurements below were
+taken with `git rev-parse --show-toplevel` = `C:/workspace/active-projects/python-template_kopie-worktrees/feature/structure-map`,
+HEAD `e54b4ec`.
+
+| Claim under test | Re-verified value | Verdict |
+|---|---|---|
+| 12 CI jobs across 3 workflows | counted under each workflow's `jobs:` key: `lint.yml` 1 (`lint`), `quality.yml` 8 (`type-check`, `security`, `coverage`, `dependency-review`, `dependencies`, `docs`, `migrations`, `complexity`), `spec-validation.yml` 3 (`spec-validation`, `traceability`, `tests`) = **12** | correct |
+| `repo: local` hooks | 2 — `deptry` (`stages: [pre-commit]`) and `mkdocs-build` (`stages: [pre-push]`); the `ruff-check --fix` / `ruff-format` hooks do rewrite | **corrected in ADR-085** (it called both "pre-commit hooks") |
+| `AGENTS.md` Project Structure line | `AGENTS.md:1120` at this head | **corrected in ADR-085** (it said `:1112`, the P.5-era line) |
+| parallel worktrees | `git worktree list` → primary (`main`) + **3 change worktrees** (`crosscut/settings-public-registry-setter`, `feature/structure-map`, `issue/pytest-randomly`) | **corrected in ADR-085** (it said "four") |
+| ADR numbering | `git ls-tree -r --name-only crosscut/settings-public-registry-setter docs/decisions` → ADR-080, 082, **083, 084**; `git ls-tree -r --name-only HEAD docs/decisions \| grep -c ADR-081` → **0**; 84 ADR files at HEAD, highest = **ADR-086** | correct — 085/086 are free of collision |
+| tracked-file counts | `git ls-files`: **597** tracked (595 at `aabf878` + the 2 ADR files this step added), **339 `.py`**, **84** under `src/`, **70** `__init__.py`, 17 `conftest.py`, 11 `*_test_helpers.py` → **118 Packages-scope modules**, 9 root-level files, `docs/` **212** (210 + 2), `.github/` 9 | correct |
+| F-02 (`REQ-025` premise) | `uv run mypy scripts/` → `scripts/verify_spec.py:74: … [union-attr]`, **1 error in 1 file (checked 3 source files)** | correct |
+| ADR-086 gate table | `pyproject.toml`: `python_version = "3.14"`, `check_untyped_defs`, `disallow_untyped_defs`, `explicit_package_bases`, `namespace_packages`; `[tool.ty] root = ["./src"]`; coverage `source = ["src/backend", "src/frontend"]`, `fail_under = 92`; complexipy `paths = ["src", "tests"]`, `max-complexity-allowed = 15`; `quality.yml` runs `mypy src/`, `ty check src/`, `bandit -r src/`, `complexipy src tests` | correct |
+| `make_map` absent from live guidance | `grep -rn make_map .github AGENTS.md .agents` → **0 hits** (AC-023 holds trivially today) | correct |
+| `.gitattributes` / `core.autocrlf` | absent / **`true`** (F-07 stands) | correct |
+| `uv run python scripts/check_traceability.py` | **PASS — 822 matrix rows, 136 spec IDs, 746 test functions** (up from 765 / 130 / 714 at P.5 because other changes merged; per finding 2 the PASS is still not evidence of this spec's rows) | PASS |
+
+ADR format check: both files follow `docs/decisions/ADR-000-template.md` (Status / Context / Decision /
+Consequences / Alternatives Considered / References, `## Status` = `Accepted`), match the heading style of
+ADR-082/ADR-080, cite the spec IDs they settle, and contradict no row of the spec's Out-of-scope table
+(no CI job, no auto-fixing hook, no workflow gate, no `.gitattributes`, no new dependency, no coverage or
+complexipy scope change). No `docs/decisions/` index file exists, so none needed updating.
