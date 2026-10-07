@@ -462,4 +462,16 @@ Every question that needs user input is recorded HERE — never in a central fil
 
 ## Late questions (Phases 2–6)
 
-(none yet)
+## Q-30 — T-012: `AGENTS.md` has no section for two of the five features (D13's premise is false)
+- **Step:** S2.2 Decompose (raised again at S3.1); blocks **T-012** (Phase 3 derivation + Phase 4 implementation)
+- **Why needed:** REQ-015 / AC-019 require that each of the five features' `Using the …` section in `AGENTS.md` names its install operation. D13 (`docs/specs/settings-public-registry-setter.md:47`) states: "`AGENTS.md` gains one bullet per feature in its five `Using the …` sections; **no new section**, no new pattern prose." Measured on the branch (and on `main` after the `structlog-logging` merge), `AGENTS.md` has **eight** `Using the …` sections — Logging, Event Bus, Settings, User Management, Authentication, Mail Service, File Management, Search — and **none** for permissions or session-management. So D13's "five sections" premise is false and its "no new section" clause makes AC-019 unsatisfiable for two of the five features.
+- **Context:** the DAG's T-012 `design_constraints` already flag this as "D13 DIVERGENCE (open decision, raised at S2.2)" and instruct: "do not start this task before it is recorded". T-001..T-011 are fully derived and RED-recorded; only T-012's `test_ac_019_agents_md_names_installer` cannot be written until the home of the two missing bullets is fixed, because the contract test asserts the bullet is inside *that feature's section*.
+- **Question:** Where do the `set_permission_service` and `set_session_service` bullets go?
+- **Options:**
+  - **(Recommended) Add the two missing sections** — `## Using the Permissions Feature` and `## Using the Session Management Feature` in the existing house form (heading + bullets + code block), one naming `set_permission_service`, the other `set_session_service`. Satisfies AC-019 as written; costs two short sections; **amends D13's "no new section" clause**, so it needs a one-line spec amendment (D13 wording) in this change's PR.
+  - **Put both bullets in existing sections** — e.g. extend `Using the User Management Feature` (permissions) and `Using the Authentication Feature` (session-management). Honours D13's "no new section", but AC-019's "its feature's section" then names a section that does not exist for that feature, so the spec must be amended to name the host sections instead.
+  - **Drop the two features from REQ-015/AC-019** — guidance for permissions and session-management stays undocumented; smallest diff, but leaves two of the five install operations undiscoverable, which is what Q-17 wanted to prevent.
+- **Answer:** (pending)
+- **Date:** 2026-10-07
+- **Status:** PENDING
+- **Incorporated:** no — T-012 is not derived and not implemented; the change is WAITING on this answer
