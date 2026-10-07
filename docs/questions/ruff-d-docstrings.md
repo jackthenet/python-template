@@ -245,10 +245,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — two one-line docstrings naming the context-manager contract (Recommended)** — it is published behaviour and it clears the rule with no exemption needed.
   - **(b) No — add `D105` to `ignore`** — dunders stay undocumented repo-wide, and future dunders never trigger the rule.
   - **(c) No — `# noqa: D105` on the two lines** — rule stays active, the exception is local and visible.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — two one-line docstrings naming the context-manager contract** (user, 2026-10-07). `D105` stays selected; no ignore, no noqa.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `src/backend/eventbus/eventbus.py:158,161` are in the backfill
 
 ## Q-14 — Are private helpers in scope even though `D` never requires them?
 - **Step:** P.2 Interrogate
@@ -259,10 +259,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Strictly what `D` covers (Recommended)** — the gate and the diff stay aligned, and the change stays mechanically checkable ("`ruff check --select D src` is clean").
   - **(b) Also the private helpers in the files already being touched** — better docs where the complexity is, but the diff grows and no gate proves it.
   - **(c) Also the private helpers of the functions `pyproject-tooling-gaps` refactored** — targeted at the known-complex code, but it drags that change's files back in.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) Also the private helpers in the files already being touched** (user, 2026-10-07) — **not** the recommended strict scope. Consequences recorded: the diff grows beyond what `ruff check --select D src` can prove, so the Phase 5 done-criterion is "`D` clean **plus** every private helper in a touched file documented" (checked by review, not by the gate); the private-helper docstrings are still subject to the Q-15 no-filler rule.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — scope: private helpers inside the 43 `src/` files the change touches are in scope; the gate stays `ruff check --select D src` clean, the extra coverage is a review check
 
 ## Q-15 — How is the "no filler docstring" rule enforced?
 - **Step:** P.2 Interrogate
@@ -288,10 +288,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes, follow the existing style — IDs in docstrings (Recommended)** — consistent with the docstrings already in `src/`, and it keeps code↔spec links greppable.
   - **(b) No — reader-facing prose only, no internal IDs** — cleaner published pages, but it breaks the established convention and the grep-ability.
   - **(c) IDs only where the docstring explains a rule the spec defines, not as decoration** — middle ground, reviewer judgement.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — IDs stay in docstrings** (user, 2026-10-07), following the existing style (`filemanagement/search_source.py:100` "… (REQ-021)"). Recorded caveat: `docs/specs/` is not published (`mkdocs.yml` site source is `userdocs/`), so a reader of the API reference sees an ID with nothing to resolve it against — accepted, because code↔spec grep-ability is the higher value here.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — the scope record's docstring convention names REQ/AC citation as expected, not forbidden
 
 ## Q-17 — Is the traced-class docstring wording (REQ-009 / AC-009) a hard constraint on this change?
 - **Step:** P.2 Interrogate
@@ -302,10 +302,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — record it as a MUST-hold invariant and re-run that acceptance test in Phase 5 (Recommended)** — one sentence in the scope record, and the test already exists.
   - **(b) No — rely on the full test suite to catch it** — the test does catch it, but only if the suite is run, and a light-tier Phase 5 might not run it.
   - **(c) Yes, and additionally exclude traced classes' docstrings from any reformatting step** — belt and braces, but it leaves 45 classes outside the formatting rules.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — a MUST-hold invariant, and Phase 5 re-runs `tests/acceptance/logging_coverage/test_docstrings.py::test_traced_class_docstrings_mention_tracing`** (user, 2026-10-07). Rewording is allowed; dropping "traced" or "logged" from any of the 45 `@logged_class` classes' docstrings is not.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded as an invariant of the scope record; the named acceptance test is in the Phase 5 evidence set
 
 ## Q-18 — Does `mkdocs.yml` pin the docstring parser explicitly?
 - **Step:** P.2 Interrogate
