@@ -357,3 +357,135 @@ Consequences / Alternatives Considered / References, `## Status` = `Accepted`), 
 ADR-082/ADR-080, cite the spec IDs they settle, and contradict no row of the spec's Out-of-scope table
 (no CI job, no auto-fixing hook, no workflow gate, no `.gitattributes`, no new dependency, no coverage or
 complexipy scope change). No `docs/decisions/` index file exists, so none needed updating.
+
+## Phase 2 — S2.2 task DAG (2026-10-08)
+
+`git rev-parse --show-toplevel` = `C:/workspace/active-projects/python-template_kopie-worktrees/feature/structure-map`,
+branch `feature/structure-map`, HEAD before this step `b9a2c76`, `origin/main` = `aabf878` (an ancestor of
+HEAD — re-checked with `git merge-base --is-ancestor aabf878 HEAD`, exit 0). The spec approval gate is read
+from the cached record above (PR #69, merge commit `570bfbc`) and was **not** re-checked.
+
+### Artifacts
+
+| Artifact | State |
+|---|---|
+| `docs/tasks/structure-map.tasks.json` | new, 7 tasks, sha256 `520a1958a1681697c1522279b270975c65d4b8af81a658f070c752c6f0eee2dc` |
+| `.github/task-runner/tasks.json` | overwritten with the new DAG (the active build environment holds one DAG at a time; the previous content was the merged `structlog-logging` DAG, 7 tasks all `VERIFIED`), sha256 `520a1958a1681697c1522279b270975c65d4b8af81a658f070c752c6f0eee2dc` — **byte-identical** to the docs copy |
+
+Byte-identity is proven by hashing both files (`certutil -hashfile … SHA256` and a Python `hashlib.sha256`
+over the raw bytes agree). `scripts/validate_task_dag.py` does **not** check byte-identity — its sync check
+compares only the `task_id` sets and each task's `status` — so the hash is the evidence (PROBLEMS.md P-61).
+
+### DAG validation output
+
+```
+$ uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json
+Task DAG validation PASSED: 7 tasks, acyclic, well-formed.
+exit 0
+```
+
+### Task table
+
+| Task | Title (abridged) | IDs covered | Depends on |
+|---|---|---|---|
+| T-001 | `uv run mypy scripts/` joins the quality.yml type-check job; fix the one pre-existing `union-attr` error in `scripts/verify_spec.py` behaviour-preservingly | REQ-025, AC-025, NFR-004 | — |
+| T-002 | the stdlib-only generator harness: CLI, file set, exit-code dispatcher (2, 4), unreadable-source hard failure, document shape, `--out` parent dir | REQ-001/002/003/004/006/007/008, AC-001/002/003/006/007/008, EDGE-003/004/005/006/007/008/014, NFR-001/003/006 | T-001 |
+| T-003 | Directory tree + Packages scope + group/module headers + path form | REQ-009/010/011/012/013/020, AC-009/010/011/012/013/020, INV-002/003, EDGE-001/002/013/015, NFR-007 | T-002 |
+| T-004 | symbol inventory: group order, `ast.unparse` signatures, decorators, visibility, field cap, summaries | REQ-014/015/016/017/018, AC-014/015/016/017/018, EDGE-011/012 | T-003 |
+| T-005 | `--check` semantics + the completed exit-code precedence + determinism + hook-clean output | REQ-004/005/019, AC-004/005/019, INV-001/004/005/006, EDGE-009/010/016 | T-004 |
+| T-006 | the integration surface: skill, check-only local hook, the four `AGENTS.md` edits, the advisory sentence, the freshness policy | REQ-022/023/024/026/027, AC-022/023/024/026/027 | T-005 |
+| T-007 | generate and commit `STRUCTURE.md` for the post-change tree; gate AC-021, NFR-002, NFR-005 | REQ-021, AC-021, NFR-002/005 | T-006 |
+
+Dependency chain is linear (T-001 → … → T-007) and acyclic. T-001 runs first because it is the easiest task
+(Todo Tracking Discipline, easiest-first) and because ADR-086's intent is that the generator lands in an
+already-typed `scripts/` tree; T-007 is last by ADR-085.
+
+### ID coverage — two-direction diff, 0 missing / 0 unknown
+
+The spec defines **83** normative IDs (27 REQ, 27 AC, 6 INV, 16 EDGE, 7 NFR; series 001–027 / 001–027 /
+001–006 / 001–016 / 001–007 with no gaps). Scripted diff over the spec text and the DAG's
+`requirements`/`acceptance_criteria`/`invariants`/`edge_cases`/`non_functional` lists:
+
+```text
+defined in spec: 83      assigned in DAG: 83
+MISSING (defined, not assigned): []
+UNKNOWN  (assigned, not defined): []
+id_coverage.spec_ids entries: 83   coverage-vs-task diff: []
+```
+
+Every `id_coverage.spec_ids` entry names a task that lists that ID in one of its five requirement fields,
+and every ID in a task's five fields appears in `id_coverage` — checked programmatically, no mismatch.
+`amended_spec_ids` is empty: this change amends no other spec.
+
+### Witness cross-check against spec §11 — 55 node IDs, 1:1
+
+Spec §11 names **55** witness functions (27 AC, 6 INV, 16 EDGE, 6 NFR — NFR-006 has no test and is recorded
+as the line count of `scripts/make_map.py` in Phase 5). The DAG's `tests_to_create` holds exactly 55 entries,
+each a single `path::test_name` node ID (never several node IDs packed into one string — the defect a sibling
+change hit). Diffing the DAG's entries against §11's rows: `in spec not in dag: []`,
+`in dag not in spec: []`, `path/function mismatches: []`. Layer placement matches the spec exactly:
+31 acceptance / 18 unit / 6 property, in the three fixed files only (no new test directory, Q-10). No
+duplicate node ID across tasks. Per-task counts: T-001 2, T-002 15, T-003 13, T-004 7, T-005 10, T-006 5,
+T-007 3.
+
+### Gate satisfiability (every test can pass with its own task plus its dependencies)
+
+| Placement | Reason |
+|---|---|
+| AC-004 (the whole exit-code table, incl. exit 1 and 3) and EDGE-009 (stale on a fresh clone) → **T-005**, not T-002 | both need `--check`, which does not exist before T-005; a T-002 test asserting exit 1 or 3 could only pass vacuously. REQ-004 is nevertheless listed under T-002, which implements the 2 and 4 branches and the dispatcher shape. |
+| AC-020, INV-003, NFR-007 → **T-003** | they assert on rendered paths; before any path is rendered they would pass over an empty document. |
+| EDGE-001 → **T-003** (module half, per §11's EDGE-001 → REQ-013 mapping); the symbol half is REQ-018 and is exercised in **T-004** by AC-018 | narrowed-gate rule: the task that actually exercises the path owns the coverage, and T-004 is named as responsible for a regression there. |
+| AC-021, NFR-002, NFR-005 → **T-007** | they can only be gated once the committed map exists, and the map must reflect the post-change tree (ADR-085). |
+| NFR-005's witness (`complexipy src tests`) scans files created by T-002…T-005 | all three test files are therefore in T-007's `allowed_files` so a violation is fixed **in-task**, never deferred to Phase 5 (decompose skill: a break is fixed by the task that causes it). |
+| NFR-006 → **T-002**, no test | spec §11 record row: Phase 5 records the actual line count. |
+
+No task's test calls a component of a later task; no test was deleted to make a gate satisfiable.
+
+### `allowed_files` derivation method (P-55)
+
+For each task: (1) take the files its `tests_to_create` create or modify; (2) take the files its
+`implementation_steps` edit; (3) take the **search/scan scope of each of its own witnesses** — every file a
+test reads, greps or walks — and for each file inside that scope that the task could be required to edit, put
+it in `allowed_files`; (4) where a scope is searched but must **not** change, list it annotated
+read-only so the witness scope is explicit and the prohibition is stated in `design_constraints` instead.
+Measured facts that make step 3 cheap here: `grep -rn make_map .github AGENTS.md .agents` → **0 hits** and
+`grep -rn 'tests/architecture' AGENTS.md .agents` → **0 hits** at this head, so AC-023/AC-024/AC-026's
+negative searches need no edit outside the four listed `AGENTS.md`/skill files; `uv run mypy scripts/` reports
+exactly **1** offender (`scripts/verify_spec.py`), which is listed in T-001; `deptry` scans
+`src/ migrations/ scripts/` (not `tests/`), and the only file in that set this change touches is
+`scripts/make_map.py`. Each task records its own derivation in its `design_constraints`, and each names the
+correction path (add the file to `allowed_files`, never weaken the test).
+
+### Top-level key adaptation
+
+The per-task key set is **identical** to the house DAG (`docs/tasks/structlog-logging.tasks.json`, 20 keys —
+verified programmatically for all 7 tasks) so the task-runner tooling and the Phase 4 steps work unchanged.
+Top level, `deptry_interlock` is replaced by **`gate_interlock`**: this change adds no dependency (REQ-001 is
+stdlib-only), so there is nothing for deptry to interlock; what has to be interlocked instead is the widened
+type gate (T-001 before T-002), the `structure-map-check` hook versus the not-yet-existing `STRUCTURE.md`
+(T-006 before T-007, no `.py` commit in between), the absence of any CI map job (AC-023), the frozen
+coverage/complexipy/bandit/`ty` scope with `fail_under = 92` unmoved, the three fixed test paths, and the
+`complexity` CI job that no Phase 3–5 step runs (P-56). All other top-level keys
+(`feature`, `spec`, `branch`, `change_type`, `adr`, `grouping`, `id_coverage`, `tasks`) are unchanged in name
+and shape; `id_coverage` collapses to a single `spec_ids` map because this change has one spec and no
+amendments. Initial `status` for all tasks is `PENDING`, matching the house convention at S2.2
+(`b38a2cc` created `structlog-logging` with all seven tasks `PENDING`).
+
+### Commands deliberately NOT in any task
+
+No task runs the full suite (Phase 5 gate); no task adds a CI job for the map (AC-023); no task creates a
+new test directory (Q-10); no task touches coverage/complexipy/bandit/`ty` configuration or
+`fail_under = 92`; no task adds a `.gitattributes` (the CRLF handling is inside `--check`, spec §13);
+no task regenerates the map for the already-merged `chore/remove-spec-tdd-driver` (F-08); no task for
+`tests/architecture/` (already removed by `chore/architecture-tests-missing`).
+
+### Gate
+
+S2.2 done criteria: DAG committed at `docs/tasks/structure-map.tasks.json` and byte-identical at
+`.github/task-runner/tasks.json` (hashes above) ◆; `validate_task_dag.py` PASSED ◆; 83/83 IDs assigned,
+0 missing / 0 unknown ◆; 55 witness node IDs 1:1 with spec §11 ◆; `allowed_files` derived from each task's
+own witness scope (P-55) ◆; `red_command`/`green_command` targeted, never the full suite ◆. Phase 2 writes no
+implementation code and derives no acceptance tests — the three test files do not exist yet (verified:
+`tests/acceptance/test_structure_map.py`, `tests/unit/test_make_map.py`,
+`tests/property/test_structure_map.py` and `STRUCTURE.md` are all absent at this head).
+
