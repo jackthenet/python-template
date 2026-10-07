@@ -45,13 +45,15 @@ RendererName = Literal["text", "json"]
 RENDERERS: tuple[RendererName, ...] = ("text", "json")
 
 # The slow-call threshold for the setup call itself: NFR-001's budget, so a setup that
-# stops being fast is visible as a WARNING exit record (REQ-007/AC-007).
+# stops being fast is visible as a WARNING exit record (the §9 tracing policy under REQ-007;
+# the slow-call contract itself is ``logging.md`` AC-011, retained by this spec's AC-013).
 _SETUP_SLOW_THRESHOLD_MS = 25.0
 
 # The setup call is traced at INFO, not at the decorator default DEBUG: the pipeline's own
 # lifecycle record ("logging configured") is INFO (spec §9), and a DEBUG setup trace would
 # be filtered at the default level, so the entry/exit of setup would never be observable
-# (AC-005 requires records for the traced ``setup_logger`` module function).
+# (``logging-coverage.md`` AC-005 requires records for the traced ``setup_logger`` module
+# function; the bare "AC-005" would read as ``logging.md`` AC-005, the ID this change deletes).
 _SETUP_TRACE_LEVEL = "INFO"
 
 # The chains that produce the specified record fields. The callsite and the
