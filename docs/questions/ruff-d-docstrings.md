@@ -316,10 +316,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) No — leave `mkdocs.yml` untouched (Recommended)** — plain prose needs no parser, and touching the docs config is a second gate to re-verify for no gain.
   - **(b) Yes — pin `docstring_style: google` to match the ruff convention (Q-1 a)** — the two tools can no longer drift apart, at the cost of a config line that means nothing while no sections exist.
   - **(c) Yes — pin it to whatever Q-2 chooses** — self-consistent by construction, same cost as (b).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b/c) Yes — pin `handlers.python.options.docstring_style: google` in `mkdocs.yml`** (user, 2026-10-07). The premise changed after Q-1/Q-2 chose Google sections: griffe's default is already `google`, so the line is a drift guard, not a behavior change. One config line in the same config commit as `select`.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `mkdocs.yml` joins the config surface; `mkdocs build --strict` (Q-19) verifies it
 
 ## Q-19 — Is `mkdocs build --strict` a Phase 5 gate for this change?
 - **Step:** P.2 Interrogate
@@ -330,10 +330,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — it is the only check that sees the docstrings as published output (Recommended)** — one extra command in Phase 5, and it is the change's real deliverable.
   - **(b) No — rely on the CI `docs` job on the PR** — no local step, but a failure then surfaces after the whole change is committed.
   - **(c) Yes, and also add `userdocs/`-adjacent paths to the `mkdocs-build` pre-push hook's `files:` filter** — closes the local gap permanently, but edits CI config beyond the change's scope.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — Phase 5 runs `uv run --group docs mkdocs build --strict` and records the result** (user, 2026-10-07). No change to the pre-push hook's `files:` filter.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — named in the Phase 5 evidence set for this change (see Q-25)
 
 ## Q-20 — Does `userdocs/api.md` gain the three packages it does not render?
 - **Step:** P.2 Interrogate
@@ -344,10 +344,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) No — leave `api.md` as-is; document the code, let a docs change extend the page (Recommended)** — keeps the DOCS/CHORE scope at docstrings + config, and the `D` gate covers all 11 packages regardless.
   - **(b) Yes — add `permissions` and `search` (not `shared`)** — the backfill pays off for readers immediately; two lines of `api.md`.
   - **(c) Yes — all 11 packages** — the page becomes complete, but `shared` is plumbing and its inclusion is its own judgement call.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) No — `userdocs/api.md` stays as-is** (user, 2026-10-07). The `D` gate still covers `permissions`, `search` and `shared` (Q-3's `src/` scope is all of `src/`), so 38 documented objects remain unrendered; extending the page is a separate docs change. Recorded as a known gap, not an oversight.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `userdocs/api.md` is out of scope; the TODO's out-of-scope line stands
 
 ## Q-21 — How is `structlog-logging` sequenced against this change?
 - **Step:** P.2 Interrogate
@@ -358,10 +358,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Run alongside, and leave `src/backend/logging/` out of this backfill (Recommended)** — only 3 `D` sites and 0 `D1xx` there, so nothing is lost, and the two branches never touch the same file.
   - **(b) Wait for `structlog-logging` to merge, then start** — zero collision risk, but this change cannot start while the queue has other READY work.
   - **(c) Run alongside including `logging`** — 3 sites of avoidable conflict in a package the other change is rewriting.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Closed by implication (orchestrator, 2026-10-07)** — the premise is stale: `structlog-logging` **merged** on 2026-10-07 (PR #74, merge commit `c7a9119`), so `ruff-d-docstrings` branches from a `main` that already contains it. No sequencing decision is needed; the `src/` `D` measurements in this file were taken on that `main`. Option (a)'s concern (touching `src/backend/logging/` while it is being rewritten) no longer applies — `logging` is in scope like any other feature (3 `D` sites, 0 `D1xx`).
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — no `Depends on:` entry for `structlog-logging`
 
 ## Q-22 — How is `structure-map` sequenced (AGENTS.md, `scripts/`, and the map's docstring summaries)?
 - **Step:** P.2 Interrogate
@@ -386,10 +386,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Exempt permanently via `per-file-ignores` (Recommended)** — generated files stay generated; the 11 sites are never touched.
   - **(b) Cover them: document the 11 sites now and hold future revisions to it** — uniform gate, and the `-m` habit covers most of it.
   - **(c) Cover `migrations/env.py` only, exempt `versions/*`** — the hand-written scaffold is documented, the autogen output is not.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Exempt permanently via `per-file-ignores`** (user, 2026-10-07). `migrations/*` joins the Q-3 exemption list; the 11 sites are never touched, and no standing obligation lands on future `alembic revision` output.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `per-file-ignores` = `tests/*`, `scripts/*`, `migrations/*`, `.github/*`
 
 ## Q-24 — Does `AGENTS.md` gain a normative docstring convention line?
 - **Step:** P.2 Interrogate
