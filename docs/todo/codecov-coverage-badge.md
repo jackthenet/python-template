@@ -4,7 +4,9 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** DROPPED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+  <!-- dropped 2026-10-07 at P.3: Q-1 answered "drop — no badge". Reason: the badge buys visibility, not assurance — the assurance already exists (`fail_under = 92`, `pyproject.toml:105`, enforced at `quality.yml:59`); for a TEMPLATE repo every added third-party integration is a configuration-or-deletion task for every downstream user. The remaining 26 P.2 questions became moot and were never asked. -->
+- **Disposition:** **DROPPED** — user decision, 2026-10-07 (P.3 round 1, Q-1). The 3/5 value triage stands; the deciding argument was the template-audience cost. No external service, no badge, no CI step. `update-readme` Q-3's option (d) — "add Codecov, as a separate change" — is hereby closed as declined, not deferred.
 - **Change type:** DOCS/CHORE  <!-- CI + config only; no externally observable product behavior changes -->
 - **Created:** 2026-10-04
 - **Question file:** `docs/questions/codecov-coverage-badge.md`

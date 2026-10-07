@@ -6,7 +6,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/codecov-coverage-badge.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
+- **Status:** CLOSED — change **DROPPED** at P.3 (2026-10-07)  <!-- Q-1 = drop; Q-2 was answered then became moot; Q-3 = n/a; Q-4 … Q-29 were never asked (moot once the service is declined) -->
 - **Answer rounds:** 0  <!-- P.2 Interrogate has not run yet -->
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
@@ -117,10 +117,10 @@ So the per-file names are **relative to each source root** (`authentication/__in
   - **B. Yes, but I want to see the CI diff before I activate anything** — the upload step is reviewed first, activation follows; the badge necessarily lands later (feeds Q-2).
   - **C. No — drop the change** — the `fail_under` gate stays the only coverage signal; no external service, no badge, nothing to maintain.
   - **D. No — a different service (Coveralls, self-hosted, or a generated static badge)** — the change must be re-framed before P.4.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **No — drop the change** (user, 2026-10-07, after the orchestrator's architecture read: a badge buys visibility, not assurance; `fail_under = 92` is already the guarantee, and in a *template* repo every third-party integration is a configure-or-delete task for every downstream user). A hardcoded static shields.io badge was ruled out as silently lying; a self-hosted `coverage.json` + shields endpoint was ruled out as more machinery than Codecov for the same result.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — the change is DROPPED (`docs/todo/codecov-coverage-badge.md`); no P.4, no worktree, no CI step, no badge
 
 ## Q-2 — Does the badge ship in the same PR as the upload step?
 - **Step:** P.2 Interrogate
@@ -130,10 +130,10 @@ So the per-file names are **relative to each source root** (`authentication/__in
   - **A. Two PRs: upload step first, badge in a follow-up PR after the `main` run is verified (Recommended)** — `README.md` never shows a number that does not exist; costs one extra PR cycle and one extra `chore/` branch (or a second commit pushed after the gate clears).
   - **B. One PR, badge included** — one review, but `README.md` shows `unknown` from merge until the first `main` push completes (minutes to hours, and indefinitely if the upload silently fails).
   - **C. One PR, badge added in a later commit of the same branch after a branch run proves the upload** — one PR, but a branch/PR upload is not a `main` upload, so the badge can still be unproven at merge.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **One PR, badge included** (user, 2026-10-07). This **overrides** the TODO's conditional wording "**only** once the upload is proven to work on `main`" (`docs/todo/codecov-coverage-badge.md:31`): one PR, one review, `README.md` may render `unknown` from merge until the first `main` push completes. The honesty risk is accepted **because** Q-3 still defines a post-merge proof that must be observed and recorded — the badge is not allowed to stay unproven.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 scope: single PR file set includes `README.md`; the "proven" gate moves from *before the badge is written* to *after the merge, before the change is called MERGED* (Phase 5/6 evidence, Q-3). **Superseded 2026-10-07:** Q-1 dropped the change, so this answer is a record of a decision that was never executed.
 
 ## Q-3 — What exactly counts as "the upload is proven"?
 - **Step:** P.2 Interrogate
@@ -144,10 +144,10 @@ So the per-file names are **relative to each source root** (`authentication/__in
   - **B. The upload step exits 0 in the `main` run** — cheap and automatable, but with `fail_ci_if_error: false` it can be 0 on a rejected upload.
   - **C. The badge stops reporting `unknown`** — end-user visible, but it lags, and it says nothing about whether per-file paths resolved.
   - **D. The Codecov API returns a coverage value for the commit** — machine-checkable, but needs a token to query v2 (404 today), i.e. more secrets for a one-off check.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **n/a** — moot: Q-1 declined the service, so there is no upload to prove.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** n/a — change dropped
 
 ## Q-4 — How does the upload authenticate?
 - **Step:** P.2 Interrogate
