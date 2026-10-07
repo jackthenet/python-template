@@ -1573,3 +1573,210 @@ unchanged; the only `src/` file in scope is `src/main.py`). Hand-off notes from 
    session service with an explicit repository and never relies on a lazy default — but if a
    T-006 witness reads the session singleton afterwards, it must pass a repository (EDGE-003),
    and `src/main.py` must not be made to install one just to make a read bare.
+
+## S3.1 — T-006 test derivation (2026-10-07)
+
+One fresh subagent, one atomic step: derive **T-006**'s tests (group
+`composition root — src/main.py (write site 1 of the 12)`, `requirements` REQ-011 + REQ-012,
+`acceptance_criteria` AC-016, `amended_spec_ids` `settings-coverage.md` REQ-002 cited
+unchanged). Tests only — no `src/` file was touched (`git status --porcelain` shows the new
+test package and this record, nothing else). The task object was read from
+`.github/task-runner/tasks.json` (identical to `docs/tasks/settings-public-registry-setter.tasks.json`);
+its two `tests_to_create` entries are two single-node strings, and both node IDs were written
+**exactly** as the DAG spells them. T-001's ten, T-002's six, T-003's six, T-004's six and
+T-005's six tests were not edited, and `tests/singleton_install_test_helpers.py` was not
+touched at all: `SLOTS` already holds all five features and T-006 adds no sixth entry
+(T-005 hand-off note 1).
+
+Every ID below is read together with its spec file (P-53): **AC-016** is defined in fourteen
+spec files — `event-bus.md` v2 AC-016 is this change's own sibling ID and
+`settings-coverage.md` AC-016 is the `required=False` guarded read — and **REQ-011 / REQ-012**
+in twelve each (`settings-coverage.md` REQ-011/REQ-012 are cited by the change spec for a
+different rule). `docs/verification/traceability.md` already carries `test_ac_016_to_view`,
+`test_ac_016_set_role_not_in_set`, `test_ac_016_reset_request_unknown_email`,
+`test_ac_016_no_secrets_in_log_records` and `test_ac_016_storage_failure_rollback`.
+
+### Tests written (two nodes, verbatim from `tests_to_create`)
+
+| Test node | Category | Witnesses |
+|---|---|---|
+| `tests/integration/singleton_install/test_composition_root.py::test_ac_016_main_installs_through_setter` | integration | change-spec AC-016, all three clauses (REQ-011: install through `set_settings_registry()` + the getter read-back with the feature settings registered; no private-slot import; no consumer site passed the local handle) |
+| `tests/integration/singleton_install/test_composition_root.py::test_installed_registry_serves_feature_registration` | integration | change-spec REQ-011's ordering/identity half as AC-016 states it — the install precedes the six registrations and the installed instance **is** the instance they register into — which is what makes `settings-coverage.md` REQ-002 (cited unchanged) literally true |
+
+T-006 has no `INV`/`EDGE`/`NFR` ID of its own, so no property, unit or contract file was
+created. The category is `integration` because the change spec's §10 test-strategy table
+assigns REQ-011 and AC-016 there; `tests/integration/singleton_install/__init__.py` is a new,
+empty package marker (every other test package's `__init__.py` is 0 bytes).
+
+### How the composition root is observed
+
+- **Fresh interpreter.** The composition root's wiring runs at module-import time, so both
+  witnesses run `import main` through `subprocess.run([sys.executable, "-c", code])` — the
+  established pattern of `tests/acceptance/settings_coverage/test_wiring.py:16-31` and
+  `tests/acceptance/permissions/test_composition_wiring.py` (its `sys.path.insert(0, <abs src>)`
+  + `cwd=tmp_path` form, not `test_wiring.py`'s `cwd=_REPO_ROOT` form).
+- **Scratch cwd.** `src/main.py` creates `./data/*.db`, `./data/files` and the `settings/` YAML
+  directory relative to its cwd, so `cwd=tmp_path`. Measured: two runs of the new file leave
+  `data/permissions.db` and `settings/values.yaml` byte-identical (md5), while the pre-existing
+  `test_wiring.py` does rewrite `data/permissions.db` — see F-27. The new file plants **no**
+  private-slot write anywhere, not even inside its embedded code string (grep for
+  `_registry[0]` / `_singleton[0]` / `_default_bus[0]` in it → 0 hits), as T-005's note 3 asked.
+- **The install operation is looked up, never imported.** The embedded preamble does
+  `_real_setter = backend.settings.set_settings_registry` and wraps the six features'
+  `register_settings` attributes **before** `import main`, because main binds both at its own
+  import time. That is the only way "installs through `set_settings_registry()`" is observable
+  at all, and it keeps the RED signal inside the subprocess (surfaced as an assertion failure
+  on `returncode`) instead of an import error at collection.
+- **AC-016's two static clauses** are witnessed by module-level AST helpers over
+  `src/main.py` (precedent: `tests/acceptance/logging_coverage/test_setup_logger.py`). Measured
+  today: the private-import scan reports `backend.settings.registry._registry` (line 68) and the
+  consumer-site scan reports lines **153, 173, 174, 175, 176, 177, 178, 195, 202, 212** — the
+  four `settings_registry=` service-construction sites plus the six `register_*_settings` calls,
+  exactly the ten sites AC-016 and the DAG name. Run against the implementation form the DAG
+  plans (`set_settings_registry(SettingsRegistry(...))` plus `_shared_settings_registry()` at the
+  sites), both scans return `[]`, so they do not false-positive on the fix.
+
+### Sensitivity proof (the witness is RED for T-006's own change)
+
+Run out-of-band (scratch script, not committed): the same two code strings with a temporary
+`backend.settings.set_settings_registry` shim installed — i.e. T-001 simulated as landed while
+T-006 has not run — exit 0 and print `[False, False, True]` (AC-016) and
+`[False, True, True, True]` (registrations). So the witness is still RED when only the setter
+exists, and it is RED for exactly one clause: main does not call the setter. Every other clause
+(`import main` succeeds, the getter returns the wired registry, all six keys of the six features
+are registered, six registrations observed) is already `True`, which rules out a broken witness.
+
+### Collection and RED evidence
+
+Worktree for every count below (`git rev-parse --show-toplevel`):
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+
+- Collection (not a RED signal if it breaks): `uv run pytest --collect-only -q
+  tests/integration/singleton_install` → **2 tests collected in 0.12s**; over the three touched
+  directories (`tests/integration/singleton_install tests/acceptance/settings_coverage
+  tests/acceptance/permissions`) → **46 tests collected in 0.44s**, zero collection errors.
+- The task's `red_command` run **verbatim** (two node IDs, targeted — the full suite is a
+  Phase 5 gate): **2 failed in 1.48s**. Failure reason per test — both:
+  `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'. Did you
+  mean: 'get_settings_registry'?` raised in the subprocess preamble at
+  `_real_setter = backend.settings.set_settings_registry`, surfaced by
+  `assert result.returncode == 0, result.stderr` at `test_composition_root.py:193` and `:208`
+  — the install operation the change adds does not exist. Correct reason (assertion failure in
+  the test body, not a collection/setup error).
+- Determinism + no state leak: the new file re-run twice (`-p no:randomly`, then with random
+  order) → **2 failed** both times (1.54s / 1.64s); `md5sum` of `data/permissions.db` and
+  `settings/values.yaml` unchanged across those runs; `git status --porcelain` → only
+  `?? tests/integration/singleton_install/`.
+- T-001's ten / T-002's six / T-003's six / T-004's six / T-005's six nodes re-run after this
+  derivation (each set's own `red_command` node list from the DAG): **10 failed in 1.18s**,
+  **6 failed in 0.84s**, **6 failed in 0.93s**, **6 failed in 0.93s**, **6 failed in 0.61s** —
+  same node sets and same reasons as recorded at T-001 .. T-005 (eight `AttributeError …
+  set_settings_registry` + `assert 8 == 1` + `assert 2 == 1`; four `set_event_bus` + two thread
+  collectors; four `set_permission_service` + two thread collectors; five `set_search_service` +
+  one thread collector; five `set_session_service` + one thread collector). Nothing of the
+  earlier tasks broke.
+- T-006's regression witnesses (read-only for this task) run together with the new file —
+  `uv run pytest tests/integration/singleton_install tests/acceptance/settings_coverage/test_wiring.py
+  tests/acceptance/permissions/test_composition_wiring.py
+  tests/acceptance/logging_coverage/test_setup_logger.py -q -p no:randomly` →
+  **2 failed, 3 passed in 3.46s**: the three startup-wiring witnesses
+  (`test_main_wires_all_features`, `test_ac_020_composition_root_validates_session_token`,
+  `test_entrypoint_calls_setup_logger_once`) stay GREEN next to the two new red tests.
+
+### Quality gates (per-step scope)
+
+- Ruff gate on the two changed paths: `uv run ruff check <paths>` → **All checks passed**;
+  `uv run ruff format <paths>` → **2 files left unchanged**, and `ruff format --check` on those
+  paths → **2 files already formatted**. No whole-repo sweep (`ruff check .` /
+  `ruff format --check .` is the Phase 5 gate).
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs, 750
+  test functions)** — still green; the function count rose from 748 (T-005) to 750, i.e. the two
+  new functions are seen by the script.
+- `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within the
+  allowed complexity** (the two test functions and the three scan helpers included).
+- `uv run mypy src/` → **Success: no issues found in 83 source files** (no `src/` file was
+  changed by this step).
+
+### Findings
+
+- **F-27 — the pre-existing `test_wiring.py` writes into the worktree's `data/`.** Measured:
+  running `tests/acceptance/settings_coverage/test_wiring.py` alone changes
+  `data/permissions.db` (md5 `3f56492…` → `39236be…`) because its subprocess runs with
+  `cwd=_REPO_ROOT` (`test_wiring.py:31`), while `test_composition_wiring.py` and this step's new
+  file use a scratch cwd and leave nothing. T-006 may not touch that file (its `allowed_files`
+  lists it as a regression witness only), and this step's file therefore never copies its
+  `cwd=_REPO_ROOT` form. Flagged for **T-007**, which migrates that file's embedded slot write
+  anyway and can switch the cwd in the same edit.
+- **F-28 — the DAG's second node name carries no ID.**
+  `test_installed_registry_serves_feature_registration` is written verbatim as
+  `tests_to_create` spells it (the DAG is normative for node IDs, as at T-003's
+  `test_install_over_nonempty_default`); its docstring ties it to REQ-011 / AC-016 and
+  `settings-coverage.md` REQ-002, and `check_traceability.py` counts it (750 functions).
+  Flagged for **S5.3**: the `REQ-011 | AC-016` matrix row (currently `—` / `PENDING`, written at
+  P.4) must cite **both** nodes, and the change spec's §10 table names only the first.
+- **F-29 — AC-016's static clauses live in this file, not in T-007's scanner.** AC-017
+  (T-007) proves *no file writes another package's singleton slot*; the two clauses "no
+  private-slot import in `src/main.py`" and "no consumer site passed the local
+  `_settings_registry` handle" are AC-016/REQ-011 rules and are witnessed here. T-007 must not
+  be expected to cover the handle rule, and must not be expected to make these two assertions
+  redundant.
+- **F-30 — the witness patches the package attribute, so the import form matters.** The
+  subprocess patches `backend.settings.set_settings_registry` before `import main`; if the
+  implementation imported the setter from `backend.settings.registry` instead of from
+  `backend.settings`, main would bind the unpatched function and the witness would stay red for
+  the wrong reason. The DAG's implementation step 1 already prescribes
+  `from backend.settings import set_settings_registry` (the feature's public surface, ADR-083 /
+  NFR-002), so this is a confirmation, not a new constraint.
+- **F-31 — traceability Test cells still left to S5.3** (continues F-14/F-19/F-25): the rows
+  `REQ-011 | AC-016` and `REQ-012 | AC-017` exist as `PENDING` with `—` Test cells; this step's
+  commit is scoped to the test files plus this record, and `check_traceability.py` stays green
+  either way.
+- No new question for the user: nothing in the change spec, `settings-coverage.md` REQ-002 or
+  ADR-083/ADR-084 left a decision open for these two witnesses.
+
+### Not done in this step (by instruction)
+
+No `src/` change, no other DAG task's tests, no full test-suite run, no write to
+`docs/todo/` or `docs/questions/`, no change to `tests/singleton_install_test_helpers.py` or to
+`tests/acceptance/settings_coverage/test_wiring.py` (read-only regression witnesses), no change
+to T-001's .. T-005's tests, no push, no todo-list change, no subagent, no background work. No
+`docs/workflow/PROBLEMS.md` entry: the one defect found while deriving (`{!r}` on a `Path`
+inside the embedded code string, a `NameError` in the subprocess) was fixed and re-checked
+inside this same execution, which is an in-step self-introduced nit per AGENTS.md, not
+friction — next free id stays **P-63**. **The Phase 3 RED gate is not declared here** — S3.2
+owns it for all tasks; this section records T-006's derivation and its targeted run only.
+
+**Next step: S3.1 (T-007)** — derive the test-infrastructure + architecture-scan task
+(`tests/unit/architecture/test_singleton_slots.py`, `requirements` REQ-012 + REQ-013,
+`acceptance_criteria` AC-017 + AC-018, the 11 test-side foreign-slot writes). Hand-off notes
+from T-006:
+
+1. The 12 measured foreign-slot writes are unchanged by this step: `src/main.py:138` (T-006's)
+   plus exactly **eleven** in tests — `tests/acceptance/settings_coverage/test_setup_logger.py:31`
+   and `:55`, `tests/acceptance/settings_coverage/test_wiring.py:18` (embedded in a code string),
+   `tests/contract/logging/test_logging_contracts.py:35`,
+   `tests/property/logging/test_logging_properties.py:42`, `tests/unit/logging/test_logging_edges.py:32`,
+   `tests/eventbus_test_helpers.py:77` and `:84`, `tests/settings_test_helpers.py:132`, `:160`
+   and `:180`. Re-verified by `grep -rn "\[0\] *=" src tests` (the two other hits,
+   `test_usermanagement.py:95` and `test_usermanagement_contracts.py:150`, are `[0] ==` compares,
+   not writes, and must not be reported).
+2. `tests/integration/singleton_install/test_composition_root.py` is **clean** under the AC-017
+   rule (0 slot-write hits), but it does contain, inside its embedded code string, the text
+   `backend.settings.set_settings_registry = _install` (the deliberate patch of the **public**
+   operation) and the bare literal `"_settings_registry"` (the handle name its own scan looks
+   for). A scanner keyed on a substring (`_settings_registry`, or `<module>.<name> = `) would
+   flag this witness; AC-017's scanner must key on the slot-write **shape**
+   (`_registry[0] =`, `_default_bus[0] =`, `_permission_service[0] =`, `_session_service[0] =`,
+   `_singleton[0] =`, and their `_settings_registry_singleton[0] =` alias form), as ADR-084
+   describes.
+3. T-007's scanner must also read string-literal bodies (AC-017's third clause) — the
+   `test_wiring.py:18` site is one — and it runs over `tests/` as well as `src/`; the owner-side
+   writes inside the five owning modules (`src/backend/settings/registry.py:373`/`:380`,
+   `eventbus/eventbus.py:221`/`:232`, `permissions/service.py:524`/`:530`,
+   `search/service.py:560`/`:572`, `sessionmanagement/service.py:364`/`:371`) are **not**
+   violations and must not be reported.
+4. If T-007 also switches `test_wiring.py`'s `cwd=_REPO_ROOT` to a scratch cwd (F-27), the
+   witness's semantics stay identical — it installs an isolated registry before `import main`
+   and asserts four registered keys — and this step's two nodes are unaffected either way.
+5. `SLOTS` still holds exactly the five features; T-007 must not add a sixth, and the
+   parametrized sets of T-009/T-010 read that table as-is.
