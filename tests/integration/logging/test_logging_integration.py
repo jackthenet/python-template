@@ -3,9 +3,9 @@
 Covers multi-component interactions: a record emitted on the feature's own logger,
 a record emitted on a foreign (third-party) logger that reaches the pipeline only
 through the root forwarding handler, and a @logged call must all reach the file
-sink through the same setup. The function name keeps the historical wording of the
-matrix row; the loguru line it once asserted is retired with the backend
-(docs/specs/structlog-logging.md).
+sink through the same setup. The function name is backend-neutral: the loguru line
+it once asserted is retired with the backend (docs/specs/structlog-logging.md), and
+the matrix row was re-named with it (structlog-logging S6.1 finding F-S6.1-06).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from backend.logging import logged
 _EXPECTED_RESULT = 7
 
 
-def test_stdlib_loguru_decorator_pipeline(session_settings: Any) -> None:
+def test_stdlib_decorator_pipeline(session_settings: Any) -> None:
     """A feature record, a forwarded foreign record, and a @logged call all reach the file sink."""
     import logging
 

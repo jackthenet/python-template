@@ -181,6 +181,11 @@ def get_logger(name: str | None = None) -> BoundLogger:
     Usable before ``setup_logger()``: no sink is created, and stdlib's last-resort
     handler still puts the record on standard error (EDGE-006).
     """
+    # ponytail: re-applied on every call. structlog caches the bound logger, so the cost
+    # is one config rebuild per get_logger() (microseconds, and get_logger() runs at import
+    # time per module, not per record) — in exchange, EDGE-006 (usable before setup) needs
+    # no module-level guard. Upgrade path: a one-shot flag, if a third-party structlog
+    # logger ever appears whose own configuration the feature must not overwrite.
     _configure_structlog()
     return structlog.get_logger(**{LOGGER_NAME_FIELD: name or _caller_module()})
 

@@ -157,8 +157,8 @@ root = ["./src"]
 
 [tool.ty.analysis]
 # mypy `ignore_missing_imports = true` equivalent, scoped to the only
-# third-party package without type information (verified 2026-09-15:
-# sqlmodel/sqlalchemy/pydantic/loguru all ship `py.typed`).
+# third-party package without type information (re-verified 2026-10-07:
+# sqlmodel/sqlalchemy/pydantic/structlog/orjson all ship `py.typed`).
 allowed-unresolved-imports = ["webauthn"]
 # mypy `check_untyped_defs = true` has no ty equivalent: ty analyzes all
 # function bodies by default.

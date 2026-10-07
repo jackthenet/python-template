@@ -6,12 +6,21 @@ The witness is per file (spec AC-009 names the four files and the statement coun
 each): the module's source is parsed, its one-off statement call sites are counted —
 the statements are kept as statements, none added, none removed — and every one of
 them must be written on a logger the module obtained from ``get_logger()``.
+
+The static clauses say nothing about the record, so each per-feature witness is
+paired with a runtime half: the migrated statements are executed and their message
+wording — spec §9 row 2, "unchanged wording" — is asserted on the pipeline capture.
+That is the witness the retired direct-backend test carried, re-homed here.
 """
 
 from __future__ import annotations
 
 import ast
+import tempfile
 from pathlib import Path
+from typing import Any
+
+from logging_coverage_test_helpers import messages
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -123,7 +132,44 @@ def _statement_violations(relative_path: str, expected_statements: int) -> list[
     return violations
 
 
-def test_ac_009_settings_statements_go_through_get_logger() -> None:
+def _run_settings_statements() -> None:
+    """Execute two migrated settings statements (register + set value) on an isolated registry."""
+    from backend.settings.models import SettingDefinition, SettingKind
+    from backend.settings.registry import SettingsRegistry
+    from backend.settings.repository import MemoryTemplateRepository, YamlValueRepository
+
+    registry = SettingsRegistry(
+        template_repository=MemoryTemplateRepository(), value_repository=YamlValueRepository(tempfile.mkdtemp())
+    )
+    registry.register(SettingDefinition(key="ac009.probe", kind=SettingKind.TEXT, default="d"))
+    registry.set_value("ac009.probe", "v")
+
+
+def _run_eventbus_statements() -> None:
+    """Execute two migrated event bus statements (publish + shutdown)."""
+    from eventbus_test_helpers import UserCreated
+
+    from backend.eventbus.eventbus import EventBus
+
+    bus = EventBus()
+    try:
+        bus.publish(UserCreated(user_id="u1", email="e1"))
+    finally:
+        bus.shutdown()
+
+
+def _missing_messages(records: list[Any], expected: tuple[str, ...]) -> list[str]:
+    """The expected message wordings that never reached the pipeline capture."""
+    seen = messages(records)
+    return [text for text in expected if not any(text in record for record in seen)]
+
+
+# The wording spec §9 row 2 keeps unchanged, as the retired direct-backend test asserted it.
+_SETTINGS_STATEMENT_MESSAGES = ("setting registered: key=", "value set: key=")
+_EVENTBUS_STATEMENT_MESSAGES = ("event bus: published event type", "event bus: shutdown initiated")
+
+
+def test_ac_009_settings_statements_go_through_get_logger(log_records: list[Any]) -> None:
     """AC-009 (settings half): the 17 statements in ``registry.py`` and the 11 in
     ``repository.py`` are written through ``get_logger()``, and neither module — nor
     any other module of the settings feature — imports a logging backend."""
@@ -139,8 +185,13 @@ def test_ac_009_settings_statements_go_through_get_logger() -> None:
 
     assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
 
+    # The kept statements still emit their unchanged wording through the pipeline (spec §9 row 2).
+    _run_settings_statements()
+    if missing := _missing_messages(log_records, _SETTINGS_STATEMENT_MESSAGES):
+        raise AssertionError(f"AC-009: settings statements never emitted {missing}; got {messages(log_records)!r}")
 
-def test_ac_009_eventbus_statements_go_through_get_logger() -> None:
+
+def test_ac_009_eventbus_statements_go_through_get_logger(log_records: list[Any]) -> None:
     """AC-009 (event bus half): the 10 statements in ``eventbus.py`` are written through
     ``get_logger()``, and no module of the event bus feature imports a logging backend."""
     # REQ-005 fixes the statement count per file; logging-coverage REQ-010 v2 keeps each of them a statement.
@@ -151,6 +202,11 @@ def test_ac_009_eventbus_statements_go_through_get_logger() -> None:
         violations.append(f"a module under src/backend/eventbus/ imports a logging backend: {offenders}")
 
     assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
+
+    # The kept statements still emit their unchanged wording through the pipeline (spec §9 row 2).
+    _run_eventbus_statements()
+    if missing := _missing_messages(log_records, _EVENTBUS_STATEMENT_MESSAGES):
+        raise AssertionError(f"AC-009: event bus statements never emitted {missing}; got {messages(log_records)!r}")
 
 
 # AC-009's four named files, with the statement count REQ-005 fixes in each.
