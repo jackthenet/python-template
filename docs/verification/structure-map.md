@@ -489,3 +489,127 @@ implementation code and derives no acceptance tests — the three test files do 
 `tests/acceptance/test_structure_map.py`, `tests/unit/test_make_map.py`,
 `tests/property/test_structure_map.py` and `STRUCTURE.md` are all absent at this head).
 
+## Phase 3 — S3.1 test derivation, T-001 (2026-10-07)
+
+`git rev-parse --show-toplevel` = `C:/workspace/active-projects/python-template_kopie-worktrees/feature/structure-map`,
+branch `feature/structure-map`, HEAD before this step `69801eb` (measured, not assumed — P-57). Spec approval
+gate read from the cached record above (PR #69, merge commit `570bfbc`); not re-checked.
+
+### Derived tests (T-001 only — `tests/acceptance/test_structure_map.py`, new file)
+
+| Node ID | Witness for | Clauses asserted |
+|---|---|---|
+| `test_ac_025_mypy_covers_scripts` | AC-025 / REQ-025 | (1) the `type-check` job block of `.github/workflows/quality.yml` contains the literal `uv run mypy scripts/`; (2) mypy over `scripts/` exits `0`; (3) `scripts/verify_spec.py docs/specs/template.md` still exits `0` with the pre-fix report |
+| `test_nfr_004_mypy_and_ruff_clean` | NFR-004 / REQ-025 | all four gates clean: `mypy scripts/`, `mypy src/`, `ruff check .`, `ruff format --check .` |
+
+Both tests collect clause results and assert once, so the failure message names the failing clause.
+No implementation code was written: `git status --porcelain` after the step shows only
+`?? tests/acceptance/test_structure_map.py` (plus ` M uv.lock`, reverted — P-42); `.github/workflows/quality.yml`
+and `scripts/verify_spec.py` are untouched.
+
+### RED (the `red_command`, before implementation)
+
+```text
+$ uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts \
+      tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean -v
+tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean FAILED [ 50%]
+tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts FAILED [100%]
+E  AssertionError: mypy scripts/: exit 1: scripts\verify_spec.py:74: error: Item "TextIO" of
+   "TextIO | Any" has no attribute "reconfigure"  [union-attr]
+E  AssertionError: clause 1: the type-check job of quality.yml does not run 'uv run mypy scripts/'
+     clause 2: mypy over scripts/ exits 1: scripts\verify_spec.py:74: … [union-attr]
+     Found 1 error in 1 file (checked 3 source files)
+============================== 2 failed in 1.20s ==============================
+exit 1
+```
+
+**Failure mode (test contract sanity check): PASSED.** Both red tests fail with `AssertionError` on
+unimplemented behavior; no collection, import, fixture or test-data error. Pre-flight and post-run
+`uv run pytest --collect-only tests/acceptance/test_structure_map.py` → `2 tests collected`.
+
+**Clause → what T-001 implements:**
+
+- clause 1 → the added `uv run mypy scripts/` step in the `type-check` job (RED now);
+- clause 2 → the behaviour-preserving `union-attr` fix at `scripts/verify_spec.py:74` (RED now);
+- clause 3 → the regression guard on the fixed script: **already GREEN at this head** (the report is
+  unchanged by the fix, which is exactly what the clause protects). It is not a RED witness and must
+  stay GREEN through T-002…T-007;
+- NFR-004 → the same fix: only the `mypy scripts/` gate is dirty, the other three pass.
+
+### Sensitivity (the RED is not vacuous)
+
+- `uv run mypy scripts/` → `scripts\verify_spec.py:74: error: Item "TextIO" of "TextIO | Any" has no
+  attribute "reconfigure"  [union-attr]` / `Found 1 error in 1 file (checked 3 source files)`, exit 1 —
+  identical to finding F-02.
+- `grep -rn "mypy scripts" .github/workflows/` → **no hits**; the `type-check` job (`quality.yml:10-25`)
+  runs only `uv run mypy src/` (gate) and `uv run ty check src/` (informational).
+- The other three NFR-004 gates are clean at this head, so their clauses are GREEN and the NFR-004 RED
+  isolates the widened gate: `uv run mypy src/` → `Success: no issues found in 84 source files`;
+  `uv run ruff check .` → `All checks passed!`; `uv run ruff format --check .` → `339 files already formatted`.
+
+### Golden baseline for AC-025 clause 3
+
+The pre-fix report of `uv run python scripts/verify_spec.py docs/specs/template.md` (exit 0, byte-stable
+over two runs) is embedded in the test as `_VERIFY_SPEC_REPORT_BEFORE_FIX` — 11 lines: the header, the
+`\u2500 × 25` rule, 3 `✓ REQ-… has acceptance criteria`, 3 `✓ AC-… has executable test`, 1
+`✓ INV-001 has property test`, a blank line, `Traceability: PASS`. Comparison is over
+`stdout.splitlines()`, so CRLF/LF differences do not matter (NFR-007 spirit).
+
+Why the baseline cannot be flipped by T-002…T-007: `verify_spec.py` decides the AC/INV lines by matching
+the numeric part of **template.md's** IDs (`001`, `002`, `003`, `001`) against test *function names* in
+`tests/`. This change's witnesses add names containing `025`, `004`, etc.; a name containing `001`/`002`/`003`
+would only add a match to an already-passing line. The report is therefore insensitive to this change.
+
+### Gates run on the new file
+
+- `uv run ruff check tests/acceptance/test_structure_map.py` → `All checks passed!`
+- `uv run ruff format --check tests/acceptance/test_structure_map.py` → `1 file already formatted`
+- `uv run complexipy tests/acceptance/test_structure_map.py --max-complexity-allowed 15` (the invocation of
+  the `complexity` job at `quality.yml:144`) → `All functions are within the allowed complexity`. Scores:
+  `_workflow_job_block` 5, `test_ac_025_mypy_covers_scripts` 4, `test_nfr_004_mypy_and_ruff_clean` 3,
+  `_opens_job_key` 1, `_run` 0, `_output` 0 — NFR-005 headroom holds (P-56).
+- `uv run python scripts/check_traceability.py` → `Traceability: PASS (822 matrix rows, 136 spec IDs,
+  748 test functions)`, exit 0. Its PASS is **not** evidence of this spec's rows — the matrix update is
+  S3.2's.
+
+### Deviation (recorded): `sys.executable -m <tool>` instead of a nested `uv run <tool>`
+
+AC-025 and NFR-004 name the literal `uv run …` commands. The tests invoke `sys.executable -m mypy|ruff …`
+with `cwd=_REPO_ROOT`: under `uv run pytest`, `sys.executable` **is** the uv-managed venv interpreter, so the
+tool run is the same one CI runs, whereas a nested `uv run` inside a test re-syncs and rewrites `uv.lock`
+(P-42) and would dirty the tree from a test. The CI command itself is still pinned literally by clause 1, and
+the `type-check` job step is what CI gates. `encoding="utf-8"` is explicit in the helper because
+`verify_spec.py` reconfigures stdout to UTF-8 while the Windows locale codec is cp1252 — without it the
+report decodes as mojibake and clause 3 fails for the wrong reason (found and fixed inside this step).
+
+### Hand-off note for T-002
+
+- Reuse the module-level helpers already in the file — `_REPO_ROOT` (`parents[2]`, the worktree root),
+  `_run(args)` (`sys.executable` + args, `cwd=_REPO_ROOT`, `capture_output`, `text=True`, `encoding="utf-8"`,
+  `check=False`) and `_output(proc)`. `_workflow_job_block` / `_opens_job_key` / `_NFR_004_GATES` /
+  `_VERIFY_SPEC_REPORT_BEFORE_FIX` belong to T-001's witnesses — leave them alone.
+- `_run` always runs at the repo root. For a temp-tree run either pass absolute paths, or add a `cwd=`
+  keyword to `_run` (extend the helper; do not duplicate a second `subprocess.run`).
+- Append T-002's 15 node IDs to the **same** file (Q-10: no new test directory), one function per §11 row,
+  docstring citing the AC/EDGE/NFR ID. Do not re-declare AC-025/NFR-004.
+- Do **not** re-run mypy/ruff/complexipy inside T-002's tests — `test_nfr_004_mypy_and_ruff_clean` already
+  owns those four gates. But keep the file ruff-clean **and** ruff-format-clean: NFR-004 asserts `ruff check .`
+  and `ruff format --check .` repo-wide, so a formatting slip in T-002 turns NFR-004 RED again.
+- Keep every new function under complexipy 15 (`uv run complexipy tests/acceptance/test_structure_map.py
+  --max-complexity-allowed 15`); the CI `complexity` job scans `src tests` and no Phase 3–5 step runs it (P-56).
+- AC-025 clause 3 must stay GREEN: do not change `docs/specs/template.md`, and do not change
+  `scripts/verify_spec.py`'s output (its fix is T-001's Phase 4 work).
+- NFR-001's witness (the 2 s budget, `skipif` on a measured calibration run) and NFR-003 (`deptry`) are in
+  T-002's set; NFR-003's command rewrites `uv.lock` under `uv run` — revert it before committing (P-42).
+- `git checkout -- uv.lock` before the commit; commit locally, push nothing.
+
+### Gate (S3.1 / T-001)
+
+Both §11 node IDs exist with the exact names and assert exactly their AC/NFR clauses ◆; RED observed for
+T-001's set with the failure mode recorded (assertion, not setup error) ◆; sensitivity evidence recorded
+(the one mypy error, no `mypy scripts/` step in any workflow, the other three gates clean) ◆; ruff check +
+ruff format clean on the changed path ◆; complexipy clean at the CI threshold ◆;
+`check_traceability.py` PASS ◆; no implementation code, no dependency/coverage/complexity/bandit/`ty`
+configuration change ◆. This step does **not** declare the Phase 3 RED gate — S3.2 declares it over all
+seven tasks and updates the traceability matrix.
+
