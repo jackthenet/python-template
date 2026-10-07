@@ -2852,3 +2852,83 @@ Observation, not acted on: T-003's `green_command` in both task files still name
 Out of scope, untouched as required: `docs/specs/` (no spec edit), every other test file, `docs/todo/`, `docs/questions/`, and T-006's `status` field (still `PENDING` — S4.4's job).
 
 **Phase 4 (S4.2, T-006) gate: PASS — GREEN confirmed (73 passed, 0 failed), deptry clean, traceability PASS, full-suite collection intact (760 passed, 1 skipped) and recorded.** Next: S4.3 (T-006) — refactor, keep GREEN.
+
+### S4.3 T-006 — refactor, keep GREEN (2026-10-07)
+
+**Objective:** review the T-006 diff (`git show 198480b`) for structure only — leftover dead code / imports / helpers from the deleted loguru capture half, stale docstrings, naming, duplication — without changing observable behavior and without weakening any test.
+
+**Result: no structural changes needed — zero file changes.** The S4.2 commit already left nothing behind. Evidence per review axis:
+
+#### 1. Dead code / unused imports after the capture half was deleted
+
+`capture_from_loguru` and `loguru_sink` are gone, and nothing references them:
+
+```text
+grep -rn "capture_from_loguru|loguru_sink" tests src scripts migrations   -> 0 hits
+```
+
+(the only remaining mentions anywhere are in `docs/verification/structlog-logging.md`, i.e. the plan/record text that scheduled the deletion).
+
+Every name still defined in `tests/logging_coverage_test_helpers.py` still has a live consumer — checked by counting references outside the defining module:
+
+| Name | External call sites | Verdict |
+|---|---|---|
+| `INVENTORY_CLASSES` / `INVENTORY_MODULE_FUNCTIONS` | 18 / 7 | live (the inventory witnesses) |
+| `messages` / `entry_records` / `exit_records` / `exception_records` / `level_name` / `for_qualname` / `parse_elapsed_ms` | 44 / 28 / 24 / 2 / 16 / 15 / 6 | live |
+| `PipelineCaptureHandler` / `FailingHandler` / `failing_sink_attached` | 1 / 1 / 6 | live (`pipeline_capture` + `test_sink_failure.py`) |
+| `pipeline_capture` / `capture_records` | 2 / 6 | live — the two capture entry points, now pipeline-only |
+| `CaptureRecord` / `capture_from_logrecord` / `_LevelName` / `_CAPTURED_DROP` | internal only | live — `PipelineCaptureHandler.emit` (`:201`) builds a `CaptureRecord` via `capture_from_logrecord`, which uses `_LevelName` and `_CAPTURED_DROP` |
+
+Import check: `Callable` (`:18`) is still used by `INVENTORY_MODULE_FUNCTIONS` (`:76`); `namedtuple` (`:17`) by `_LevelName` (`:136`); the `loguru` import is gone from all three touched test files. Ruff's `F401`/`I001` run below confirms no unused import or stale import block survived.
+
+Deleted file: `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` leaves no dangling reference in anything still runnable — `uv run pytest --collect-only -q` collects **761 tests** (the 760 passed + 1 skipped S4.2 observed), so no test module imports a removed helper. The only live files still naming it are historical records outside T-006's `allowed_files` (`docs/tasks/logging-coverage.tasks.json`, the older change's task file) and T-003's already-`VERIFIED` `green_command` — already recorded as an observation in the S4.2 section above and deliberately not rewritten.
+
+#### 2. Docstrings — none still describes a live loguru sink
+
+| Site | State after S4.2 | Verdict |
+|---|---|---|
+| `tests/conftest.py::_stdlib_root_logging_restored` | "routes stdlib records into the pipeline (AC-004, AC-006, …)" | updated, accurate |
+| `tests/conftest.py::log_records` | "the capture is the pipeline's own stdlib handler … the loguru sink half … is gone (T-006)" | updated; the one past-tense mention records why the fixture used to be dual-backend — kept, not churned |
+| `tests/logging_coverage_test_helpers.py` capture-section comment | "every record reaches the logging pipeline, so one normalised shape covers the whole suite" | updated, accurate |
+| `tests/logging_coverage_test_helpers.py::pipeline_capture` | still names "the retired loguru sink gated it on the *handler*" | **kept deliberately** — it is the *reason* the handler is paired with `setLevel()` (AGENTS.md: docstrings explain *why* non-obvious logic exists). Deleting it removes the only explanation of a non-obvious line |
+| `tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks` | still names the replaced loguru handler-count assertions | **kept deliberately** — it is the re-derivation record for the amended AC-001 wording |
+| `src/backend/permissions/service.py::_deny` | "Log the denial at WARNING (never the session token, REQ-028) and publish the event (REQ-020)" | still true of the migrated statement (level and wording preserved) — no edit needed |
+
+No docstring asserts behavior the code no longer has, so there is nothing stale to fix.
+
+#### 3. Naming — matches the pattern the earlier tasks established
+
+`_logger = get_logger("permissions")` (`src/backend/permissions/service.py:67`) is the same module-level name, the same `REQ-005 (structlog-logging)` comment shape, and the same feature-name-as-logger-name convention as the three modules migrated before it — `src/backend/settings/registry.py:41`, `src/backend/settings/repository.py:34`, `src/backend/eventbus/eventbus.py:27`. Renaming it (e.g. `_permission_logger`) would break that consistency for no gain; the module has no second logger to disambiguate.
+
+#### 4. Duplication — the f-string + structured-binding pair is the specified shape, not a copy bug
+
+`_deny` passes the three values twice: interpolated into the message, and again as bindings (`user_id=…, permission=…, reason=…`). Considered and rejected:
+
+- It is the established shape at every migrated call site (`settings/registry.py:92/153/157/255…`, `settings/repository.py:145/156/253…`, `eventbus/eventbus.py:123/128`) — T-006 follows it rather than inventing a fourth variant.
+- The two copies are not redundant: the message text is the **observable wording** the AC-009 witness and `tests/acceptance/permissions/test_check_api.py::test_denial_log_and_no_token_leak` match; the bindings are the structured JSON fields the file sink renders. Collapsing them changes one or the other — an observable behavior change, which Phase 4 refactoring must not introduce.
+- A helper that formats a message from its bindings would be a new abstraction nobody asked for (AGENTS.md: no unrequested abstraction), for one call site in this file.
+
+#### 5. Dependency-set leftovers (outside `allowed_files` — observations, not acted on)
+
+`pyproject.toml` removed the `loguru` entry **and its comment** together; no `loguru` remains in `[dependency-groups]`, `[tool.deptry]` (no stale `DEP002` ignore) or `uv.lock`. Two mentions survive outside T-006's allowed scope and are reported rather than edited:
+
+| Location | What | Why not touched |
+|---|---|---|
+| `pyproject.toml:161` | a `[tool.ty.analysis]` comment listing "sqlmodel/sqlalchemy/pydantic/loguru all ship `py.typed`" | an illustrative example (dated 2026-09-15), not a claim that loguru is installed; T-006's `allowed_files` limits `pyproject.toml` to "dependencies only" |
+| `.github/dependabot.yml:34` | the `runtime-core` update group still lists `"loguru"` | dead config now that the package is gone; not in any T-006 `allowed_files` — a `chore` follow-up (or Phase 6 review) decision |
+
+#### 6. Gates
+
+| Gate | Command (verbatim) | Result |
+|---|---|---|
+| `green_command` re-run | `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean tests/acceptance/permissions tests/unit/permissions tests/contract/permissions tests/property/permissions tests/integration/permissions -v` | **skipped — no-op fast-path** (AGENTS.md Phase 4 step 6 / implement skill S4.4: zero file changes in this step, so the S4.2 GREEN — 73 passed — still holds) |
+| Ruff (T-006 changed paths, the ruff gate) | `uv run ruff check src/backend/permissions/service.py pyproject.toml tests/conftest.py tests/logging_coverage_test_helpers.py tests/acceptance/logging/test_logging.py tests/acceptance/logging_coverage/test_statements_via_feature.py` | **All checks passed!** |
+| Ruff format | `uv run ruff format --check <same .py paths>` | **5 files already formatted** |
+| Collection safety (cheap substitute for the skipped re-run) | `uv run pytest --collect-only -q` | **761 tests collected** — no import broke, no test disappeared beyond the authorized deletion |
+| mypy / deptry / `check_traceability.py` | not re-run | n/a — this step changed no `src/`, no `pyproject.toml`, no test-function name (S4.2 recorded them clean: mypy 84 files, deptry clean, traceability PASS 784 rows) |
+
+**Assertion-strength check:** no test file was touched in this step; the assertion set from S4.2 is unchanged — nothing deleted, weakened, converted, or skipped. The only file this step writes is this verification record.
+
+Out of scope, untouched: `docs/specs/`, `docs/todo/`, `docs/questions/`, every test file, both task files (T-006 `status` stays `PENDING` — that is S4.4's job).
+
+**Phase 4 (S4.3, T-006) gate: PASS — no structural changes needed, ruff clean on the changed paths, GREEN from S4.2 intact.** Next: S4.4 (T-006) — commit + set status `VERIFIED`.
