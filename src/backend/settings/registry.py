@@ -7,9 +7,7 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Any
 
-from loguru import logger
-
-from backend.logging import logged, logged_class
+from backend.logging import get_logger, logged, logged_class
 from backend.shared import PermissionChecker, Principal, requires_permission
 
 if TYPE_CHECKING:
@@ -36,6 +34,11 @@ from backend.settings.repository import (
     ValueRepository,
     YamlValueRepository,
 )
+
+# REQ-005 (structlog-logging): the module's one-off statements go through the
+# logging feature's entry point instead of importing a logging backend. The
+# feature name keeps the records attributable to the settings feature.
+_logger = get_logger("settings")
 
 # ADR-071: the default trailing principal of every enforced method is the
 # system principal (user_id=None; EDGE-022). A module-level singleton keeps
@@ -86,12 +89,16 @@ class SettingsRegistry:
         """Register a setting. Duplicate keys are rejected."""
         with self._lock:
             if definition.key in self._definitions:
-                logger.warning("duplicate registration: key={}", definition.key)
+                _logger.warning(f"duplicate registration: key={definition.key}", key=definition.key)
                 raise SettingsRegistrationError(f"duplicate key {definition.key}")
             self._definitions[definition.key] = definition
             # Persisted values take precedence over definition defaults (REQ-011).
             self._values[definition.key] = self._persisted.get(definition.key, definition.default)
-        logger.debug("setting registered: key={} kind={}", definition.key, definition.kind)
+        _logger.debug(
+            f"setting registered: key={definition.key} kind={definition.kind}",
+            key=definition.key,
+            kind=definition.kind,
+        )
         self._persist_values()
 
     @property
@@ -110,7 +117,11 @@ class SettingsRegistry:
                 raise SettingsRegistrationError(f"key {d.key} does not start with {prefix}")
         for d in definitions:
             self.register(d)
-        logger.debug("feature settings registered: feature={} count={}", feature, len(definitions))
+        _logger.debug(
+            f"feature settings registered: feature={feature} count={len(definitions)}",
+            feature=feature,
+            count=len(definitions),
+        )
 
     # -- Lookup --
 
@@ -139,11 +150,11 @@ class SettingsRegistry:
         with self._lock:
             d = self._require_definition(key)
             if not value_valid_for(d, value):
-                logger.warning("value set rejected (invalid): key={}", key)
+                _logger.warning(f"value set rejected (invalid): key={key}", key=key)
                 raise SettingsValidationError(f"value is invalid for {key}")
             previous = self._values[key]
             self._values[key] = value
-        logger.debug("value set: key={}", key)
+        _logger.debug(f"value set: key={key}", key=key)
         self._persist_values()
         self._publish_setting_changed(key, value, previous)
         return value
@@ -157,7 +168,7 @@ class SettingsRegistry:
             d = self._require_definition(key)
             previous = self._values[key]
             self._values[key] = d.default
-        logger.debug("value reset: key={}", key)
+        _logger.debug(f"value reset: key={key}", key=key)
         self._persist_values()
         self._publish_setting_changed(key, d.default, previous)
 
@@ -170,7 +181,7 @@ class SettingsRegistry:
             with self._lock:
                 previous = self._values[key]
                 self._values[key] = d.default
-            logger.debug("value reset: key={}", key)
+            _logger.debug(f"value reset: key={key}", key=key)
             self._publish_setting_changed(key, d.default, previous)
         self._persist_values()
 
@@ -241,27 +252,36 @@ class SettingsRegistry:
     ) -> Template:
         """Create a template scoped to (category, group)."""
         if not is_template_name_valid(name):
-            logger.warning("template create rejected (invalid name): name={}", name)
+            _logger.warning(f"template create rejected (invalid name): name={name}", name=name)
             raise TemplateValidationError(f"invalid template name {name}")
         with self._lock:
             if self._repository.get(name) is not None:
-                logger.warning("template create rejected (duplicate): name={}", name)
+                _logger.warning(f"template create rejected (duplicate): name={name}", name=name)
                 raise TemplateValidationError(f"template name {name} already exists")
             scope_keys = self._scope_keys(category, group)
             if values is None:
                 captured = {k: self._values[k] for k in scope_keys}
             else:
                 if set(values.keys()) != set(scope_keys):
-                    logger.warning("template create rejected (scope): name={}", name)
+                    _logger.warning(f"template create rejected (scope): name={name}", name=name)
                     raise TemplateValidationError("values must exactly cover the scope")
                 for k in scope_keys:
                     if not value_valid_for(self._definitions[k], values[k]):
-                        logger.warning("template create rejected (invalid value): name={} key={}", name, k)
+                        _logger.warning(
+                            f"template create rejected (invalid value): name={name} key={k}",
+                            name=name,
+                            key=k,
+                        )
                         raise TemplateValidationError(f"value for {k} is invalid")
                 captured = dict(values)
             template = Template(name=name, category=category, group=group, values=captured)
             self._repository.save(template)
-        logger.debug("template created: name={} category={} group={}", name, category, group)
+        _logger.debug(
+            f"template created: name={name} category={category} group={group}",
+            name=name,
+            category=category,
+            group=group,
+        )
         return template
 
     @requires_permission("settings.load_template")
@@ -280,7 +300,11 @@ class SettingsRegistry:
                 previous = self._values[key]
                 self._values[key] = value
                 self._publish_setting_changed(key, value, previous)
-        logger.debug("template loaded: name={} count={}", name, len(template.values))
+        _logger.debug(
+            f"template loaded: name={name} count={len(template.values)}",
+            name=name,
+            count=len(template.values),
+        )
 
     @requires_permission("settings.update_template")
     def update_template(self, name: str, values: dict[str, Any], principal: Principal = _SYSTEM_PRINCIPAL) -> None:
@@ -292,11 +316,15 @@ class SettingsRegistry:
         with self._lock:
             scope_keys = self._scope_keys(existing.category, existing.group)
             if set(values.keys()) != set(scope_keys):
-                logger.warning("template update rejected (scope): name={}", name)
+                _logger.warning(f"template update rejected (scope): name={name}", name=name)
                 raise TemplateValidationError("values must exactly cover the scope")
             for k in scope_keys:
                 if not value_valid_for(self._definitions[k], values[k]):
-                    logger.warning("template update rejected (invalid value): name={} key={}", name, k)
+                    _logger.warning(
+                        f"template update rejected (invalid value): name={name} key={k}",
+                        name=name,
+                        key=k,
+                    )
                     raise TemplateValidationError(f"value for {k} is invalid")
             updated = Template(
                 name=name,
@@ -305,7 +333,7 @@ class SettingsRegistry:
                 values=dict(values),
             )
             self._repository.save(updated)
-        logger.debug("template updated: name={}", name)
+        _logger.debug(f"template updated: name={name}", name=name)
 
     @requires_permission("settings.delete_template")
     def delete_template(self, name: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
@@ -314,7 +342,7 @@ class SettingsRegistry:
             if self._repository.get(name) is None:
                 raise TemplateNotFoundError(f"unknown template {name}")
             self._repository.delete(name)
-        logger.debug("template deleted: name={}", name)
+        _logger.debug(f"template deleted: name={name}", name=name)
 
     @requires_permission("settings.get_template")
     def get_template(self, name: str, principal: Principal = _SYSTEM_PRINCIPAL) -> Template | None:

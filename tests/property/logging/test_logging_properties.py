@@ -15,15 +15,17 @@ from typing import Any
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from logging_test_helpers import run_python
+from logging_test_helpers import PIPELINE_COUNT_CODE, run_python
 
 from backend.logging import logged
 
 
 def test_inv_001_concurrent_setup_logger_sinks(tmp_path: Path) -> None:
-    """INV-001: for any number of concurrent setup_logger() calls, exactly one console + one file sink.
+    """INV-001 (logging.md v3): for any number of concurrent setup_logger() calls, exactly one console handler and one file handler.
 
-    Each example runs in a subprocess because setup_logger() is idempotent
+    Re-derived from the amended INV-001 wording: the pair is now the two managed
+    standard-library handlers owned by the feature logger, not loguru's handler
+    table. Each example runs in a subprocess because setup_logger() is idempotent
     per process and the in-process session setup already configured the sinks.
     """
 
@@ -36,7 +38,6 @@ import threading, tempfile
 from backend.settings import SettingsRegistry, YamlValueRepository
 from backend.settings import registry as _reg_mod
 from backend.logging import register_settings as logging_register, setup_logger
-from loguru import logger
 
 reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
 _reg_mod._registry[0] = reg
@@ -57,12 +58,15 @@ for t in threads:
 for t in threads:
     t.join()
 print("ERRORS", len(errors))
-print("HANDLERS", len(logger._core.handlers))
+{PIPELINE_COUNT_CODE}
 """
         result = run_python(code)
         assert result.returncode == 0, result.stderr
         assert "ERRORS 0" in result.stdout
-        assert "HANDLERS 2" in result.stdout
+        assert "OWNERS 1" in result.stdout, f"INV-001: {n} concurrent setups, output:\n{result.stdout}"
+        assert "CONSOLE 1" in result.stdout, f"INV-001: {n} concurrent setups, output:\n{result.stdout}"
+        assert "FILE 1" in result.stdout, f"INV-001: {n} concurrent setups, output:\n{result.stdout}"
+        assert "FEATURE_HANDLERS 2" in result.stdout, f"INV-001: {n} concurrent setups, output:\n{result.stdout}"
 
     inner()
 

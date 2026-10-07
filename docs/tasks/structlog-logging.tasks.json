@@ -1,0 +1,882 @@
+{
+  "feature": "structlog-logging",
+  "spec": "docs/specs/structlog-logging.md",
+  "branch": "crosscut/structlog-logging",
+  "change_type": "CROSS-CUTTING",
+  "adr": "docs/decisions/ADR-082-structlog-processor-layer-over-stdlib.md",
+  "grouping": "CROSS-CUTTING, grouped by the affected features of docs/specs/structlog-logging.md section 10 Impact Analysis: backend.logging owner (T-001 pipeline core + dependency-set part 1, T-002 decorators + tracing-surface contract), backend.settings (T-003 live reconfigure + the amended settings-coverage IDs, T-004 the 28 registry/repository statements), backend.eventbus (T-005 the 10 statements), backend.permissions + tooling (T-006 the last loguru import together with the dependency-set finalization - the deptry interlock), guidance (T-007 AGENTS.md + the python-best-practices skill). Impact row 5 (migrations/alembic) needs no task: no code change, its interaction is EDGE-003, tested in T-001. Impact row 8 (test suite) is carried by every task's green_command. Impact row 7's amended specs (logging.md v3, logging-coverage.md v2, settings-coverage.md v2, settings.md v4) already merged with the approval PR #67 (merge eb68ed2), so no task re-opens them; the tasks only re-derive their tests.",
+  "deptry_interlock": "quality_check runs `uv run deptry .` at Phase 5 parity (pyproject.toml:224) and deptry scans src/, migrations/ and scripts/ but NOT tests/ (it reports 'Scanning 89 files', the 90 non-test .py files). The dependency set is therefore changed in exactly two tasks, each paired with the code that keeps deptry clean in the state it leaves behind: T-001 declares structlog in the same task that imports it and removes orjson from the DEP002 ignore in the same task that imports orjson (loguru stays declared because settings/eventbus/permissions still import it); T-006 removes the last loguru import in the scan set (src/backend/permissions/service.py) in the same task that removes loguru from `dependencies`. Every intermediate state passes deptry: after T-001, T-004 and T-005 loguru is still imported by a not-yet-migrated feature file, so it is neither missing (DEP001) nor unused (DEP002).",
+  "id_coverage": {
+    "new_spec_ids": {
+      "REQ-001": [
+        "T-001",
+        "T-006"
+      ],
+      "REQ-002": [
+        "T-001"
+      ],
+      "REQ-003": [
+        "T-001"
+      ],
+      "REQ-004": [
+        "T-001"
+      ],
+      "REQ-005": [
+        "T-004",
+        "T-005",
+        "T-006"
+      ],
+      "REQ-006": [
+        "T-001"
+      ],
+      "REQ-007": [
+        "T-002"
+      ],
+      "REQ-008": [
+        "T-002"
+      ],
+      "REQ-009": [
+        "T-002"
+      ],
+      "REQ-010": [
+        "T-001"
+      ],
+      "REQ-011": [
+        "T-001",
+        "T-002"
+      ],
+      "REQ-012": [
+        "T-003"
+      ],
+      "REQ-013": [
+        "T-001",
+        "T-006"
+      ],
+      "REQ-014": [
+        "T-007"
+      ],
+      "REQ-015": [
+        "T-001",
+        "T-002"
+      ],
+      "AC-001": [
+        "T-006"
+      ],
+      "AC-002": [
+        "T-001"
+      ],
+      "AC-003": [
+        "T-002"
+      ],
+      "AC-004": [
+        "T-001"
+      ],
+      "AC-005": [
+        "T-001"
+      ],
+      "AC-006": [
+        "T-001"
+      ],
+      "AC-007": [
+        "T-001"
+      ],
+      "AC-008": [
+        "T-001"
+      ],
+      "AC-009": [
+        "T-004",
+        "T-005",
+        "T-006"
+      ],
+      "AC-010": [
+        "T-001"
+      ],
+      "AC-011": [
+        "T-002"
+      ],
+      "AC-012": [
+        "T-002"
+      ],
+      "AC-013": [
+        "T-002"
+      ],
+      "AC-014": [
+        "T-002"
+      ],
+      "AC-015": [
+        "T-002"
+      ],
+      "AC-016": [
+        "T-001"
+      ],
+      "AC-017": [
+        "T-003"
+      ],
+      "AC-018": [
+        "T-006"
+      ],
+      "AC-019": [
+        "T-007"
+      ],
+      "AC-020": [
+        "T-001"
+      ],
+      "INV-001": [
+        "T-001"
+      ],
+      "INV-002": [
+        "T-002"
+      ],
+      "INV-003": [
+        "T-002"
+      ],
+      "INV-004": [
+        "T-001",
+        "T-003"
+      ],
+      "INV-005": [
+        "T-002"
+      ],
+      "EDGE-001": [
+        "T-001"
+      ],
+      "EDGE-002": [
+        "T-001"
+      ],
+      "EDGE-003": [
+        "T-001"
+      ],
+      "EDGE-004": [
+        "T-001"
+      ],
+      "EDGE-005": [
+        "T-001"
+      ],
+      "EDGE-006": [
+        "T-001"
+      ],
+      "NFR-001": [
+        "T-001"
+      ],
+      "NFR-002": [
+        "T-002"
+      ],
+      "NFR-003": [
+        "T-002"
+      ],
+      "NFR-004": [
+        "T-006"
+      ],
+      "NFR-005": [
+        "T-001"
+      ]
+    },
+    "amended_spec_ids": {
+      "logging.md REQ-001": [
+        "T-001"
+      ],
+      "logging.md REQ-003": [
+        "T-001"
+      ],
+      "logging.md REQ-005": [
+        "T-002"
+      ],
+      "logging.md AC-001": [
+        "T-001"
+      ],
+      "logging.md AC-004": [
+        "T-001"
+      ],
+      "logging.md AC-005 (deleted)": [
+        "T-001"
+      ],
+      "logging.md INV-001": [
+        "T-001"
+      ],
+      "logging.md EDGE-005 (deleted)": [
+        "T-001"
+      ],
+      "logging.md NFR-001": [
+        "T-001"
+      ],
+      "logging.md NFR-002": [
+        "T-002"
+      ],
+      "logging.md NFR-003": [
+        "T-002"
+      ],
+      "logging.md NFR-004": [
+        "T-002"
+      ],
+      "logging-coverage.md REQ-010": [
+        "T-004",
+        "T-005",
+        "T-006"
+      ],
+      "logging-coverage.md AC-010": [
+        "T-004",
+        "T-005",
+        "T-006"
+      ],
+      "settings-coverage.md REQ-014": [
+        "T-003"
+      ],
+      "settings-coverage.md REQ-015": [
+        "T-003"
+      ],
+      "settings-coverage.md REQ-016": [
+        "T-003"
+      ],
+      "settings-coverage.md AC-019": [
+        "T-003"
+      ],
+      "settings-coverage.md AC-020": [
+        "T-003"
+      ],
+      "settings-coverage.md AC-021": [
+        "T-003"
+      ],
+      "settings-coverage.md EDGE-008": [
+        "T-003"
+      ]
+    }
+  },
+  "tasks": [
+    {
+      "task_id": "T-001",
+      "feature_group": "backend.logging (owner) + tooling (pyproject.toml dependency set, part 1)",
+      "title": "pipeline core: dedicated non-propagating feature logger owning two managed stdlib sinks (colorized text console + queue-fed rotating JSON file via orjson), root forwarding handler, renderer selection, get_logger(), public export surface; declare structlog and retire the orjson DEP002 suppression",
+      "requirements": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-006",
+        "REQ-010",
+        "REQ-011",
+        "REQ-013",
+        "REQ-015"
+      ],
+      "acceptance_criteria": [
+        "AC-002",
+        "AC-004",
+        "AC-005",
+        "AC-006",
+        "AC-007",
+        "AC-008",
+        "AC-010",
+        "AC-016",
+        "AC-020"
+      ],
+      "invariants": [
+        "INV-001",
+        "INV-004"
+      ],
+      "edge_cases": [
+        "EDGE-001",
+        "EDGE-002",
+        "EDGE-003",
+        "EDGE-004",
+        "EDGE-005",
+        "EDGE-006"
+      ],
+      "non_functional": [
+        "NFR-001",
+        "NFR-005"
+      ],
+      "amended_ids": [
+        "logging.md REQ-001",
+        "logging.md REQ-003",
+        "logging.md AC-001",
+        "logging.md AC-004",
+        "logging.md AC-005 (deleted)",
+        "logging.md INV-001",
+        "logging.md EDGE-005 (deleted)",
+        "logging.md NFR-001"
+      ],
+      "tests_to_create": [
+        "tests/acceptance/logging/test_pipeline_backend.py::test_ac_002_two_managed_handlers",
+        "tests/acceptance/logging/test_third_party_records.py::test_ac_006_third_party_reaches_both_sinks",
+        "tests/acceptance/logging/test_get_logger.py::test_ac_008_get_logger_emits_to_sinks",
+        "tests/acceptance/logging/test_renderer.py::test_ac_010_renderer_selection",
+        "tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_call_unaffected_by_failing_file_sink",
+        "tests/unit/logging/test_sink_ownership.py::test_ac_004_foreign_handlers_untouched",
+        "tests/unit/logging/test_sink_ownership.py::test_ac_005_no_duplicate_records",
+        "tests/unit/logging/test_third_party_records.py::test_ac_007_location_of_emitting_call",
+        "tests/unit/logging/test_pipeline_edges.py::test_edge_001_log_file_parent_created",
+        "tests/unit/logging/test_pipeline_edges.py::test_edge_002_rotation_with_open_handle",
+        "tests/unit/logging/test_pipeline_edges.py::test_edge_004_unknown_numeric_level",
+        "tests/unit/logging/test_pipeline_edges.py::test_edge_005_unknown_renderer",
+        "tests/unit/logging/test_pipeline_edges.py::test_edge_006_get_logger_before_setup",
+        "tests/unit/logging/test_pipeline_edges.py::test_nfr_005_single_listener_thread",
+        "tests/integration/logging/test_external_reconfiguration.py::test_edge_003_file_config_keeps_managed_handlers",
+        "tests/property/logging/test_pipeline_invariants.py::test_inv_001_concurrent_setup_owns_two_handlers",
+        "tests/property/logging/test_pipeline_invariants.py::test_inv_004_other_loggers_untouched",
+        "tests/contract/logging/test_tracing_surface.py::test_ac_020_public_export_surface",
+        "tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks (re-derived from logging.md AC-001 v3)",
+        "tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records (re-derived as the forwarding-handler case, logging.md AC-004 v3)",
+        "tests/property/logging/test_logging_properties.py::test_inv_001_concurrent_setup_logger_sinks (re-derived, logging.md INV-001 v3)",
+        "tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget (amended budget: < 25 ms)",
+        "tests/unit/logging/test_logging.py::test_ac_005_intercept_handler_skips_bootstrap (DELETION, authorized per-ID: logging.md AC-005 deleted; recorded in docs/verification/structlog-logging.md)",
+        "tests/unit/logging/test_logging_edges.py::test_edge_005_intercept_unknown_level (DELETION, authorized per-ID: logging.md EDGE-005 deleted, the case survives as this spec's EDGE-004; recorded in docs/verification/structlog-logging.md)"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging/test_pipeline_backend.py::test_ac_002_two_managed_handlers tests/acceptance/logging/test_third_party_records.py::test_ac_006_third_party_reaches_both_sinks tests/acceptance/logging/test_get_logger.py::test_ac_008_get_logger_emits_to_sinks tests/acceptance/logging/test_renderer.py::test_ac_010_renderer_selection tests/acceptance/logging_coverage/test_sink_failure.py::test_ac_016_call_unaffected_by_failing_file_sink tests/unit/logging/test_sink_ownership.py::test_ac_004_foreign_handlers_untouched tests/unit/logging/test_sink_ownership.py::test_ac_005_no_duplicate_records tests/unit/logging/test_third_party_records.py::test_ac_007_location_of_emitting_call tests/unit/logging/test_pipeline_edges.py tests/integration/logging/test_external_reconfiguration.py tests/property/logging/test_pipeline_invariants.py::test_inv_001_concurrent_setup_owns_two_handlers tests/property/logging/test_pipeline_invariants.py::test_inv_004_other_loggers_untouched tests/contract/logging/test_tracing_surface.py::test_ac_020_public_export_surface tests/acceptance/logging/test_logging.py::test_ac_001_setup_logger_adds_sinks tests/unit/logging/test_logging.py::test_ac_004_intercept_handler_routes_records tests/property/logging/test_logging_properties.py::test_inv_001_concurrent_setup_logger_sinks tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget -v",
+      "implementation_steps": [
+        "Add structlog to [project].dependencies and run `uv sync` so uv.lock records it (the same task that declares it imports it - deptry interlock).",
+        "Rebuild src/backend/logging/_setup.py as the pipeline: a dedicated, non-propagating feature logger owns exactly one console handler (stderr, colorized human-readable text) and one rotating file handler (UTF-8, JSON records, rotation size = log_max_bytes, backup count = log_backup_count) fed through a queue handler with a single listener thread (D4: the queue handler must pass the record through UNFORMATTED).",
+        "Install ONE forwarding handler on the stdlib root logger that hands foreign records to the two managed handlers (D2) - no frame-skipping arithmetic; the record's own level, logger name and location survive.",
+        "Renderers per sink (D3): console text renderer; file renderer serializing the record with orjson. The JSON-serializer adapter must return a str (orjson returns bytes) and must tolerate the keyword arguments the renderer forwards; drop the formatter's bookkeeping keys and map the pipeline's filename/lineno to the contract names file/line.",
+        "Add the optional keyword-only `renderer` parameter to setup_logger() ('text' | 'json' | None); an unknown value raises ValueError BEFORE any handler is installed (EDGE-005). Keep setup idempotent and thread-safe (ADR-035) and settings-driven when called with no argument.",
+        "Add get_logger(name=None) and export it; export surface exactly spec section 3 (AC-020). get_logger() before setup_logger() must not raise (EDGE-006).",
+        "Create the parent directory of log_file when missing (EDGE-001); rotation must not raise into the emitting call on Windows/xdist (EDGE-002); a numeric non-standard level must reach both sinks with the number preserved (EDGE-004).",
+        "Migrate the logging feature's own 2 direct backend statements in src/backend/logging/feature_settings.py to get_logger() (part of REQ-001: no backend import under src/).",
+        "Remove the orjson entry from [tool.deptry.per_rule_ignores] DEP002 (orjson is now imported by the file renderer).",
+        "Adapt tests/logging_test_helpers.py to the new backend: re-implement the fd-level console capture (_console_sink_fd / captured_stderr) and the queue drain in wait_for_file_content() with the same public signatures, so the cross-feature tests keep passing.",
+        "Delete the two authorized tests (logging.md AC-005 / EDGE-005 enforcers) and record both deletions in docs/verification/structlog-logging.md."
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging/test_pipeline_backend.py tests/acceptance/logging/test_third_party_records.py tests/acceptance/logging/test_get_logger.py tests/acceptance/logging/test_renderer.py tests/acceptance/logging/test_logging.py tests/unit/logging/ tests/property/logging/test_pipeline_invariants.py::test_inv_001_concurrent_setup_owns_two_handlers tests/property/logging/test_pipeline_invariants.py::test_inv_004_other_loggers_untouched tests/property/logging/test_logging_properties.py tests/integration/logging tests/contract/logging/test_tracing_surface.py::test_ac_020_public_export_surface tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget tests/acceptance/logging_coverage/test_sink_failure.py tests/acceptance/logging_coverage/test_setup_logger.py -v",
+      "inputs": [
+        "docs/specs/structlog-logging.md sections 2 (D1-D4, D7), 3, 4 (REQ-001/002/003/006/010/011/013/015), 5, 6, 7, 8",
+        "docs/specs/logging.md v3 (REQ-001, REQ-003, AC-001, AC-004, INV-001, NFR-001)",
+        "docs/decisions/ADR-082-structlog-processor-layer-over-stdlib.md",
+        "docs/verification/structlog-logging.md (P.4 design decisions 1, 2, 5, 6, 7; test re-derivation protocol items 5 and 6)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "src/backend/logging/_setup.py",
+          "src/backend/logging/__init__.py",
+          "src/backend/logging/feature_settings.py",
+          "src/backend/logging/_pipeline.py (new; the module split inside src/backend/logging/ is the implementer's choice, no new package)",
+          "src/backend/logging/_renderers.py (new; same note)",
+          "pyproject.toml (dependencies + [tool.deptry.per_rule_ignores] DEP002 only)",
+          "uv.lock"
+        ],
+        "test_files": [
+          "tests/acceptance/logging/test_pipeline_backend.py",
+          "tests/acceptance/logging/test_third_party_records.py",
+          "tests/acceptance/logging/test_get_logger.py",
+          "tests/acceptance/logging/test_renderer.py",
+          "tests/acceptance/logging/test_logging.py",
+          "tests/unit/logging/test_sink_ownership.py",
+          "tests/unit/logging/test_third_party_records.py",
+          "tests/unit/logging/test_pipeline_edges.py",
+          "tests/unit/logging/test_logging.py",
+          "tests/unit/logging/test_logging_edges.py",
+          "tests/unit/logging/test_logging_sink_ownership.py",
+          "tests/property/logging/test_pipeline_invariants.py",
+          "tests/property/logging/test_logging_properties.py",
+          "tests/integration/logging/test_external_reconfiguration.py",
+          "tests/integration/logging/test_logging_integration.py",
+          "tests/contract/logging/test_tracing_surface.py",
+          "tests/contract/logging/test_logging_contracts.py",
+          "tests/acceptance/logging_coverage/test_sink_failure.py",
+          "tests/logging_test_helpers.py",
+          "tests/acceptance/logging_coverage/test_setup_logger.py (only if the entrypoint call shape changes)"
+        ]
+      },
+      "implementation_scope": "The record pipeline itself: handler ownership, the two managed sinks, forwarding interception, renderers, queue + listener, renderer selection, get_logger(), the export surface, and the structlog/orjson half of the dependency set. The tracing decorators are NOT rebuilt here (T-002).",
+      "design_constraints": [
+        "ADR-082 (supersedes ADR-002): structlog is a processor/renderer layer over the standard library's handler machinery, never a logging backend; loguru is not used by the pipeline.",
+        "ADR-035: setup_logger() stays idempotent, thread-safe, and called exactly once from src/main.py before feature code runs.",
+        "D1: a dedicated non-propagating logger owns the two handlers; INV-004 / REQ-003 - the feature never attaches, removes or reconfigures a handler, level or logger it does not own, except the single forwarding handler on the root logger.",
+        "D4: the stdlib QueueHandler must not format the record while enqueueing (that would destroy the structured event the file sink renders from); exactly one listener thread (NFR-005).",
+        "D7: the callsite is resolved at the emitting call site, never in the listener thread; the stdlib exception formatting is suppressed for the managed sinks so a JSON record stays one line.",
+        "Record field contract (spec section 3): level, logger, event, timestamp, file, line on every record; the pipeline's own names (filename/lineno) and the formatter's bookkeeping keys must never appear in a rendered record (the AC-003 negative half is exercised in T-002).",
+        "EDGE-003: migrations/env.py is NOT modified - the alembic fileConfig interaction is handled by handler ownership plus the re-enable/re-install path, and the autouse tests/conftest.py::_stdlib_root_logging_restored fixture stays.",
+        "deptry interlock (S2.1 merged-main fact 1): structlog is declared in the same task that imports it; orjson's DEP002 suppression is removed in the same task that imports orjson; loguru STAYS declared here because src/backend/settings, src/backend/eventbus and src/backend/permissions still import it - its removal is T-006.",
+        "No test is weakened; the only deletions are the two authorized ones named in tests_to_create.",
+        "Gate scoping (Phase 3 derives every task's tests before Phase 4 starts): green_command lists this task's own tests plus the pre-existing tests this task must fix, and deliberately EXCLUDES test files owned by a later DAG task, so this task's GREEN gate is honest and satisfiable with only this task and its declared dependencies. The full suite is the Phase 5 gate."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before implementation; recorded in docs/verification/structlog-logging.md.",
+        "AC-002, AC-004, AC-005, AC-006, AC-007, AC-008, AC-010, AC-016, AC-020 tests pass.",
+        "Property tests for INV-001 (concurrent setup owns exactly two handlers) and INV-004 (other loggers untouched) pass.",
+        "Unit/integration tests for EDGE-001, EDGE-002, EDGE-003, EDGE-004, EDGE-005, EDGE-006 and NFR-005 pass.",
+        "Contract gate NFR-001: setup_logger() < 25 ms (median of 3 fresh processes).",
+        "uv run deptry . is clean in the state this task leaves behind (structlog declared and imported; orjson declared, imported and no longer in DEP002; loguru still declared and still imported by the three not-yet-migrated feature files).",
+        "uv run ruff check <changed paths> and uv run ruff format <changed paths> clean; uv run mypy src/ clean.",
+        "uv run python scripts/check_traceability.py stays green (the logging.md AC-005/EDGE-005 rows already carry an em-dash Test cell, so the two deletions do not dangle).",
+        "Both authorized deletions are recorded in docs/verification/structlog-logging.md."
+      ],
+      "dependencies": [],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-002",
+      "feature_group": "backend.logging (owner)",
+      "title": "tracing decorators rebuilt on the pipeline's binding machinery: @logged (sync + async) entry / exit-with-elapsed_ms / exception, @logged_class, exception rendered into the exception field with no local values, context_getter and depth removed, tracing-surface contract, amended NFR-002 budget, test record-capture helpers re-implemented",
+      "requirements": [
+        "REQ-007",
+        "REQ-008",
+        "REQ-009",
+        "REQ-011",
+        "REQ-015"
+      ],
+      "acceptance_criteria": [
+        "AC-003",
+        "AC-011",
+        "AC-012",
+        "AC-013",
+        "AC-014",
+        "AC-015"
+      ],
+      "invariants": [
+        "INV-002",
+        "INV-003",
+        "INV-005"
+      ],
+      "edge_cases": [],
+      "non_functional": [
+        "NFR-002",
+        "NFR-003"
+      ],
+      "amended_ids": [
+        "logging.md REQ-005",
+        "logging.md NFR-002",
+        "logging.md NFR-003",
+        "logging.md NFR-004"
+      ],
+      "tests_to_create": [
+        "tests/acceptance/logging/test_tracing_records.py::test_ac_011_sync_and_async_traced_records",
+        "tests/acceptance/logging/test_tracing_records.py::test_ac_012_exception_record_and_propagation",
+        "tests/acceptance/logging/test_tracing_records.py::test_ac_014_logged_class_records",
+        "tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json",
+        "tests/acceptance/logging/test_secrets.py::test_ac_015_no_local_values_in_exception_record",
+        "tests/contract/logging/test_tracing_surface.py::test_ac_013_removed_parameters",
+        "tests/property/logging/test_pipeline_invariants.py::test_inv_002_no_local_value_ever_recorded",
+        "tests/property/logging/test_pipeline_invariants.py::test_inv_003_elapsed_non_negative",
+        "tests/property/logging/test_pipeline_invariants.py::test_inv_005_required_fields_present",
+        "tests/contract/logging/test_logging_contracts.py::test_nfr_002_decorator_overhead_budget (amended: measured with both managed sinks active at DEBUG, no backend disable/enable)",
+        "tests/contract/logging/test_logging_contracts.py::test_nfr_004_backward_compatible_api (amended: asserts the reduced parameter set, logging.md NFR-004 v3)"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging/test_tracing_records.py tests/acceptance/logging/test_secrets.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json tests/contract/logging/test_tracing_surface.py::test_ac_013_removed_parameters tests/property/logging/test_pipeline_invariants.py::test_inv_002_no_local_value_ever_recorded tests/property/logging/test_pipeline_invariants.py::test_inv_003_elapsed_non_negative tests/property/logging/test_pipeline_invariants.py::test_inv_005_required_fields_present tests/contract/logging/test_logging_contracts.py::test_nfr_002_decorator_overhead_budget tests/contract/logging/test_logging_contracts.py::test_nfr_004_backward_compatible_api -v",
+      "implementation_steps": [
+        "Rebuild src/backend/logging/_decorator.py on the pipeline's own bound-logger machinery: @logged emits entry, exit-with-elapsed_ms and exception records for BOTH synchronous and asynchronous callables (REQ-007, AC-011; verification record decision 3 - async tracing is a behavior expansion over ADR-002's wording).",
+        "Reduce the @logged parameter set to level, slow_threshold_ms, slow_threshold_setting, include_args; DELETE context_getter and depth with no compatibility shim (D6) so @logged(context_getter=...) / @logged(depth=1) raise TypeError (AC-013).",
+        "Render the exception record into the exception field with the exception type, message and traceback FRAMES only - never local variable values (REQ-009, INV-002, NFR-003, AC-015); the exception still propagates unchanged (AC-012).",
+        "Keep @logged_class semantics: public methods traced, private skipped, the class marked traced (__logged_class__) and the resolved slow_threshold_ms exposed (AC-014).",
+        "Re-implement the test-helper capabilities that have no standard-library equivalent (verification record, test re-derivation protocol item 5): the record capture in tests/conftest.py and the helpers in tests/logging_coverage_test_helpers.py, keeping their public signatures so the nine cross-feature tests (authentication, mail, settings_coverage, logging_coverage) keep passing.",
+        "Amend the two NFR contract gates in tests/contract/logging/test_logging_contracts.py to the re-measured budgets (NFR-002 < 1 ms/call with both managed sinks at DEBUG; the backend disable/enable call disappears with the backend).",
+        "Fix every pre-existing test this breaking change touches inside this task (see green_command): the logging unit/acceptance/property tracing tests and the whole logging_coverage suite."
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging/test_tracing_records.py tests/acceptance/logging/test_secrets.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_003_file_record_fields_as_json tests/unit/logging/ tests/property/logging/test_pipeline_invariants.py tests/property/logging/test_logging_properties.py tests/contract/logging/test_tracing_surface.py tests/contract/logging/test_logging_contracts.py tests/acceptance/logging_coverage/test_abc_traced.py tests/acceptance/logging_coverage/test_behavior_unchanged.py tests/acceptance/logging_coverage/test_docstrings.py tests/acceptance/logging_coverage/test_inventory.py tests/acceptance/logging_coverage/test_levels.py tests/acceptance/logging_coverage/test_new_classes_traced.py tests/acceptance/logging_coverage/test_secret_args.py tests/acceptance/logging_coverage/test_services_traced.py tests/acceptance/logging_coverage/test_slow_threshold.py tests/acceptance/logging_coverage/test_direct_loguru_kept.py tests/unit/logging_coverage tests/property/logging_coverage tests/acceptance/authentication/test_logging.py tests/contract/authentication/test_logging.py tests/acceptance/mail/test_logging.py tests/contract/mail/test_logging.py -v",
+      "inputs": [
+        "docs/specs/structlog-logging.md section 3 (decorator signatures, record fields), section 4 (REQ-007/008/009/011/015), section 5 (AC-003/011/012/013/014/015), section 6 (INV-002/003/005), section 8 (NFR-002/003)",
+        "docs/specs/logging.md v3 (REQ-005, NFR-002, NFR-003, NFR-004)",
+        "docs/decisions/ADR-060 (tracing policy, unchanged), ADR-082",
+        "T-001 handoff (the pipeline, get_logger, the managed sinks)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "src/backend/logging/_decorator.py",
+          "src/backend/logging/__init__.py (export surface only if the parameter removal changes it)",
+          "src/backend/logging/_pipeline.py (binding helpers only, if needed)"
+        ],
+        "test_files": [
+          "tests/conftest.py (record capture only; the autouse _stdlib_root_logging_restored fixture stays)",
+          "tests/logging_coverage_test_helpers.py",
+          "tests/logging_test_helpers.py",
+          "tests/acceptance/logging/test_tracing_records.py",
+          "tests/acceptance/logging/test_secrets.py",
+          "tests/acceptance/logging/test_pipeline_backend.py",
+          "tests/acceptance/logging/test_logging.py",
+          "tests/unit/logging/test_logging.py",
+          "tests/unit/logging/test_logging_edges.py",
+          "tests/property/logging/test_pipeline_invariants.py",
+          "tests/property/logging/test_logging_properties.py",
+          "tests/contract/logging/test_tracing_surface.py",
+          "tests/contract/logging/test_logging_contracts.py",
+          "tests/acceptance/logging_coverage/test_abc_traced.py",
+          "tests/acceptance/logging_coverage/test_behavior_unchanged.py",
+          "tests/acceptance/logging_coverage/test_docstrings.py",
+          "tests/acceptance/logging_coverage/test_inventory.py",
+          "tests/acceptance/logging_coverage/test_levels.py",
+          "tests/acceptance/logging_coverage/test_new_classes_traced.py",
+          "tests/acceptance/logging_coverage/test_secret_args.py",
+          "tests/acceptance/logging_coverage/test_services_traced.py",
+          "tests/acceptance/logging_coverage/test_slow_threshold.py",
+          "tests/acceptance/logging_coverage/test_direct_loguru_kept.py (adapt only if the helper re-implementation breaks it; DELETED in T-006)",
+          "tests/unit/logging_coverage/test_edge_cases.py",
+          "tests/property/logging_coverage/test_invariants.py",
+          "tests/acceptance/authentication/test_logging.py",
+          "tests/contract/authentication/test_logging.py",
+          "tests/acceptance/mail/test_logging.py",
+          "tests/contract/mail/test_logging.py"
+        ]
+      },
+      "implementation_scope": "The tracing surface: @logged / @logged_class rebuilt on the pipeline, the removed parameters, the exception field, the amended contract gates, and the test record-capture helpers. No sink or renderer change.",
+      "design_constraints": [
+        "ADR-060 tracing policy is unchanged: @logged_class on public service/registry/repository/provider classes, @logged on public module-level functions, include_args=False for secret-handling methods.",
+        "include_args semantics stay byte-identical (verification record decision 4); diagnose-style local leakage is forbidden (INV-002, NFR-003).",
+        "D6 breaking surface with no shim and no deprecation alias: the removal of context_getter / depth is asserted by AC-013, not papered over.",
+        "The elapsed_ms of every traced exit record is non-negative (INV-003) and the record set per call stays one entry + one exit (logging-coverage INV-001 stays green).",
+        "Narrowed-gate correction: AC-003, INV-005 and the elapsed half of REQ-011 are tested HERE, not in T-001, because they need a rebuilt traced call; T-001 covers the non-traced record fields, this task covers the traced-exit path.",
+        "No test weakened or deleted: the logging_coverage suite is adapted through the helpers, its assertions stay.",
+        "Gate scoping (Phase 3 derives every task's tests before Phase 4 starts): green_command lists this task's own tests plus the pre-existing tests this task must fix, and deliberately EXCLUDES test files owned by a later DAG task, so this task's GREEN gate is honest and satisfiable with only this task and its declared dependencies. The full suite is the Phase 5 gate."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+        "AC-003, AC-011, AC-012, AC-013, AC-014, AC-015 tests pass.",
+        "Property tests for INV-002, INV-003, INV-005 pass (INV-002 is also the NFR-003 witness).",
+        "Contract gate NFR-002: @logged overhead < 1 ms/call with both managed sinks active at DEBUG (nothing disabled).",
+        "The whole logging_coverage suite and the four cross-feature logging tests pass with unchanged assertions (this breaking change is fixed inside this task, not deferred to Phase 5).",
+        "uv run ruff check <changed paths> clean; uv run mypy src/ clean.",
+        "uv run python scripts/check_traceability.py stays green."
+      ],
+      "dependencies": [
+        "T-001"
+      ],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-003",
+      "feature_group": "backend.settings (amended settings-coverage IDs; the reconfigure code lives in the logging feature's _setup.py)",
+      "title": "live reconfiguration on a logging.* settings change: mutate the managed handlers in place re-applying all current logging.* values, setup_logger() stays callable with no arguments, settings-coverage amended tests re-derived",
+      "requirements": [
+        "REQ-012"
+      ],
+      "acceptance_criteria": [
+        "AC-017"
+      ],
+      "invariants": [
+        "INV-004"
+      ],
+      "edge_cases": [],
+      "non_functional": [],
+      "amended_ids": [
+        "settings-coverage.md REQ-014",
+        "settings-coverage.md REQ-015",
+        "settings-coverage.md REQ-016",
+        "settings-coverage.md AC-019",
+        "settings-coverage.md AC-020",
+        "settings-coverage.md AC-021",
+        "settings-coverage.md EDGE-008",
+        "settings.md observability wording (no ID)"
+      ],
+      "tests_to_create": [
+        "tests/acceptance/settings_coverage/test_setup_logger.py::test_ac_017_live_reconfigure",
+        "tests/acceptance/settings_coverage/test_setup_logger.py::test_setup_logger_reads_registry (re-derived from settings-coverage AC-019 v2)",
+        "tests/acceptance/settings_coverage/test_setup_logger.py::test_sink_reconfigured_on_change (re-derived from settings-coverage AC-020 v2)",
+        "tests/unit/test_settings_coverage.py::test_logging_stub_removed (re-derived from settings-coverage AC-021 v2)",
+        "tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation (re-derived from settings-coverage EDGE-008 v2)",
+        "tests/unit/test_settings_coverage.py::test_observability_tracing (re-derived for the settings.md v4 wording: the settings feature uses the logging feature's logger)"
+      ],
+      "red_command": "uv run pytest tests/acceptance/settings_coverage/test_setup_logger.py tests/unit/test_settings_coverage.py::test_logging_stub_removed tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation tests/unit/test_settings_coverage.py::test_observability_tracing -v",
+      "implementation_steps": [
+        "Change the SettingChanged subscription in src/backend/logging/_setup.py so a logging.* write reconfigures the feature's OWN handlers in place, re-applying every current logging.* value (level, file path, rotation size, backup count) without restarting the process (REQ-012, AC-017).",
+        "Keep setup_logger() callable with no arguments - the new renderer parameter is optional and keyword-only (settings-coverage REQ-014 v2).",
+        "The reconfigure must touch only the handlers the feature owns (AC-017 third clause, INV-004): a foreign handler attached to the root logger or to another feature's logger stays attached and unmodified; the re-enable + re-install path for the alembic fileConfig case (EDGE-003) runs here.",
+        "Adapt tests/settings_test_helpers.py to the new backend (set_value_settled keeps its semantics: the write's dispatch is awaited) and remove the loguru import from tests/acceptance/settings_coverage/test_setup_logger.py.",
+        "Re-derive the six settings-coverage tests listed above from the amended v2 wording; assertions stay as strong as before (no weakening)."
+      ],
+      "green_command": "uv run pytest tests/acceptance/settings_coverage tests/unit/test_settings_coverage.py tests/contract/settings_coverage tests/property/test_settings_coverage.py -v",
+      "inputs": [
+        "docs/specs/structlog-logging.md section 4 (REQ-012), section 5 (AC-017), section 10 row 2",
+        "docs/specs/settings-coverage.md v2 (REQ-014/015/016, AC-019/020/021, EDGE-008)",
+        "docs/specs/settings.md v4 (wording only)",
+        "T-001 handoff (the managed handlers), T-002 handoff (the record-capture helpers)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "src/backend/logging/_setup.py (the reconfigure path only)"
+        ],
+        "test_files": [
+          "tests/acceptance/settings_coverage/test_setup_logger.py",
+          "tests/unit/test_settings_coverage.py",
+          "tests/settings_test_helpers.py",
+          "tests/property/test_settings_coverage.py (only if the reconfigure change breaks it)",
+          "tests/contract/settings_coverage (only if the reconfigure change breaks it)"
+        ]
+      },
+      "implementation_scope": "The settings-driven live reconfigure path and the settings-coverage tests re-derived from the amended IDs. No new settings key, no change to the settings feature's own behavior.",
+      "design_constraints": [
+        "No new settings keys: the five logging.* keys (log_level, log_file, log_max_bytes, log_backup_count, profiling_include_arguments) and their defaults are unchanged (spec section 1 out of scope).",
+        "ADR-035: setup_logger() stays idempotent and thread-safe; the reconfigure must not race a concurrent setup (INV-001).",
+        "INV-004: only the feature's own handlers change; the single root forwarding handler is the only foreign-logger touch.",
+        "The autouse tests/conftest.py::_stdlib_root_logging_restored fixture stays (EDGE-003 test-suite guard).",
+        "settings.md is wording-only in this change: no settings.md ID is re-opened here."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+        "AC-017 passes: DEBUG records reach both sinks without a restart, the rotation parameters are re-applied, and only the feature's own handlers change.",
+        "The re-derived settings-coverage AC-019, AC-020, AC-021 and EDGE-008 tests pass with unchanged assertion strength.",
+        "uv run ruff check <changed paths> clean; uv run mypy src/ clean.",
+        "uv run python scripts/check_traceability.py stays green (the settings-coverage rows keep citing the same test function names)."
+      ],
+      "dependencies": [
+        "T-001",
+        "T-002"
+      ],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-004",
+      "feature_group": "backend.settings",
+      "title": "migrate the 28 direct backend statements in src/backend/settings/registry.py (17) and src/backend/settings/repository.py (11) to get_logger()",
+      "requirements": [
+        "REQ-005"
+      ],
+      "acceptance_criteria": [
+        "AC-009"
+      ],
+      "invariants": [],
+      "edge_cases": [],
+      "non_functional": [],
+      "amended_ids": [
+        "logging-coverage.md REQ-010 (restated: statements stay statements, written through the feature's exported logger)",
+        "logging-coverage.md AC-010 (restated)"
+      ],
+      "tests_to_create": [
+        "tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger (per-file AC-009 witness: the two settings files import no backend and every one-off statement is written through get_logger())"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger -v",
+      "implementation_steps": [
+        "Replace `from loguru import logger` in src/backend/settings/registry.py and src/backend/settings/repository.py with the logging feature's exported get_logger(); keep the same message wording and level (spec section 9: the observability policy does not change).",
+        "Convert the 28 call sites to the feature logger's keyword-field form (message + fields) instead of the backend's brace-formatting form; no statement added, none removed, no level change.",
+        "Leave the settings feature's tracing decorators untouched (ADR-060).",
+        "Leave the loguru declaration in pyproject.toml in place (eventbus and permissions still import it - deptry interlock, T-006)."
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger tests/acceptance/settings tests/unit/settings tests/contract/settings tests/property/settings tests/integration/settings -v",
+      "inputs": [
+        "docs/specs/structlog-logging.md section 4 (REQ-005), section 5 (AC-009), section 9, section 10 row 2",
+        "docs/specs/logging-coverage.md v2 (REQ-010 / AC-010 restated)",
+        "T-001 handoff (get_logger is exported)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "src/backend/settings/registry.py",
+          "src/backend/settings/repository.py"
+        ],
+        "test_files": [
+          "tests/acceptance/logging_coverage/test_statements_via_feature.py"
+        ]
+      },
+      "implementation_scope": "Statement migration only, in the two settings files. No behavior, level or message-semantics change.",
+      "design_constraints": [
+        "REQ-005: get_logger() is the only supported entry point for one-off statements; a feature must not import a logging backend.",
+        "The statement count stays 17 + 11 (logging-coverage REQ-010 restated: statements stay statements).",
+        "Import direction unchanged: backend.settings -> backend.logging is the allowed direction (spec section 10 row 2).",
+        "deptry interlock: loguru stays declared here - src/backend/eventbus and src/backend/permissions still import it.",
+        "Gate scoping (Phase 3 derives every task's tests before Phase 4 starts): green_command lists this task's own tests plus the pre-existing tests this task must fix, and deliberately EXCLUDES test files owned by a later DAG task, so this task's GREEN gate is honest and satisfiable with only this task and its declared dependencies. The full suite is the Phase 5 gate."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+        "The settings-half AC-009 witness passes.",
+        "No `loguru` import remains anywhere under src/backend/settings/.",
+        "The settings feature's whole test directory passes unchanged (no behavior delta).",
+        "uv run deptry . clean; uv run ruff check <changed paths> clean; uv run mypy src/ clean."
+      ],
+      "dependencies": [
+        "T-001"
+      ],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-005",
+      "feature_group": "backend.eventbus",
+      "title": "migrate the 10 direct backend statements in src/backend/eventbus/eventbus.py to get_logger()",
+      "requirements": [
+        "REQ-005"
+      ],
+      "acceptance_criteria": [
+        "AC-009"
+      ],
+      "invariants": [],
+      "edge_cases": [],
+      "non_functional": [],
+      "amended_ids": [
+        "logging-coverage.md REQ-010 (restated)",
+        "logging-coverage.md AC-010 (restated)"
+      ],
+      "tests_to_create": [
+        "tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger (per-file AC-009 witness for src/backend/eventbus/eventbus.py)"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger -v",
+      "implementation_steps": [
+        "Replace `from loguru import logger` in src/backend/eventbus/eventbus.py with the logging feature's exported get_logger(); convert the 10 call sites to the keyword-field form, same messages and levels.",
+        "Keep the worker-thread statements (startup, handler exception, shutdown) at their current levels - the event bus's own observability policy is unchanged (spec section 9).",
+        "Leave the loguru declaration in pyproject.toml in place (permissions still imports it - deptry interlock, T-006)."
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger tests/acceptance/eventbus tests/unit/eventbus tests/contract/eventbus tests/property/eventbus tests/integration/eventbus -v",
+      "inputs": [
+        "docs/specs/structlog-logging.md section 4 (REQ-005), section 5 (AC-009), section 10 row 3",
+        "docs/specs/logging-coverage.md v2 (REQ-010 / AC-010 restated)",
+        "T-001 handoff (get_logger is exported)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "src/backend/eventbus/eventbus.py"
+        ],
+        "test_files": [
+          "tests/acceptance/logging_coverage/test_statements_via_feature.py"
+        ]
+      },
+      "implementation_scope": "Statement migration only, in the event bus module. No behavior, level or message-semantics change.",
+      "design_constraints": [
+        "REQ-005: no feature imports a logging backend; get_logger() is the only entry point.",
+        "The statement count stays 10 (logging-coverage REQ-010 restated).",
+        "Import direction unchanged: backend.eventbus -> backend.logging is the allowed direction (spec section 10 row 3).",
+        "deptry interlock: loguru stays declared here - src/backend/permissions/service.py still imports it."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+        "The eventbus-half AC-009 witness passes.",
+        "No `loguru` import remains anywhere under src/backend/eventbus/.",
+        "The event bus's whole test directory passes unchanged (no behavior delta).",
+        "uv run deptry . clean; uv run ruff check <changed paths> clean; uv run mypy src/ clean."
+      ],
+      "dependencies": [
+        "T-001"
+      ],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-006",
+      "feature_group": "backend.permissions + tooling (pyproject.toml dependency set, part 2 - the deptry interlock)",
+      "title": "migrate the last backend statement in the scan set (src/backend/permissions/service.py) to get_logger(), remove loguru from the dependency set, delete the retired-policy test and update its traceability row",
+      "requirements": [
+        "REQ-001",
+        "REQ-005",
+        "REQ-013"
+      ],
+      "acceptance_criteria": [
+        "AC-001",
+        "AC-009",
+        "AC-018"
+      ],
+      "invariants": [],
+      "edge_cases": [],
+      "non_functional": [
+        "NFR-004"
+      ],
+      "amended_ids": [
+        "logging-coverage.md REQ-010 (restated)",
+        "logging-coverage.md AC-010 (restated)"
+      ],
+      "tests_to_create": [
+        "tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger (the spec-named all-four-features witness)",
+        "tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain",
+        "tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean"
+      ],
+      "red_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean -v",
+      "implementation_steps": [
+        "Replace `from loguru import logger` in src/backend/permissions/service.py with the logging feature's exported get_logger(); same message and level (this is the LAST backend import in the deptry scan set).",
+        "Remove loguru from [project].dependencies in pyproject.toml and run `uv sync` so uv.lock drops it - in THIS task, the same one that removes the last import (deptry interlock).",
+        "Delete tests/acceptance/logging_coverage/test_direct_loguru_kept.py (authorized deletion: it enforces the retired logging-coverage REQ-010 / AC-010 policy) and record it in docs/verification/structlog-logging.md.",
+        "Update the logging-coverage REQ-010 / AC-010 row of docs/verification/traceability.md in this same task: its Test column still cites test_existing_direct_loguru_kept, which no longer exists, so scripts/check_traceability.py would fail; the row now cites the AC-009 witness test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger and records the restated v2 wording.",
+        "Write the AC-001 witness as a repo-wide search (src/ and tests/) for a logging-backend import plus the stdlib-chain check (a foreign logger's record reaches both managed sinks through the forwarding handler)."
+      ],
+      "green_command": "uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain tests/contract/logging/test_dependency_contract.py::test_ac_018_dependency_report_clean tests/acceptance/permissions tests/unit/permissions tests/contract/permissions tests/property/permissions tests/integration/permissions -v",
+      "inputs": [
+        "docs/specs/structlog-logging.md section 4 (REQ-001, REQ-005, REQ-013), section 5 (AC-001, AC-009, AC-018), section 8 (NFR-004), section 10 rows 2-4 and 6",
+        "docs/specs/logging-coverage.md v2 (REQ-010 / AC-010 restated)",
+        "docs/verification/traceability.md (the logging-coverage REQ-010 / AC-010 row)",
+        "T-001, T-002, T-003, T-004, T-005 handoffs (every other backend import is already gone)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "src/backend/permissions/service.py",
+          "pyproject.toml (dependencies only)",
+          "uv.lock"
+        ],
+        "test_files": [
+          "tests/acceptance/logging_coverage/test_statements_via_feature.py",
+          "tests/acceptance/logging_coverage/test_direct_loguru_kept.py (DELETED)",
+          "tests/acceptance/logging/test_pipeline_backend.py",
+          "tests/contract/logging/test_dependency_contract.py",
+          "tests/conftest.py (allowed_files correction at S4.2 T-006: the loguru half of the log_records dual capture)",
+          "tests/logging_coverage_test_helpers.py (allowed_files correction at S4.2 T-006: the loguru capture helpers)",
+          "tests/acceptance/logging/test_logging.py (allowed_files correction at S4.2 T-006: the loguru handler-count probe)"
+        ],
+        "docs_files": [
+          "docs/verification/traceability.md",
+          "docs/verification/structlog-logging.md"
+        ]
+      },
+      "implementation_scope": "The last statement migration, the loguru removal from the dependency set, the one authorized test deletion and its traceability row. Nothing else in the dependency set changes.",
+      "design_constraints": [
+        "deptry interlock (S2.1 merged-main fact 1): the last loguru import in the deptry scan set (src/, migrations/, scripts/ - deptry does not scan tests/) and the loguru declaration must disappear in the SAME task, otherwise that intermediate state is DEP002 unused-dependency red at Phase 5 parity (quality_check, pyproject.toml:224).",
+        "The AC-001 witness searches src/ AND tests/, so this task may only run after T-001, T-002, T-003 (which remove the loguru imports from the logging, logging_coverage and settings_coverage test files and helpers).",
+        "The deletion is authorized per-ID by spec section 11 and the verification record's test re-derivation protocol; no other test may be deleted or weakened.",
+        "REQ-013: the dependency report must be clean - loguru absent from the dependency set, structlog and orjson declared and imported, no DEP002 entry for orjson."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+        "AC-001, AC-009 (all four features), AC-018 tests pass.",
+        "uv run deptry . reports no issues (NFR-004): loguru no longer declared and no longer imported anywhere in the scan set; structlog and orjson declared and imported; no DEP002 suppression for orjson.",
+        "uv run python scripts/check_traceability.py passes after the logging-coverage REQ-010 / AC-010 row update (no dangling test reference).",
+        "The deletion is recorded in docs/verification/structlog-logging.md.",
+        "uv run ruff check <changed paths> clean; uv run mypy src/ clean."
+      ],
+      "dependencies": [
+        "T-001",
+        "T-002",
+        "T-003",
+        "T-004",
+        "T-005"
+      ],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-007",
+      "feature_group": "guidance (AGENTS.md + .agents/skills/python-best-practices/)",
+      "title": "rewrite the agent-facing logging guidance to the new surface: AGENTS.md 'Using the Logging Feature' (backend named, removed @logged parameters, setup_logger(Settings(...)) shape) and the python-best-practices skill's direct backend entry point",
+      "requirements": [
+        "REQ-014"
+      ],
+      "acceptance_criteria": [
+        "AC-019"
+      ],
+      "invariants": [],
+      "edge_cases": [],
+      "non_functional": [],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points (scans AGENTS.md and .agents/skills/python-best-practices/ for the removed backend name and the removed parameter names, and requires the feature's own entry points)"
+      ],
+      "red_command": "uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v",
+      "implementation_steps": [
+        "Rewrite the AGENTS.md 'Using the Logging Feature' section (lines 765-776): drop the loguru backend sentence, drop context_getter and depth from the @logged parameter list, and replace the setup_logger(Settings(...)) example with the new surface (setup_logger() / setup_logger(renderer=...), get_logger(), @logged, @logged_class).",
+        "Rewrite the python-best-practices skill's logging guidance: .agents/skills/python-best-practices/SKILL.md:16, references/errors-and-resources.md:19 and :45, references/modern-python.md:85 currently show the raw backend entry point structlog.get_logger() - replace it with the shared feature's own entry points (setup_logger, logged, logged_class, get_logger imported from backend.logging), because REQ-005 forbids a direct backend import even in guidance.",
+        "Keep the ADR-060 tracing-policy wording (which classes are traced, include_args=False for secrets) - only the backend and the removed parameters change.",
+        "No userdocs/ change: mkdocs.yml sets docs_dir: userdocs and userdocs/ (api.md, index.md) contains no loguru or setup_logger reference, so the published site is unaffected."
+      ],
+      "green_command": "uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -v",
+      "inputs": [
+        "docs/specs/structlog-logging.md section 4 (REQ-014), section 5 (AC-019), section 10 row 6",
+        "docs/verification/structlog-logging.md (guidance defect inventory: three defect classes in AGENTS.md, direct backend entry point in the skill files)",
+        "T-001 and T-002 handoffs (the final public surface the guidance must name)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "AGENTS.md (the 'Using the Logging Feature' section and the tooling line that names loguru)",
+          ".agents/skills/python-best-practices/SKILL.md",
+          ".agents/skills/python-best-practices/references/errors-and-resources.md",
+          ".agents/skills/python-best-practices/references/modern-python.md"
+        ],
+        "test_files": [
+          "tests/contract/logging/test_dependency_contract.py"
+        ]
+      },
+      "implementation_scope": "Guidance text only - no Python source, no test assertion weakened. The AC-019 contract test is the only code this task adds.",
+      "design_constraints": [
+        "REQ-014: agent-facing guidance must describe the new surface; guidance must not name a removed backend or a removed parameter.",
+        "REQ-005 applies to guidance too: an example must show the feature's exported entry points, never a backend import.",
+        "Docs gate: uv run --group docs mkdocs build --strict (the docs tooling is in the docs dependency group with default-groups = ['dev'], so a bare mkdocs invocation is not the CI command). It guards the published site only - docs/ and AGENTS.md are outside docs_dir: userdocs, so the gate is listed to prove no site regression, not to validate the guidance text (the AC-019 test does that).",
+        "No other guidance file changes (README.md, userdocs/, .agents/skills/{specify,test,implement,verify,review,decompose,git}/ are out of scope for this change)."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set; recorded in docs/verification/structlog-logging.md.",
+        "AC-019 passes: AGENTS.md and the python-best-practices skill name the feature's entry points and no removed backend or parameter.",
+        "uv run --group docs mkdocs build --strict succeeds (no published-site regression).",
+        "uv run python scripts/check_traceability.py passes (the AC-019 row cites the new contract test).",
+        "uv run ruff check tests/contract/logging/test_dependency_contract.py clean."
+      ],
+      "dependencies": [
+        "T-001",
+        "T-002"
+      ],
+      "status": "VERIFIED"
+    }
+  ]
+}

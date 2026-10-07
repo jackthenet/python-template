@@ -19,15 +19,20 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 from ruamel.yaml.nodes import ScalarNode
 from ruamel.yaml.representer import SafeRepresenter
 
-from backend.logging import logged_class
+from backend.logging import get_logger, logged_class
 from backend.settings.exceptions import TemplateStorageError, ValueStorageError
 from backend.settings.models import Template
+
+# REQ-005 (structlog-logging): the module's one-off statements go through the
+# logging feature's entry point instead of importing a logging backend. The same
+# feature name as registry.py keeps the settings records attributable to settings.
+_logger = get_logger("settings")
+
 
 # The characters the YAML-1.1 reader (the reader ``typ="safe"`` uses) treats as
 # line breaks: inside a plain or single-quoted scalar they fold to a line break
@@ -137,7 +142,7 @@ class YamlValueRepository(ValueRepository):
             tmp = self._directory / ".values.yaml.tmp"
             tmp.write_text(text, encoding="utf-8")
             os.replace(tmp, self._path())
-        logger.debug("values saved to storage: count={}", len(values))
+        _logger.debug(f"values saved to storage: count={len(values)}", count=len(values))
 
     def load(self) -> dict[str, Any] | None:
         try:
@@ -148,12 +153,12 @@ class YamlValueRepository(ValueRepository):
                 data = _load_yaml(path.read_text(encoding="utf-8"))
                 result = self._parse(data)
         except YAMLError as e:
-            logger.error("value storage failure: reason={}", e)
+            _logger.error(f"value storage failure: reason={e}", reason=e)
             raise ValueStorageError(f"corrupted values file: {e}") from e
         except ValueStorageError as e:
-            logger.error("value storage failure: reason={}", e)
+            _logger.error(f"value storage failure: reason={e}", reason=e)
             raise
-        logger.debug("values loaded from storage: count={}", len(result))
+        _logger.debug(f"values loaded from storage: count={len(result)}", count=len(result))
         return result
 
     def _parse(self, data: Any) -> dict[str, Any]:
@@ -245,7 +250,7 @@ class YamlTemplateRepository(TemplateRepository):
             tmp = self._directory / f".{template.name}.yaml.tmp"
             tmp.write_text(text, encoding="utf-8")
             os.replace(tmp, self._path(template.name))
-        logger.debug("template saved to storage: name={}", template.name)
+        _logger.debug(f"template saved to storage: name={template.name}", name=template.name)
 
     def get(self, name: str) -> Template | None:
         try:
@@ -256,12 +261,12 @@ class YamlTemplateRepository(TemplateRepository):
                 data = _load_yaml(path.read_text(encoding="utf-8"))
                 result = self._parse(name, data)
         except YAMLError as e:
-            logger.error("template storage failure: name={} reason={}", name, e)
+            _logger.error(f"template storage failure: name={name} reason={e}", name=name, reason=e)
             raise TemplateStorageError(f"corrupted template file {name}: {e}") from e
         except TemplateStorageError as e:
-            logger.error("template storage failure: name={} reason={}", name, e)
+            _logger.error(f"template storage failure: name={name} reason={e}", name=name, reason=e)
             raise
-        logger.debug("template loaded from storage: name={}", name)
+        _logger.debug(f"template loaded from storage: name={name}", name=name)
         return result
 
     def delete(self, name: str) -> None:
@@ -278,12 +283,12 @@ class YamlTemplateRepository(TemplateRepository):
                     data = _load_yaml(path.read_text(encoding="utf-8"))
                     templates.append(self._parse(path.stem, data))
         except YAMLError as e:
-            logger.error("template storage failure: reason={}", e)
+            _logger.error(f"template storage failure: reason={e}", reason=e)
             raise TemplateStorageError(f"corrupted template file: {e}") from e
         except TemplateStorageError as e:
-            logger.error("template storage failure: reason={}", e)
+            _logger.error(f"template storage failure: reason={e}", reason=e)
             raise
-        logger.debug("templates loaded from storage: count={}", len(templates))
+        _logger.debug(f"templates loaded from storage: count={len(templates)}", count=len(templates))
         return templates
 
     def _parse(self, name: str, data: Any) -> Template:

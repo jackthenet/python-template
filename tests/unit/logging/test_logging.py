@@ -12,14 +12,15 @@ import asyncio
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
-from loguru import logger
+from logging_test_helpers import captured_console, managed_handlers, pipeline_logger, wait_for_record
 
-from backend.logging import logged, logged_class, setup_logger
+from backend.logging import get_settings, logged, logged_class, setup_logger
 
-_EXPECTED_HANDLER_COUNT = 2  # one console sink + one file sink
+_EXPECTED_HANDLER_COUNT = 2  # REQ-002: one console handler + one queue handler
 _ASYNC_SLEEP_MS = 50  # minimum measurable elapsed time for the ~100 ms async sleep
 _AC012_RESULT = 42
 _AC006_SUM = 3
@@ -43,43 +44,33 @@ def test_ac_003_setup_logger_thread_safe() -> None:
         thread.join()
 
     assert not errors
-    assert len(logger._core.handlers) == _EXPECTED_HANDLER_COUNT
+    assert len(managed_handlers(pipeline_logger())) == _EXPECTED_HANDLER_COUNT, (
+        "INV-001: concurrent setup must leave exactly the two managed handlers"
+    )
 
 
-def test_ac_004_intercept_handler_routes_records(log_records: list[Any]) -> None:
-    """AC-004: a stdlib logging record is routed into loguru sinks with correct level and message."""
-    import logging
+def test_ac_004_intercept_handler_routes_records() -> None:
+    """AC-004 (logging.md v3): a stdlib record is forwarded to the managed sinks with its level and message.
 
-    setup_logger()
-    stdlib_logger = logging.getLogger("ac_004_third_party")
-    stdlib_logger.info("routed from stdlib")
-
-    routed = [m for m in log_records if "routed from stdlib" in str(m)]
-    assert routed
-    assert routed[0]["level"].name == "INFO"
-
-
-def test_ac_005_intercept_handler_skips_bootstrap(log_records: list[Any]) -> None:
-    """AC-005: bootstrap/logging frames are skipped in depth calculation.
-
-    The observable consequence: the loguru record is attributed to the real
-    caller (function and file), not to the logging module or the handler.
+    Re-derived from the amended AC-004 wording: the single forwarding handler the
+    feature installs on the root logger routes the foreign record into the two
+    managed sinks. The old assertion inspected a loguru record object.
     """
     import logging
-    from pathlib import Path
 
     setup_logger()
+    token = "ac_004 forwarded from stdlib"
+    foreign = logging.getLogger("ac_004_third_party")
 
-    def _emit_source() -> None:
-        logging.getLogger("ac_005").warning("from real caller")
+    with captured_console() as console_path:
+        foreign.warning(f"{token} console")
+        assert f"{token} console" in console_path.read_text(encoding="utf-8"), (
+            "AC-004: the forwarded record must reach the console sink"
+        )
 
-    _emit_source()
-
-    routed = [m for m in log_records if "from real caller" in str(m)]
-    assert routed
-    record = routed[0]["record"]
-    assert record["function"] == "_emit_source"
-    assert Path(record["file"].path).resolve() == Path(__file__).resolve()
+    record = wait_for_record(Path(get_settings().log_file), lambda record: record.get("event") == f"{token} console")
+    assert record is not None, "AC-004: the forwarded record must reach the file sink"
+    assert record["level"] == "WARNING", "AC-004: the forwarded record must keep its level"
 
 
 def test_ac_006_logged_sync_entry_exit(log_records: list[Any]) -> None:

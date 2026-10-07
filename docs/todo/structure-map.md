@@ -4,13 +4,14 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+  <!-- gate cleared 2026-10-07: spec PR #69 merged into main (merge commit 570bfbc, 2026-10-06) -> Phase 2 starts -->
 - **Change type:** FEATURE  <!-- new capability (a generator + a CLI + a CI gate); see the classification note below -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/structure-map.md`
 - **Spec:** `docs/specs/structure-map.md`
 - **Worktree:** created at P.4 (2026-10-05) `../python-template_kopie-worktrees/feature/structure-map` — branch `feature/structure-map`
-- **Depends on:** none
+- **Depends on:** `ruff-d-docstrings` — ordering only, decided at that change's Q-22 (2026-10-07): **it lands first**, this change rebases. It settles whether `D` covers `scripts/` (it does not — `scripts/*` is in `per-file-ignores`) before `scripts/make_map.py` is written, it edits the `AGENTS.md` "Documentation" line this change also edits, and the generated `STRUCTURE.md` picks up the new docstring summaries free on its first regeneration
 - **Related specs:** none (no `docs/specs/` file is touched; `docs/specs/logging.md`-style feature specs are unaffected)
 
 **Classification note.** FEATURE, not DOCS/CHORE: the Change Types table is first-match-ordered, and #2 (FEATURE — "adds … capability not covered by an approved spec") matches before #5 (DOCS/CHORE — "does not alter behavior … tooling"). The change ships a new CLI with observable exit codes, a generated artifact, and a CI/pre-commit gate that can fail a build. P.2 may re-examine this; if the team treats repo tooling as DOCS/CHORE, the Escalation Rules apply (downgrade loses the spec, so the requirement set would have to live in the scope record instead).

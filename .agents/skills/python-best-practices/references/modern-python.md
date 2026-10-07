@@ -82,4 +82,4 @@ class User(BaseModel):
 - HTTP: `httpx`, not `requests` (async support, timeouts, one client for everything).
 - JSON in hot paths: `orjson` (returns `bytes`, so use `.decode()` when you need `str`).
 - YAML: `ruamel.yaml`, not `pyyaml`.
-- Logging: structlog events, not f-string messages and not `print`.
+- Logging: the shared logging feature — `setup_logger()` once at startup, `get_logger()` for statements, `@logged` / `@logged_class` to trace calls — with keyword fields, not f-string messages and not `print`.

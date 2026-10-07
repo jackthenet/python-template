@@ -21,10 +21,10 @@ from logging_coverage_test_helpers import (
     capture_records,
     entry_records,
     exit_records,
+    failing_sink_attached,
     for_qualname,
     parse_elapsed_ms,
 )
-from loguru import logger
 
 from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
@@ -116,17 +116,12 @@ def test_tracing_never_interrupts_call(sleep_ms: int) -> None:
     def slow() -> None:
         time.sleep(sleep_ms / 1000.0)
 
-    def failing_sink(message: Any) -> None:
-        raise RuntimeError("sink failure")
-
     with tempfile.TemporaryDirectory() as tmp:
-        handler_id = logger.add(failing_sink, level="DEBUG", catch=True)
-        try:
-            with capture_records() as records:
-                slow()  # slow call completes despite the failing sink
-                _qualname, invoke = _subjects(Path(tmp))[0]
-                invoke()  # inventory call completes despite the failing sink
-        finally:
-            logger.remove(handler_id)
+        # structlog-logging (REQ-013): the failing sink is a handler on the pipeline's own
+        # logger, in place of the removed backend's ``logger.add(failing_sink, catch=True)``.
+        with capture_records() as records, failing_sink_attached():
+            slow()  # slow call completes despite the failing sink
+            _qualname, invoke = _subjects(Path(tmp))[0]
+            invoke()  # inventory call completes despite the failing sink
         # Both completed; the inventory call is traced.
         assert any("new_token" in str(r) for r in records)
