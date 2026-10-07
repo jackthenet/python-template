@@ -38,6 +38,7 @@ import pytest
 
 import backend.eventbus
 import backend.permissions
+import backend.search
 import backend.settings
 from backend.eventbus import EventBus
 from backend.permissions import (
@@ -46,6 +47,7 @@ from backend.permissions import (
     MemorySystemPrincipalRepository,
     PermissionService,
 )
+from backend.search import SearchService
 from backend.settings import SettingsRegistry, YamlValueRepository
 from backend.usermanagement import SqliteUserRepository, UserManager
 
@@ -121,10 +123,29 @@ PERMISSIONS_SLOT = SingletonSlot(
     factory=_new_permission_service,
 )
 
+
+def _new_search_service() -> SearchService:
+    """A search service over an isolated (temp-dir) settings registry (search.md REQ-013).
+
+    Its source registry is per-instance by construction, so a fresh instance is also
+    an isolated source registry (search.md AC-038); nothing is shared with the
+    composition root's service and its three feature sources.
+    """
+    return SearchService(settings_registry=_new_settings_registry())
+
+
+SEARCH_SLOT = SingletonSlot(
+    module=backend.search,
+    installer="set_search_service",
+    getter="get_search_service",
+    reset="reset_search_service",
+    factory=_new_search_service,
+)
+
 # One entry per singleton-owning feature (settings-public-registry-setter REQ-001).
-# settings at T-001, eventbus at T-002, permissions at T-003; T-004 (search) and
-# T-005 (sessionmanagement) append their entry here.
-SLOTS: tuple[SingletonSlot, ...] = (SETTINGS_SLOT, EVENTBUS_SLOT, PERMISSIONS_SLOT)
+# settings at T-001, eventbus at T-002, permissions at T-003, search at T-004;
+# T-005 (sessionmanagement) appends its entry here.
+SLOTS: tuple[SingletonSlot, ...] = (SETTINGS_SLOT, EVENTBUS_SLOT, PERMISSIONS_SLOT, SEARCH_SLOT)
 
 
 class _CreateWindow:

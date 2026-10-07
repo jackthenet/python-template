@@ -1,10 +1,11 @@
 """Unit tests for the search feature's edge cases (docs/specs/search.md).
 
-One test function per edge case EDGE-001 .. EDGE-021 (the search feature's
+One test function per edge case EDGE-001 .. EDGE-023 (the search feature's
 own edge cases). These tests verify externally observable behavior only: the
 error conditions, the resilient global fan-out, the per-source timeout, the
-registration-lifecycle no-ops, the invalid source declaration, and the
-concurrent register/query cases.
+registration-lifecycle no-ops, the invalid source declaration, the concurrent
+register/query cases, and (EDGE-022, EDGE-023, added by ``search.md`` v4) the
+shared-default install edge cases.
 
 The ``backend.search`` imports are deferred into the test bodies (and the
 ``search_test_helpers`` builders) so the module collects cleanly before the
@@ -14,6 +15,7 @@ feature is implemented (RED).
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 import pytest
 from search_test_helpers import (
@@ -27,6 +29,11 @@ from search_test_helpers import (
     service,
     slow_source,
     sort,
+)
+from singleton_install_test_helpers import (
+    SEARCH_SLOT,
+    non_tracing_warnings,
+    widened_lazy_create_window,
 )
 
 
@@ -364,3 +371,97 @@ def test_edge_021_invalid_source_declaration() -> None:
                 items=valid_item,
             ).to_source()
         )
+
+
+# --- Public install operation (search.md v4 EDGE-022, EDGE-023) ---
+
+_EDGE_SOURCE_NAME = "demo"
+_BARRIER_TIMEOUT = 5.0
+
+
+def test_edge_022_install_over_nonempty_default(log_records: list[Any]) -> None:
+    """EDGE-022: installing over a non-empty shared default replaces it, warns once, and leaves the replaced service's registrations intact."""
+    from backend.search import get_search_service, reset_search_service
+
+    reset_search_service()
+    try:
+        replaced = SEARCH_SLOT.new()
+        replacement = SEARCH_SLOT.new()
+        replaced.register_source(demo_source(_EDGE_SOURCE_NAME))  # the held default has sources registered
+        SEARCH_SLOT.install(replaced)  # the shared default is now non-empty
+        SEARCH_SLOT.install(replacement)  # EDGE-022: replace it — no exception
+        assert get_search_service() is replacement, "the non-empty shared default was not replaced"
+        warnings = non_tracing_warnings(log_records)
+        assert len(warnings) == 1, f"expected exactly one replace WARNING, got {warnings!r}"
+        assert "search" in str(warnings[0]).lower(), f"the WARNING does not name the shared default: {warnings[0]!r}"
+        # No lifecycle effect and no registration side effect: the replaced service keeps
+        # its registrations for every caller that holds it, the install registers nothing
+        # on either service, and it therefore cannot disturb the feature sources the
+        # composition root registered on its own service.
+        assert replaced.list_sources() == [_EDGE_SOURCE_NAME]
+        assert replacement.list_sources() == []
+    finally:
+        reset_search_service()
+
+
+def test_edge_023_concurrent_install_and_lazy_create(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EDGE-023: the module lock serialises a concurrent install and lazy create; the slot ends with exactly one whole instance.
+
+    Search's lazy path already takes ``_singleton_lock`` today, so this witness is RED
+    for the missing ``set_search_service`` (the install thread's ``AttributeError``),
+    not for a create race. The widened window is what makes the *serialisation*
+    observable: the creating thread is held inside its constructor, so an install that
+    is not guarded by the same lock would write its instance first and then lose it to
+    the create's slot write.
+    """
+    from backend.search import SearchService, get_search_service, reset_search_service
+
+    reset_search_service()
+    try:
+        installed = SEARCH_SLOT.new()  # built before the window: it is not a lazy create
+        with widened_lazy_create_window(monkeypatch, SearchService) as window:
+            read, errors = _install_and_read_concurrently(installed)
+        assert not errors, f"install/read threads raised: {errors!r}"
+        assert isinstance(read, SearchService), f"the concurrent read did not return a whole instance: {read!r}"
+        final = get_search_service()
+        assert final is installed, (
+            f"install and lazy create were not serialised under the module lock: the slot ends with {final!r}, "
+            f"the lazily created instances were {window.instances!r}"
+        )
+        assert all(inst is not final for inst in window.instances), (
+            "a lazily created instance ended in the slot beside the installed one"
+        )
+    finally:
+        reset_search_service()
+
+
+def _install_and_read_concurrently(installed: Any) -> tuple[Any, list[BaseException]]:
+    """Install ``installed`` and read the shared slot from two barrier-released threads.
+
+    Returns the reader's value (``None`` if it never completed) and every exception the
+    threads raised, instead of letting a thread die silently.
+    """
+    start = threading.Barrier(2, timeout=_BARRIER_TIMEOUT)
+    errors: list[BaseException] = []
+    reads: list[Any] = []
+
+    def _install() -> None:
+        try:
+            start.wait()
+            SEARCH_SLOT.install(installed)
+        except BaseException as exc:  # reported through the assertion in the test
+            errors.append(exc)
+
+    def _read() -> None:
+        try:
+            start.wait()
+            reads.append(SEARCH_SLOT.read())
+        except BaseException as exc:  # reported through the assertion in the test
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_install), threading.Thread(target=_read)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return (reads[0] if reads else None), errors

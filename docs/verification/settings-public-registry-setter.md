@@ -1077,3 +1077,232 @@ must be RED for the missing `set_search_service`, not for a create race, and
 `widened_lazy_create_window` must not be used to force a failure the existing lock
 prevents. `get_search_service()` also takes optional `event_bus` / `settings_registry` /
 `permission_service` arguments, so the slot read may need `concurrent_reads(..., args=...)`.
+
+## S3.1 — T-004 test derivation (2026-10-07)
+
+One fresh subagent, one atomic step: derive **T-004**'s tests (group `search`,
+`requirements` REQ-001 .. REQ-010 + REQ-014, `amended_spec_ids` `search.md` v4 REQ-024,
+AC-038, AC-039, AC-040, AC-041, EDGE-022, EDGE-023). Tests only — no `src/` file was
+touched (`git status --porcelain` shows two modified test files, one new test file and
+this record, nothing else). The task object was read from `.github/task-runner/tasks.json`
+(identical to `docs/tasks/settings-public-registry-setter.tasks.json`); its two
+`tests_to_create` entries expand to **six** `path::test_name` nodes (the first entry packs
+four), and all six node IDs were written **exactly** as the DAG spells them. T-001's ten,
+T-002's six and T-003's six tests were not edited.
+
+Every ID below is read together with its spec file: `search.md` v4 **AC-038 .. AC-041**
+collide numerically with `settings.md` v5 AC-040 .. AC-043 and
+`user-roles-permissions.md` v2 AC-041 .. AC-044 (P-53).
+
+### Tests written (six nodes, verbatim from `tests_to_create`)
+
+| Test node | Category | Witnesses |
+|---|---|---|
+| `tests/acceptance/search/test_singleton_install.py::test_ac_038_set_search_service_installs_default` | acceptance | `search.md` v4 AC-038 (REQ-024; change REQ-001) |
+| `tests/acceptance/search/test_singleton_install.py::test_ac_039_replace_logs_one_warning` | acceptance | AC-039 (+ change REQ-002 WARNING rule) |
+| `tests/acceptance/search/test_singleton_install.py::test_ac_040_concurrent_install_read_reset` | acceptance | AC-040 (+ change REQ-006/REQ-007 one module lock, change AC-009/AC-010) |
+| `tests/acceptance/search/test_singleton_install.py::test_ac_041_install_then_reset_then_default` | acceptance | AC-041 (change REQ-008 reset pair, AC-012) |
+| `tests/unit/search/test_search_edges.py::test_edge_022_install_over_nonempty_default` | unit | EDGE-022 (change REQ-002/REQ-003: replace + one WARNING + no lifecycle/registration side effect) |
+| `tests/unit/search/test_search_edges.py::test_edge_023_concurrent_install_and_lazy_create` | unit | EDGE-023 (change REQ-006: install and lazy create serialised by the **existing** module lock) |
+
+No new test package or `__init__.py` was needed — `tests/acceptance/search/` already exists
+and `tests/unit/search/test_search_edges.py` already carries the feature's EDGE-001 ..
+EDGE-021 witnesses (its docstring range was extended to EDGE-023). T-004 has no `INV`/`NFR`
+ID of its own, so no property or contract file was created (the change spec's INV-001 ..
+INV-003 and the cross-feature parametrized sets belong to T-009/T-010).
+
+### Shared helper: `tests/singleton_install_test_helpers.py` (T-004's append)
+
+- **`SEARCH_SLOT`** appended to `SLOTS` (`module=backend.search`,
+  `installer="set_search_service"`, `getter="get_search_service"`,
+  `reset="reset_search_service"`, `factory=_new_search_service`), so
+  `SLOTS == (SETTINGS_SLOT, EVENTBUS_SLOT, PERMISSIONS_SLOT, SEARCH_SLOT)`. The factory
+  builds `SearchService(settings_registry=_new_settings_registry())` — the isolated
+  temp-dir registry AC-038's "a `SearchService` built with an isolated source registry"
+  needs (the source registry is per-instance by construction, so a fresh instance is also
+  an isolated source registry, and nothing is shared with the composition root's service
+  and its three feature sources). T-001/T-002/T-003 use their own slot objects, so the
+  append changes nothing in them (verified below).
+- The trio is reached **only** through the slot object; nothing in the new tests writes
+  `from backend.search import set_search_service`. That is what keeps the RED signal
+  inside the test body instead of a collection error that would take the 78 pre-existing
+  tests in the three search packages down with it. `SearchService` itself **is** imported
+  at module level (it exists today) — only the not-yet-existing installer is resolved by
+  name at call time.
+- `get_search_service()`'s three parameters (`event_bus`, `settings_registry`,
+  `permission_service`) are all optional, so the hand-off caveat about
+  `concurrent_reads(..., args=...)` does **not** apply to search: `args=()` is correct and
+  the lazily created default reads the shared registry through
+  `get_settings_registry(required=False)` (`src/backend/search/service.py:453-457`), so it
+  creates no registry and writes no `settings/values.yaml`.
+- `concurrent_reads`, `widened_lazy_create_window` and `non_tracing_warnings` are reused
+  unchanged, as T-003 left them.
+- Isolation: `shared_search_slot_reset()` in the acceptance file, and the
+  `reset_search_service()` / `reset_search_service()` pair inline in the two unit tests —
+  public API only, no private-slot write (ADR-084's ban on touching
+  `backend.search.service._singleton` from tests). See F-18.
+
+### Search is **not** symmetric: the lazy path is already closed
+
+`src/backend/search/service.py` already holds a module-level `_singleton_lock`, and both
+`get_search_service()` and `reset_search_service()` take it today. So, unlike T-001/T-002/
+T-003, search's lazy-create half is **GREEN before the implementation**:
+
+- `test_ac_040`'s first half (8 barrier-released readers + a widened create window) passes
+  today — `len(window.instances) == 1` holds because the creating thread holds the lock. It
+  is the **regression witness** that the direct write stays inside that lock (change
+  REQ-007) when the install path joins it, and the test is RED only from its second half
+  (the install/read/reset phase). The assertions are ordered so the install half carries
+  the RED, exactly as the T-003 hand-off note required.
+- `test_edge_023` uses the widened window to make the **serialisation** observable, not to
+  manufacture a create race the lock prevents. The creating thread is held inside
+  `SearchService.__init__`; an install that is *not* guarded by the same lock would write
+  its instance first and then lose the slot to the create's write. The discriminating
+  assertion is therefore `get_search_service() is installed` plus
+  `all(inst is not final for inst in window.instances)` — under one lock both possible
+  orders end with the installed instance in the slot (exactly one of the two instances, per
+  EDGE-023), and with a second/unshared lock the create wins and the install is lost.
+
+### Collection and RED evidence
+
+Worktree for every count below (`git rev-parse --show-toplevel`):
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+
+- Collection (not a RED signal if it breaks): `uv run pytest --collect-only -q
+  tests/acceptance/search tests/unit/search tests/contract/search` → **84 tests collected
+  in 0.41s** (78 before this step), zero collection errors. All six new nodes collect as
+  tests.
+- The task's `red_command` run **verbatim** (six node IDs, targeted — the full suite is a
+  Phase 5 gate): **6 failed in 0.78s**. Failure reason per test:
+  - `test_ac_038…`, `test_ac_039…`, `test_ac_041…`, `test_edge_022_install_over_nonempty_default`
+    — all four: `AttributeError: module 'backend.search' has no attribute
+    'set_search_service'. Did you mean: 'get_search_service'?` raised inside the test body
+    via `SingletonSlot.install` → the install operation the task adds does not exist.
+    Correct reason.
+  - `test_ac_040_concurrent_install_read_reset` — the same `AttributeError`, raised at
+    `tests/acceptance/search/test_singleton_install.py:109`, i.e. **after** the
+    lazy-create half passed (`window.instances == 1`, all 8 readers got one service). RED
+    for the missing install operation, not for a create race. Correct reason.
+  - `test_edge_023_concurrent_install_and_lazy_create` — `AssertionError: install/read
+    threads raised: [AttributeError("module 'backend.search' has no attribute
+    'set_search_service'")]`: the install thread's missing-operation error surfaced
+    through the thread collector instead of dying silently. Correct reason.
+  - No collection, setup, fixture or import error; no `ValidationError`/`ValueError` from
+    test data (services come from the slot factory over an isolated registry; the one
+    source name `demo` is in-domain for `SOURCE_NAME_PATTERN`); no Hypothesis strategy
+    involved (T-004 has no `INV` ID).
+- T-001's ten nodes re-run unchanged after the `SLOTS` append: **10 failed in 0.97s**
+  (eight `AttributeError … set_settings_registry`, `assert 8 == 1`, `assert 2 == 1`);
+  T-002's six: **6 failed in 0.63s** (four `AttributeError … set_event_bus`, `lazy create
+  race built 8 buses`, `built 2 buses`); T-003's six: **6 failed in 0.71s** (four
+  `AttributeError … set_permission_service`, `built 8 services`, `built 2 services`). All
+  identical to the reasons recorded at T-001/T-002/T-003 — nothing of the earlier tasks
+  broke.
+- Determinism + no state leak: the two touched test files re-run twice
+  (`uv run pytest tests/acceptance/search tests/unit/search -q -p no:randomly`) →
+  **`6 failed, 73 passed`** both times (4.10s / 4.21s). Exactly the six new tests fail; all
+  73 pre-existing tests in those two packages still pass, so the new tests leave the shared
+  search-service slot as they found it.
+- Neighbouring search suites smoke-checked (they share the module singleton and the public
+  API list): `uv run pytest tests/contract/search tests/integration/search
+  tests/property/search -q` → **14 passed in 10.24s**; all five search test directories
+  together with random order enabled → **6 failed, 87 passed in 14.36s** — including
+  `tests/acceptance/search/test_search.py::test_ac_032_singleton_and_reset`, which resets
+  the same slot, and `tests/acceptance/search/test_feature_sources.py`, whose three
+  feature-source registrations are untouched.
+
+### Quality gates (per-step scope)
+
+- Ruff gate on the three changed paths: `uv run ruff check <paths>` → **All checks
+  passed**; `uv run ruff format <paths>` → **1 file reformatted**, after which
+  `ruff check` and `ruff format --check` are both clean on those paths. The whole-repo
+  sweep (`ruff check .` / `ruff format --check .`) is the Phase 5 gate and was not run.
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs,
+  742 test functions)** — still green; the function count rose from 736 (T-003) to 742,
+  i.e. the six new functions are seen by the script.
+- `uv run python scripts/verify_spec.py docs/specs/search.md` → **Traceability: PASS**
+  (unchanged from the pre-derivation baseline — see F-20: its AC check is not evidence for
+  this task).
+- `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within
+  the allowed complexity** (the new test functions and the helper append included).
+- `uv run mypy src/` → **Success: no issues found in 83 source files** (no `src/` file was
+  changed by this step).
+
+### Findings
+
+- **F-15 — the DAG's T-004 gate names a file that does not exist.**
+  `completion_gates[2]` cites `tests/contract/search/test_search_contract.py`; the file on
+  disk is `tests/contract/search/test_search_contracts.py`. Its public-API check is
+  `hasattr`-based (`_EXPECTED_API`, `:189`), so adding `set_search_service` to `__all__`
+  cannot break it — the regression witnesses T-004 actually needs are
+  `tests/contract/search/test_search_contracts.py` and
+  `tests/acceptance/search/test_feature_sources.py`, both green above. Flagged so the
+  implementation step runs the real paths.
+- **F-16 — two of T-004's six witnesses have a half that is already GREEN.** AC-040's
+  lazy-read half and EDGE-023's create half pass today because search already had the
+  module lock (unlike the other four features). The RED is carried entirely by the install
+  half, as the T-003 hand-off required. Consequence for T-004's implementation: the
+  discriminating assertion in `test_edge_023` is that the **installed** instance ends in the
+  slot after a concurrent install + widened lazy create — an implementation that guards the
+  install with a second lock, or outside the lock, fails it. That is ADR-084's one-lock rule
+  witnessed from the test side, and it is why the widened window stays.
+- **F-17 — the widened create window makes `get_search_service()` a slow traced call.**
+  Holding `SearchService.__init__` for 50 ms pushes the `@logged(slow_threshold_ms=5)` exit
+  record to WARNING (`<< get_search_service returned in 50.057 ms`), observed in the run
+  output. Harmless here (neither concurrency witness takes `log_records`, and
+  `non_tracing_warnings` filters the `<<` prefix anyway), but **T-009/T-010** must count
+  WARNINGs through `non_tracing_warnings` whenever a parametrized witness runs a widened
+  window over `SEARCH_SLOT`.
+- **F-18 — the search slot cannot be *saved*, so the new tests reset it before and after**
+  (same shape as F-10). `get_search_service()` has no `required=False` form, so reading the
+  current instance would construct one, and putting a saved instance back would need the
+  install operation T-004 adds — which would raise `AttributeError` in the `finally` and
+  mask the real RED. `reset_search_service()` exists today, so the cleanup works in RED
+  state. The slot's state at module import is "unset", and
+  `tests/acceptance/search/test_search.py::test_ac_032_singleton_and_reset` already resets
+  it, so reset-before/after is the established public-API isolation for this feature. T-007
+  can turn it into a real save/restore once all five install operations exist.
+- **F-19 — traceability Test cells still left to S5.3** (unchanged from F-14): the rows
+  `REQ-024 (search.md v4) | AC-038 .. AC-041` and `EDGE-022, EDGE-023 (search.md v4)` exist
+  in `docs/verification/traceability.md` as `PENDING` with `—` Test cells (written at P.4);
+  the DAG assigns the matrix fill to S5.3 and this step's commit is scoped to the test
+  files plus this record. `check_traceability.py` stays green either way. Flagged so S5.3
+  fills those rows with the six node IDs above.
+- **F-20 — `scripts/verify_spec.py`'s AC check is a substring match and is not evidence
+  here.** `check_traceability` in that script marks an AC covered when **any** test function
+  name anywhere contains the AC's digits (`ac.lower().replace("ac-", "") in f`,
+  `scripts/verify_spec.py:104`), so `search.md` v4 AC-038 .. AC-041 already printed `✓`
+  before this step, satisfied by `test_ac_038_delete_avatar_noop` (filemanagement),
+  `test_ac_038_none_publisher_no_events_no_subscriptions` (sessionmanagement) and
+  `test_ac_038_thread_safe_registration` (settings) — the P-53 ID-collision problem again.
+  The evidence for T-004 is the targeted `red_command` run plus
+  `scripts/check_traceability.py`, which at least fails when a matrix row cites a test
+  function that no longer exists under `tests/`; the whole-suite spec-validation job is a
+  Phase 5 gate.
+- No new question for the user: nothing in `search.md` v4 or the change spec left a
+  decision open for these six witnesses. The AC-010 vs `settings.md` AC-042
+  concurrency-coverage divergence recorded at S2.2 is unaffected — this task's AC-040
+  covers install + read + **reset**, as the stronger change-spec rule requires.
+
+### Not done in this step (by instruction)
+
+No `src/` change, no other DAG task's tests, no full test-suite run, no write to
+`docs/todo/` or `docs/questions/`, no change to `tests/search_test_helpers.py` (read-only
+for this task), `tests/settings_test_helpers.py`, `tests/eventbus_test_helpers.py` or
+T-001's/T-002's/T-003's tests (F-11 from T-003 stays reported, unfixed), no push, no
+todo-list change, no subagent, no background work. No `docs/workflow/PROBLEMS.md` entry:
+this step had no relaunch, no iteration and no block (next free id stays **P-63**). **The
+Phase 3 RED gate is not declared here** — S3.2 owns it for all tasks; this section records
+T-004's derivation and its targeted run only.
+
+**Next step: S3.1 (T-005)** — derive the `sessionmanagement` task's tests. T-005 appends
+its entry to `SLOTS` and may reuse `concurrent_reads` and `non_tracing_warnings` unchanged.
+Session-management is the **second** asymmetry (after search): `get_session_service()` with
+no `repository` argument raises `ValueError` (`session-management.md` EDGE-003 / AC-042),
+so there is **no lazily created default** — the install → read → reset assertions apply only
+to the four features that build a default, and session-management's pair must be observed
+through `get_session_service(repository)` (change REQ-008 / AC-012, `session-management.md`
+AC-049). Practical consequences: its `SingletonSlot.read` needs `args=(repository,)`
+(`concurrent_reads` already supports `args=`), its AC-048 concurrency witness cannot rely on
+a bare lazy create, and — as for search — check whether its lazy path is already guarded
+before using `widened_lazy_create_window` to force a failure.
