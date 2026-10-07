@@ -2643,7 +2643,11 @@ because the captured loguru tracing output otherwise floods the tracebacks):
   (`src/backend/sessionmanagement/service.py`), which is why its lazy path is the one AC-009 cannot
   witness. If a witness exposes a divergence between two features, fix the module — do not relax the
   witness.
-- **T-011** extends `tests/contract/singleton_install/` and may reuse
+- **T-011** extends ~~`tests/contract/singleton_install/`~~ — **corrected at S3.2 (finding F-63): the DAG
+  object is authoritative**, and T-011's `tests_to_create` / `allowed_files` name
+  `tests/acceptance/singleton_install/test_install.py` (the AC-014 node added to the file T-001/T-009/T-010
+  share) and `tests/acceptance/logging_coverage/test_inventory.py`; `tests/contract/singleton_install/` is
+  T-008/T-009/T-012's package and is **not** in T-011's file list. T-011 may reuse
   `SingletonSlot.read_args()` / `concurrent_installs`; it must keep the `SingletonSlot` field order and the
   five `SLOTS` entries intact (T-009's and T-010's witnesses iterate `SLOTS` and assume exactly five).
 
@@ -3048,3 +3052,790 @@ derived") is superseded by this section: all 12 DAG tasks are now derived. S3.2 
 whole set, the traceability rows for REQ-015 / AC-019 (`docs/verification/traceability.md`, the row citing
 `test_ac_019_agents_md_names_installer`), and — because this branch now contains `main` up to `ff48e90` —
 re-running every task's `red_command` against the merged state (T-001 spot-checked: unchanged at 10 failed).
+
+---
+
+## S3.2 — Phase 3 gate: ruff + RED confirmed over all 12 DAG tasks — 2026-10-07
+
+**Step.** S3.2, one atomic step, the closing step of Phase 3: the ruff gate on every derived path, RED
+confirmed for **all 12 DAG tasks'** derived tests, the Phase 3 gate record, the traceability rows, and the
+three Problem Log entries. Skill: `.agents/skills/test/SKILL.md` (RED gate / evidence); evidence shape:
+`docs/verification/TDD-evidence-template.md`.
+
+**Not touched by this step (deliberate):** no `src/` file, no `AGENTS.md`, no test skipped / xfailed /
+deselected / weakened / deleted, no full test suite (Phase 5 gate), no repo-wide `uv run ruff check .` (Phase 5
+gate, CI `lint.yml`), no `"status": "VERIFIED"` in `.github/task-runner/tasks.json` (that is S4.4), no version
+bump, no push, no `docs/todo/` or `docs/questions/` edit (orchestrator-owned, `main`-only).
+
+`git rev-parse --show-toplevel` =
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter` beside
+every measurement below. Branch tip before this step: **`95d92d8`**, with `main` merged in at **`b421d12`**.
+
+### The three open defects S3.2 owned
+
+| Finding | Disposition |
+|---|---|
+| **F-11** — `tests/acceptance/eventbus/test_eventbus.py::_concurrent_install_read_reset` passed two arguments to a one-argument `_run(action)` | **Fixed here** (2 lines, the test's own signature). Details and before/after measurements below. |
+| **F-56** — the widened lazy-create window must cover every lazy leg, including search | **Confirmed in place** and the sensitivity **re-measured** on this branch state (probe below). |
+| **F-63** — the T-010 hand-off note wrongly listed `tests/contract/singleton_install/` as a file T-011 extends | **Record made consistent**: the wrong line (this file, the T-010 hand-off list) is struck through and corrected in place to T-011's DAG `tests_to_create` / `allowed_files`; the DAG object is authoritative. |
+
+### F-11 — the broken `_run(action)` contract (fixed)
+
+The witness built its install threads as `Thread(target=_run, args=(EVENTBUS_SLOT.install, bus))` while the
+inner helper was `def _run(action: Callable[[], None]) -> None:`. Every install thread therefore recorded
+`TypeError: _run() takes 1 positional argument but 2 were given` in the `errors` list the test later asserts
+empty — a broken test contract, not a RED on behavior.
+
+The defect was **latent**, which is why it survived the per-task gate: in
+`test_ac_015_concurrent_install_read_reset` the lazy-create assertion fires first, so the
+`assert not errors` half is never reached. Measured with the fix reverted (`git checkout --` the file, run, restore):
+
+| Measurement | pre-fix | post-fix |
+|---|---|---|
+| `uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_015_concurrent_install_read_reset -q -p no:randomly` | `1 failed` — `AssertionError: lazy create race built 8 buses` (the `TypeError` hidden behind it) | `1 failed` — the same assertion; the `errors` list now carries only real thread errors |
+| `uv run pytest tests/acceptance/eventbus tests/unit/eventbus -q -p no:randomly` | `6 failed, 22 passed` | `6 failed, 22 passed` — identical; the 22 pre-existing eventbus witnesses still pass |
+| T-002's `red_command` | 6 failed | 6 failed |
+
+Fix (the test's own signature, no assertion or test data changed):
+
+```python
+def _run(action: Callable[..., Any], *args: Any) -> None:
+    try:
+        start.wait(timeout=_BARRIER_TIMEOUT)
+        action(*args)
+```
+
+Left unfixed, the `TypeError` would have surfaced in **Phase 4** the moment the lazy-create half started
+passing — i.e. as a failure attributed to the implementation. Fixing a test's own contract in Phase 3 is not
+weakening a test: no assertion, no expected value and no count changed.
+
+### F-56 — the widened lazy-create window covers every lazy leg (confirmed + re-measured)
+
+`tests/acceptance/singleton_install/test_concurrency.py::test_ac_009_concurrent_lazy_create` loops over
+`SLOTS` and applies `widened_lazy_create_window(monkeypatch, type(slot.new()))` to each of the four features
+whose getter creates a default; session-management is skipped **explicitly** because its getter raises instead
+(`session-management.md` EDGE-003), and its concurrency case is AC-010 run with a repository. Search is
+therefore widened too — search is the one owner that **already** guards with `_singleton_lock`
+(`src/backend/search/service.py:547`), so an un-widened search leg would have made AC-009 vacuous for that
+feature.
+
+Sensitivity re-measured on this branch state (scratch `tests/_scratch_f56_probe.py`, **deleted before the
+commit**; it monkeypatched `backend.search.service._singleton_lock` to a no-op lock at runtime — no `src/`
+edit, no planted file):
+
+| Search leg | distinct instances returned by 8 barrier-released reads | constructors run |
+|---|---|---|
+| `_singleton_lock` active (as committed) | **1** | 1 |
+| `_singleton_lock` neutered at runtime | **8** | 8 |
+
+The witness passes because of the lock, not despite its absence — and it fails the moment the lock stops
+covering the lazy path, which is exactly what T-010 must preserve.
+
+### Collection gate
+
+`uv run pytest --collect-only -q` over the 18 test directories this change's witnesses live in
+(`tests/acceptance/{singleton_install,settings,eventbus,permissions,search,sessionmanagement,logging_coverage}`,
+`tests/contract/singleton_install`, `tests/integration/singleton_install`,
+`tests/unit/{singleton_install,settings,eventbus,permissions,search,sessionmanagement,architecture}`,
+`tests/property/{singleton_install,settings}`) → **379 tests collected**, **zero** collection or import errors.
+
+### RED gate — every task's `red_command`, verbatim, three runs each
+
+Run 1: the `red_command` exactly as stored in `.github/task-runner/tasks.json` (`-v`, default random order).
+Run 2: the same node list with `--tb=line -q` (random order) for the failure-mode audit. Run 3: the same node
+list with `-q -p no:randomly` (fixed order).
+
+| Task | nodes in `red_command` | run 1 | run 2 | run 3 | dominant failure mode (observed) |
+|---|---|---|---|---|---|
+| T-001 | 10 | **10 failed** | 10 failed | 10 failed | `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'` (helper:112); `assert 2 == 1` (EDGE-033, `test_settings_edges.py:425`); `assert 8 == 1` (AC-041 WARNING count, `test_settings.py:670`) |
+| T-002 | 6 | **6 failed** | 6 failed | 6 failed | `AttributeError: module 'backend.eventbus' has no attribute 'set_event_bus'`; `AssertionError: lazy create race built 8 buses` (`test_eventbus.py:270`); `AssertionError: lazy create race built 2` (`test_eventbus_edges.py:186`) |
+| T-003 | 6 | **6 failed** | 6 failed | 6 failed | `AttributeError: module 'backend.permissions' has no attribute 'set_permission_service'`; `AssertionError: lazy create race built 2` (`test_edge_cases.py:1164`); `… race …` (`test_singleton_install.py:95`) |
+| T-004 | 6 | **6 failed** | 6 failed | 6 failed | `AttributeError: module 'backend.search' has no attribute 'set_search_service'`; `AssertionError: install/read threads raised: [AttributeError…]` (`test_search_edges.py:424`) |
+| T-005 | 6 | **6 failed** | 6 failed | 6 failed | `AttributeError: module 'backend.sessionmanagement' has no attribute 'set_session_service'`; `AssertionError: install/read/reset threads raised: …` (`test_singleton.py:138`) |
+| T-006 | 2 | **2 failed** | 2 failed | 2 failed | `AssertionError` carrying the subprocess traceback `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'` from `src/main.py` (`test_composition_root.py:193`, `:208`) |
+| T-007 | 3 | **1 failed, 2 passed** | 1 failed, 2 passed | 1 failed, 2 passed | `AssertionError: 12 foreign singleton-slot write(s)` (`test_singleton_slots.py:178`); the two passes are the scanner's own anti-vacuity (`test_ac_017_scanner_reports_planted_violation`) and owner-allowance (`test_edge_008_owner_slot_write_allowed`) witnesses — GREEN by design |
+| T-008 | 3 | **3 failed** | 3 failed | 3 failed | `AssertionError: AC-018: importing backend.settings.registry._registry must be reported in both reference modes` (`:134`); `AssertionError: NFR-004 / REQ-013: [tool.ruff.lint.flake8-tidy-imports.banned-api] must configure …` (`:191`); `AssertionError: EDGE-009 anti-vacuity …` (`:178`) |
+| T-009 | 20 | **20 failed** | 20 failed | 20 failed | `AttributeError` on the five missing install operations; `AssertionError: the child process did not print OK` (EDGE-005, `test_edges.py:172`); `ExceptionGroup` whose two sub-exceptions are both `AssertionError` (INV-003) |
+| T-010 | 6 | **6 failed** | 6 failed | 6 failed | `AssertionError: settings: 8 concurrent reads of an empty slot returned 8 different instances — the read-and-swap is not one atomic module-lock step` (`test_concurrency.py:77`); `AssertionError: settings: set_settings_registry() does not exist, so 'no entry record for it' would be vacuous` (`test_install.py:223`); `AttributeError` on the missing installers |
+| T-011 | 2 | **2 failed** | 2 failed | 2 failed | `AssertionError: settings: set_settings_registry() does not exist, so it cannot be traced with @logged` (`test_install.py:283`); `AssertionError: the executable inventory has no 'module function' row for ['set_event_bus', 'set_permission_service', …]` (`test_inventory.py:93`) |
+| T-012 | 1 | **1 failed** | 1 failed | 1 failed | `AssertionError: AC-019 / REQ-015: AGENTS.md guidance for the five install operations:` (`test_guidance_contract.py:143`) — reproduced 3× including with `-p no:randomly` |
+
+**Totals: 71 derived nodes → 69 failed, 2 passed.** The three runs agree on every count, so the RED is not an
+artifact of test ordering. The two passes are T-007's by-design witnesses, recorded rather than deselected.
+
+### Failure-mode audit — no invalid RED
+
+The `--tb=line` pass prints exactly one exception line per failing node. Across all 12 runs the complete set of
+exception types at the failure points is:
+
+| Exception | occurrences | why it is a valid RED |
+|---|---|---|
+| `AttributeError` | 49 | raised **inside the test body** by the shared slot helper (`tests/singleton_install_test_helpers.py:112`) resolving the missing public install operation by attribute name — the deliberate design that keeps the RED inside the test instead of at import (helper docstring; P-55) |
+| `AssertionError` | 20 | an assertion on behavior that does not yet match the spec (WARNING counts, lazy-create races, scanner findings, lint configuration, guidance text) |
+
+Nothing else: **no** collection error, **no** fixture/setup error, **no** `ValidationError` / `ValueError` from
+invalid test data, **no** out-of-domain Hypothesis strategy, **no** fixture unique-value collision. The single
+Hypothesis node that reports as `ExceptionGroup: Hypothesis found 2 distinct failures` was opened and both
+sub-exceptions are `AssertionError` (`settings: the sequence [False, False] published -1 event(s) beyond the
+witness's own`) — a property assertion, not an error. The `pytest.raises(ValueError)` inside AC-009 is the
+session-management EDGE-003 expectation, not a failure.
+
+### Ruff gate on the step's changed paths
+
+The derived path set is the union of every task's `allowed_files.test_files` that exists on disk — **40 files**
+(12 new test files, 5 new packages' `__init__.py`, and the existing feature test files and shared helpers
+Phase 3 edited).
+
+- `uv run ruff check <the 40 paths>` → **All checks passed!**
+- `uv run ruff format --check <the same 40>` → **40 files already formatted**
+- No repo-wide sweep: `uv run ruff check .` is the Phase 5 gate (it matches CI `.github/workflows/lint.yml`).
+
+### Complexity gate on the same paths (CI `complexity` job, P-56 lesson)
+
+`uv run complexipy <the 40 paths> --max-complexity-allowed 15` → **All functions are within the allowed complexity.**
+
+### No state leak from the Phase 3 runs
+
+`md5sum data/permissions.db` → `555e225f260ca009733a15d6a042a021`, `md5sum settings/values.yaml` →
+`af81d2322fc8d15a398dc53a10391c1e` — both identical to the standing baseline for this branch; `git status
+--porcelain` after all runs lists only the files this step intends to commit (the three scratch runners were
+deleted first).
+
+### TDD evidence per acceptance criterion
+
+Shape per `docs/verification/TDD-evidence-template.md`. **GREEN is Phase 4 evidence**; every GREEN block below
+is recorded as `PENDING` and will be filled by the implementing task's S4.2/S4.4 record. `commit: S3.2` means
+this step's commit — its sha is in the S3.2 handoff, never in the file (the convention set at S2.2, line 585).
+The commands are copy-pasteable and are the exact node-level form of each task's `red_command`.
+
+#### The change spec (`docs/specs/settings-public-registry-setter.md`)
+
+### AC-001
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_001_install_then_get_returns_instance -v
+  result: FAILED — `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'`
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-001
+  commit: PENDING
+
+### AC-002
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_002_install_all_five_features -v
+  result: FAILED — `AttributeError` on each of the five missing install operations
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-003
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_003_replace_logs_one_warning -v
+  result: FAILED — `AttributeError` on the missing install operation, reached before the WARNING-count assertion
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-004
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_004_empty_slot_no_warning -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-005
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_005_install_not_retroactive -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-006
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_006_replaced_bus_keeps_lifecycle -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-007
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_api_contract.py::test_ac_007_signature_takes_concrete_instance -v
+  result: FAILED — `AttributeError` at the signature probe (`test_api_contract.py:290`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-008
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_api_contract.py::test_ac_008_no_runtime_type_check_no_new_error -v
+  result: FAILED — `AttributeError` at the probe (`test_api_contract.py:315`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-009
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_concurrency.py::test_ac_009_concurrent_lazy_create -v
+  result: FAILED — `AssertionError: settings: 8 concurrent reads of an empty slot returned 8 different instances — the read-and-swap is not one atomic module-lock step` (`test_concurrency.py:77`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-010
+  commit: PENDING
+
+### AC-010
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_concurrency.py::test_ac_010_concurrent_install_read_reset -v
+  result: FAILED — `AttributeError` on the missing install operation inside the race; its EDGE-010 half (`_assert_no_install_lost_silently`) is the WARNING bound
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-010
+  commit: PENDING
+
+### AC-011
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_011_lazy_path_emits_one_traced_pair -v
+  result: FAILED — `AssertionError: settings: set_settings_registry() does not exist, so 'no entry record for it' would be vacuous` (`test_install.py:223`, the F-59 anti-vacuity guard)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-010
+  commit: PENDING
+
+### AC-012
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_012_install_then_reset_then_default -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-010
+  commit: PENDING
+
+### AC-013
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_013_install_publishes_no_event -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### AC-014
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_014_install_is_traced -v
+  result: FAILED — `AssertionError: settings: set_settings_registry() does not exist, so it cannot be traced with @logged` (`test_install.py:283`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-011
+  commit: PENDING
+
+### AC-015
+RED:
+  command: uv run pytest tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations -v
+  result: FAILED — `AssertionError: the executable inventory has no 'module function' row for ['set_event_bus', 'set_permission_service', …]` (`test_inventory.py:93`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-011 (the five `INVENTORY_MODULE_FUNCTIONS` rows are added by the implementation step, not by derivation — F-64)
+  commit: PENDING
+
+### AC-016
+RED:
+  command: uv run pytest tests/integration/singleton_install/test_composition_root.py::test_ac_016_main_installs_through_setter tests/integration/singleton_install/test_composition_root.py::test_installed_registry_serves_feature_registration -v
+  result: FAILED (2) — `AssertionError` carrying the subprocess traceback `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'` (`test_composition_root.py:193`, `:208`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-006
+  commit: PENDING
+
+### AC-017
+RED:
+  command: uv run pytest tests/unit/architecture/test_singleton_slots.py::test_ac_017_no_cross_package_slot_write tests/unit/architecture/test_singleton_slots.py::test_ac_017_scanner_reports_planted_violation -v
+  result: FAILED (1) + PASSED (1) — `AssertionError: 12 foreign singleton-slot write(s)` (`test_singleton_slots.py:178`); the planted-violation witness passes, which is what makes the finding trustworthy
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-007 (the write sites migrated; the planted-violation witness stays GREEN)
+  commit: PENDING
+
+### AC-018
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import -v
+  result: FAILED — `AssertionError: AC-018: importing backend.settings.registry._registry must be reported in both reference modes` (`test_lint_contract.py:134`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-008
+  commit: PENDING
+
+### AC-019
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer -v
+  result: FAILED — `AssertionError: AC-019 / REQ-015: AGENTS.md guidance for the five install operations:` (`test_guidance_contract.py:143`) — five findings, two of them "AGENTS.md has no '## Using the Permissions Feature' / '## Using the Session Management Feature' section" (the D13 premise Q-30 resolved)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-012 (`AGENTS.md` gains the guidance and the two sections per Q-30)
+  commit: PENDING
+
+### AC-020
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_api_contract.py::test_ac_020_permission_catalog_unchanged -v
+  result: FAILED — `AssertionError: settings: set_settings_registry does not exist, so 'not a catalog action' is vacuous` (`test_api_contract.py:340`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### INV-001
+RED:
+  command: uv run pytest tests/property/singleton_install/test_install_properties.py::test_inv_001_last_install_wins -v
+  result: FAILED — `AttributeError` on the missing install operation; its EDGE-010 half (`_assert_concurrent_installs_last_writer_wins`) is the no-install-lost-silently + WARNING bound
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-010
+  commit: PENDING
+
+### INV-002
+RED:
+  command: uv run pytest tests/property/singleton_install/test_install_properties.py::test_inv_002_warning_count_matches_nonempty_installs -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### INV-003
+RED:
+  command: uv run pytest tests/property/singleton_install/test_install_properties.py::test_inv_003_no_events_and_no_rebinding -v
+  result: FAILED — `ExceptionGroup: Hypothesis found 2 distinct failures`, both sub-exceptions `AssertionError: settings: the sequence [False, False] published -1 event(s) beyond the witness's own`
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### EDGE-001 … EDGE-007
+RED:
+  command: uv run pytest tests/unit/singleton_install/test_edges.py -v
+  result: FAILED (7) — `AttributeError` on the missing install operations; EDGE-005 additionally `AssertionError: the child process did not print OK` (`test_edges.py:172`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### EDGE-008
+RED:
+  command: uv run pytest tests/unit/architecture/test_singleton_slots.py::test_edge_008_owner_slot_write_allowed -v
+  result: **PASSED at Phase 3** — the owner's own slot write is allowed today and must stay allowed; recorded as GREEN-by-design, not counted as a RED and not weakened
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING confirmation in Phase 4, T-007 (must stay GREEN after the migration)
+  commit: PENDING
+
+### EDGE-009
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_lint_contract.py::test_edge_009_public_api_not_banned -v
+  result: FAILED — `AssertionError: EDGE-009 anti-vacuity: the same ruff run must report TID251 for a private-slot import …` (`test_lint_contract.py:178`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-008
+  commit: PENDING
+
+### EDGE-010
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_concurrency.py::test_ac_010_concurrent_install_read_reset tests/property/singleton_install/test_install_properties.py::test_inv_001_last_install_wins -v
+  result: FAILED (2) — witnessed inside those two nodes (`_assert_no_install_lost_silently`, `_assert_concurrent_installs_last_writer_wins`); there is **no separate EDGE-010 node** (F-60), and the DAG's `edge_cases` list for T-010 is read accordingly
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-010
+  commit: PENDING
+
+### NFR-001
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_api_contract.py::test_nfr_001_public_api_additive -v
+  result: FAILED — `AssertionError: settings: set_settings_registry is missing from the public API, so the change is not additive` (`test_api_contract.py:371`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### NFR-002
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_performance_contract.py::test_nfr_002_install_latency -v
+  result: FAILED — `AttributeError` on the missing install operation (the latency loop cannot run against a function that does not exist)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-009
+  commit: PENDING
+
+### NFR-003
+RED:
+  command: uv run pytest tests/acceptance/singleton_install/test_concurrency.py::test_nfr_003_slot_lock_is_short_lived -v
+  result: FAILED — `AssertionError` on the missing module lock (the install is not unblocked during a reset's `shutdown()`), with its own control half proving the witness is not vacuous
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-010
+  commit: PENDING
+
+### NFR-004
+RED:
+  command: uv run pytest tests/contract/singleton_install/test_lint_contract.py::test_nfr_004_ruff_and_mypy_clean -v
+  result: FAILED — `AssertionError: NFR-004 / REQ-013: [tool.ruff.lint.flake8-tidy-imports.banned-api] must configure …` (`test_lint_contract.py:191`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-008
+  commit: PENDING
+
+#### The amended feature specs (per-feature ACs, same shape)
+
+### `settings.md` v5 AC-040
+RED:
+  command: uv run pytest tests/acceptance/settings/test_settings.py::test_ac_040_set_settings_registry_installs_default -v
+  result: FAILED — `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'`
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-001
+  commit: PENDING
+
+### `settings.md` v5 AC-041
+RED:
+  command: uv run pytest tests/acceptance/settings/test_settings.py::test_ac_041_replace_logs_one_warning -v
+  result: FAILED — `assert 8 == 1` on the replace-WARNING count (`test_settings.py:670`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-001
+  commit: PENDING
+
+### `settings.md` v5 AC-042
+RED:
+  command: uv run pytest tests/acceptance/settings/test_settings.py::test_ac_042_concurrent_install_and_read -v
+  result: FAILED — `AttributeError` on the missing install operation inside the race
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-001
+  commit: PENDING
+
+### `settings.md` v5 AC-043
+RED:
+  command: uv run pytest tests/acceptance/settings/test_settings.py::test_ac_043_install_then_reset_then_default -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-001
+  commit: PENDING
+
+### `settings.md` v5 INV-011
+RED:
+  command: uv run pytest tests/property/settings/test_settings_properties.py::test_inv_011_last_install_wins -v
+  result: FAILED — `AttributeError` inside the Hypothesis body
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-001
+  commit: PENDING
+
+### `settings.md` v5 EDGE-030 … EDGE-033
+RED:
+  command: uv run pytest tests/unit/settings/test_settings_edges.py::test_edge_030_install_over_nonempty_default tests/unit/settings/test_settings_edges.py::test_edge_031_install_then_reset_creates_default tests/unit/settings/test_settings_edges.py::test_edge_032_required_false_after_install tests/unit/settings/test_settings_edges.py::test_edge_033_concurrent_lazy_create -v
+  result: FAILED (4) — `AttributeError` on the missing installer; EDGE-033 `assert 2 == 1` (`test_settings_edges.py:425`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-001
+  commit: PENDING
+
+### `event-bus.md` v2 AC-013
+RED:
+  command: uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_013_set_event_bus_installs_default -v
+  result: FAILED — `AttributeError: module 'backend.eventbus' has no attribute 'set_event_bus'`
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-002
+  commit: PENDING
+
+### `event-bus.md` v2 AC-014
+RED:
+  command: uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_014_replace_logs_one_warning -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-002
+  commit: PENDING
+
+### `event-bus.md` v2 AC-015
+RED:
+  command: uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_015_concurrent_install_read_reset -v
+  result: FAILED — `AssertionError: lazy create race built 8 buses` (`test_eventbus.py:270`); after the F-11 fix the install/read/reset half is reachable
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-002
+  commit: PENDING
+
+### `event-bus.md` v2 AC-016
+RED:
+  command: uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_016_install_then_reset_then_default -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-002
+  commit: PENDING
+
+### `event-bus.md` v2 EDGE-011, EDGE-012
+RED:
+  command: uv run pytest tests/unit/eventbus/test_eventbus_edges.py::test_edge_011_replaced_bus_not_shut_down tests/unit/eventbus/test_eventbus_edges.py::test_edge_012_concurrent_lazy_create -v
+  result: FAILED (2) — `AttributeError` on the missing installer; EDGE-012 `AssertionError: lazy create race built 2` (`test_eventbus_edges.py:186`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-002
+  commit: PENDING
+
+### `user-roles-permissions.md` v2 AC-041
+RED:
+  command: uv run pytest tests/acceptance/permissions/test_singleton_install.py::test_ac_041_set_permission_service_installs_default -v
+  result: FAILED — `AttributeError: module 'backend.permissions' has no attribute 'set_permission_service'`
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-003
+  commit: PENDING
+
+### `user-roles-permissions.md` v2 AC-042
+RED:
+  command: uv run pytest tests/acceptance/permissions/test_singleton_install.py::test_ac_042_replace_logs_one_warning -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-003
+  commit: PENDING
+
+### `user-roles-permissions.md` v2 AC-043
+RED:
+  command: uv run pytest tests/acceptance/permissions/test_singleton_install.py::test_ac_043_concurrent_install_read_reset -v
+  result: FAILED — `AssertionError: lazy create race …` (`test_singleton_install.py:95`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-003
+  commit: PENDING
+
+### `user-roles-permissions.md` v2 AC-044
+RED:
+  command: uv run pytest tests/acceptance/permissions/test_singleton_install.py::test_ac_044_install_then_reset_then_default -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-003
+  commit: PENDING
+
+### `user-roles-permissions.md` v2 EDGE-027, EDGE-028
+RED:
+  command: uv run pytest tests/unit/permissions/test_edge_cases.py::test_install_over_nonempty_default tests/unit/permissions/test_edge_cases.py::test_concurrent_lazy_create -v
+  result: FAILED (2) — `AttributeError` on the missing installer; EDGE-028 `AssertionError: lazy create race built 2` (`test_edge_cases.py:1164`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-003
+  commit: PENDING
+
+### `search.md` v4 AC-038
+RED:
+  command: uv run pytest tests/acceptance/search/test_singleton_install.py::test_ac_038_set_search_service_installs_default -v
+  result: FAILED — `AttributeError: module 'backend.search' has no attribute 'set_search_service'`
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-004
+  commit: PENDING
+
+### `search.md` v4 AC-039
+RED:
+  command: uv run pytest tests/acceptance/search/test_singleton_install.py::test_ac_039_replace_logs_one_warning -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-004
+  commit: PENDING
+
+### `search.md` v4 AC-040
+RED:
+  command: uv run pytest tests/acceptance/search/test_singleton_install.py::test_ac_040_concurrent_install_read_reset -v
+  result: FAILED — `AttributeError` on the missing install operation inside the race
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-004
+  commit: PENDING
+
+### `search.md` v4 AC-041
+RED:
+  command: uv run pytest tests/acceptance/search/test_singleton_install.py::test_ac_041_install_then_reset_then_default -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-004
+  commit: PENDING
+
+### `search.md` v4 EDGE-022, EDGE-023
+RED:
+  command: uv run pytest tests/unit/search/test_search_edges.py::test_edge_022_install_over_nonempty_default tests/unit/search/test_search_edges.py::test_edge_023_concurrent_install_and_lazy_create -v
+  result: FAILED (2) — `AttributeError` on the missing installer; EDGE-023 `AssertionError: install/read threads raised: [AttributeError…]` (`test_search_edges.py:424`)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-004
+  commit: PENDING
+
+### `session-management.md` v2 AC-046
+RED:
+  command: uv run pytest tests/acceptance/sessionmanagement/test_singleton.py::test_ac_046_set_session_service_installs_default -v
+  result: FAILED — `AttributeError: module 'backend.sessionmanagement' has no attribute 'set_session_service'`
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-005
+  commit: PENDING
+
+### `session-management.md` v2 AC-047
+RED:
+  command: uv run pytest tests/acceptance/sessionmanagement/test_singleton.py::test_ac_047_replace_logs_one_warning -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-005
+  commit: PENDING
+
+### `session-management.md` v2 AC-048
+RED:
+  command: uv run pytest tests/acceptance/sessionmanagement/test_singleton.py::test_ac_048_concurrent_install_read_reset -v
+  result: FAILED — `AssertionError: install/read/reset threads raised: …` (`test_singleton.py:138`); run with a repository on every read because session-management has no lazy default (`session-management.md` EDGE-003, AC-048/AC-049)
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-005
+  commit: PENDING
+
+### `session-management.md` v2 AC-049
+RED:
+  command: uv run pytest tests/acceptance/sessionmanagement/test_singleton.py::test_ac_049_install_then_reset_then_default -v
+  result: FAILED — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-005
+  commit: PENDING
+
+### `session-management.md` v2 EDGE-013, EDGE-014
+RED:
+  command: uv run pytest tests/unit/sessionmanagement/test_validation.py::test_edge_013_repository_rule_after_install_and_reset tests/unit/sessionmanagement/test_validation.py::test_edge_014_install_over_nonempty_default -v
+  result: FAILED (2) — `AttributeError` on the missing install operation
+  commit: S3.2
+GREEN:
+  command: (same)
+  result: PENDING — Phase 4, T-005
+  commit: PENDING
+
+### Traceability matrix (`docs/verification/traceability.md`)
+
+- **31 rows updated** in the "Settings Public Registry Setter Matrix": the 19 rows of the change spec
+  (REQ-001…REQ-016, INV-001/002/003, EDGE-001…EDGE-010, NFR-001…NFR-004) and the 12 rows of the six amended
+  specs. Every one previously read `— | PENDING (settings-public-registry-setter P.4, 2026-10-06)`; each now
+  cites its Phase 3 witness node(s) and a dated **`RED (settings-public-registry-setter S3.2, 2026-10-07 —
+  <observed failure mode>; <task counts>)`** cell. The `logging-coverage.md` v3 inventory row keeps its `N/A`
+  status (inventory-only amendment) and gains its witness.
+- The REQ-010 / AC-014 + AC-015 row now cites `test_ac_014_install_is_traced` and
+  `test_inventory_covers_install_operations`; the REQ-015 / AC-019 row now cites
+  `test_ac_019_agents_md_names_installer` — the two rows the S3.2 brief called out.
+- **No row this change did not touch was refreshed** (convention B: the Status column is a historical gate
+  record; a dated `RED` is a legal record, not a defect).
+- `uv run python scripts/check_traceability.py` → **PASS (822 matrix rows, 136 spec IDs, 817 test
+  functions)** — identical to the pre-step baseline: rows were filled, not added, and the 817 test functions
+  already existed after S3.1. The script enforces referential integrity, not status freshness.
+
+### Problem Log entries written (`docs/workflow/PROBLEMS.md`)
+
+| New id | Finding | One-line summary |
+|---|---|---|
+| **P-65** | F-69 | T-012's `completion_gates[0]` states the RED reason as "none of the five install operations exists", but the witness reads `AGENTS.md` — the RED is "the guidance does not name them" (same class as P-55) |
+| **P-66** | F-70 | `.github/task-runner/tasks.json` is tracked on `main`, so every cross-change merge conflicts on two whole DAGs; the "take ours" rule was undocumented |
+| **P-67** | F-71 | union-merging `docs/workflow/PROBLEMS.md` drops the trailing `- **Date:**` line of both sides' last entry — check every entry after unioning |
+| **P-68** | F-72 (new, found by this step) | the step's shell cwd silently reset to the **primary** worktree, so two commits, the traceability check and one ruff run ran against `main`; nothing was written there, but the step's commit was missing and its counts wrong until every gate command was re-run with an explicit `cd` into the change worktree |
+
+Post-edit self-check (the P-67 rule applied to the edited file): **70 `## P-` headings, 70 `- **Date:**`
+lines** (P-50 carries three recurrence headings), no entry renumbered or reordered; the file is 613 lines.
+
+### Phase 3 gate ◆ — PASS
+
+| Gate | Result |
+|---|---|
+| Every DAG task's derived tests RED **on behavior** | **69 of 71 nodes failed**; the 2 passes are T-007's by-design anti-vacuity / owner-allowance witnesses; counts identical across three runs (random ×2, `-p no:randomly` ×1) |
+| No invalid RED | the complete exception set at failure points is `AttributeError` (missing public install operation, raised inside the test body) and `AssertionError`; zero collection/setup/import errors, zero invalid test data |
+| Ruff on the step's changed paths | **All checks passed!** over the 40 derived paths; `ruff format --check` → **40 files already formatted**; `complexipy … --max-complexity-allowed 15` → **All functions are within the allowed complexity** (whole-repo sweep stays a Phase 5 gate) |
+| Collection | `--collect-only` over the 40 derived files → **240 tests, 0 errors**; over the 22 touched test directories → **432 tests, 0 errors** |
+| Re-verification pass (final, after the `main` merge) | all 12 `red_command`s re-run in the change worktree — counts **identical** to the table above (69 failed / 2 passed) |
+| Traceability | 31 rows filled; `scripts/check_traceability.py` **PASS** |
+| Tests committed | yes — this step's commit (sha in the handoff) |
+
+State machine: the change is at **RED_CONFIRMED** for all 12 tasks. Phase 4 (IMPLEMENT) may start.
+
+### Hand-off for S4.1
+
+Pick the first ready DAG task (easiest first among the unblocked ones; `Depends on` per the DAG). Per task:
+S4.1 pick + confirm RED (the counts above are the baseline to reproduce) → S4.2 implement + targeted GREEN +
+ruff on the changed paths → S4.3 refactor (no-op fast-path allowed) → S4.4 commit + `"status": "VERIFIED"`.
+Targeted `green_command` only — the full suite is Phase 5. Carry the T-010 constraints into T-001…T-005:
+one module-level `threading.Lock` per owning module guarding install, lazy create and reset mutually
+exclusively; the owner's own lazy write stays direct under that lock, never via the public setter; the lock
+covers only the slot read/swap (NFR-003), the replace WARNING is emitted after release; INV-001
+last-install-wins and the EDGE-010 WARNING bound must survive. `src/backend/search/service.py:547` already has
+`_singleton_lock`; `src/backend/sessionmanagement/service.py` has no module lock at all. T-011 must add the
+five `INVENTORY_MODULE_FUNCTIONS` rows in `tests/logging_coverage_test_helpers.py` **at implementation time**
+(F-64), and T-012 must add the two `Using the …` sections to `AGENTS.md` per Q-30 while amending D13's
+"no new section" clause in the same PR.

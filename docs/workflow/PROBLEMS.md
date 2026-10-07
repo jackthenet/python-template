@@ -579,3 +579,35 @@ A step MUST log a problem when it:
 - **Duration / iterations:** one redundant step launch (the P-63 launch) caused directly by the stale orchestrator model.
 - **Resolution:** **Durable rules:** (1) a step subagent that notices the *next* task's work is cheap must record it in `findings`/`next` and stop — it must not perform another step's atomic step; (2) the orchestrator MUST read `git log --oneline` and the verification record's newest section after **every** step and reconcile them against the handoff before briefing the next step, rather than trusting the handoff's commit list. Same class as **P-55** (task gate unsatisfiable as authored) in that the DAG/record, not the agent's report, is the source of truth.
 - **Date:** 2026-10-07
+
+## P-65 — a task-DAG `completion_gates` entry stated the wrong RED reason for a guidance contract test (S3.1 / S3.2, T-012)
+
+- **Problem:** T-012's `completion_gates[0]` reads "RED observed … before any implementation: **none of the five install operations exists yet**". T-012's witness (`tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer`) never touches the operations — it reads `AGENTS.md` and asserts each of the five is named in its feature's section. Its RED is "`AGENTS.md` does not name them" (`grep` → 0 matches, and the Permissions / Session Management sections do not exist). The gate happened to be met, but for a reason the DAG does not describe, so a subagent that satisfied the gate text literally (e.g. by asserting the operations are missing from `src/`) would have produced a witness that tests nothing of AC-019.
+- **Step / Phase:** S3.1 (T-012) derivation, closed at S3.2 (Phase 3 RED gate) — change settings-public-registry-setter / CROSS-CUTTING
+- **Duration / iterations:** no rework; caught by reading the witness against the spec rather than the gate text. Recorded as finding **F-69** in `docs/verification/settings-public-registry-setter.md`.
+- **Resolution:** the verification record and the traceability row now state the RED reason the witness actually produces. **Durable rule:** a `completion_gates` entry must name the reason *the task's own witness* fails, in the vocabulary of the file it reads — for a text/guidance contract test that is a documentation gap, not a missing symbol. S2.2 authors must derive gate wording from `tests_to_create`, never from the implementation scope. Same class as **P-55**.
+- **Date:** 2026-10-07
+
+## P-66 — `.github/task-runner/tasks.json` is tracked on `main`, so every cross-change merge conflicts on it and the resolution rule was undocumented (S3.1, merge of `main`)
+
+- **Problem:** the file is the *active build environment* for whichever change is running, but it is committed on `main`, where it holds the DAG of the last merged change. Merging `main` into `crosscut/settings-public-registry-setter` after `crosscut/structlog-logging` landed (PR #74 → `c7a9119`) produced a conflict between two whole DAGs — ours: 12 tasks for `settings-public-registry-setter`; `main`'s: 7 tasks for the already-merged `structlog-logging`. Nothing in `AGENTS.md` or the git skill says which side wins, and a naive union would have yielded a 19-task DAG mixing two changes.
+- **Step / Phase:** S3.1 (T-012) — the `git merge main` that preceded the derivation; affects every S3.x/S4.x step of every change
+- **Duration / iterations:** one conflict resolution round-trip (read both sides, verify the result: `"feature": "settings-public-registry-setter"`, 12 `task_id` keys).
+- **Resolution:** resolved with `git checkout --ours` — the per-change record is `docs/tasks/<name>.tasks.json`, the task-runner copy is scratch, and `main`'s copy is stale by definition once its change is merged. **Durable rule:** in a merge, the in-flight change's DAG always wins for `.github/task-runner/tasks.json`; verify the `feature` key and the task count afterwards. Follow-up candidate (chore TODO): gitignore the task-runner copy, or document the rule in the git skill.
+- **Date:** 2026-10-07
+
+## P-67 — union-merging `docs/workflow/PROBLEMS.md` silently drops the trailing `- **Date:**` line of both sides' last entry (S3.1, merge of `main`)
+
+- **Problem:** the last entry of each side ends with `- **Date:** 2026-10-07`, and git used one copy of that line as the shared trailing context of the conflict hunk. A naive union of the two sides therefore leaves the last entry of **both** sides without its Date field — a silent loss of a required Problem Log field, not a merge marker to notice.
+- **Step / Phase:** S3.1 (T-012) — the `docs/workflow/PROBLEMS.md` conflict in `git merge main`
+- **Duration / iterations:** one extra inspection pass over every entry after the union.
+- **Resolution:** the union was written append-only (`main`'s P-55…P-62, then this branch's P-63, P-64) and P-62's Date line was restored. **Durable rule:** after unioning `docs/workflow/PROBLEMS.md`, check that **every** entry still carries its `- **Date:**` line (`grep -c '^- \*\*Date:' <entries>`), and never renumber or reorder entries. Same class as **P-66** — both are conflicts on append-only shared files.
+- **Date:** 2026-10-07
+
+## P-68 — a step subagent's shell cwd silently reset to the primary worktree, so gate commands ran against `main` (S3.2)
+
+- **Problem:** mid-step, the bash tool's working directory reverted from the change worktree to the primary worktree (`main`). Four commands then ran against the wrong tree: two `git commit` calls reported "nothing to commit" (the step's commit silently did not happen), `scripts/check_traceability.py` reported `main`'s counts instead of the change's, and a `ruff check` fed a stale path list collected with prose still attached word-split into 292 tokens, so it checked files outside the step's scope and reported 185 errors. Nothing was written to `main` (its status stayed clean), but the step's own evidence was unverifiable for a while and the commit was missing.
+- **Step / Phase:** S3.2 — Phase 3 gate recording and commit
+- **Duration / iterations:** one recovery pass (re-ran every gate command with an explicit `cd` into the change worktree).
+- **Resolution.** **Durable rules for every step subagent in a worktree workflow:** (1) prefix each command with an explicit `cd "<change worktree>" &&` — never rely on the shell's cwd persisting across calls; (2) prove the directory in the same command (`pwd && git rev-parse --abbrev-ref HEAD`) for any command that commits or reports gate counts; (3) build file lists from the DAG with a script that keeps only tokens that are existing files (`allowed_files.*` strings carry prose annotations inline, so raw word-splitting is invalid); (4) note that Python writes to `/tmp` land in `C:\tmp`, which git-bash `/tmp` does not see — pass gate file lists inline or use a worktree-local scratch file.
+- **Date:** 2026-10-07

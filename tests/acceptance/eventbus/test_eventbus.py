@@ -302,10 +302,10 @@ def _concurrent_install_read_reset(installed: list[EventBus]) -> list[BaseExcept
     start = threading.Barrier(_CONCURRENT_INSTALLS + _CONCURRENT_READERS + _CONCURRENT_RESETS)
     errors: list[BaseException] = []
 
-    def _run(action: Callable[[], None]) -> None:
+    def _run(action: Callable[..., Any], *args: Any) -> None:
         try:
             start.wait(timeout=_BARRIER_TIMEOUT)
-            action()
+            action(*args)
         except BaseException as exc:
             errors.append(exc)
 
