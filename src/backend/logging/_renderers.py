@@ -228,7 +228,8 @@ class TextRenderer:
     ) -> str:
         fields = _ordered(event_dict)
         level = str(fields.get("level", ""))
-        shown_level = self._colorize(level, LEVEL_COLORS.get(level, ""))
+        # ``level`` is the record's ``levelname`` (uppercase); the map is keyed lowercase.
+        shown_level = self._colorize(level, LEVEL_COLORS.get(level.lower(), ""))
         head = f"{fields.get('timestamp', '')} [{shown_level:<8}] {fields.get('event', '')} ({fields.get('logger', '')}"
         if fields.get("file") is not None:
             head += f":{fields.get('line')}"

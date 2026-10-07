@@ -3441,54 +3441,6 @@ Every gate is the verbatim command from the step that ran it, matched to the CI 
 
 ### S6.1 — review vs. normative basis (2026-10-07)
 
-**Phase 6 REVIEW, step 1 of 4.** Objective (AGENTS.md Phase 6 checks **1** and **5–6** for CROSS-CUTTING): does the FINAL code state satisfy the approved spec and the amended approved specs, is any behavior present that the spec does not represent, is any spec requirement silently dropped, and was any acceptance test weakened or deleted beyond the spec's own authorization?
-
-**Bounded inputs (P-27).** `docs/specs/structlog-logging.md` v1 (approval cached above: PR #67, merge `eb68ed2`, 2026-10-04 — not re-checked), `docs/specs/logging.md` v3, `docs/specs/logging-coverage.md` v2, `docs/specs/settings-coverage.md` v2, this artifact (S1.4 → S5.4), and the final code state at HEAD `ea91784` (= `34184a0` + the S5.4 record commit, i.e. **no source or test changed after Phase 5**). NOT the commit-by-commit diff. **No full-suite run** (S5.1/S5.4 hold the gate clean: 760 passed / 1 pre-existing skip).
-
-**CWD pin (P-57).** Every command ran after an absolute `cd C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/structlog-logging`; `git rev-parse --show-toplevel` → `C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/structlog-logging`, HEAD `ea91784`, `git status --porcelain` empty apart from this record.
-
-**No file other than this record was modified; nothing committed, nothing pushed.** Findings are recorded, not fixed — S6.3 resolves them and commits the review report.
-
-#### 1. Check 1 — every requirement implemented as specified: **PASS**
-
-API surface spot-checked against spec §3 in the final state (not the diff):
-
-| Spec §3 item | Final state | Verdict |
-|---|---|---|
-| `setup_logger(*, renderer: str \| None = None)` | `src/backend/logging/_pipeline.py:239` — keyword-only, optional, `Literal["text","json"]` validated **before** any mutation (`_validate_renderer`, EDGE-005) | as specified |
-| `get_logger(name: str \| None = None)` | `_pipeline.py:177` — returns the structlog bound logger over the pipeline logger; usable before setup (EDGE-006) | as specified |
-| `@logged(func=None, *, level, slow_threshold_ms, slow_threshold_setting, include_args)` | `_decorator.py:189-196` — exactly these four keyword parameters; `context_getter` and `depth` absent from the module (grep: no occurrence in `src/backend/logging/`) | as specified |
-| `@logged_class(cls=None, *, slow_threshold_ms, include_args)` | `_decorator.py:220-224`; sets `__logged_class__ = True` and the resolved `slow_threshold_ms` (REQ-008) | as specified |
-| Public surface exactly the §3 set | `__init__.py:16-25` `__all__` = `Settings, _read_setting, get_logger, get_settings, logged, logged_class, register_settings, setup_logger` — 8 names, no more | as specified |
-| Unchanged exports | `Settings`, `get_settings`, `register_settings`, `_read_setting` all present and traced | as specified |
-
-Requirement-by-requirement, in the final state:
-
-- **REQ-001 / AC-001** — no `_setup.py`, no backend import; the pipeline is stdlib handlers + structlog processors (`_pipeline.py`), and `tests/acceptance/logging/test_pipeline_backend.py::test_ac_001_no_backend_import_and_stdlib_chain` searches `src/` **and** `tests/` by AST, not by grep.
-- **REQ-002 / AC-002, AC-003** — `_install` (`_pipeline.py:255-297`) builds a `StreamHandler(sys.stderr)` and a `RotatingFileHandler(maxBytes, backupCount, encoding="utf-8")`; the file renderer is orjson (`_renderers.py:211-212`); `rename_callsite_fields` maps the pipeline's `filename`/`lineno` onto the specified `file`/`line`, and `drop_pipeline_internals` strips `filename`, `lineno`, `_record`, `_from_structlog` (AC-003's "and nothing else"). **One clause is not witnessed — see finding M2 (colorization).**
-- **REQ-003 / AC-004, AC-005** — `pipeline_logger()` (`backend.logging`) with `propagate = False` owns both handlers; the only foreign mutation is one `_ForwardingHandler` on the root logger (`_pipeline.py:283-285`), which is exactly the INV-004 exception.
-- **REQ-004 / AC-006, AC-007** — `_ForwardingHandler.emit` hands the *same* record to both managed handlers, so level, logger name and location survive. D7's "never in the listener thread" holds by construction: structlog's `CallsiteParameterAdder.__call__` reads `record.__dict__` when `_from_structlog` is `False` (verified against the installed structlog source), so a forwarded record's `file`/`line` come from the record, not from the listener stack; a structlog record's callsite is taken in the emitting thread with `additional_ignores=["backend.logging"]` so the decorator's own frames are skipped.
-- **REQ-005 / AC-008, AC-009** — the 39 statements are migrated and counted in the final state: `settings/registry.py` 17, `settings/repository.py` 11, `eventbus/eventbus.py` 10, `permissions/service.py` 1 = 39 (spec REQ-005's per-file counts). Each module binds `_logger = get_logger(...)` at import time, which EDGE-006 permits.
-- **REQ-006 / AC-010** — `_renderer_pair` + `_formatter_for` give each sink its own renderer; `renderer="json"` sets both, `None` keeps text console + JSON file.
-- **REQ-007/008/009 / AC-011…AC-015** — `_wrap_sync`/`_wrap_async`, `_Tracer` entry/exit/exception, `exception_field` renders type/message/frames only (`_exception_content`), never locals.
-- **REQ-010 / AC-016** — `_PipelineQueueHandler` passes the record **unformatted** (D4); `_PipelineQueueListener` and `_ForwardingHandler.emit` guard a raising sink with `handleError`.
-- **REQ-011** — `_RENDER_CHAIN` produces `level`, `logger`, `event`, `timestamp`, `file`, `line`; `elapsed_ms` comes from the tracer.
-- **REQ-012 / AC-017** — `_subscribe_to_setting_changes` (`_pipeline.py:370-387`) subscribes to `SettingChanged` and `_reconfigure` re-applies **all** current values in place: level on the logger and all three handlers, `maxBytes`, `backupCount`, and the log-file path via `_move_file_handler` (never a second file handler). `_reconcile_ownership` is EDGE-003's documented recovery.
-- **REQ-013 / AC-018, NFR-004** — `pyproject.toml` declares `structlog>=25.1.0` and `orjson>=3.12.0`, no `loguru`; `uv.lock` resolves both and has no `loguru` entry; the `[tool.deptry] DEP002` suppression for `orjson` is gone.
-- **REQ-014 / AC-019** — all four guidance files name `get_logger` and show `setup_logger()` with no `Settings` argument; no `.md` outside `docs/` mentions `loguru`, `context_getter` or `depth=`.
-- **REQ-015 / AC-020** — surface exactly the §3 set (above); no shim, no alias; the version bump at S6.4 is `major`.
-- **Amended IDs** — `logging.md` v3 REQ-001/REQ-003/REQ-005/AC-001/AC-004/INV-001/NFR-001…NFR-004 and `logging-coverage.md` v2 REQ-010/AC-010 are realized as restated; `AC-005` and `EDGE-005` are deleted **by the merged amendment**, not by this implementation. `settings-coverage.md` v2 REQ-014/015/016, AC-019/020/021, EDGE-008 hold against `_reconfigure`.
-- **Sequencing check (spec §10, binding):** `git diff main...HEAD --stat -- docs/specs/ docs/decisions/` is **empty** — the amendment PR (4 specs + ADR-082 + ADR-002 status) is already on `main`, i.e. it merged first, as required. ADR-002's Status line reads "Superseded by ADR-082 (2026-10-04)".
-- **Entrypoint unchanged:** `src/main.py` is not in this change's diff and already calls `setup_logger()` exactly once (line 221) — the call shape the amended signature accepts.
-
-#### 2. Check 5 — no acceptance test weakened or deleted beyond the spec's authorization: **PASS**
-
-- **Deletions.** `git diff main...HEAD --name-status --diff-filter=D -- tests/` → exactly one deleted test file, `tests/acceptance/logging_coverage/test_direct_loguru_kept.py`; test-function counts drop only in `tests/unit/logging/test_logging.py` (12 → 11, `test_ac_005_intercept_handler_skips_bootstrap`) and `tests/unit/logging/test_logging_edges.py` (5 → 4, `test_edge_005_intercept_unknown_level`). Those three are the only deletions, and all three are authorized by spec §11 / the merged `logging.md` v3 amendment. Each case is re-witnessed: `logging.md` AC-005 → `test
-
----
-
-### S6.1 — review vs. normative basis (2026-10-07)
-
 **Inputs (bounded, per P-27):** `docs/specs/structlog-logging.md` (approved, merge commit `177771c`, 2026-09-28 — cached approval, not re-checked), the amended approved specs `docs/specs/logging.md` v3 / `docs/specs/logging-coverage.md` v2 / `docs/specs/settings-coverage.md` / `docs/specs/settings.md`, `docs/verification/structlog-logging.md` (S1.4 → S5.4), and the FINAL code state at HEAD `ea91784`. The full test suite was **not** re-run (Phase 5 confirmed the gate CLEAN: 760 passed, 1 skipped). No code, test or spec file was edited in this step.
 
 **Review order followed:** normative basis → traceability of the normative IDs → acceptance tests → implementation → architecture → quality → observability.
@@ -3613,3 +3565,78 @@ The behavior is correct and required: EDGE-006 (usable before `setup_logger()`) 
 | Spec / traceability | `uv run python scripts/check_traceability.py` | PASS (822 matrix rows, 136 spec IDs, 746 test functions) |
 
 **Gate for S6.1-fix: NOT clean.** Every CI-parity gate is green, but the Phase 5 test-suite gate is not re-established: F-S6.1-01 turned out to be a real implementation defect (the console sink never colorizes), not a coverage gap, and the step directive forbade patching `src` for it. Next: an authorized implement step for the one-line color fix at `src/backend/logging/_renderers.py:231`, then re-run S5.1 and re-run S6.1 (review) before S6.2.
+
+---
+
+### S4.2 re-entry — F-01 colorize defect, RED → GREEN (2026-10-07)
+
+Step: **S4.2 (re-entry)** — implement + confirm GREEN for the one implementation defect the S6.1 findings resolution left unresolved (**F-S6.1-01**). Change worktree `C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/structlog-logging`, branch `crosscut/structlog-logging`, starting HEAD `856f483`. **CWD pin (P-57):** every command below ran after an absolute `cd C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/structlog-logging`; `git rev-parse --show-toplevel` → `C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/structlog-logging` for every run, `git status --porcelain` empty at the start.
+
+Scope honored: exactly this implement step — the RED witness was already committed at `856f483`, so no test was written, touched, weakened or deleted here; no refactor; no task-status change (all DAG tasks stay `VERIFIED`); no spec edit; no dependency added; nothing pushed; `docs/todo/` and `docs/questions/` untouched.
+
+#### The defect (F-S6.1-01, restated as a behavior defect, not a coverage gap)
+
+`docs/specs/structlog-logging.md` AC-002 requires "one writes **colorized** text to standard error" (and amended `docs/specs/logging.md` v3 AC-001 restates the same clause). `src/backend/logging/_renderers.py:231` looked the ANSI escape up with `LEVEL_COLORS.get(level, "")`, where `level` is the record's `level` field — set by `add_level_field` from `record.levelname`, i.e. **uppercase** (`INFO`) — while the `LEVEL_COLORS` map at `_renderers.py:48-54` is keyed **lowercase** (`"info"`). The lookup never matched for any record the pipeline produces, so the console sink never colorized, even on a real terminal. The committed witness `tests/unit/logging/test_renderers.py:59` (`test_ac_002_console_color_is_selected_only_for_a_terminal_stream`) proves it.
+
+#### The fix (one line, `allowed_files.source_files` only)
+
+```diff
+--- a/src/backend/logging/_renderers.py
++++ b/src/backend/logging/_renderers.py
+@@ -228,7 +228,8 @@ class TextRenderer:
+     ) -> str:
+         fields = _ordered(event_dict)
+         level = str(fields.get("level", ""))
+-        shown_level = self._colorize(level, LEVEL_COLORS.get(level, ""))
++        # ``level`` is the record's ``levelname`` (uppercase); the map is keyed lowercase.
++        shown_level = self._colorize(level, LEVEL_COLORS.get(level.lower(), ""))
+         head = f"{fields.get('timestamp', '')} [{shown_level:<8}] {fields.get('event', '')} ({fields.get('logger', '')}"
+```
+
+The lookup site was normalized, not the map: the map's lowercase keys are part of the module's public-ish constant and the witness reads `LEVEL_COLORS["info"]`, so uppercasing the five keys would have broken the witness and changed the constant's shape. The added comment records *why* the `.lower()` is needed, so the mismatch cannot be re-introduced. No other behavior changes: an unknown level name still maps to `""` and `_colorize` still returns the text uncolored when the color is empty or `self.color` is False, so the plain (non-tty) path is byte-identical.
+
+#### RED (observed before the fix, at HEAD `856f483`)
+
+```
+$ uv run pytest tests/unit/logging/test_renderers.py -v
+tests\unit\logging\test_renderers.py:59: AssertionError
+E  AssertionError: AC-002: the console record written to a terminal standard error must carry the level's ANSI escape ('\x1b[32m'), got '2026-10-07T04:29:54Z [INFO    ] colorized console probe (ac_002:7)'
+E  assert '\x1b[32m' in '2026-10-07T04:29:54Z [INFO    ] colorized console probe (ac_002:7)'
+============================== 1 failed in 0.49s ==============================
+```
+
+**RED gate: 1 failed** — the failure is the colorized-clause assertion (the three `color_for_tty` assertions and the "carries its event" assertions pass, so the witness isolates exactly the defect).
+
+#### GREEN (after the fix)
+
+```
+$ uv run pytest tests/unit/logging/test_renderers.py -v
+tests/unit/logging/test_renderers.py::test_ac_002_console_color_is_selected_only_for_a_terminal_stream PASSED [100%]
+============================== 1 passed in 0.20s ==============================
+
+$ uv run pytest tests/acceptance/logging tests/unit/logging tests/contract/logging tests/acceptance/logging_coverage -q
+69 passed in 11.44s
+```
+
+**GREEN gate: PASS** — the witness passes unmodified, and all four logging trees are green (69 passed, 0 failed). The witness is unchanged: `git diff` lists exactly two files, `src/backend/logging/_renderers.py` and this record — no test file appears in the diff.
+
+#### Gate re-establishment (src changed, so the Phase 5 gate set is re-run)
+
+| Gate | Command | Result |
+|---|---|---|
+| Full test suite | `uv run pytest tests/ -q` | **761 passed, 1 skipped in 224.67s** — 0 failed; the skip is the pre-existing environmental one (`tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host`); 761 = the 760 previously passing + the F-S6.1-01 witness, now passing |
+| Lint (changed path) | `uv run ruff check src/backend/logging/_renderers.py` | All checks passed! |
+| Format (changed path) | `uv run ruff format src/backend/logging/_renderers.py` | 1 file left unchanged |
+| Lint (CI parity) | `uv run ruff check .` | All checks passed! |
+| Types | `uv run mypy src/` | Success: no issues found in 84 source files |
+| Dependencies | `uv run deptry .` | Success! No dependency issues found. (Scanning 90 files) |
+| Complexity | `uv run complexipy src tests --max-complexity-allowed 15` | All functions are within the allowed complexity |
+| Spec / traceability | `uv run python scripts/check_traceability.py` | PASS (822 matrix rows, 136 spec IDs, 746 test functions) |
+
+**Phase 5 gate re-established: PASS** — the suite is back to 0 failed and every CI-parity gate is clean. The `docs/verification/traceability.md` AC-002 row keeps its dated `RED` for the colorized clause as the historical gate record written by the S6.1 findings resolution (convention B, decision Q-129: a dated RED is a legal record of a past gate, and this step does not own the matrix — an S5.3 write does); the row already cites the witness that is now GREEN.
+
+#### Record dedupe (same commit)
+
+The S6.1 review section had been appended **twice** in commit `856f483` — identical heading `### S6.1 — review vs. normative basis (2026-10-07)` at lines 3442 and 3490. The first copy was a truncated draft: it ended mid-sentence ("Each case is re-witnessed: `logging.md` AC-005 → `test") and referred to "finding M2 (colorization)", an ID that exists nowhere in the artifact. The second copy is complete and is the one the following `### S6.1 findings — resolution` section and the traceability rows cite (F-S6.1-01 … F-S6.1-08). The first copy was deleted (48 lines), the second kept; the artifact now has exactly one S6.1 review section (line 3442) followed by the findings-resolution section (line 3489). No finding, gate result or evidence was lost by the dedupe — everything unique to the deleted draft (the spec §3 API spot-check table, the REQ-by-REQ walkthrough) is covered by the kept copy's sections 1–2 with the correct finding IDs.
+
+**Gate for S4.2 (re-entry): PASS — RED observed, GREEN confirmed with the witness unmodified, full suite 761 passed / 1 skipped / 0 failed, all gates clean.** Next: **re-run S6.1 (review)** — the review report must be re-checked now that F-S6.1-01 is closed, then S6.2/S6.3 and the S6.4 version bump (`major`).
