@@ -568,3 +568,10 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 discarded 596-line write + 4-chunk rewrite; the step ran 2891 s / 39 tool uses / ~2.0 M tokens, of which the retry accounted for roughly a third.
 - **Resolution:** the file was written task-group by task-group with the file-write tool plus marker-anchored edits, then verified by hash against its `.github/task-runner/` copy (`sha256 520a1958…e2dc` both) and by `validate_task_dag.py` (`PASSED: 7 tasks, acyclic, well-formed`). **Durable rule:** an S2.2 DAG above ~4 tasks is written **in per-task chunks by default**, never in one write; the byte-identity hash and the validator run are the completion check, not the write's return value.
 - **Date:** 2026-10-07
+
+## P-66 — an S3.1 step subagent died on a context overflow because its brief told it to read whole large files
+- **Problem:** the **S3.1 (T-001)** subagent of `structure-map` was told to "read the spec fully", "read the ADRs and both verification sections", and "read the DAG". Those files measure 636 + 491 + 596 + 105 lines at this head, and the skill file plus the test-tree listing added more; the transcript reached **90 617 prompt tokens** and the run was rejected with `400: prompt + max tokens exceeds the context (131072)` before it wrote a single file. No work was lost, but the whole step launch was.
+- **Step / Phase:** S3.1 Derive tests (T-001) — change structure-map / FEATURE
+- **Duration / iterations:** 1 wasted step launch (~0 work produced), plus the re-launch.
+- **Resolution:** relaunched with a **context-budgeted brief**: the task's JSON definition is pasted into the brief instead of being read from the 596-line DAG; the spec is read by **section** (locate with `grep -n "REQ-025\|AC-025\|NFR-004"`, then read that line range); the verification record is read only from its `## Phase 2 — S2.2 task DAG` hand-off note. **Durable rule:** a step brief names the exact sections/line ranges to read and never instructs a full read of a file above ~300 lines; the orchestrator pastes small inputs (a task object, a hand-off note) into the brief rather than pointing at a large file.
+- **Date:** 2026-10-07
