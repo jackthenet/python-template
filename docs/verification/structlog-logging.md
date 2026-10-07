@@ -3075,3 +3075,167 @@ The other ~150 are **pre-existing and identical on `main`** — dominated by `in
 Two files changed, both test files named above, plus this record. No `src/` file, no spec, no `pyproject.toml`/`uv.lock`, no task file, no `docs/todo/`, no `docs/questions/`. No test was weakened, deleted, skipped or converted; the assertions in both refactored tests are character-identical. Nothing was pushed, no branch was switched, and the `site/` directory `mkdocs build` writes is gitignored — the tree is clean apart from the two test files and this record.
 
 **Phase 5 (S5.2) gate: PASS — `uv run ruff check .` clean whole-repo (matches `lint.yml`), `ruff format --check .` clean, `uv run mypy src/` clean (84 files), `uv run deptry .` clean, `mkdocs build --strict` exit 0, `complexipy` clean after one in-scope test-side fix; ty informational-only, classified, no gate impact.** Next: S5.3 — update the traceability matrix (every REQ of `docs/specs/structlog-logging.md` + the rows of every affected feature).
+
+### S5.3 — update traceability (2026-10-07)
+
+**Phase 5 VERIFY, step 3 of 4.** Objective: bring `docs/verification/traceability.md` up to date for this
+change — every normative ID of `docs/specs/structlog-logging.md` mapped to a row and a GREEN test, and the
+rows of **every affected feature** updated (the CROSS-CUTTING requirement) — then prove with
+`uv run python scripts/check_traceability.py` that no row cites a test function that no longer exists (the
+files this change deleted) and that no row is orphaned. No test file was touched by this step; no row of
+another change was weakened, deleted or refreshed.
+
+**Matrix state after the step:** the **Structlog Logging Matrix** (37 rows, `docs/verification/traceability.md`
+§ *Structlog Logging Matrix*) is fully `GREEN`; a **`### Affected Features (CROSS-CUTTING — per-feature rows,
+spec §10 Impact Analysis)`** table was added under it (mirroring the precedent set by the permissions-wiring
+and search-source sections); and **23 rows in three other matrices** were updated in place — 12 in the `logging.md` matrix (10 witness
+refreshes + 2 retired-row annotations), 6 in `logging-coverage.md`, 5 in `settings-coverage.md`.
+
+#### Own IDs → rows → tests (51 IDs, 37 rows)
+
+| ID | Acceptance criterion | Witness test (matrix row) | Status as recorded |
+|---|---|---|---|
+| REQ-001 | AC-001 | `test_ac_001_no_backend_import_and_stdlib_chain` | GREEN |
+| REQ-002 | AC-002 | `test_ac_002_two_managed_handlers` | GREEN |
+| REQ-002 | AC-003 | `test_ac_003_file_record_fields_as_json` | GREEN |
+| REQ-003 | AC-004 | `test_ac_004_foreign_handlers_untouched` | GREEN |
+| REQ-003 | AC-005 | `test_ac_005_no_duplicate_records` | GREEN |
+| REQ-004 | AC-006 | `test_ac_006_third_party_reaches_both_sinks` | GREEN |
+| REQ-004 | AC-007 | `test_ac_007_location_of_emitting_call` | GREEN |
+| REQ-005 | AC-008 | `test_ac_008_get_logger_emits_to_sinks` | GREEN |
+| REQ-005 | AC-009 | `test_ac_009_statements_go_through_get_logger` | GREEN |
+| REQ-006 | AC-010 | `test_ac_010_renderer_selection` | GREEN |
+| REQ-007 | AC-011 | `test_ac_011_sync_and_async_traced_records` | GREEN |
+| REQ-007 | AC-012 | `test_ac_012_exception_record_and_propagation` | GREEN |
+| REQ-007 | AC-013 | `test_ac_013_removed_parameters` | GREEN |
+| REQ-008 | AC-014 | `test_ac_014_logged_class_records` | GREEN |
+| REQ-009 | AC-015 | `test_ac_015_no_local_values_in_exception_record` | GREEN |
+| REQ-010 | AC-016 | `test_ac_016_call_unaffected_by_failing_file_sink` | GREEN |
+| REQ-011 | AC-003 | `test_ac_003_file_record_fields_as_json` | GREEN |
+| REQ-012 | AC-017 | `test_ac_017_live_reconfigure` | GREEN |
+| REQ-013 | AC-018 | `test_ac_018_dependency_report_clean` | GREEN |
+| REQ-014 | AC-019 | `test_ac_019_guidance_names_feature_entry_points` | GREEN |
+| REQ-015 | AC-020 | `test_ac_020_public_export_surface` | GREEN |
+| INV-001 | — | `test_inv_001_concurrent_setup_owns_two_handlers` | GREEN |
+| INV-002 | — | `test_inv_002_no_local_value_ever_recorded` | GREEN |
+| INV-003 | — | `test_inv_003_elapsed_non_negative` | GREEN |
+| INV-004 | — | `test_inv_004_other_loggers_untouched` | GREEN |
+| INV-005 | — | `test_inv_005_required_fields_present` | GREEN |
+| EDGE-001 | — | `test_edge_001_log_file_parent_created` | GREEN |
+| EDGE-002 | — | `test_edge_002_rotation_with_open_handle` | GREEN |
+| EDGE-003 | — | `test_edge_003_file_config_keeps_managed_handlers` | GREEN |
+| EDGE-004 | — | `test_edge_004_unknown_numeric_level` | GREEN |
+| EDGE-005 | — | `test_edge_005_unknown_renderer` | GREEN |
+| EDGE-006 | — | `test_edge_006_get_logger_before_setup` | GREEN |
+| NFR-001 | — | `test_nfr_001_setup_time_budget` | GREEN |
+| NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | GREEN |
+| NFR-003 | — | `test_inv_002_no_local_value_ever_recorded` | GREEN |
+| NFR-004 | — | `test_ac_018_dependency_report_clean` | GREEN |
+| NFR-005 | — | `test_nfr_005_single_listener_thread` | GREEN |
+
+Every REQ has at least one GREEN test; every AC, INV, EDGE and NFR has a GREEN witness. `AC-003` is covered by
+two REQs (REQ-002 and REQ-011) and `NFR-003` shares the INV-002 witness — both are stated inside the cells.
+
+#### Amended IDs → rows in the affected feature's own matrix
+
+**`logging.md` v3 (logging matrix, owner feature):**
+
+| ID | Acceptance criterion | Witness test (matrix row) | Status as recorded |
+|---|---|---|---|
+| REQ-001 | AC-001 | `test_ac_001_setup_logger_adds_sinks` | GREEN |
+| REQ-002 | AC-002 | `test_ac_002_setup_logger_idempotent` | GREEN |
+| REQ-002 | AC-003 | `test_ac_003_setup_logger_thread_safe` | GREEN |
+| REQ-003 | AC-004 | `test_ac_004_intercept_handler_routes_records` | GREEN |
+| INV-001 | — | `test_inv_001_concurrent_setup_logger_sinks` | GREEN |
+| NFR-001 | — | `test_nfr_001_setup_time_budget` | GREEN |
+| NFR-002 | — | `test_nfr_002_decorator_overhead_budget` | GREEN |
+| NFR-003 | — | `test_nfr_003_diagnose_false` | GREEN |
+| NFR-004 | — | `test_nfr_004_backward_compatible_api` | GREEN |
+| — | — | `test_stdlib_loguru_decorator_pipeline` | GREEN |
+
+Retired rows — kept as historical records (decision **Q-129**, convention B), now annotated with the fact that
+the witness was deleted by this change (spec §11, T-001 `fcce934`), so the matrix no longer implies a live test:
+
+| ID | Acceptance criterion | Witness test (matrix row) | Status as recorded |
+|---|---|---|---|
+| REQ-003 | AC-005 | — (the AC was deleted by the approved `logging.md` v3 amendment; its witness, the intercept-bootstrap case in `tests/unit/logging/test_logging.py`, was deleted in T-001 `fcce934`, spec §11 — the surviving case is this change's AC-007) | GREEN (historical) |
+| EDGE-005 | — | — (the EDGE was restated in capability terms as this change's EDGE-004; its witness, the unknown-level case in `tests/unit/logging/test_logging_edges.py`, was deleted in T-001 `fcce934`, spec §11 — the case is now witnessed by `test_edge_004_unknown_numeric_level`) | GREEN (historical) |
+
+**`logging-coverage.md` v2 (logging-coverage matrix):**
+
+| ID | Acceptance criterion | Witness test (matrix row) | Status as recorded |
+|---|---|---|---|
+| REQ-005 | AC-005 | `test_module_functions_traced` | GREEN |
+| REQ-010 | AC-010 | `test_ac_009_statements_go_through_get_logger` | GREEN |
+| REQ-013 | AC-013 | `test_sink_failure_does_not_interrupt` | GREEN |
+| INV-004 | — | `test_tracing_never_interrupts_call` | GREEN |
+| EDGE-002 | — | `test_sink_failure_graceful` | GREEN |
+| EDGE-005 | — | `test_setup_logger_idempotent` | GREEN |
+
+**`settings-coverage.md` v2 / `settings.md` v4 (settings-coverage matrix):**
+
+| ID | Acceptance criterion | Witness test (matrix row) | Status as recorded |
+|---|---|---|---|
+| REQ-014 | AC-019 | `test_setup_logger_reads_registry` | GREEN |
+| REQ-015 | AC-020 | `test_sink_reconfigured_on_change` | GREEN |
+| REQ-016 | AC-021 | `test_logging_stub_removed` | GREEN |
+| EDGE-008 | — | `test_sink_reconfigured_rotation` | GREEN |
+| NFR-004 | — | `test_observability_tracing` | GREEN |
+
+`REQ-014/AC-019`, `REQ-015/AC-020`, `EDGE-008` and `NFR-004` moved **RED → GREEN** here (they were RED at
+S3.2); `REQ-016/AC-021` was already GREEN at S3.2 and keeps that note plus the S5.1 re-confirmation.
+
+**`event-bus.md` (eventbus) and `user-roles-permissions.md` (permissions): no row updated.** The change routed
+10 eventbus and 1 permissions statement through `get_logger()`, but no witness of those features' rows was
+modified, so their rows stay as those changes recorded them; both suites are GREEN in the S5.1 full-suite run.
+This is stated in the Affected Features table rather than by editing rows that this change did not touch.
+
+#### Rows deliberately NOT refreshed
+
+Convention B forbids refreshing a row a change did not actually alter. A test file's **imports** changing is
+not a witness change — only a row whose **witness function body** this change modified was refreshed. Verified
+unmodified bodies (deliberately left exactly as the change that wrote them recorded them):
+
+| Row | Witness left untouched | Why |
+|---|---|---|
+| settings-coverage `EDGE-007` | `test_setup_logger_idempotent` (`tests/unit/test_settings_coverage.py`) | the settings-coverage copy of the same-named test was not modified; only the `tests/unit/logging_coverage/test_edge_cases.py` copy (logging-coverage row `EDGE-005`) was |
+| settings-coverage `REQ-013/AC-018` | `test_eventbus_registry_value` | import-only change in the enclosing file |
+| settings-coverage `NFR-001` | `test_live_read_in_memory` | import-only change in the enclosing file |
+| logging-coverage `EDGE-001` | `test_slow_threshold_exceeded` | body unchanged (`slow_threshold_ms` semantics unchanged) |
+| logging-coverage `EDGE-004` | `test_traced_method_exception_propagates` | body unchanged |
+| issue `main-ci-green` items E, G, I | `tests/unit/logging/test_logging_sink_ownership.py`, `tests/settings_test_helpers.py::set_value_settled`, `tests/conftest.py::_stdlib_root_logging_restored` | another change's dated gate record; this change adapted those witnesses, and the effect is recorded inside the `logging.md` / `settings-coverage` rows that cite them (rows REQ-001/AC-001, REQ-003/AC-004, INV-001, `REQ-014/AC-019`, `REQ-015/AC-020`, `EDGE-008`) instead of rewriting the issue's own rows |
+| `Settings Public Registry Setter Matrix` (2026-10-06) | — | a different change's amendment section; untouched, including its statement that no existing row of an affected feature is rewritten |
+
+#### Deleted witnesses and the rows that cited them
+
+| Deleted test | Row affected | Resolution |
+|---|---|---|
+| `test_existing_direct_loguru_kept` (`tests/acceptance/logging_coverage/test_direct_loguru_kept.py`, file deleted, spec §11) | logging-coverage `REQ-010/AC-010` | re-pointed in T-006 to `test_ac_009_statements_go_through_get_logger`; the cell names the retired witness and why (T-006, 2026-10-07) |
+| `test_ac_005_intercept_handler_skips_bootstrap` (`tests/unit/logging/test_logging.py`) | `logging.md` `REQ-003/AC-005` | the AC itself was deleted by the approved amendment; the row now records the deletion and points at the surviving case (`AC-007` / `test_ac_007_location_of_emitting_call`) |
+| `test_edge_005_intercept_unknown_level` (`tests/unit/logging/test_logging_edges.py`) | `logging.md` `EDGE-005` | the EDGE was restated in capability terms as this change's `EDGE-004`; the row points at `test_edge_004_unknown_numeric_level` |
+
+No row cites a deleted function any more — that is exactly what the gate below proves.
+
+#### Gate: referential integrity
+
+```text
+$ uv run python scripts/check_traceability.py
+Traceability: PASS (822 matrix rows, 136 spec IDs, 745 test functions)
+```
+
+Exit code **0**. The script fails on a spec ID with no row, a row citing an ID no spec defines, a row citing a
+test function that no longer exists under `tests/`, and an undeclared status value — so a PASS after these
+edits is the evidence that (a) all 51 own IDs are covered, (b) the three deleted witnesses are no longer cited,
+(c) no row was orphaned by the amendments, and (d) every status cell uses a declared value
+(`PENDING`/`RED`/`GREEN`/`REFACTORED`/`VERIFIED`/`N/A`). It does **not** fail on a stale status, by design.
+
+#### Scope discipline for this step
+
+One file changed: `docs/verification/traceability.md` (76 insertions, 60 deletions — 23 rows updated in
+three existing matrices, 37 rows of this change's own matrix re-statused, one Affected Features table added)
+plus this record. No test file, no `src/` file, no spec, no task file, no `docs/todo/`, no `docs/questions/`. No
+test was edited, weakened, deleted or skipped to make a row pass; no row belonging to another change was
+rewritten. Nothing was pushed.
+
+**Phase 5 (S5.3) gate: PASS — `uv run python scripts/check_traceability.py` → Traceability: PASS (822 matrix rows, 136 spec IDs, 745 test functions) (exit 0).** Next:
+S5.4 — the verification report (spec coverage, acceptance coverage, branch coverage).
