@@ -613,3 +613,161 @@ ruff format clean on the changed path ◆; complexipy clean at the CI threshold 
 configuration change ◆. This step does **not** declare the Phase 3 RED gate — S3.2 declares it over all
 seven tasks and updates the traceability matrix.
 
+
+
+## Phase 3 — S3.1 test derivation, T-002 (2026-10-07)
+
+**Step:** S3.1 (Test & RED phase), DAG task **T-002 — the generator harness** only. One atomic
+step; the Phase 3 RED gate is **not** declared here (S3.2 declares it over all seven tasks and
+updates the traceability matrix).
+
+**Repository root for every count below (P-57):** `git rev-parse --show-toplevel` →
+`C:/workspace/active-projects/python-template_kopie-worktrees/feature/structure-map`
+(branch `feature/structure-map`, tree clean before and after the step apart from the two files
+this step wrote).
+
+**Inputs read:** `docs/specs/structure-map.md` §4 Definitions, §5 REQ-001/002/003/004/006/007/008,
+§7 AC-001/002/003/006/007/008, §9 EDGE-003/004/005/006/007/008/014, §10 NFR-001/003/006 + the
+Observability table, §11 rows naming the T-002 nodes; `docs/decisions/ADR-086` in full; the
+T-001 section of this file; `tests/acceptance/test_structure_map.py` in full.
+`docs/tasks/structure-map.tasks.json` was **not** read (T-002's definition was in the step
+prompt, P-66).
+
+### Files written
+
+| File | Lines | Content |
+|---|---|---|
+| `tests/acceptance/test_structure_map.py` | 124 → **468** | T-002 section appended: 8 module constants, 6 helpers, 10 tests. T-001's tests, `_workflow_job_block`, `_opens_job_key`, `_NFR_004_GATES` and `_VERIFY_SPEC_REPORT_BEFORE_FIX` are untouched. |
+| `tests/unit/test_make_map.py` | **251** (new) | 5 tests + 5 helpers (`_run_generator`, `_git_tree`, `_reported_paths`, `_is_unparseable`, `_unopenable`). |
+
+Q-10 placement respected: no new test directory, no third test file. `_run` was extended with a
+`cwd: Path = _REPO_ROOT` keyword (default unchanged, so T-001's two witnesses behave exactly as
+before) instead of duplicating `subprocess.run`. `_git_tree` is deliberately duplicated in the
+two test files rather than imported across them — a cross-test-file import would need a third
+shared module, which Q-10's placement forbids.
+
+### The 15 derived tests → spec clauses
+
+| Test node | File | Spec clause(s) | Asserts |
+|---|---|---|---|
+| `test_ac_001_stdlib_only_and_single_read` | acceptance | AC-001 (1)–(4) | the generator file exists; a generate run exits 0; every top-level import is in `sys.stdlib_module_names`; exactly one file-read call site (`read_text`/`read_bytes`/non-write `open`) in the module AST; `deptry .` exits 0 |
+| `test_ac_002_cli_options_and_defaults` | acceptance | AC-002 (1)–(4) | `--help` exits 0 and lists `--root`, `--out`, `--include-private`, `--max-depth`, `--check`, `-h`, `--help`, with `STRUCTURE.md` in the `--out` option segment and `4` in the `--max-depth` segment; `--out here.md` is written against the **cwd**, never under `--root`; with no `--root` the map describes the script's repository root (`scripts/check_traceability.py` present); an unknown option exits 2 with an argparse `usage` line |
+| `test_ac_003_file_set_includes_untracked_drops_deleted` | acceptance | AC-003 (1)–(3) | in a throwaway `git init` tree: exit 0; the never-`git add`ed `src/untracked.py` is in the map; the deleted-but-staged `src/gone.py` is not; `src/kept.py` is |
+| `test_ac_008_document_shape` | acceptance | AC-008 (1)–(4), INV-003 | line 1 `# Repository structure`; line 2 blank; line 3 the generated-by line; the only `## ` sections are `## Directory tree` then `## Packages`; no timestamp, drive letter/UNC, backslash, absolute POSIX path or `generated in` line; no host name (`platform.node()`) or user name (`getpass.getuser()`) anywhere |
+| `test_edge_006_out_parent_directory_created` | acceptance | EDGE-006 (REQ-002) | `--out deep/nested/STRUCTURE.md` exits 0 and writes a non-empty map although the parents did not exist |
+| `test_edge_007_non_git_root_falls_back_to_ignore_list` | acceptance | EDGE-007 (1)–(5) | a non-git `--root` exits 0; exactly one non-empty stderr line and it names `git`; `src/mod.py` is mapped; `.venv`, `__pycache__`, `data` never appear; `src/ignored/hidden.py` **is** mapped although `.gitignore` lists `src/ignored/` (the ignore file is never parsed) |
+| `test_edge_008_deleted_tracked_file_absent` | acceptance | EDGE-008 | exit 0; `src/gone.py` absent from the map; `gone.py` never mentioned on stderr; `src/kept.py` present |
+| `test_edge_014_max_depth_below_one_is_usage_error` | acceptance | EDGE-014 (REQ-002) | `--max-depth 0` and `--max-depth -3` each exit 2, print an argparse `usage` line, and write no output file |
+| `test_nfr_001_full_run_under_two_seconds` | acceptance | NFR-001 | a full generate run over this repository exits 0 in under 2 s (skipif-guarded, see calibration) |
+| `test_nfr_003_deptry_clean` | acceptance | NFR-003 | `sys.executable -m deptry .` exits 0 — no unused/missing/misplaced dependency |
+| `test_ac_006_parse_error_is_hard_failure` | unit | AC-006 (1)–(5), INV-004 | two unparseable files (`src/z_bad.py`, `src/a_bad.py`): exit 4; stderr has exactly one line per path, sorted ascending, each naming the path and `SyntaxError`, each path exactly once; stdout empty; a pre-existing `--out` file is byte-identical afterwards; no new file at `STRUCTURE.md` |
+| `test_ac_007_grammar_is_the_running_interpreter` | unit | AC-007 (1)–(3) | PEP 695 sources (`type Alias = int \| None`, `def first[T](…)`) exit 0; `--feature-version 3.12` exits 2 (no grammar option, REQ-002); `--help` mentions neither `feature-version` nor `feature_version` |
+| `test_edge_003_newer_syntax_is_hard_failure` | unit | EDGE-003 | a `def f(a: int \| None = None, *, b: list[str] = []) -> dict[str, int]` source exits 4 and is reported once as `SyntaxError`; no output file |
+| `test_edge_004_non_utf8_is_hard_failure` | unit | EDGE-004 | `b"x = '\xe9'\n"` exits 4, reported once as `UnicodeDecodeError`, no output file |
+| `test_edge_005_unopenable_file_is_hard_failure` | unit | EDGE-005 | a file made unopenable by the probe fixture exits 4, reported once as `PermissionError`/`IsADirectoryError`/`OSError`, no output file |
+
+### RED evidence (observed, not declared)
+
+`red_command` (run from the worktree root):
+
+```
+uv run pytest -p no:randomly -v tests/acceptance/test_structure_map.py::<10 nodes> tests/unit/test_make_map.py::<5 nodes>
+→ 14 failed, 1 passed in 1.48s
+```
+
+Every failure is a `Failed:` (an explicit `pytest.fail` naming the missing generator or the
+missing output file) or an `AssertionError` listing the unmet clauses — **no** collection, import
+or fixture error, and no `ValidationError`/`ValueError` from invalid test data. Neither test file
+imports `scripts.make_map` at module level; the generator is reached only as a subprocess
+(`sys.executable <script>`), so the missing module surfaces as a behaviour failure, not an import
+error. Representative evidence:
+
+- `test_ac_001` — `Failed: …\scripts\make_map.py does not exist — T-002 Phase 4 has not implemented the generator`
+- `test_ac_002` — `Failed: no map file at …\default.md (exit 2): '' "python.exe: can't open file '…scripts\\make_map.py': [Errno 2] No such file or directory"`
+- `test_ac_003` / `test_ac_008` / `test_edge_007` / `test_edge_008` — same `_map_text` failure (no map written)
+- `test_edge_006` — `AssertionError: clause 1: exit 2: …can't open file…`
+- `test_edge_014` — `AssertionError: --max-depth 0: no argparse usage error on stderr: …`
+- `test_nfr_001` — `AssertionError: generate run exits 2: …can't open file…`
+- `test_ac_006` — `Failed: …make_map.py does not exist…` (its clause set is separately shown to be sensitive: against a generator that reads but never parses, it fails with `clause 1: exit 0, expected 4`, `clause 2: stderr has 0 line(s)`, `clause 4: the pre-existing output file was modified`, `clause 5: no output file may be written`)
+- `test_ac_007` / `test_edge_003` / `test_edge_004` / `test_edge_005` — `Failed: …make_map.py does not exist…`
+
+**GREEN witness (must stay GREEN through Phase 4):** `test_nfr_003_deptry_clean` passes at
+derivation time — `deptry .` is already clean on the branch, and the witness exists to catch a
+Phase 4 that introduces a dependency. This is the same pattern as T-001's AC-025 clause 3.
+
+### Test sensitivity (the tests fail on a wrong implementation, not only on a missing one)
+
+A behaviour-correct stub generator (`Temp/sens_t002/stub_make_map.py`, never committed: CLI with
+`ArgumentDefaultsHelpFormatter`, `git ls-files --cached --others --exclude-standard` + the
+built-in ignore fallback with one stderr note, `ast.parse` per file → exit 4 with sorted
+`path: ExceptionType` lines, `--max-depth < 1` → `parser.error`, the REQ-008 chrome plus a
+minimal code-dir tree) was driven through all 15 test functions directly, with `_GENERATOR`
+rebound to it (`Temp/sens_t002/driver.py`):
+
+```
+15/15 pass against the stub        (same 15 nodes: 14 fail against the absent module, NFR-003 passes both times)
+```
+
+The driver also caught two defects in the derived tests themselves, both fixed before this
+record: `_run`'s body still pinned `cwd=_REPO_ROOT` after the signature gained the keyword (an
+`--out here.md` run leaked a file into the worktree root — removed, `git status` clean), and
+`_help_segment` matched the `usage:` line instead of the option line, so the default-value
+clauses could not be satisfied by any implementation.
+
+### NFR-001 calibration (the skipif guard)
+
+Measured at this step on this host (CPython 3.14.5, Windows): **0.0114 s** for the fixed
+micro-benchmark (parse a 50-function source 40 times, best of 3). `_CALIBRATION_REFERENCE_SECONDS
+= 0.011`, so `test_nfr_001_full_run_under_two_seconds` **skips** when the calibration exceeds
+0.066 s (6× the reference) — the spec's "skipped on slow CI" rule. It did **not** skip in this
+run (calibration 0.0114 s), and the stub's full-repository run completed well inside the 2 s
+budget. NFR-001 is not a CI gate (the spec's own wording); the guard keeps it from failing a
+slow runner while still asserting the budget on a normal one.
+
+### Quality gates for this step's changed paths
+
+- `uv run ruff check tests/acceptance/test_structure_map.py tests/unit/test_make_map.py` → **All checks passed!**
+- `uv run ruff format --check` on the same two paths → **2 files already formatted** (two violations were fixed with a path-scoped `ruff format`; PLR2004 magic-value hits were fixed with named `_EXIT_USAGE` / `_EXIT_UNREADABLE` constants rather than a noqa)
+- `uv run complexipy` (CI scope `src` + `tests`) → **All functions are within the allowed complexity**; the highest T-002 function is 13 (`_reported_paths`, `test_ac_008_document_shape`), all others ≤ 11 (P-56)
+- Repo-wide `ruff check .` / `ruff format --check .` stay clean: T-001's `test_nfr_004_mypy_and_ruff_clean` fails **only** on the pre-existing `scripts/verify_spec.py:74` mypy error, i.e. the two T-002 files add no ruff or format violation
+- `uv run python scripts/check_traceability.py` → **Traceability: PASS (822 matrix rows, 136 spec IDs, 763 test functions)** — no row updates made here (S3.2 owns the matrix)
+- Full suite `uv run pytest tests/ -q` → **762 passed, 1 skipped, 16 failed in 213.51s**. Against the T-001 baseline (748 passed, 1 skipped, 2 failed) the delta is exactly the 14 new T-002 REDs; the 2 remaining failures are T-001's own RED witnesses (AC-025, NFR-004). No other test changed state.
+- `uv.lock` restored with `git checkout -- uv.lock` before committing (P-42); nothing pushed.
+
+### Decisions and deviations
+
+- **AC-002 clause 3** witnesses "the map describes the script's repository root" with
+  `scripts/check_traceability.py` rather than `scripts/make_map.py`: the witness must be
+  satisfiable before Phase 4 creates the generator, and a wrong default (`--root` = cwd) still
+  fails it, because the temporary cwd contains no `scripts/` directory at all.
+- **AC-001 clause 3** is a static AST witness of the read *site*, not a runtime count of reads —
+  marked with a `ponytail:` comment naming the ceiling and the upgrade path (an `open` audit hook
+  in a wrapper process).
+- **EDGE-005** fixture: the probe (`Temp/probe_edge005.py`) established that a directory passed to
+  `open()` raises `IsADirectoryError` and that `os.chmod(0o000)` does **not** block reads on this
+  Windows host; the fixture therefore uses `os.open(path, os.O_WRONLY)` + `os.fdopen(fd, "wb")`
+  for the file's lifetime, which yields `PermissionError` (an `OSError`). The test skips when
+  that fixture cannot work (root on POSIX).
+- **`--max-depth -3`** is passed as a value (argparse accepts negative numbers when no option
+  looks like one), so the test requires the generator's own `>= 1` validation, exactly as
+  EDGE-014 states, not only argparse's type check.
+- Content-bearing assertions (`src/untracked.py` in the map, the ignore-list directories absent,
+  `scripts/check_traceability.py` present) cannot go GREEN before **T-003** renders the Directory
+  tree body; they are still valid RED now, and T-002's own Phase 4 scope (module, CLI, file set,
+  exit-code dispatcher, chrome) is what makes the *structural* clauses pass.
+
+### Hand-off note for T-003 (Directory tree body)
+
+- T-003's acceptance tests go in `tests/acceptance/test_structure_map.py`, its property tests in
+  `tests/property/test_structure_map.py` (new file, Q-10 allows exactly this one).
+- Reuse `_git_tree(root, files)` (acceptance) and `_map_text(out, proc)`; `_run(args, cwd=…)` now
+  supports temporary trees. Fixture paths belong under `src/` (a code dir) so REQ-009 renders
+  them entry by entry — that is what makes the T-002 content assertions work.
+- The T-002 chrome assertion pins the section list to exactly `["## Directory tree", "## Packages"]`;
+  T-003 must not add a section, and must keep the `# Repository structure` / blank / generated-by
+  line order (lines 1–3) or `test_ac_008_document_shape` regresses.
+- The stub proves the chrome + a minimal code-dir tree is enough for T-002's assertions to pass;
+  T-003's Phase 4 will replace the tree body without touching T-002's tests.
+- Nothing in T-002 asserts tree indentation, depth rendering, docstring first lines, count lines
+  or `__init__.py` collapsing — those are T-003's nodes (REQ-009/010/011, AC-009/010/011,
+  EDGE-009/010/011 and the tree invariants).
