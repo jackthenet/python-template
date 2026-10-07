@@ -12,7 +12,7 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 - **Question file:** `docs/questions/settings-public-registry-setter.md`
 - **Spec:** **six amendments required** — `docs/specs/settings.md` (REQ-014 names only `get_settings_registry()` / `reset_settings_registry()`), plus `event-bus.md`, `user-roles-permissions.md`, `search.md`, `session-management.md` (each specifies its own singleton accessor with no install operation), plus `logging-coverage.md` §3.1 (REQ-001's normative inventory must list the new public module functions — Q-15)
 - **Worktree:** <created at P.4> `../python-template_kopie-worktrees/crosscut/settings-public-registry-setter` (branch `crosscut/settings-public-registry-setter`)
-- **Depends on:** `architecture-tests-missing` — **satisfied** (MERGED, PR #65 → `4f684f8`). Rebase expected on `structlog-logging` (IN-WORKFLOW): it amends `docs/specs/settings.md` at v4 and rewrites statements inside `src/backend/settings/registry.py`
+- **Depends on:** `architecture-tests-missing` — **satisfied** (MERGED, PR #65 → `4f684f8`). `structlog-logging` rebase is **no longer pending** — it MERGED 2026-10-07 (PR #74 → `c7a9119`), amending `docs/specs/settings.md` to v4 and rewriting statements inside `src/backend/settings/registry.py`; the change branch was created before that merge, so its S3.2/S4.x steps must re-check the six spec amendments and the `registry.py` statements against current `main`
 - **Related specs:** `docs/specs/settings.md` (REQ-014 singleton surface), `docs/specs/settings-coverage.md` (REQ-012/AC-016/EDGE-011 guarded read), `docs/specs/event-bus.md`, `docs/specs/user-roles-permissions.md`, `docs/specs/search.md`, `docs/specs/session-management.md`
 
 ## Goal (one line)
