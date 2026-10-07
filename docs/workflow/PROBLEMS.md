@@ -575,3 +575,10 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 wasted step launch (~0 work produced), plus the re-launch.
 - **Resolution:** relaunched with a **context-budgeted brief**: the task's JSON definition is pasted into the brief instead of being read from the 596-line DAG; the spec is read by **section** (locate with `grep -n "REQ-025\|AC-025\|NFR-004"`, then read that line range); the verification record is read only from its `## Phase 2 — S2.2 task DAG` hand-off note. **Durable rule:** a step brief names the exact sections/line ranges to read and never instructs a full read of a file above ~300 lines; the orchestrator pastes small inputs (a task object, a hand-off note) into the brief rather than pointing at a large file.
 - **Date:** 2026-10-07
+
+## P-67 — a witness on `verify_spec.py`'s report failed for the wrong reason under the Windows cp1252 locale
+- **Problem:** in **S3.1 (T-001)** of `structure-map`, AC-025's clause-3 regression guard compares `scripts/verify_spec.py`'s stdout against an embedded golden report. Run through `subprocess.run(..., text=True)`, Python decoded the child's UTF-8 output with the Windows locale codec (cp1252), so the comparison failed on **mojibake** — an invalid RED (the clause is meant to be GREEN before implementation).
+- **Step / Phase:** S3.1 Derive tests (T-001) — change structure-map / FEATURE
+- **Duration / iterations:** 1 in-step fix + re-run (the subagent caught and resolved it within its own execution, per the in-step fix-and-recheck rule).
+- **Resolution:** the `_run` helper passes `encoding="utf-8"` explicitly. **Durable rule:** any test that asserts on the text output of a repo script must pass `encoding="utf-8"` (or `PYTHONUTF8=1` in the child env) — never rely on the platform locale; the same applies to `uv run python -c` over JSON with non-ASCII.
+- **Date:** 2026-10-07
