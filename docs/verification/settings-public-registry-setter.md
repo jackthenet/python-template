@@ -2022,3 +2022,167 @@ subagent's own new file (F-37 context), which is an in-step fix-and-recheck, not
   `tests/contract/logging/test_logging_contracts.py`, `tests/property/logging/test_logging_properties.py`
   and `tests/unit/logging/test_logging_edges.py` — three of the files T-007 Phase 4 migrates.
   Whichever branch merges second rebases and keeps both edits; neither may overwrite the other.
+
+## S3.1 — T-008 test derivation (lint contract: AC-018, EDGE-009, NFR-004) — 2026-10-07
+
+Task under test, read from `.github/task-runner/tasks.json` (byte-identical to
+`docs/tasks/settings-public-registry-setter.tasks.json`): **T-008** "Add the five TID251 banned-api
+entries and enable TID251 in [tool.ruff.lint].select; prove the ban fires and the repo stays clean"
+— `requirements` [REQ-013], `acceptance_criteria` [AC-018], `edge_cases` [EDGE-009],
+`non_functional` [NFR-004], `dependencies` [T-007]. Every bare ID below is a
+`docs/specs/settings-public-registry-setter.md` ID unless a spec file is named (P-53).
+`git rev-parse --show-toplevel` =
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`
+for every count in this section.
+
+### Files created — exactly the DAG's `allowed_files.test_files`
+
+| File | Lines | Notes |
+|---|---|---|
+| `tests/contract/singleton_install/__init__.py` | 1 | new package (every `tests/` package carries `__init__.py`, which is what puts `tests/` on `sys.path`); T-009/T-011/T-012 add their files to it |
+| `tests/contract/singleton_install/test_lint_contract.py` | 212 | the three DAG node IDs, spelled verbatim |
+
+`pyproject.toml` was **not** touched — the config change is T-008's implementation step (S4.x), and
+P-55 keeps that file owned by this task only.
+
+### Tests derived (3)
+
+| Test | Normative ID | Assertion design |
+|---|---|---|
+| `test_ac_018_ruff_bans_private_slot_import` | AC-018 (REQ-013) | four conjuncts, in this order: (1) five files planted in `tmp_path`, each importing one private slot in **both** AC-018 reference forms, must yield exactly 2 `TID251` findings each whose message names the banned path **and** that feature's install operation; (2) `[tool.ruff.lint].select` contains `"TID251"` (read with `tomllib` — AC-018 states the selection as a normative fact, so pinning it is spec-derived, not an implementation detail); (3) `ruff check .` over the repository reports no `TID251`; (4) the five owner modules' own slot files report no `TID251` (the ruff counterpart of EDGE-008) |
+| `test_edge_009_public_api_not_banned` | EDGE-009 | five planted files importing the install operation from the feature package **and** a public symbol from the owning module path (`SettingsRegistry`, `EventBus`, `PermissionService`, `SearchService`, `SessionService`) → no `TID251`; plus an **anti-vacuity control**: a sibling planted file importing `backend.settings.registry._registry` **must** be flagged by the same run |
+| `test_nfr_004_ruff_and_mypy_clean` | NFR-004 | three conjuncts: the `[tool.ruff.lint.flake8-tidy-imports.banned-api]` table holds all five fully-qualified keys, each with a non-empty `.msg`; `ruff check .` reports no `TID251`; `python -m mypy src` exits 0 |
+
+Tool invocation (deviation from the DAG wording, F-41): `sys.executable -m ruff check
+--output-format=json --config <abs pyproject.toml>` and `sys.executable -m mypy src`, `cwd=_REPO_ROOT`
+with `_REPO_ROOT = Path(__file__).resolve().parents[3]`. Same tool, same repository configuration, but
+resolved from this file's own location instead of the caller's CWD (PROBLEMS.md P-57), and the
+interpreter is the one already running the test, so no environment re-resolution happens mid-test.
+`_ruff_findings` asserts exit code ∈ {0, 1} and JSON-parseable stdout **before** any assertion on
+findings, so a broken invocation can never read as "no violation found".
+
+### Collection
+
+- before: `tests/contract/singleton_install/` did not exist — no nodes.
+- after: `uv run pytest --collect-only -q tests/contract/singleton_install` → **3 tests collected**,
+  no errors (no module-level import of a not-yet-existing install operation: the tests never import
+  `backend.*` at all, they only plant text into `tmp_path`).
+
+### RED gate — the DAG's `red_command`, verbatim
+
+```
+uv run pytest tests/contract/singleton_install/test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import \
+  tests/contract/singleton_install/test_lint_contract.py::test_edge_009_public_api_not_banned \
+  tests/contract/singleton_install/test_lint_contract.py::test_nfr_004_ruff_and_mypy_clean -v
+```
+
+| Test | Observed failure |
+|---|---|
+| `test_ac_018_ruff_bans_private_slot_import` | `AssertionError: AC-018: importing backend.settings.registry._registry must be reported in both reference forms (the ImportFrom and the module-alias write), got 0: []` / `assert 0 == 2` |
+| `test_edge_009_public_api_not_banned` | `AssertionError: EDGE-009 anti-vacuity: the same ruff run must report TID251 for a private-slot import — while the ban is inert, 'the public API is not banned' proves nothing` / `assert []` |
+| `test_nfr_004_ruff_and_mypy_clean` | `AssertionError: NFR-004 / REQ-013: [tool.ruff.lint.flake8-tidy-imports.banned-api] must configure these fully-qualified keys: ['backend.settings.registry._registry', 'backend.eventbus.eventbus._default_bus', 'backend.permissions.service._permission_service', 'backend.search.service._singleton', 'backend.sessionmanagement.service._session_service']` / `assert [...] == []` |
+
+`3 failed in 0.48s`. Every failure is an `AssertionError` raised in the test body; no
+collection/import/fixture error, no `ValidationError`/`ValueError` from test data.
+
+### Why this is a valid RED and not a broken invocation
+
+- `uv run python -m ruff check --output-format=concise --config <abs repo pyproject.toml> <planted
+  fixture>` on this branch prints the fixture's own `I001` and `All checks passed!`, exit 0 — the
+  invocation runs and the repository configuration loads for a file outside the repo, and **no
+  `TID251` comes back** because `TID251` is not in `[tool.ruff.lint].select` (ADR-084: an unselected
+  `banned-api` table is inert).
+- Sensitivity probe, out-of-band and never committed (`/tmp/tmp.eqFr5NHX5f/probe.py`: the three test
+  functions called directly with the module's `_PYPROJECT` pointed at a scratch copy of
+  `pyproject.toml` carrying `TID251` + the five fully-qualified keys):
+  `test_edge_009_public_api_not_banned: PASS`;
+  `test_ac_018…: FAIL -> AC-018: the repository itself must report no TID251 violation`;
+  `test_nfr_004…: FAIL -> NFR-004: ruff check . must report no TID251 violation in the repository`.
+  So the ban half of both witnesses is satisfiable by exactly the planned config, and the surviving
+  failure is the DAG's `T-008 depends on T-007` ordering, not a broken witness.
+
+### Measured facts handed to T-008's implementation step (S4.x)
+
+- Repository sweep with the scratch config: **9** `TID251` findings
+  (`uv run python -m ruff check --output-format=concise --config <scratch pyproject.toml> . | grep -c TID251`)
+  — the un-migrated write sites T-007 removes. A targeted run over the eight site files
+  (`src/main.py`, `tests/settings_test_helpers.py`, `tests/eventbus_test_helpers.py`,
+  `tests/acceptance/settings_coverage/test_setup_logger.py`,
+  `tests/acceptance/settings_coverage/test_wiring.py`, `tests/contract/logging/test_logging_contracts.py`,
+  `tests/property/logging/test_logging_properties.py`, `tests/unit/logging/test_logging_edges.py`)
+  gives the same 9.
+- The five owner modules' own slot files report **no** `TID251` under the scratch config — `TID251`
+  sees cross-module references only (the ruff counterpart of EDGE-008, measured).
+- `uv run python -m mypy src` → `Success: no issues found in 83 source files`, exit 0, 0.4 s.
+- `uv run ruff check .` on the current tree → `All checks passed!` — i.e. AC-018's repository half is
+  "clean" today only because the rule is inert.
+
+### Gates run for this step
+
+- `uv run ruff check tests/contract/singleton_install/__init__.py tests/contract/singleton_install/test_lint_contract.py`
+  → **All checks passed** (after one in-step fix: `PLR2004` on the literal `2`, replaced by the named
+  constant `_REFERENCE_FORMS`).
+- `uv run ruff format --check` on the same two paths → **2 files already formatted**.
+- `uv run complexipy tests/contract/singleton_install --max-complexity-allowed 15` → all functions
+  within the limit (max 7).
+- `uv run python scripts/check_traceability.py` → `Traceability: PASS (796 matrix rows, 136 spec IDs,
+  756 test functions)`.
+- T-007's three nodes re-run after adding this file: `1 failed, 2 passed`, still **12** foreign write
+  sites — the new file lives under `tests/` and **is** read by the T-007 scanner, and it is not
+  flagged, because the planted fixture source is assembled from the owner table with f-strings so no
+  string constant in this file places a slot name next to a subscript write (the F-36 lesson applied
+  before the first run, not after a scan failure).
+- Determinism: the `red_command` run twice (plain, and `-p no:randomly`) → the same 3 failures with
+  the same messages; the whole package re-run → `3 failed`.
+- State leak: `git status --porcelain` → only `?? tests/contract/singleton_install/`. Planted ruff
+  fixtures live in pytest `tmp_path`, never in the repository — the `lint` job runs `ruff check .` on
+  every push (`.github/workflows/lint.yml:37`), so a planted violation committed into the repo would
+  break CI (T-008 design constraint, ADR-084).
+
+### Findings
+
+- **F-41** The DAG's `red_command`/`green_command` wording (`uv run ruff check --config pyproject.toml
+  <fixture>`) is CWD-dependent: a relative `pyproject.toml` resolves against the caller's directory,
+  which is exactly the PROBLEMS.md P-57 hazard. The tests invoke the same tool with an absolute
+  config path derived from `__file__` and the test interpreter. Deviation from the DAG wording only;
+  the tool, the configuration and the assertion target are unchanged.
+- **F-42** Fixture naming collision, caught by the sensitivity probe before commit: keying a planted
+  file on the owning module's leaf name collapses three fixtures into one, because three of the five
+  owning modules are `service.py`. The probe's AC-018 message quoted
+  `backend.sessionmanagement.service._session_service` findings under the permissions slot. Fixed by
+  keying the planted names on the slot (unique across the five) plus an explicit uniqueness assert in
+  both tests.
+- **F-43** EDGE-009's witness needed an anti-vacuity control: with the ban inert, "the public API is
+  not flagged" is trivially true, so the test would have been GREEN before implementation — an invalid
+  RED. It now also asserts that the *same* ruff run reports `TID251` for a private-slot import.
+- **F-44** Citation defects inside the T-008 DAG entry (same class as F-37): `inputs` cite
+  "`pyproject.toml` [tool.ruff.lint].select (line 95)" — `select` is at `pyproject.toml:182` — and
+  "spec section 11" for the measured ruff facts — §11 is the Traceability Matrix, the facts are in §10
+  Test Strategy (spec lines 326-327). No effect on the derivation; recorded so the S2.x record is not
+  trusted for line numbers.
+- **F-45** `test_ac_018_ruff_bans_private_slot_import` and `test_nfr_004_ruff_and_mypy_clean` will stay
+  RED on their repository half until T-007's Phase 4 migration of the 12 write sites lands (measured:
+  9 `TID251` findings with the config applied). The DAG already orders T-008 after T-007; this is the
+  dependency made visible, not a defect in the witnesses. `test_edge_009_public_api_not_banned` is the
+  only one of the three that goes GREEN on the config change alone.
+- **F-46** Matrix rows for these IDs are the change-spec rows `REQ-013 | AC-017, AC-018`
+  (`docs/verification/traceability.md:937`), `EDGE-001 … EDGE-010` (`:942`) and `NFR-001 … NFR-004`
+  (`:943`), all `PENDING` from P.4; S5.3 fills them with these node IDs. P-53 warning for S5.3: the
+  matrix already carries unrelated `AC-018` rows (`:106` `settings.md`, `:199` user-roles-permissions)
+  and unrelated `EDGE-009` / `NFR-004` rows — write only inside the change-spec section.
+
+### Hand-off
+
+- **S3.2 (T-008)**: the ruff gate for this step is already clean on the changed paths and RED is
+  observed above; S3.2 re-confirms RED on the three nodes. It must **not** run the whole-repo sweep —
+  that is one of T-008's own completion gates in Phase 4/5, and it is clean today only because the
+  rule is inert.
+- **T-008 implementation (S4.x)**: add `TID251` to `[tool.ruff.lint].select` (only `TID251`, not the
+  `TID` family) and the `[tool.ruff.lint.flake8-tidy-imports.banned-api]` table with the five
+  fully-qualified keys, each `.msg` naming that feature's `set_*`/`get_*`/`reset_*` trio; the
+  repository half then requires T-007's migration.
+
+### Next
+
+S3.1 for **T-009** (cross-cutting witness set: AC-002..AC-008, AC-013, AC-020, EDGE-001..EDGE-007,
+INV-002, INV-003, NFR-001, NFR-002).
