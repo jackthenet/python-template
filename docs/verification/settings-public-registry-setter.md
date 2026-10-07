@@ -241,3 +241,92 @@ repository (nothing left behind):
 - Files changed by P.5: `docs/specs/settings-public-registry-setter.md`, this record,
   `docs/workflow/PROBLEMS.md`. `docs/todo/`, `docs/questions/`, `src/`, `tests/` and the six amended specs
   were not touched.
+
+## S2.1 — ADR decision (2026-10-07)
+
+**Cached Spec Approval Gate (recorded here, not re-checked in this step).** Approval PR **#73** was
+merged into `main` as merge commit **`a1a15db`** (2026-10-06T20:07:48Z), carrying the new spec plus all
+six spec amendments in one PR (Q-3). The gate is satisfied and the result is cached per AGENTS.md
+(“verify once per change”); later steps read this line and MUST NOT re-run
+`git log main -- docs/specs/settings-public-registry-setter.md`. The P.5 finding that `settings.md`
+AC-042 is narrower than its four siblings was **not** widened by the reviewer, so the change implements
+against its own **AC-010** (install + read + **reset**, all five features), which is the stronger rule.
+
+### Threshold applied
+
+AGENTS.md Phase 2 item 1 / decompose SKILL §S2.1: an ADR is required only for a decision that
+introduces a **new dependency**, a **new pattern/architecture element**, or a **cross-feature
+interface**. Measured against the code on this branch:
+
+- **No new dependency** — stdlib `threading`, plus already-installed ruff / pytest / mypy
+  (§12 row 9). No dependency ADR.
+- **A new cross-feature interface** — five features gain the same new public operation, called by the
+  composition root and by every state-isolating test helper; 12 outside-owner private-slot writes exist
+  today (`src/main.py:138` + 11 test sites). → **ADR-083**.
+- **A new pattern/architecture element in the quality gate** — first use of ruff `banned-api` in this
+  repository (`grep -rn "banned-api|flake8-tidy" pyproject.toml` → no match; `[tool.ruff.lint] select`
+  at `pyproject.toml:182` contains no `TID` rule) and the first `tests/unit/architecture/` package.
+  → **ADR-084**.
+
+### Which decisions got an ADR, and which did not
+
+| Spec decision | ADR | Why |
+|---|---|---|
+| D6 + D7 (one module-level lock guarding install, lazy create and reset; the owner keeps its direct lazy write) | **ADR-083** | Same architectural element as the interface — the slot-access pattern. Splitting it off would be a second ADR about one variable. |
+| D12 (two guards: ruff `TID251` banned-api + a pytest source-scan test) | **ADR-084** | New enforcement pattern for the repository, with five measured shape-facts (the table is inert without `TID251` in `select`; bare-name keys flag nothing; owner-module writes are not flagged; both import forms are flagged; zero pre-existing `TID` violations) and a real rejected precedent (the `rg` scans of `architecture-tests-missing`). |
+| D1 (`set_*` beside `get_*`/`reset_*`), D2 (replace + exactly one WARNING), D3 (not retroactive), D4 (never `None`), D5 (annotation + mypy only), D8 (no event), D14 (no lifecycle effect) | inside **ADR-083** | Boundary rules *of* the new interface — WHAT-level detail already fixed by the spec; they introduce no pattern beyond the trio, so they are stated in the Decision and argued in its Alternatives, not as separate ADRs. |
+| D9 (`@logged(slow_threshold_ms=5)`, default `include_args`) | none | Reuses the existing tracing policy (ADR-060) and the siblings' existing threshold — no new pattern. |
+| D10 (composition root keeps its module-import-time position) | none | The *new* pattern (a `create_app()` factory) is explicitly deferred to TODO `composition-root-factory`; keeping the position is the conservative non-decision. |
+| D11 (test migration keeps capture-install-restore semantics) | none | Mechanical migration of 11 sites; the semantics are the helpers' existing contract. |
+| D13 (one `AGENTS.md` bullet per feature) | none | Documentation placement. |
+| D15 (no ADR at P.4, decision deferred to S2.1) | closed by this section | — |
+
+### ADR files
+
+| File | Title | Supersedes |
+|---|---|---|
+| `docs/decisions/ADR-083-public-install-operation-feature-singletons.md` | Public install operation (`set_*`) as the third member of the singleton trio, one module lock per slot | **nothing** — extends ADR-009, ADR-017, ADR-040, ADR-065 (all decisions stand) |
+| `docs/decisions/ADR-084-two-guards-singleton-slot-tid251-scan-test.md` | Two guards for the singleton slot — ruff `TID251` banned-api plus a source-scanning architecture test | **nothing** — replaces the *mechanism* of the `rg` scans recorded in `docs/verification/architecture-tests-missing.md`, which were never an ADR |
+
+No existing ADR was edited, renumbered or marked superseded. The clarification that matters is recorded
+inside ADR-083: **ADR-017's `threading.RLock` guards `SettingsRegistry` instance state, while this
+change's module-level lock guards the slot variable** — two different locks, and `settings/registry.py`
+ends up holding both.
+
+**Numbering.** Highest ADR file present: `ADR-082-structlog-processor-layer-over-stdlib.md`;
+`ADR-081` is **not on disk and is deliberately left unclaimed** for the `api-keys` change
+(`docs/todo/api-keys.md:64`, “ADRs from **ADR-081**” — the same reservation ADR-082’s own
+“Numbering” consequence records). This step therefore took the next two free numbers, **083** and
+**084**. Verified with `ls docs/decisions` (82 files, no `ADR-081*`) and
+`git log --all --oneline -- "docs/decisions/ADR-081*"` (empty).
+
+### ID traceability
+
+- **ADR-083** — change spec REQ-001…REQ-012, AC-001…AC-014, AC-016, INV-001…INV-003,
+  EDGE-001…EDGE-007, EDGE-010, NFR-001…NFR-003 (D1–D8, D10–D11, D14); amended specs
+  `settings.md` v5 REQ-026 / AC-040…AC-043 / INV-011 / EDGE-030…EDGE-033,
+  `event-bus.md` v2 REQ-008 / AC-013…AC-016 / EDGE-011–012,
+  `user-roles-permissions.md` v2 REQ-030 / AC-041…AC-044 / EDGE-027–028,
+  `search.md` v4 REQ-024 / AC-038…AC-041 / EDGE-022–023,
+  `session-management.md` v2 REQ-023 / AC-046…AC-049 / EDGE-013–014,
+  `logging-coverage.md` v3 (five §3.1 rows, no new ID).
+- **ADR-084** — change spec REQ-012, REQ-013, AC-017, AC-018, EDGE-005, EDGE-008, EDGE-009, NFR-004
+  (D12, §3.4, §10).
+
+Every ID cited in the two ADRs is defined by a spec on this branch (checked against
+`docs/specs/settings-public-registry-setter.md` and `docs/specs/settings.md` v5); no ID was invented,
+renumbered or restated by this step.
+
+### S2.1 gate evidence
+
+- Worktree (printed with the counts, per P-57): `git rev-parse --show-toplevel` →
+  `C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+- Files created by S2.1: the two ADR files above. Files modified: this record only.
+  `src/`, `tests/`, `pyproject.toml`, `AGENTS.md`, `docs/specs/`, `docs/tasks/`,
+  `.github/task-runner/`, `docs/todo/` and `docs/questions/` were **not** touched.
+- `docs/decisions` file count: **82 before → 84 after** (`ls docs/decisions | wc -l`, same command in the
+  same worktree).
+- Ruff: **`n/a`** — no Python or TOML file was written or modified by this step.
+- Done-criteria check: an ADR exists for every decision that passes the threshold (2), the below-threshold
+decisions are listed with reasons above, and both ADRs plus this record are committed on the change branch.
+S2.2 (task DAG, grouped by affected feature per §12) is the next step and was **not** run here.
