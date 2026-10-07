@@ -30,6 +30,7 @@ from backend.authentication.repository import (
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
 from backend.eventbus.eventbus import EventBus
+from backend.logging import setup_logger
 from backend.settings import get_settings_registry
 from backend.settings.registry import SettingsRegistry
 from backend.settings.repository import MemoryTemplateRepository, YamlTemplateRepository, YamlValueRepository
@@ -137,3 +138,8 @@ def test_module_functions_traced(log_records: list[Any]) -> None:
                 assert len(exits) >= 1, f"{name}: expected at least 1 exit record"
         finally:
             restore_singleton(saved_registry)
+            # The inventory calls reset_settings_registry() and setup_logger(), which
+            # reconfigures the pipeline from the default settings (INFO) instead of the
+            # session's DEBUG. Re-run setup_logger() against the restored registry so the
+            # session's pipeline state survives this test (no leak into later tests).
+            setup_logger()

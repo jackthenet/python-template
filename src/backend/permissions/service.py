@@ -35,9 +35,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from loguru import logger
-
-from backend.logging import logged_class
+from backend.logging import get_logger, logged_class
 from backend.permissions.catalog import PermissionCatalog
 from backend.permissions.errors import (
     PermissionDeniedError,
@@ -62,6 +60,11 @@ if TYPE_CHECKING:
     from backend.permissions.events import EventPublisher
     from backend.settings import SettingsRegistry
     from backend.usermanagement import UserRead
+
+# REQ-005 (structlog-logging): the module's one-off statements go through the logging
+# feature's entry point instead of importing a logging backend. The feature name keeps
+# the records attributable to the permission service.
+_logger = get_logger("permissions")
 
 # The permission key shape (REQ-002): hierarchical ``feature.action`` keys.
 _PERMISSION_KEY_PATTERN = re.compile(r"^[a-z0-9_-]+\.[a-z0-9_-]+$")
@@ -429,11 +432,11 @@ class PermissionService:
 
     def _deny(self, user_id: UUID | None, permission: str, reason: str) -> None:
         """Log the denial at WARNING (never the session token, REQ-028) and publish the event (REQ-020)."""
-        logger.warning(
-            "permission check denied: user_id={} permission={} reason={}",
-            user_id,
-            permission,
-            reason,
+        _logger.warning(
+            f"permission check denied: user_id={user_id} permission={permission} reason={reason}",
+            user_id=user_id,
+            permission=permission,
+            reason=reason,
         )
         self._publish(PermissionDenied(user_id=user_id, permission=permission, reason=reason))
 

@@ -16,9 +16,10 @@ from logging_coverage_test_helpers import (
     entry_records,
     exception_records,
     exit_records,
+    failing_sink_attached,
     level_name,
 )
-from loguru import logger
+from logging_test_helpers import managed_sinks
 
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.logging import logged, setup_logger
@@ -48,18 +49,16 @@ def test_slow_threshold_exceeded(log_records: list[Any]) -> None:
 
 def test_sink_failure_graceful(log_records: list[Any], tmp_path: Any) -> None:
     """EDGE-002: a log sink failure during a traced call is handled gracefully; the
-    call completes normally."""
+    call completes normally.
 
-    def failing_sink(message: Any) -> None:
-        raise RuntimeError("sink failure")
-
-    handler_id = logger.add(failing_sink, level="DEBUG", catch=True)
-    try:
+    structlog-logging (REQ-013): the failing sink is a handler on the pipeline's own
+    logger — the backend the records actually travel through — in place of the removed
+    backend's ``logger.add(failing_sink, catch=True)``. The assertion is unchanged.
+    """
+    with failing_sink_attached():
         repo = SqliteUserRepository(f"sqlite:///{tmp_path}/edge.db")
         result = repo.get_by_username("probe")  # must not raise
         assert result is None
-    finally:
-        logger.remove(handler_id)
     # The traced call still produced an entry record (via the working sink).
     assert any("SqliteUserRepository.get_by_username" in str(r) for r in entry_records(log_records))
 
@@ -93,12 +92,16 @@ def test_traced_method_exception_propagates(log_records: list[Any], tmp_path: An
 
 def test_setup_logger_idempotent() -> None:
     """EDGE-005: ``setup_logger`` is idempotent — a second call adds no sinks; the
-    entrypoint relies on this (it calls ``setup_logger`` exactly once)."""
+    entrypoint relies on this (it calls ``setup_logger`` exactly once).
+
+    structlog-logging (INV-001): the witness is the pipeline's own sinks — the two
+    handlers its logger owns — not the removed backend's handler table.
+    """
     setup_logger()
-    first = len(logger._core.handlers)
+    first = managed_sinks()
     setup_logger()
-    second = len(logger._core.handlers)
-    assert first == second, "a second setup_logger call must be a no-op"
+    second = managed_sinks()
+    assert first == second, "a second setup_logger call must add or replace no sink"
     # The entrypoint relies on this idempotency: main.py calls setup_logger exactly once.
     main_src = Path("src/main.py").read_text(encoding="utf-8")
     assert main_src.count("setup_logger(") == 1, "src/main.py must call setup_logger exactly once"

@@ -13,7 +13,7 @@ Write modern, typed, boring Python. Clarity first; optimize only after measuring
 - Full type hints on every signature, no `Any` unless unavoidable.
 - Validate external data (config, API payloads, files) with Pydantic at the boundary.
 - Use `pathlib.Path` instead of `os.path`, `httpx` instead of `requests`, `orjson` for hot JSON paths.
-- Use the project logger (structlog) instead of `print`.
+- Log through the shared logging feature instead of `print`: `setup_logger()` once at startup, `get_logger()` for one-off statements, `@logged` / `@logged_class` to trace calls (`from backend.logging import ...`) — never import a logging backend directly.
 - Catch specific exceptions; never use a bare `except:`; never swallow errors silently.
 - No mutable default arguments; no new dependencies without asking.
 - Prefer the standard library tool (`functools.cache`, `dataclass(slots=True)`, `contextlib`) over hand-rolled versions.

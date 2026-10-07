@@ -31,7 +31,7 @@ updates:
         patterns:
           - "pydantic"
           - "sqlmodel"
-          - "loguru"
+          - "structlog"
           - "orjson"
           - "httpx"
     versioning-strategy: increase

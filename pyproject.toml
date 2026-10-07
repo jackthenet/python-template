@@ -1,16 +1,16 @@
 # pyproject.toml — default template for Python projects
 [project]
 name = "python-template"
-version = "0.6.1"
+version = "1.0.0"
 description = "Default template for Python projects."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     # Domain and request/response validation models.
     "pydantic>=2.13.5",
-    # Structured application logging across backend and UI integrations.
-    "loguru>=0.7.3",
-    # High-performance JSON serialization/deserialization.
+    # Structured logging: processor/renderer and binding layer over stdlib handlers.
+    "structlog>=25.1.0",
+    # High-performance JSON serialization/deserialization (logging file sink).
     "orjson>=3.12.0",
     # HTTP client for outbound calls.
     "httpx>=0.28.1",
@@ -82,7 +82,7 @@ package = true
 default-groups = ["dev"]
 
 [tool.bumpversion]
-current_version = "0.6.1"
+current_version = "1.0.0"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 commit = true
@@ -116,10 +116,10 @@ package_module_name_map = { "ruamel-yaml" = "ruamel" }
 
 [tool.deptry.per_rule_ignores]
 # CLI tools / pytest plugins that are never imported from source, plus the
-# declared runtime capabilities (httpx, orjson) not yet imported from source.
+# declared runtime capability (httpx) not yet imported from source.
 DEP002 = [
     "bandit", "complexipy", "httpx", "mkdocs", "mkdocs-material", "mkdocstrings",
-    "mypy", "orjson", "pip-audit", "pre-commit", "py-spy", "pytest-cov",
+    "mypy", "pip-audit", "pre-commit", "py-spy", "pytest-cov",
     "pytest-randomly", "pytest-xdist", "ruff", "ty",
 ]
 # Optional production dependency: py-webauthn is deferred-imported inside
@@ -157,8 +157,8 @@ root = ["./src"]
 
 [tool.ty.analysis]
 # mypy `ignore_missing_imports = true` equivalent, scoped to the only
-# third-party package without type information (verified 2026-09-15:
-# sqlmodel/sqlalchemy/pydantic/loguru all ship `py.typed`).
+# third-party package without type information (re-verified 2026-10-07:
+# sqlmodel/sqlalchemy/pydantic/structlog/orjson all ship `py.typed`).
 allowed-unresolved-imports = ["webauthn"]
 # mypy `check_untyped_defs = true` has no ty equivalent: ty analyzes all
 # function bodies by default.
