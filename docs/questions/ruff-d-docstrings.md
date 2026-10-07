@@ -189,10 +189,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes, but only where the constructor adds context the class docstring lacks; disable `D107` for `*/errors.py` (Recommended)** — keeps the useful ones, avoids 19 "Initialize self."-class fillers in exception modules.
   - **(b) Yes, all 51, no exemption** — uniform rule, but the exception-class docstrings will be near-empty.
   - **(c) No — disable `D107` globally (the numpy convention choice)** — 51 fewer docstrings; constructor context has to live in the class docstring.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) Yes, all 51, no exemption** (user, 2026-10-07) — **not** the recommended partial exemption. `D107` stays on for every class including the exception modules (`permissions/errors.py` 6, `filemanagement/errors.py` 6, `usermanagement/errors.py` 4, `search/errors.py` 3, `mail/errors.py` 3, …). Consequence: the exception-class `__init__` docstrings must still pass the Q-15 no-filler rule, so they have to say something the class docstring does not (or the class docstring carries the content and the `__init__` docstring names the constructor's contract). Flagged for the Phase 6 checklist.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — no `per-file-ignores` entry for `*/errors.py`; all 51 `D107` sites are in the backfill
 
 ## Q-10 — Is `D401` (imperative-mood first line) enforced?
 - **Step:** P.2 Interrogate
@@ -217,10 +217,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — same change, separate commits from the docstring additions (Recommended)** — one config edit covers the whole `D` subset, and the commit split keeps the review readable.
   - **(b) No — select only the codes that are already clean, and defer formatting to a follow-up TODO** — smaller diff now, but the formatting rules stay unenforced.
   - **(c) Only the auto-fixable ones (`D209`, `D301`, `D403`), hand-written `D205` deferred** — cheapest half, but a partial rule set is the confusing middle ground.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — same change, separate commits from the docstring additions** (user, 2026-10-07). All 123 `src/` format sites are in scope (`D205` 66, `D209` 57, `D301` 3, `D403` 4); the commit split keeps the two kinds of work reviewable separately.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — full `D` subset selected (Q-1) and the format families are part of the backfill, not deferred
 
 ## Q-12 — Does `[tool.ruff.lint] fixable` gain the fixable `D` codes?
 - **Step:** P.2 Interrogate
@@ -231,10 +231,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes, but scoped to the codes actually selected (Recommended)** — the 123 formatting sites become one command on the changed paths, and pre-commit keeps them from regressing.
   - **(b) No — keep `fixable` as-is and apply the formatting by hand** — nothing new is auto-rewritten in a docs change, at the cost of 123 manual edits.
   - **(c) Yes, and run the fix once as an explicit first step of this change only** — mechanical sweep now, no permanent widening of `fixable`.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes, scoped to the codes actually selected** (user, 2026-10-07). `[tool.ruff.lint] fixable` gains the fixable `D` codes (always-fixable: `D204`, `D207`, `D208`, `D209`, `D211`, `D212`, `D403`; sometimes-fixable ones stay under ruff's own safety rules). AGENTS.md's P-6 rule still applies: `--fix` is scoped to the step's changed paths, never repo-wide during a task step.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `pyproject.toml` `fixable` allow-list extended in the same config commit as `select`
 
 ## Q-13 — Are the two `D105` magic methods documented?
 - **Step:** P.2 Interrogate
@@ -274,10 +274,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(b) A small scripted check in `scripts/` that fails a docstring equal to/near the de-snaked callable name** — enforceable, but it is new tooling with its own false positives, and it needs its own tests.
   - **(c) Enable `D402` + `D419` and rely on ruff** — free, but measured 0 hits today, so it catches almost no filler in practice.
   - **(d) Nothing explicit — rely on the per-feature commit split (Q-5 a) keeping each chunk reviewable** — cheapest, weakest.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Reviewer rule stated in the scope record + the Phase 6 review checklist** (user, 2026-10-07). No new tooling. The rule is recorded in `docs/verification/ruff-d-docstrings.md` at P.4 and becomes a Phase 6 review check: no docstring that restates the signature ("Get the user.") may pass review; per-feature commits are the unit of that check.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — scope record carries the no-filler rule; Phase 6 checklist gains the check; no `scripts/` checker, no `D402`/`D419` reliance
 
 ## Q-16 — Do REQ/AC IDs stay inside published docstrings?
 - **Step:** P.2 Interrogate
