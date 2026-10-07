@@ -2186,3 +2186,243 @@ collection/import/fixture error, no `ValidationError`/`ValueError` from test dat
 
 S3.1 for **T-009** (cross-cutting witness set: AC-002..AC-008, AC-013, AC-020, EDGE-001..EDGE-007,
 INV-002, INV-003, NFR-001, NFR-002).
+
+---
+
+## S3.1 — T-009 test derivation (cross-cutting witness set) — 2026-10-07
+
+Task object re-read from `.github/task-runner/tasks.json` before writing (PROBLEMS.md P-63):
+`feature_group` "cross-cutting witness set — all five features: uniform install semantics,
+public API contract, catalog surface, latency"; `requirements` REQ-001…REQ-005, REQ-009,
+REQ-014, REQ-016; `acceptance_criteria` AC-002…AC-008, AC-013, AC-020; `edge_cases`
+EDGE-001…EDGE-007; `invariants` INV-002, INV-003; `non_functional` NFR-001, NFR-002;
+`dependencies` T-001…T-005 (a **Phase 4** ordering constraint — derivation ran now, with none
+of the five install operations implemented, so RED is the expected state).
+`implementation_scope`: "…No src/ file changes." — no `src/` file was touched in this step.
+
+### Files created / modified — exactly the DAG's `allowed_files.test_files`
+
+| File | Nodes | State |
+|---|---|---|
+| `tests/acceptance/singleton_install/test_install.py` | 6 (AC-002…AC-006, AC-013) | modified — added to the file T-001 created |
+| `tests/contract/singleton_install/test_api_contract.py` | 4 (AC-007, AC-008, AC-020, NFR-001) | new |
+| `tests/contract/singleton_install/test_performance_contract.py` | 1 (NFR-002) | new |
+| `tests/unit/singleton_install/test_edges.py` | 7 (EDGE-001…EDGE-007) | new |
+| `tests/property/singleton_install/test_install_properties.py` | 2 (INV-002, INV-003) | new |
+| `tests/singleton_install_test_helpers.py` | — | modified — extended the T-001 slot table (PROBLEMS.md P-55) |
+| `tests/unit/singleton_install/__init__.py`, `tests/property/singleton_install/__init__.py` | — | new packages |
+| `tests/contract/singleton_install/__init__.py` | — | **untouched** — T-008 already created it |
+
+### The helper extension (what the witnesses share)
+
+`SingletonSlot` gained three fields — `stamper` (required), `dispose` (default no-op),
+`warning_keyword` — and two methods, `stamp()` and `name()`. `stamp()` returns
+`(instance, probe)` where the probe recognizes **that one instance** through its own public
+API only (two instances of the same class are otherwise indistinguishable, so a cross-feature
+witness could not tell "the caller still gets what it was given" from "the install swapped it
+out"): settings registers a unique `app.name` default read by `get_value`; eventbus subscribes
+a per-stamp private event class and the probe publishes it; permissions creates a runtime role
+`stamp_<hex>` (a **grant** would need a catalog the isolated service does not carry — its
+default `PermissionCatalog` is empty, `src/backend/permissions/service.py:135`) read by
+`list_roles()`; search registers a uniquely named source read by `list_sources()`;
+session-management builds the service over a store pre-loaded with one session row read by
+`list_sessions()` (the service owns no state of its own — its store is its observable state).
+`EventWatcher` subscribes the collector for `object` on every touched instance that has
+`subscribe` (only `EventBus` does) and `drain()` shuts each watched bus down, which drains its
+queue (event-bus.md AC-008) — so "no event arrived" is a settled fact, not a race.
+
+### Collection — the DAG's 20 node IDs, exact
+
+`uv run pytest <the five files> --collect-only -q -p no:randomly` → **21** collected: the 20
+`tests_to_create` node IDs plus `test_ac_001_install_then_get_returns_instance` (T-001's node,
+which lives in the shared `test_install.py`). Diff against the task object:
+`MISSING: []`, `EXTRA: [test_ac_001…]` only. `git rev-parse --show-toplevel` →
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`
+(the change worktree, PROBLEMS.md P-57).
+
+The witnesses **loop over `SLOTS` inside each test function** instead of using
+`pytest.mark.parametrize`: a parametrized node ID carries a `[param]` suffix and would push the
+collected set past the 20 node IDs the DAG names for this task.
+
+### RED gate — the DAG's `red_command`, verbatim
+
+`red_command` = `uv run pytest <20 node IDs> -v` (24 argv words; `red_command == green_command`).
+
+```
+============================= 20 failed in 1.38s ==============================
+```
+
+Failure kinds (all 20):
+
+| Kind | Nodes | Message |
+|---|---|---|
+| `AttributeError` at call time | 19 | `module 'backend.<feature>' has no attribute 'set_<x>'` |
+| `AssertionError` (subprocess) | 1 (`test_edge_005`) | `the child process did not run: … AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'` + `assert 1 == 0` |
+
+Determinism: the five-file set re-run twice (plain and `-p no:randomly`) → the same 21 failures
+(20 + T-001's); `tests/property/singleton_install/ tests/unit/singleton_install/` re-run with
+randomization on → `9 failed` (7 EDGE + 2 INV).
+
+### Why this is a valid RED and not a broken invocation
+
+- **No collection, import or fixture error.** Every witness resolves the install/get/reset trio
+  with `getattr` on the slot object **at call time**, so a missing installer fails inside the
+  test body; a module-level `from backend.settings import set_settings_registry` would be a
+  collection error and would take down T-001's node in the same file.
+- **Test data is valid.** Every stamped instance is built by the real constructor over isolated
+  storage (in-memory SQLite for permissions/session-management, a temp-dir value repository for
+  settings); no `ValidationError`/`ValueError` is raised while constructing fixtures — the only
+  `ValueError` in the set is the one `test_edge_003` asserts, which is the specified behaviour
+  of `get_session_service()` with no repository (session-management.md EDGE-003/AC-042).
+- **Anti-vacuity anchors** (each one is what makes the witness RED now instead of GREEN by
+  construction): AC-013 publishes a sentinel **after** the installs and asserts exactly it
+  arrives, so "no event" is a working collector's verdict; AC-020 asserts `hasattr(module,
+  installer)` before claiming the installer is not a catalog action; NFR-001 asserts the five
+  installers are in `__all__` on top of the superset check (the per-package contract tests, e.g.
+  `tests/contract/sessionmanagement/test_contract.py::test_nfr_003_public_api_contract`, are
+  `hasattr`-based over a hand-maintained list that omits the new name, so they cannot go RED on
+  an additive surface — finding F-23); EDGE-007 asserts the **install** WARNING first so that
+  "reset logs none" is a contrast rather than a tautology; INV-003's event pass asserts the
+  witness's own event arrives; `test_edge_005` asserts `returncode == 0` so a child that never
+  ran is a failure, not a silent pass (findings F-41 / PROBLEMS.md P-57).
+- **Three nodes contain a half that is already true today** (`test_edge_003`, `test_edge_004`,
+  `test_edge_007`): they witness behaviour the change must **preserve**, and each also performs
+  an install, which is what makes them RED now. They are the regression half of EDGE-003/004/007.
+
+### Measured facts handed to T-009's implementation step (S4.x)
+
+- The permission catalog built the only way it can be built — `PermissionCatalog()` plus
+  `register_actions(catalog)` on each of the **seven** `feature_actions` modules — enumerates
+  **61** action keys over 7 features (authentication 11, filemanagement 10, mail 3, search 1,
+  sessionmanagement 6, settings 19, usermanagement 11). `test_ac_020_permission_catalog_unchanged`
+  freezes that measured composition (total + per-feature counts + no installer key + no new
+  action), not the spec's "60" wording — see F-47.
+- NFR-002 times **only** the install call (instances built and slots cleared outside the timed
+  region); `_REPEATS = 100` per path per slot, budget `1.0 ms` median. The same run asserts the
+  pipeline was at DEBUG (`>= _REPEATS` DEBUG records captured) and that the replacing path logged
+  exactly one non-tracing WARNING per install while the empty-slot path logged none — which also
+  pins that the WARNING is inside the timed region.
+- `widened_lazy_create_window` (T-007's helper) is **not** used by any T-009 witness: search
+  already guards its lazy path with `_singleton_lock` (`src/backend/search/service.py:547`) and
+  session-management has **no** module lock at all (`src/backend/sessionmanagement/service.py:344,
+  359, 364, 371`), so widening it there would manufacture a real create race rather than witness
+  one (finding F-21). The session-management create-race witness is T-010's AC-010 run with a
+  repository supplied.
+- The event bus matches handlers by `isinstance`, so an `object` subscription receives every
+  event type; `publish()` on a shut-down bus is a **silent no-op**
+  (`src/backend/eventbus/eventbus.py:109-111`) — that is what makes the EDGE-006/EDGE-007
+  "still dispatching / no longer dispatching" probes observable through the public API.
+- Every witness that resets the event bus slot does so inside the existing
+  `isolated_event_bus()` helper (eventbus_test_helpers) — a bare `reset_event_bus()` shuts the
+  suite's live bus down before clearing it and kills the logging feature's sink wiring
+  (helper docstring, main-ci-green item H).
+
+### Gates run for this step
+
+- `uv run ruff check <the six changed paths>` → `All checks passed!` (after `--fix` for three
+  `I001` import-order findings and one `Q001`, and one manual `check=False` for `PLW1510` on the
+  subprocess call — the returncode assertion is the witness, so `check=True` would raise instead
+  of reporting which side failed).
+- `uv run ruff format <the six changed paths>` → clean; a second pass reports no further change.
+- `uv run complexipy <the four new/changed test paths> tests/singleton_install_test_helpers.py
+  --max-complexity-allowed 15` → no finding (one refactor was needed: the inline INV-002 body
+  scored **18**, fixed by extracting `_count_installs_on_nonempty_slot`, see F-51).
+- `uv run python scripts/check_traceability.py` → `Traceability: PASS (796 matrix rows, 136 spec
+  IDs, 776 test functions)`. The matrix rows for these IDs are the change-spec rows
+  `EDGE-001 … EDGE-010` and `NFR-001 … NFR-004` (`docs/verification/traceability.md:942-943`) and
+  the `REQ-013 | AC-017, AC-018` row (`:937`), all still `PENDING` with `—` in the Test column —
+  established practice on this branch is that no S3.1 step fills the Test column (S5.3 does).
+- `uv run pytest tests/unit/architecture/test_singleton_slots.py` (T-007's AC-017 scan) → `1
+  failed, 2 passed`, still **12** foreign write sites, none of them in a file this step wrote:
+  the new tests plant no private-slot write (they go through the public `reset_*` operations, and
+  the event-bus parking is the pre-existing helper at `tests/eventbus_test_helpers.py:77,84`).
+- `uv run mypy src/` — not run: the gate targets `src/` and this step changed no `src/` file
+  (`ty check src/` likewise). Not run at all: the whole-repo ruff sweep (Phase 5,
+  `.github/workflows/lint.yml:37`), the full test suite, `deptry`, `alembic`, `mkdocs`.
+- State leak: `git status --porcelain` → the six paths in the table above and nothing else;
+  `data/` and `settings/` are gitignored (`.gitignore:230`, `:225`) and the subprocess witness
+  runs with `cwd=tmp_path`, so the child writes nothing into the worktree.
+
+### Findings
+
+- **F-47** AC-020's wording — "the static **60**-key mapping built from public non-underscore
+  methods of the six public service classes" — does not match the repository: the catalog is
+  built at startup from feature-owned `register_feature(feature, actions)` calls
+  (`src/backend/permissions/catalog.py`), seven features register, and the measured key count is
+  **61**. The witness freezes the measured composition rather than the spec's number: asserting
+  60 would be a RED caused by a spec-wording defect, not by this change. Escalation for S5.3 /
+  Phase 6: either the AC-020 wording is amended through the Spec Amendment Workflow or the review
+  records the measured 61 as the frozen baseline.
+- **F-48** `build_default_catalog` does not exist in `src/backend/permissions/catalog.py`
+  (invented API, same family as F-43/F-44). The catalog is constructible only as
+  `PermissionCatalog()` plus `register_actions(catalog)` on each feature's actions module, and
+  exactly seven packages expose `register_actions` — `backend.eventbus` exposes none (its
+  package holds only `__init__.py`, `eventbus.py`, `feature_settings.py`), so the event bus
+  contributes no catalog action.
+- **F-49** `PermissionService.__init__` defaults `catalog` to an **empty** `PermissionCatalog()`
+  (`src/backend/permissions/service.py:135`), so an isolated service cannot
+  `grant_permission("settings.select")` — `UnknownPermissionError`. The permissions stamp marks a
+  runtime **role**, not a grant. Any later witness that needs real catalog keys must build the
+  catalog itself.
+- **F-50** NFR-002's "measured with the logging pipeline at DEBUG" is not observable through a
+  loguru API (`Logger` has no `is_debug`; the first draft of the contract test raised
+  `AttributeError: 'Logger' object has no attribute 'is_debug'` — an invalid test, not a RED).
+  The pipeline state is pinned from the capture instead (DEBUG record count + the WARNING count
+  per install path).
+- **F-51** The complexipy gate (`.github/workflows/quality.yml:144`, `pyproject.toml:97-99`)
+  caught the inline INV-002 body at **18** > 15. Extracted helper; the property semantics are
+  unchanged.
+- **F-52** AC-005 and INV-003's "every object that was constructed with an injected instance"
+  half is witnessed with a per-slot stamp/probe holder rather than with real injected consumers:
+  of the five singleton classes only three have a consuming service in the public API
+  (settings/eventbus/permissions are injected into `SearchService`/`SessionService`/etc.), and
+  search and session-management have **no** consumers anywhere. The holder carries a `ponytail:`
+  comment naming that ceiling; the injected-consumer form is witnessed by the feature specs
+  themselves (search.md EDGE-022, session-management.md EDGE-014, event-bus.md EDGE-011).
+- **F-53** `test_edge_007_reset_event_bus_still_shuts_down` would have been GREEN before
+  implementation (reset already shuts the instance down today, and it logs no WARNING today
+  either). It now installs a bus, replaces it (asserting the install WARNING that makes the
+  contrast real) and only then resets, so the node is RED now and its "reset logs none" half is
+  a statement about the post-change world.
+- **F-54** INV-003's two halves run as **separate per-slot passes**: `drain()` shuts every watched
+  bus down, so a bus stamp published afterwards would fail, and a stamp published beforehand
+  would put the stamp's own marker event into the collector and break the no-events assertion.
+  The passes are ordered events-first, holder-second.
+- **F-55** The DAG's `allowed_files.test_files` lists
+  `tests/contract/singleton_install/__init__.py` "(only if T-008 has not created it yet)" — T-008
+  created it, so it is untouched; the two new packages this step needed
+  (`tests/unit/singleton_install/`, `tests/property/singleton_install/`) are the only new
+  `__init__.py` files.
+
+### Not done in this step (by instruction)
+
+- The **Phase 3 RED gate declaration** — S3.2 owns it; this record is the evidence S3.2 re-confirms.
+- No implementation, no refactor, no `src/` change; no full-suite run; no push; no other
+  worktree touched; no `docs/todo/` or `docs/questions/` edit; no `PROBLEMS.md` entry; no
+  traceability-matrix edit (S5.3).
+
+### Hand-off
+
+- **S3.2 (T-009)**: re-run the DAG's `red_command` verbatim — expect `20 failed`, all
+  `AttributeError: … has no attribute 'set_*'` except `test_edge_005`, which fails on
+  `assert 1 == 0` with the child's own `AttributeError` in its stderr. Ruff is already clean on
+  the changed paths.
+- **T-009 implementation (S4.x)**: the five install operations must (a) take exactly one
+  positional parameter annotated with the concrete class and return `None` (AC-007), (b) contain
+  no `isinstance`/`type(...)` guard and add no new `*Error` export (AC-008), (c) log exactly one
+  non-tracing WARNING naming the replaced default on the replacing path and none on the empty-slot
+  path (AC-003/AC-004, INV-002), (d) publish no event (AC-013, INV-003), (e) leave the replaced
+  `EventBus` running and the installed one unstarted (AC-006 — `EventBus.is_running` is the public
+  probe; EDGE-006 — the `eventbus-worker` thread count), (f) leave `reset_event_bus()` shutting the instance down and logging nothing
+  (EDGE-007), and (g) stay inside the existing `_singleton_lock` where one exists (ADR-084).
+  If a witness exposes a divergence between two features, fix the module — do not relax the
+  witness (T-009 design constraint).
+- **T-010 / T-011** extend `tests/singleton_install_test_helpers.py` and
+  `tests/property/singleton_install/test_install_properties.py` (`test_inv_001_last_install_wins`
+  is T-010's, deliberately absent here); they must keep the `SingletonSlot` field order and the
+  five `SLOTS` entries intact — T-009's witnesses iterate `SLOTS` and assume exactly five.
+
+### Next
+
+S3.1 for **T-010** (the module lock: REQ-006…REQ-008, AC-009…AC-012, INV-001, EDGE-010,
+NFR-003), which depends on T-009's helper surface.

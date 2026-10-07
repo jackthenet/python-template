@@ -16,6 +16,11 @@ Two things live here because more than one test category needs them:
   a simultaneous release rather than against the scheduler's ordering.
 * ``non_tracing_warnings`` — counts the replace WARNING (REQ-002) without
   counting the tracing decorator's own records.
+* ``SingletonSlot.stamp`` / ``EventWatcher`` — the two pieces the cross-feature
+  witnesses (change AC-005, AC-013, INV-002, INV-003) need on top of the trio:
+  a way to mark one instance so a later read can tell it from every other
+  instance of the same class, and a collector that sees every event published on
+  every bus a witness touches.
 
 The trio is resolved by attribute name at call time, never imported: a feature
 whose install operation does not exist yet then fails **inside** the test with
@@ -31,10 +36,15 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from types import ModuleType
 from typing import Any, NamedTuple
+from uuid import uuid4
 
 import pytest
+from eventbus_test_helpers import wait_for
+from search_test_helpers import demo_source
+from sessionmanagement_test_helpers import make_session
 
 import backend.eventbus
 import backend.permissions
@@ -51,13 +61,27 @@ from backend.permissions import (
 )
 from backend.search import SearchService
 from backend.sessionmanagement import SessionService
-from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import (
+    SettingDefinition,
+    SettingKind,
+    SettingsNotFoundError,
+    SettingsRegistry,
+    YamlValueRepository,
+)
 from backend.usermanagement import SqliteUserRepository, UserManager
 
 # The tracing decorator's own record prefixes (entry / exit / exception). A slow
 # traced call escalates its exit record to WARNING, so a WARNING count that has
 # to see the replace record has to exclude them.
 _TRACING_PREFIXES = (">>", "<<", "!!")
+
+
+# A probe recognizes the one instance a stamper marked (see ``SingletonSlot.stamp``).
+Probe = Callable[[Any], bool]
+
+
+def _keep(instance: Any) -> None:
+    """Dispose of nothing: a feature whose instance needs no teardown."""
 
 
 class SingletonSlot(NamedTuple):
@@ -68,6 +92,9 @@ class SingletonSlot(NamedTuple):
     getter: str
     reset: str
     factory: Callable[[], Any]
+    stamper: Callable[[], tuple[Any, Probe]]
+    dispose: Callable[[Any], None] = _keep
+    warning_keyword: str = ""
 
     def install(self, instance: Any) -> Any:
         """Call the feature's public install operation (``AttributeError`` until it exists)."""
@@ -85,10 +112,41 @@ class SingletonSlot(NamedTuple):
         """Build a fresh, isolated instance of the feature's singleton class."""
         return self.factory()
 
+    def stamp(self) -> tuple[Any, Probe]:
+        """Build a fresh instance carrying a marker only that instance has.
+
+        Returns ``(instance, probe)`` where ``probe(candidate)`` is true exactly for
+        the returned instance. Two instances of the same class are otherwise
+        indistinguishable, so a cross-feature witness could not tell "the caller
+        still gets the instance it was given" (change AC-005, INV-003) from "the
+        install swapped it out". The marker is written and read through the
+        instance's own public API only.
+        """
+        return self.stamper()
+
+    def name(self) -> str:
+        """The feature's short name, for assertion messages."""
+        return self.module.__name__.removeprefix("backend.")
+
 
 def _new_settings_registry() -> SettingsRegistry:
     """A settings registry with an isolated (temp-dir) value repository."""
     return SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp(prefix="singleton_values_")))
+
+
+def _stamp_settings() -> tuple[Any, Probe]:
+    """A registry holding one uniquely valued TEXT setting; the probe reads the value back."""
+    marker = f"stamp-{uuid4()}"
+    registry = _new_settings_registry()
+    registry.register(SettingDefinition(key="app.name", kind=SettingKind.TEXT, default=marker, category="app"))
+
+    def probe(candidate: Any) -> bool:
+        try:
+            return candidate.get_value("app.name") == marker
+        except SettingsNotFoundError:
+            return False
+
+    return registry, probe
 
 
 SETTINGS_SLOT = SingletonSlot(
@@ -97,7 +155,30 @@ SETTINGS_SLOT = SingletonSlot(
     getter="get_settings_registry",
     reset="reset_settings_registry",
     factory=_new_settings_registry,
+    stamper=_stamp_settings,
+    warning_keyword="settings",
 )
+
+
+def _stamp_eventbus() -> tuple[Any, Probe]:
+    """A bus subscribed for a private event class; the probe publishes that class and waits.
+
+    The probe starts the bus's worker (publish is what starts it, event-bus.md
+    EDGE-001), so a stamped bus has to be shut down by the witness — hence the
+    slot's ``dispose``.
+    """
+    bus = EventBus()
+    marker_event = type("StampedEvent", (), {})
+    received: list[object] = []
+    bus.subscribe(marker_event, received.append)
+
+    def probe(candidate: Any) -> bool:
+        received.clear()
+        candidate.publish(marker_event())
+        return wait_for(lambda: bool(received), timeout=1.0)
+
+    return bus, probe
+
 
 EVENTBUS_SLOT = SingletonSlot(
     module=backend.eventbus,
@@ -105,6 +186,9 @@ EVENTBUS_SLOT = SingletonSlot(
     getter="get_event_bus",
     reset="reset_event_bus",
     factory=EventBus,
+    stamper=_stamp_eventbus,
+    dispose=EventBus.shutdown,
+    warning_keyword="bus",
 )
 
 
@@ -118,12 +202,30 @@ def _new_permission_service() -> PermissionService:
     )
 
 
+def _stamp_permissions() -> tuple[Any, Probe]:
+    """A service with one runtime role of its own; the probe looks that role up.
+
+    A role (not a grant) is the marker: a grant would need a catalog the isolated
+    service does not carry (its default ``PermissionCatalog`` is empty).
+    """
+    service = _new_permission_service()
+    role = f"stamp_{uuid4().hex[:16]}"  # user-roles-permissions.md: ^[a-z0-9_-]{1,32}$
+    service.create_role(role)
+
+    def probe(candidate: Any) -> bool:
+        return any(declared.role == role for declared in candidate.list_roles())
+
+    return service, probe
+
+
 PERMISSIONS_SLOT = SingletonSlot(
     module=backend.permissions,
     installer="set_permission_service",
     getter="get_permission_service",
     reset="reset_permission_service",
     factory=_new_permission_service,
+    stamper=_stamp_permissions,
+    warning_keyword="permission",
 )
 
 
@@ -137,12 +239,26 @@ def _new_search_service() -> SearchService:
     return SearchService(settings_registry=_new_settings_registry())
 
 
+def _stamp_search() -> tuple[Any, Probe]:
+    """A service with one uniquely named source registered; the probe looks the name up."""
+    service = _new_search_service()
+    name = f"stamp_{uuid4().hex[:16]}"  # search.md source-name pattern
+    service.register_source(demo_source(name))
+
+    def probe(candidate: Any) -> bool:
+        return name in candidate.list_sources()
+
+    return service, probe
+
+
 SEARCH_SLOT = SingletonSlot(
     module=backend.search,
     installer="set_search_service",
     getter="get_search_service",
     reset="reset_search_service",
     factory=_new_search_service,
+    stamper=_stamp_search,
+    warning_keyword="search",
 )
 
 
@@ -161,12 +277,32 @@ def _new_session_service() -> SessionService:
     )
 
 
+def _stamp_sessionmanagement() -> tuple[Any, Probe]:
+    """A service over a store holding one session row of its own; the probe lists that user's sessions.
+
+    The service owns no state of its own — its observable state is its store — so the
+    stamp builds the store and the service together (the slot's plain ``new()`` keeps
+    its own private store, finding F-24).
+    """
+    repository = SqliteSessionRepository("sqlite:///:memory:")
+    service = SessionService(repository, settings_registry=_new_settings_registry())
+    owner = uuid4()
+    make_session(repository, owner, created_at=datetime.now(UTC))
+
+    def probe(candidate: Any) -> bool:
+        return bool(candidate.list_sessions(user_id=owner))
+
+    return service, probe
+
+
 SESSIONMANAGEMENT_SLOT = SingletonSlot(
     module=backend.sessionmanagement,
     installer="set_session_service",
     getter="get_session_service",
     reset="reset_session_service",
     factory=_new_session_service,
+    stamper=_stamp_sessionmanagement,
+    warning_keyword="session",
 )
 
 # One entry per singleton-owning feature (settings-public-registry-setter REQ-001).
@@ -254,3 +390,34 @@ def concurrent_reads(slot: SingletonSlot, count: int, args: tuple[Any, ...] = ()
 def non_tracing_warnings(records: list[Any]) -> list[Any]:
     """Captured WARNING records that are not the tracing decorator's own output."""
     return [r for r in records if r["level"].name == "WARNING" and not str(r).startswith(_TRACING_PREFIXES)]
+
+
+class EventWatcher:
+    """Collect every event published on every bus a witness touches (change AC-013, INV-003).
+
+    An install that published an event would publish it on the shared default bus —
+    which, for the event bus feature itself, is the instance that was just installed,
+    not the bus that was shared before. So the collector subscribes to **each** bus
+    the witness creates, for ``object``: the bus matches handlers by ``isinstance``
+    (event-bus.md AC-004), so an ``object`` subscription receives every event type.
+
+    ``drain()`` shuts every watched bus down, and shutdown drains the queue
+    (event-bus.md AC-008) — so "no event arrived" is a settled fact rather than a
+    race against the worker.
+    """
+
+    def __init__(self) -> None:
+        self.received: list[object] = []
+        self._buses: list[Any] = []
+
+    def watch(self, instance: Any) -> None:
+        """Subscribe the collector to ``instance`` if it is a bus (has ``subscribe``)."""
+        subscribe = getattr(instance, "subscribe", None)
+        if callable(subscribe):
+            subscribe(object, self.received.append)
+            self._buses.append(instance)
+
+    def drain(self) -> None:
+        """Shut every watched bus down so its queued events are delivered first."""
+        for bus in self._buses:
+            bus.shutdown()
