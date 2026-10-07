@@ -546,4 +546,18 @@ A step MUST log a problem when it:
 - **Step / Phase:** S6.4 Bump version + open PR — Phase 6 (change structlog-logging / CROSS-CUTTING)
 - **Duration / iterations:** 1 mid-step question round + 1 retry with the encoding fixed (~10 min).
 - **Resolution:** bumped `0.6.1 → 1.0.0` (commit `137b7e9`), recorded in PR #74. **Durable lessons:** (a) the orchestrator MUST NOT state a derived value it has not computed — give the **level** and let the tool produce the number, or paste the `--dry-run` output (same class as **P-54**: an unmeasured count in a brief); (b) the recipe for this host is `PYTHONUTF8=1 uv tool run bump-my-version bump <level> --dry-run --verbose` — any tool whose output is empty on this shell is a code-page problem before it is a tool problem.
+<!-- Numbering note: P-55..P-60 are taken by the unmerged crosscut/structlog-logging branch, so the next free id on main is P-61. Never renumber an entry that already exists. -->
+
+## P-61 — the task-DAG JSON schema is undocumented and the existing DAGs disagree (S2.2)
+- **Problem:** `docs/tasks/template.md` is a **Markdown** template, but the DAG is JSON, and the JSON DAGs on disk disagree with each other: `structlog-logging.tasks.json` uses `amended_ids` / `blocked_on`, `search.tasks.json` uses `dependencies` / `description`, and `scripts/validate_task_dag.py` enforces only **9 of the 21** keys actually in use. The S2.2 generator aborted on a key-set mismatch and the DAG had to be regenerated — a full write/abort/regenerate cycle for a naming question no document answers.
+- **Step / Phase:** S2.2 Decompose into task DAG (change settings-public-registry-setter / CROSS-CUTTING)
+- **Duration / iterations:** 1 wasted DAG generation + 1 regeneration; ~1 of the step's 104 tool uses spent on schema archaeology (reading three other DAGs to infer the key set).
+- **Resolution:** the DAG was written with the superset key set (`id`, `requirements`, `acceptance_criteria`, `tests_to_create`, `red_command`, `implementation_steps`, `green_command`, `design_constraints`, `completion_gates`, `allowed_files`, `depends_on`, `status` + top-level `id_coverage` / `ci_gates_read_from` / `interlock`), validated (`PASSED: 12 tasks, acyclic, well-formed`), and the key set recorded in `docs/verification/settings-public-registry-setter.md`. **Durable fix (a chore TODO, not this change):** document the JSON schema in `docs/tasks/` or make `validate_task_dag.py` strict, so S2.2 does not re-infer it every time.
+- **Date:** 2026-10-07
+
+## P-62 — `git commit --amend` on the tip silently folded step S2.2's files into step S2.1's commit (S2.2)
+- **Problem:** while repairing the regenerated DAG, `git commit --amend` on the branch tip merged the S2.2 task files into the **S2.1** commit, so the two steps' outputs became one commit and the per-step commit history (which the verification record cites) stopped matching the atomic-step model.
+- **Step / Phase:** S2.2 Decompose into task DAG (change settings-public-registry-setter / CROSS-CUTTING)
+- **Duration / iterations:** 1 `git reset --soft` + 2 re-commits to rebuild `aeda963` (S2.1) and `f8c3cc1` (S2.2).
+- **Resolution:** history rebuilt; each step now commits exactly once, on its own, and **never amends a previous step's commit** — the verification record cites commit shas per step, so an amend invalidates the evidence trail. If a step needs to fix its own output, it adds a follow-up commit or amends **only its own** commit before the next step starts.
 - **Date:** 2026-10-07
