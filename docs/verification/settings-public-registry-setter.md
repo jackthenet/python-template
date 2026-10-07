@@ -1306,3 +1306,270 @@ AC-049). Practical consequences: its `SingletonSlot.read` needs `args=(repositor
 (`concurrent_reads` already supports `args=`), its AC-048 concurrency witness cannot rely on
 a bare lazy create, and — as for search — check whether its lazy path is already guarded
 before using `widened_lazy_create_window` to force a failure.
+
+## S3.1 — T-005 test derivation (2026-10-07)
+
+One fresh subagent, one atomic step: derive **T-005**'s tests (group
+`session-management — src/backend/sessionmanagement/service.py + the backend.sessionmanagement
+public surface`, `requirements` REQ-001 .. REQ-010 + REQ-014, `amended_spec_ids`
+`session-management.md` v2 REQ-023, AC-046, AC-047, AC-048, AC-049, EDGE-013, EDGE-014).
+Tests only — no `src/` file was touched (`git status --porcelain` shows three modified test
+files and this record, nothing else). The task object was read from
+`.github/task-runner/tasks.json` (identical to `docs/tasks/settings-public-registry-setter.tasks.json`);
+its two `tests_to_create` entries expand to **six** `path::test_name` nodes (the first entry
+packs four), and all six node IDs were written **exactly** as the DAG spells them. T-001's ten,
+T-002's six, T-003's six and T-004's six tests were not edited.
+
+Every ID below is read together with its spec file (P-53): `session-management.md` v2
+**AC-046 .. AC-049** collide numerically with `file-management.md` AC-046 .. AC-049
+(`test_ac_046_avatar_variants_replaced`, `test_ac_047_event_uploaded`,
+`test_ac_048_event_downloaded_deleted`, `test_ac_049_event_validation_failed`), and its
+**EDGE-013 / EDGE-014** collide with `settings.md` (`test_edge_013_reset_all`,
+`test_edge_014_slider_min_gt_max`), `user-management.md`, `authentication.md`,
+`user-roles-permissions.md` and `search.md` — six different EDGE-013 rows already exist in
+`docs/verification/traceability.md`.
+
+### Tests written (six nodes, verbatim from `tests_to_create`)
+
+| Test node | Category | Witnesses |
+|---|---|---|
+| `tests/acceptance/sessionmanagement/test_singleton.py::test_ac_046_set_session_service_installs_default` | acceptance | `session-management.md` v2 AC-046 (REQ-023; change REQ-001) |
+| `tests/acceptance/sessionmanagement/test_singleton.py::test_ac_047_replace_logs_one_warning` | acceptance | AC-047 (+ change REQ-002 WARNING rule, REQ-004 no-`None`) |
+| `tests/acceptance/sessionmanagement/test_singleton.py::test_ac_048_concurrent_install_read_reset` | acceptance | AC-048 (+ change REQ-006/REQ-007 one module lock, change AC-010 with a repository) |
+| `tests/acceptance/sessionmanagement/test_singleton.py::test_ac_049_install_then_reset_then_default` | acceptance | AC-049 (change REQ-008 / AC-012 reset pair, observed through `get_session_service(repository)`) |
+| `tests/unit/sessionmanagement/test_validation.py::test_edge_013_repository_rule_after_install_and_reset` | unit | EDGE-013 (installed → no repository needed; reset → AC-042 `ValueError` unchanged) |
+| `tests/unit/sessionmanagement/test_validation.py::test_edge_014_install_over_nonempty_default` | unit | EDGE-014 (replace + exactly one WARNING + no exception + the replaced service keeps working; change REQ-002/REQ-003) |
+
+T-005 has no `INV`/`NFR` ID of its own, so no property or contract file was created (the
+change spec's INV-001 .. INV-003 and the parametrized cross-feature sets belong to
+T-009/T-010; `session-management.md` NFR-003's contract witness
+`test_nfr_003_public_api_contract` already exists and was smoke-run below). No new test
+package or `__init__.py` was needed — `tests/acceptance/sessionmanagement/` and
+`tests/unit/sessionmanagement/test_validation.py` both already exist (see F-22); the two
+files' module docstrings were extended to the new ID range.
+
+### Shared helper: `tests/singleton_install_test_helpers.py` (T-005's append)
+
+- **`SESSIONMANAGEMENT_SLOT`** appended to `SLOTS` (`module=backend.sessionmanagement`,
+  `installer="set_session_service"`, `getter="get_session_service"`,
+  `reset="reset_session_service"`, `factory=_new_session_service`), so `SLOTS` now holds all
+  five singleton-owning features — the table T-009/T-010 parametrise over. The factory builds
+  `SessionService(SqliteSessionRepository("sqlite:///:memory:"), settings_registry=_new_settings_registry())`:
+  the repository is a **required** constructor argument (EDGE-003 — there is no default
+  construction to fall back on), and the isolated temp-dir settings registry keeps the
+  service's live setting reads away from the shared `settings/` directory. T-001 .. T-004 use
+  their own slot objects, so the append changes nothing in them (re-run counts below).
+- The trio is reached **only** through the slot object; nothing in the new tests writes
+  `from backend.sessionmanagement import set_session_service`. That is what keeps the RED
+  signal inside the test body instead of a collection error over the 69 pre-existing
+  session-management tests. `SessionService` itself **is** imported at module level in the
+  helper (it exists today) — only the not-yet-existing installer is resolved by name at call
+  time.
+- `concurrent_reads` is reused unchanged with `args=(repository,)`, exactly as its docstring
+  anticipates for this getter; `non_tracing_warnings` is reused unchanged.
+  **`widened_lazy_create_window` is deliberately not used** — see the next section.
+- Isolation: the acceptance file's existing autouse `_isolate_singleton` fixture
+  (`reset_session_service()` before and after every test) covers the four new acceptance
+  tests, and the two unit tests use the inline `reset_session_service()` / `try` / `finally`
+  pair already established in that file by
+  `test_ac_042_singleton_first_call_without_repository_value_error`. Public API only in both
+  cases — no private-slot write (ADR-084; the slot `backend.sessionmanagement.service._session_service`
+  is never touched from a test).
+
+### Session-management is the **hard** asymmetry: there is no lazily created default
+
+`get_session_service()` with no `repository` raises `ValueError` (`session-management.md`
+EDGE-003 / AC-042, unchanged by v2), so the install → read → reset assertions of the other
+four features cannot be phrased bare here:
+
+- AC-049 / change REQ-008 / AC-012: the reset pair is observed through
+  `get_session_service(repository)` — the freshly created instance is the one the repository
+  argument builds, and the assertion is `fresh is not installed`.
+- AC-046 / EDGE-013: the *installed* instance **is** readable with no repository argument —
+  that is the whole point of REQ-023, and it is the half that is RED today.
+- AC-048: the "Given the shared default holds a service" setup uses the **existing** lazy
+  create with a repository (`held = get_session_service(repository)`), so the witness does
+  not depend on the install operation for its own setup and its read half actually runs in
+  RED state. Every concurrent read carries the repository, so a read that races a reset
+  cannot fail on `ValueError` — it either returns the held instance or creates one.
+- **`widened_lazy_create_window` was checked and not used** (the T-004 hand-off asked for
+  exactly that check). Measured: `src/backend/sessionmanagement/service.py` has **no** module
+  lock today — `get_session_service()` reads `_session_service[0]` at `:359` and writes it at
+  `:364`, and `reset_session_service()` writes it at `:371`, all unguarded (the slot global is
+  declared at `:344`), so a widened window would manufacture a *real* create race here, unlike
+  search. But asserting "exactly one instance was constructed" is **not** what this feature's
+  AC says: `session-management.md` AC-048 requires only that every read returns a whole
+  instance and no thread crashes, and the change spec's AC-009 (one constructed default)
+  explicitly excludes this feature — "Session-management's lazy path needs a `repository`, so
+  its concurrency case is AC-010 run with a repository supplied, and
+  `docs/specs/session-management.md` AC-048". With 2 reset threads in the same run, a
+  one-create assertion would be illegal regardless (a reset legitimately re-opens the create
+  path). The lock-guarding of this feature's lazy path is therefore witnessed by **T-009**
+  (change AC-010, session-management run with a repository), not by T-005 — recorded so
+  nobody "fixes" AC-048 into a create-race test.
+
+### Collection and RED evidence
+
+Worktree for every count below (`git rev-parse --show-toplevel`):
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+
+- Collection (not a RED signal if it breaks): `uv run pytest --collect-only -q` over all five
+  `sessionmanagement` test directories → **75 tests collected in 0.35s** (69 before this
+  step), zero collection errors. The two touched files collect **13** tests (7 before). All
+  six new nodes collect as tests.
+- The task's `red_command` run **verbatim** (six node IDs, targeted — the full suite is a
+  Phase 5 gate): **6 failed in 0.58s**. Failure reason per test:
+  - `test_ac_046_set_session_service_installs_default`, `test_ac_047_replace_logs_one_warning`,
+    `test_ac_049_install_then_reset_then_default`,
+    `test_edge_013_repository_rule_after_install_and_reset`,
+    `test_edge_014_install_over_nonempty_default` — all five: `AttributeError: module
+    'backend.sessionmanagement' has no attribute 'set_session_service'. Did you mean:
+    'get_session_service'?` raised inside the test body via `SingletonSlot.install` → the
+    install operation the task adds does not exist. Correct reason.
+  - `test_ac_048_concurrent_install_read_reset` — `AssertionError: install/read/reset threads
+    raised: [AttributeError("… has no attribute 'set_session_service'") × 8]` raised at
+    `tests/acceptance/sessionmanagement/test_singleton.py:138`, i.e. **after** the read half
+    passed (`concurrent_reads(..., args=(repository,))` returned the held service to all 8
+    readers). RED for the missing install operation, not for a torn slot. Correct reason.
+  - No collection, setup, fixture or import error; no `ValidationError`/`ValueError` from test
+    data (the `ValueError` that does appear is the *asserted* AC-042 behaviour inside
+    `pytest.raises`, not test-data construction); services come from the slot factory over an
+    in-memory store and an isolated registry; no Hypothesis strategy involved (T-005 has no
+    `INV` ID).
+- T-001's ten / T-002's six / T-003's six / T-004's six nodes re-run after the `SLOTS` append
+  (each set's own node list from the DAG): **10 failed in 0.94s** (eight `AttributeError …
+  set_settings_registry`, `assert 8 == 1`, `assert 2 == 1`), **6 failed in 0.68s** (four
+  `AttributeError … set_event_bus`, `lazy create race built 8 buses`, `built 2 buses`),
+  **6 failed in 0.77s** (four `AttributeError … set_permission_service`, `built 8 services`,
+  `built 2 services`), **6 failed in 0.78s** (five `AttributeError … set_search_service`, one
+  thread-collector `AssertionError`). All identical to the reasons recorded at T-001 .. T-004
+  — nothing of the earlier tasks broke.
+- Determinism + no state leak: the two touched test files re-run twice
+  (`uv run pytest tests/acceptance/sessionmanagement tests/unit/sessionmanagement -q -p no:randomly`)
+  → **`6 failed, 53 passed`** both times (9.62s / 9.78s). The pre-derivation baseline of those
+  two directories was **53 passed**, so exactly the six new tests fail and every pre-existing
+  test — including `test_ac_041_singleton_created_once`, `test_ac_043_reset_session_service`
+  and `test_ac_042_singleton_first_call_without_repository_value_error`, which share the same
+  slot — still passes.
+- Neighbouring session-management suites smoke-checked (they share the module singleton and
+  the public-API list): `uv run pytest tests/contract/sessionmanagement
+  tests/integration/sessionmanagement tests/property/sessionmanagement -q` → **16 passed in
+  40.97s** — including `test_nfr_003_public_api_contract`; all five session-management test
+  directories together with random order enabled → **6 failed, 69 passed in 50.07s**.
+
+### Quality gates (per-step scope)
+
+- Ruff gate on the three changed paths: `uv run ruff check <paths>` → **All checks passed**;
+  `uv run ruff format <paths>` → **2 files reformatted, 1 file left unchanged**, after which
+  `ruff check` and `ruff format --check` are both clean on those paths, and the `red_command`
+  was re-run after formatting (**6 failed**, same reasons). The whole-repo sweep
+  (`ruff check .` / `ruff format --check .`) is the Phase 5 gate and was not run.
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs, 748
+  test functions)** — still green; the function count rose from 742 (T-004) to 748, i.e. the
+  six new functions are seen by the script.
+- `uv run python scripts/verify_spec.py docs/specs/session-management.md` → **Traceability:
+  PASS** (unchanged from the pre-derivation baseline — see F-20/F-26: its AC check is not
+  evidence for this task).
+- `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within the
+  allowed complexity** (the new test functions and the helper append included).
+- `uv run mypy src/` → **Success: no issues found in 83 source files** (no `src/` file was
+  changed by this step).
+
+### Findings
+
+- **F-21 — session-management's lazy path is unguarded today, and T-005 does not witness
+  it.** `src/backend/sessionmanagement/service.py:359-365` reads and writes
+  `_session_service[0]` with no module lock (unlike search, which already holds
+  `_singleton_lock`). `widened_lazy_create_window` would therefore expose a genuine create
+  race here — but no `session-management.md` v2 AC asks for one, and change AC-009 excludes
+  this feature by name. The witness for "the lazy create joins the module lock" (change
+  REQ-006/REQ-007) in this feature is **T-009's AC-010 run with a repository supplied**.
+  Consequence for T-005's implementation: adding `_session_service_lock` must keep
+  AC-041/AC-042/AC-043 exactly as they are — those three tests are the regression witnesses
+  and they are green in every run above.
+- **F-22 — the DAG calls `tests/unit/sessionmanagement/test_validation.py` a new file; it is
+  not.** It has existed since the session-management feature's own Phase 3 (`66f4cad`) and
+  already carries `test_ac_042_singleton_first_call_without_repository_value_error` plus the
+  AC-003/AC-013/EDGE-008/EDGE-009 witnesses. T-005 **appended** to it (which is what
+  `completion_gates[3]` assumes when it says the existing suite must stay green). Flagged so
+  the implementation step never rewrites that file wholesale.
+- **F-23 — the public-API contract witness is `hasattr`-based, so the re-export cannot break
+  it.** `tests/contract/sessionmanagement/test_contract.py::test_nfr_003_public_api_contract`
+  checks `_EXPECTED_API` (declared at `:8`, asserted in the loop at `:45`), which lists
+  `get_session_service` and `reset_session_service` but not `set_session_service`; adding the
+  new name to `__all__` is
+  therefore additive (NFR-003, change REQ-014). It is green in the 16-passed neighbour run.
+  T-009's AC-007 is the witness that the new name is actually exported.
+- **F-24 — the slot factory owns its own store.** Because `SessionService` cannot be
+  constructed without a repository, `SESSIONMANAGEMENT_SLOT.new()` builds a private
+  `SqliteSessionRepository("sqlite:///:memory:")` per instance (`StaticPool`, so each
+  repository instance really is a separate in-memory database — nothing on disk, nothing
+  shared), while AC-048/AC-049's *reads* pass a `tmp_path`-backed repository. The two are
+  never compared by content, only by identity and wholeness, so the mismatch is harmless; it
+  is recorded because a future witness that asserted stored state would have to use one
+  repository consistently.
+- **F-25 — traceability Test cells still left to S5.3** (unchanged from F-14/F-19): the rows
+  `REQ-023 (session-management.md v2) | AC-046, AC-047, AC-048, AC-049` and
+  `EDGE-013, EDGE-014 (session-management.md v2)` exist in `docs/verification/traceability.md`
+  as `PENDING` with `—` Test cells (written at P.4); the DAG assigns the matrix fill to S5.3
+  and this step's commit is scoped to the test files plus this record.
+  `check_traceability.py` stays green either way. Flagged so S5.3 fills those rows with the
+  six node IDs above.
+- **F-26 — `verify_spec.py`'s ✓ on AC-046 .. AC-049 is a false positive for this spec**
+  (the F-20 rule, now with the concrete collision): its AC check is a substring match on the
+  digits over **all** test functions, so `session-management.md` v2 AC-046 was already
+  satisfied by `test_ac_046_avatar_variants_replaced` (file-management) and its EDGE-013 by
+  `test_edge_013_reset_all` (settings) before this step existed. The evidence for T-005 is
+  the targeted `red_command` run plus `scripts/check_traceability.py`.
+- No new question for the user: nothing in `session-management.md` v2 or the change spec left
+  a decision open for these six witnesses. The AC-010 vs `settings.md` AC-042
+  concurrency-coverage divergence recorded at S2.2 is unaffected — this task's AC-048 covers
+  install + read + **reset**, as the stronger change-spec rule requires.
+
+### Not done in this step (by instruction)
+
+No `src/` change, no other DAG task's tests, no full test-suite run, no write to
+`docs/todo/` or `docs/questions/`, no change to `tests/sessionmanagement_test_helpers.py` or
+`tests/unit/sessionmanagement/conftest.py` (both read-only for this task), no change to
+T-001's/T-002's/T-003's/T-004's tests, no push, no todo-list change, no subagent, no
+background work. No `docs/workflow/PROBLEMS.md` entry: this step had no relaunch, no
+iteration and no block (next free id stays **P-63**). **The Phase 3 RED gate is not declared
+here** — S3.2 owns it for all tasks; this section records T-005's derivation and its targeted
+run only.
+
+**Next step: S3.1 (T-006)** — derive the composition-root task's tests
+(`tests/integration/singleton_install/test_composition_root.py`, `requirements` REQ-011 +
+REQ-012, `acceptance_criteria` AC-016, `amended_spec_ids` `settings-coverage.md` REQ-002 cited
+unchanged; the only `src/` file in scope is `src/main.py`). Hand-off notes from T-005:
+
+1. `SLOTS` now holds **all five** features, so T-009/T-010 can be written against the table
+   as-is; T-006 must not append a sixth entry.
+2. `src/main.py` today bypasses the install operation: it imports the private slot at `:68`
+   (`from backend.settings.registry import _registry as _settings_registry_singleton`) and
+   writes `_settings_registry_singleton[0] = _settings_registry` at `:138`, immediately after
+   building the registry at `:137` and before the six `register_*_settings` calls at `:173-178`
+   (D10: position and order unchanged, only the mechanism changes; REQ-011 needs the install
+   to precede those registrations). Reading the installed instance back through
+   `get_settings_registry()` is safe in a test (the getter exists); reaching it through
+   `set_settings_registry()` is RED-by-design until T-001's implementation lands — keep using
+   the slot object (`SETTINGS_SLOT`) so the RED stays inside the test body.
+3. AC-016 asks for a **fresh subprocess** that imports `main`. The house pattern is
+   `tests/acceptance/settings_coverage/test_wiring.py:16-31` (build a `code` string,
+   `subprocess.run([sys.executable, "-c", code], cwd=_REPO_ROOT)`) and the `_run` helper of
+   `test_setup_logger.py:12-14`. Two cautions: (a) that pattern's embedded string writes
+   `_reg_mod._registry[0] = ...` at `test_wiring.py:18` — one of the 11 sites **T-007**
+   migrates, so T-006's new file must not plant a *new* private-slot write that its own
+   AC-017 scan would later flag; (b) `src/main.py` creates `./data/*.db`, `./data/files` and
+   the settings YAML relative to the cwd (`:144`, `:152`, `:181`, `:194`, `:197`), which is
+   why the worktree already has `data/` and `settings/` directories — run the subprocess with
+   a scratch `cwd` (e.g. `tmp_path`) instead of `_REPO_ROOT` so the witness leaves nothing in
+   the repository.
+4. T-006's `green_command` names two existing startup-wiring witnesses as regression guards:
+   `tests/acceptance/settings_coverage/test_wiring.py` and
+   `tests/acceptance/permissions/test_composition_wiring.py` (plus
+   `tests/acceptance/logging_coverage/test_setup_logger.py` in its completion gates). They are
+   read-only for T-006 — `test_wiring.py`'s own slot write is migrated in T-007, not here.
+5. Session-management's asymmetry does not reach T-006: the composition root constructs the
+   session service with an explicit repository and never relies on a lazy default — but if a
+   T-006 witness reads the session singleton afterwards, it must pass a repository (EDGE-003),
+   and `src/main.py` must not be made to install one just to make a read bare.

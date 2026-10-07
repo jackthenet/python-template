@@ -39,7 +39,9 @@ import pytest
 import backend.eventbus
 import backend.permissions
 import backend.search
+import backend.sessionmanagement
 import backend.settings
+from backend.authentication.repository import SqliteSessionRepository
 from backend.eventbus import EventBus
 from backend.permissions import (
     MemoryGrantRepository,
@@ -48,6 +50,7 @@ from backend.permissions import (
     PermissionService,
 )
 from backend.search import SearchService
+from backend.sessionmanagement import SessionService
 from backend.settings import SettingsRegistry, YamlValueRepository
 from backend.usermanagement import SqliteUserRepository, UserManager
 
@@ -142,10 +145,40 @@ SEARCH_SLOT = SingletonSlot(
     factory=_new_search_service,
 )
 
+
+def _new_session_service() -> SessionService:
+    """A session service over an isolated in-memory session store and settings registry.
+
+    ``SessionService`` has no default construction — its ``repository`` is a required
+    constructor argument (``session-management.md`` EDGE-003) — so the factory supplies
+    one, and every read of this slot in a concurrency witness has to pass a repository
+    too (change REQ-008 / AC-012). The settings registry is the isolated temp-dir one,
+    so the service's live setting reads never touch the shared ``settings/`` directory.
+    """
+    return SessionService(
+        SqliteSessionRepository("sqlite:///:memory:"),
+        settings_registry=_new_settings_registry(),
+    )
+
+
+SESSIONMANAGEMENT_SLOT = SingletonSlot(
+    module=backend.sessionmanagement,
+    installer="set_session_service",
+    getter="get_session_service",
+    reset="reset_session_service",
+    factory=_new_session_service,
+)
+
 # One entry per singleton-owning feature (settings-public-registry-setter REQ-001).
-# settings at T-001, eventbus at T-002, permissions at T-003, search at T-004;
-# T-005 (sessionmanagement) appends its entry here.
-SLOTS: tuple[SingletonSlot, ...] = (SETTINGS_SLOT, EVENTBUS_SLOT, PERMISSIONS_SLOT, SEARCH_SLOT)
+# settings at T-001, eventbus at T-002, permissions at T-003, search at T-004,
+# sessionmanagement at T-005.
+SLOTS: tuple[SingletonSlot, ...] = (
+    SETTINGS_SLOT,
+    EVENTBUS_SLOT,
+    PERMISSIONS_SLOT,
+    SEARCH_SLOT,
+    SESSIONMANAGEMENT_SLOT,
+)
 
 
 class _CreateWindow:
