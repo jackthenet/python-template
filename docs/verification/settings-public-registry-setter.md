@@ -2426,3 +2426,227 @@ randomization on → `9 failed` (7 EDGE + 2 INV).
 
 S3.1 for **T-010** (the module lock: REQ-006…REQ-008, AC-009…AC-012, INV-001, EDGE-010,
 NFR-003), which depends on T-009's helper surface.
+
+## S3.1 — T-010 test derivation (cross-cutting witness set — the module lock) — 2026-10-07
+
+Task object re-read from `.github/task-runner/tasks.json` before writing (PROBLEMS.md P-63):
+`feature_group` "cross-cutting witness set — all five features: the module lock (install, lazy
+create, reset)"; `requirements` REQ-006, REQ-007, REQ-008; `acceptance_criteria` AC-009…AC-012;
+`edge_cases` EDGE-010; `invariants` INV-001; `non_functional` NFR-003; `dependencies` T-001…T-005,
+T-009 (a **Phase 4** ordering constraint — derivation ran now, with none of the five install
+operations implemented and no module lock added, so RED is the expected state).
+`implementation_scope` — no `src/` file was touched in this step; the five feature modules listed in
+`allowed_files.source_files` are fix-only for the implementation step.
+
+### Files created / modified — exactly the DAG's `allowed_files.test_files`
+
+| File | Nodes | State |
+|---|---|---|
+| `tests/acceptance/singleton_install/test_concurrency.py` | 3 (AC-009, AC-010 + EDGE-010, NFR-003) | **new** (252 lines) |
+| `tests/acceptance/singleton_install/test_install.py` | 2 (AC-011, AC-012) | modified — added to the file T-001/T-009 created (266 lines) |
+| `tests/property/singleton_install/test_install_properties.py` | 1 (INV-001 + the EDGE-010 concurrency half) | modified — added to the file T-009 created (269 lines) |
+| `tests/singleton_install_test_helpers.py` | — | modified — extended the shared slot table (PROBLEMS.md P-55), 499 lines |
+
+No new package `__init__.py` was needed (both target directories already exist). No `src/`, no
+`docs/specs/`, no `docs/verification/traceability.md`, no `docs/todo/`, no `docs/questions/` change.
+
+### The helper extension (what the five witnesses share)
+
+`SingletonSlot` gained two fields — `reader_args` (a `Callable[[], tuple]` supplying the arguments a
+feature's `get_*()` needs, default `_no_reader_args`) and the matching `read_args()` method — plus the
+module-level `concurrent_installs(slot, instances)` helper. Appending defaulted fields is safe because
+all five `SLOTS` entries are constructed with keyword arguments, and the field order and the five
+entries are unchanged (T-009's witnesses iterate `SLOTS`). Session-management's slot supplies
+`lambda: (SqliteSessionRepository(<temp url>),)` so every read of that slot carries a repository
+(`session-management.md` EDGE-003); the other four supply `()`. `record_constructions` and the mixed
+install/read/reset race driver stay **local** to `test_concurrency.py` — they are this task's shape,
+not shared surface.
+
+### Collection — the DAG's 6 node IDs, exact
+
+`uv run pytest tests/acceptance/singleton_install/ tests/property/singleton_install/ --collect-only -q`
+→ **15 tests collected**, no errors: the 6 `tests_to_create` node IDs plus the 9 pre-existing nodes of
+the shared files (T-001's AC-001…AC-006 + AC-013, T-009's INV-002 + INV-003).
+`git rev-parse --show-toplevel` → `C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`
+(the change worktree, PROBLEMS.md P-57). As in T-009, the witnesses **loop over `SLOTS` inside the test
+function** instead of parametrizing, so no `[param]` suffix pushes the collected set past the node IDs
+the DAG names.
+
+### RED gate — the DAG's `red_command`, verbatim
+
+`red_command` = `uv run pytest <the 6 node IDs> -v` (`red_command == green_command`).
+
+```
+plain (random order)          →  6 failed in 0.84s
+-p no:randomly                →  6 failed in 0.89s
+third plain re-run            →  6 failed in 0.84s
+```
+
+Failure reason per node (`-p no:randomly --tb=long --show-capture=no`; `--show-capture=no` is required
+because the captured loguru tracing output otherwise floods the tracebacks):
+
+| Node | Reason |
+|---|---|
+| `test_ac_009_concurrent_lazy_create` | `AssertionError: settings: 8 concurrent reads of an empty slot returned 8 different instances — the read-and-swap is not one atomic module-lock step` / `assert 8 == 1` (`test_concurrency.py:77`) |
+| `test_ac_010_concurrent_install_read_reset` | `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'. Did you mean: 'get_settings_registry'?` |
+| `test_nfr_003_slot_lock_is_short_lived` | `AttributeError: module 'backend.eventbus' has no attribute 'set_event_bus'. Did you mean: 'get_event_bus'?` |
+| `test_ac_011_lazy_path_emits_one_traced_pair` | `AssertionError: settings: set_settings_registry() does not exist, so 'no entry record for it' would be vacuous` (`test_install.py:218`, the `hasattr` anti-vacuity anchor) |
+| `test_ac_012_install_then_reset_then_default` | `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'` |
+| `test_inv_001_last_install_wins` | same `AttributeError`, `Failing test case: inner(ops=['install'])` |
+
+### Why this is a valid RED and not a broken invocation
+
+- **No collection, import or fixture error.** The trio is resolved by `getattr` at call time
+  (`SingletonSlot.install/read/clear`), so the missing public setter fails **inside** the test body —
+  a module-level `from backend.settings import set_settings_registry` would be a collection error and
+  would take down T-001's and T-009's nodes in the same files.
+- **Test data is valid.** Every instance is built by the real constructor over isolated storage (temp-dir
+  value repository, in-memory SQLite for permissions/session-management, a scratch bus inside
+  `isolated_event_bus()`); no `ValidationError`/`ValueError` is raised while building fixtures. The only
+  `ValueError` in the set is the one AC-009 **asserts** for session-management (`pytest.raises(ValueError)`
+  — the specified EDGE-003 behaviour of `get_session_service()` with no repository).
+- **One invalid RED was found and fixed inside this step** (F-57): `_no_reader_args` was copied from the
+  docstring-only `_keep` disposer and had no `return ()`, so `slot.read(*slot.read_args())` raised
+  `TypeError: … argument after * must be an iterable, not NoneType` — a helper bug, not a RED.
+
+### Anti-vacuity — each witness can fail
+
+- **AC-009 (the lock-removal teeth).** The lazy-create window is widened for **all four** lazy features
+  **including search**, which reverses the T-009 hand-off note (F-56). Sensitivity measured out-of-band
+  (scratch probe, deleted before the commit; run twice with the same result):
+  `WITH search _singleton_lock: distinct reads=1 constructed=1` /
+  `WITHOUT search _singleton_lock: distinct reads=8 constructed=8` — i.e. the widened race is genuinely
+  gated by search's module lock, and with the lock present widening can only serialize, so search's leg
+  is neither vacuous nor artificially manufactured. The other three legs are sensitive today by
+  construction: settings/eventbus/permissions have no module lock, which is exactly what the recorded
+  `assert 8 == 1` shows.
+- **AC-010 + EDGE-010.** The witness asserts no thread raised, all 8 reads completed, no read returned an
+  instance no constructor completed (identity set = A + the 8 installed + everything `__init__` recorded),
+  the settled slot value is in that set, and the replace-WARNING count is in `_INSTALLS - _RESETS … _INSTALLS`
+  (6…8) — the bounds are properties of the schedule (only the 2 resets can empty the slot), not of the
+  scheduler. Its lock-removal sensitivity is **capped by the GIL** and the witness says so in a
+  `ponytail:` comment rather than faking more teeth (F-58).
+- **NFR-003.** The witness parks a reset inside `EventBus.shutdown()` (an instance attribute shadows the
+  bound method — `EventBus` declares no `__slots__`) and requires the install to complete while the reset
+  is provably still inside the call; the **same predicate is then evaluated against a serialized control
+  pass** that waits for the release itself — exactly what a lock held across `shutdown()` would do — and
+  the witness asserts that control reports `False`, so the real pass cannot be GREEN by construction.
+- **AC-011.** `hasattr(module, installer)` is asserted before the "no entry record for the install
+  operation" claim, which is the node's current RED trigger; the pair count is taken over `>>`/`<<`
+  records naming the getter, and warnings are filtered with `non_tracing_warnings` so the `@logged`
+  slow-call escalation cannot fake the count.
+
+### Gates run for this step
+
+- `uv run ruff check <the four changed paths>` → `All checks passed!`
+- `uv run ruff format <the four changed paths>` → `4 files left unchanged` (a first pass reformatted 3).
+- `uv run complexipy <the four changed paths> --max-complexity-allowed 15` → *All functions are within the
+  allowed complexity*; every T-010 function was analysed (highest: `_assert_read_returns_last_write` **10**,
+  `test_ac_009_concurrent_lazy_create` **5**, `_assert_concurrent_installs_last_writer_wins` **5**), so no
+  F-51-style refactor was needed.
+- `uv run python scripts/check_traceability.py` → `Traceability: PASS (796 matrix rows, 136 spec IDs,
+  782 test functions)`. The rows for REQ-006…REQ-008, AC-009…AC-012, INV-001, EDGE-010, NFR-003 already
+  exist as `PENDING` (`docs/verification/traceability.md:942-943` area); established practice on this
+  branch is that no S3.1 step fills the Test column (S5.3 does — F-31/F-38).
+- `uv run pytest tests/unit/architecture/test_singleton_slots.py` (T-007's AC-017 scan) → `1 failed, 2
+  passed`, still **12** foreign write sites, none in a file this step wrote. The new tests plant no
+  private-slot write: they go through the public `reset_*` operations and the pre-existing
+  `isolated_event_bus()` parking helper.
+- **No regression in any earlier task's node set** — every earlier task's own `red_command` re-run after
+  this step: T-001 `10 failed`, T-002 `6 failed`, T-003 `6 failed`, T-004 `6 failed`, T-005 `6 failed`,
+  T-006 `2 failed`, T-007 `1 failed, 2 passed`, T-008 `3 failed`, T-009 `20 failed` — identical to the
+  counts recorded in each section above. (T-011/T-012 exit with usage error `rc 4`: their tests do not
+  exist yet.)
+- **No regression in the shared helper's other consumers.** `tests/singleton_install_test_helpers.py` is
+  imported by 15 test files, not only the `singleton_install` ones (F-62), so the helper-consumer set
+  (`tests/contract/singleton_install tests/unit/singleton_install
+  tests/unit/architecture/test_singleton_slots.py tests/acceptance/settings/test_settings.py
+  tests/property/settings tests/unit/settings/test_settings_edges.py
+  tests/unit/eventbus/test_eventbus_edges.py tests/unit/permissions/test_edge_cases.py
+  tests/unit/search/test_search_edges.py tests/unit/sessionmanagement/test_validation.py`) was run **with
+  and without** this step's changes: `33 failed, 141 passed` both times — byte-identical outcome, so the
+  additive helper change moved nothing.
+- `uv run mypy src/` / `ty check src/` — not run: the gate targets `src/` and this step changed no `src/`
+  file. Not run at all: the whole-repo ruff sweep (Phase 5, `.github/workflows/lint.yml:37`), the full
+  test suite, `deptry`, `alembic`, `mkdocs`.
+- State leak: `md5sum data/permissions.db settings/values.yaml` identical before and after the runs
+  (`555e225f…`, `af81d232…`); `git status --porcelain` after the step → the four paths in the table above
+  and nothing else (the scratch RED capture file and the scratch probe were deleted before the commit).
+
+### Findings
+
+- **F-56 — AC-009 widens the lazy-create window for search too, reversing the T-009 hand-off note.**
+  T-009's note (and the earlier reading of F-21) said `widened_lazy_create_window` must not be used for
+  search because `src/backend/search/service.py:547` already guards the lazy path with `_singleton_lock`.
+  For AC-009 that would make search's leg **vacuous**: the assertion would hold whether or not the lock
+  existed. Widening is harmless where a lock exists (it can only serialize) and necessary where one does
+  not, so the witness widens all four lazy features and the sensitivity is proven out-of-band instead of
+  assumed — see the probe result above. The rule for later tasks: widen every lazy leg, and prove the
+  guarded ones are still sensitive.
+- **F-57 — `_no_reader_args` was a docstring-only body** (copied from the docstring-only `_keep`
+  disposer), so it returned `None` and `slot.read(*slot.read_args())` raised `TypeError` — an invalid RED
+  (helper bug) that the collection-only gate cannot catch. Fixed in this step with `return ()`. A no-op
+  **disposer** may be docstring-only; a **tuple provider** may not.
+- **F-58 — AC-010's lock-removal sensitivity is capped by the GIL.** A Python-level singleton slot write
+  is atomic, so deleting the module lock would not tear a read and the whole-instance / final-value
+  assertions would still pass. The witness therefore proves what it can prove (interface race-safety: no
+  thread raises, no torn value, last-writer-wins, no install lost silently) and carries a `ponytail:`
+  comment naming the ceiling; the lock-removal teeth for the create path live in AC-009. This cap is
+  recorded rather than papered over with a weaker assertion.
+- **F-59 — session-management has no lazy default, so two of the five legs are shaped differently.**
+  AC-009 and AC-011 skip it (`get_session_service()` with no repository raises `ValueError` —
+  `session-management.md` EDGE-003; the change spec scopes those ACs to the four features whose `get_*()`
+  creates a default), and AC-010/AC-012 run it with a repository on every read (`session-management.md`
+  AC-048/AC-049). The skip is an explicit `if slot is SESSIONMANAGEMENT_SLOT` branch with the reason in
+  the test, not a silent narrowing.
+- **F-60 — INV-001's property half and its EDGE-010 half run separately.** The `@given` sequence model
+  (ops over `install`/`reset`/`read`, `max_size=8`, `max_examples=15`, `deadline=None`) cannot assert the
+  EDGE-010 WARNING count — a reset inside the sequence makes "how many installs met a non-empty slot"
+  schedule-dependent — so the concurrency half runs **once per slot outside the `@given` loop**, with the
+  slot pre-filled and no reset during the race, which pins the count to exactly `_CONCURRENT_INSTALLS`
+  (4). Fewer racers than AC-010's 8: the clause is about the race, not the volume. INV-001 was **not**
+  weakened to satisfy EDGE-010 (T-010 design constraint).
+- **F-61 — the pre-existing broken witness F-11 is still there and still untouched.**
+  `tests/acceptance/eventbus/test_eventbus.py::_concurrent_install_read_reset` passes two arguments to a
+  one-argument `_run(action)`, so its install threads only record a `TypeError`. This step did not touch
+  that file (out of T-010's `allowed_files`); it is reported again because T-010's AC-010 is the shape the
+  eventbus witness will be reconciled to.
+- **F-62 — the shared helper has 15 importers.** `tests/singleton_install_test_helpers.py` is imported by
+  the five feature test files, the contract/unit/property `singleton_install` files and
+  `tests/property/settings/test_settings_properties.py`, so any helper edit must be regression-checked
+  against that set, not only against the `singleton_install` directories. The with/without comparison
+  above is the cheap way to do it.
+
+### Not done in this step (by instruction)
+
+- The **Phase 3 RED gate declaration** — S3.2 owns it; this record is the evidence S3.2 re-confirms.
+- No implementation, no refactor, no `src/` change; no full-suite run; no push; no other worktree touched;
+  no `docs/todo/` or `docs/questions/` edit; no `PROBLEMS.md` entry; no traceability-matrix edit (S5.3);
+  no other DAG task's tests derived (PROBLEMS.md P-64).
+
+### Hand-off
+
+- **S3.2 (T-010)**: re-run the DAG's `red_command` verbatim — expect `6 failed`, with the per-node reasons
+  in the table above. Ruff is already clean on the four changed paths. If the eventbus leg of AC-010 ever
+  reaches its install half and F-11's file is involved, that file is still out of scope here.
+- **T-010 implementation (S4.x)**: the five modules must (a) guard install, lazy create and reset with
+  **one** module-level `threading.Lock` per module, mutually exclusive, with the `required=False` guarded
+  read taking the same lock and creating nothing (REQ-006, ADR-084); (b) keep the owner's own lazy write
+  direct — never via the public setter — and perform it under that lock (REQ-007, AC-011: exactly one
+  traced entry/exit pair for the getter and **no** entry record for the install operation); (c) make
+  install/reset a pair so the next `get_*()` builds a fresh default, session-management through
+  `get_session_service(repository)` (REQ-008, AC-012); (d) hold the lock only for the slot read/swap — no
+  construction, publication or `shutdown()` inside it, and emit the replace WARNING after the lock is
+  released (NFR-003); (e) keep INV-001 intact — last-install-wins over any install/reset/read sequence and
+  every install that replaced a non-empty slot logging its WARNING (EDGE-010). Search already has
+  `_singleton_lock` (`src/backend/search/service.py:547`); session-management has **no** module lock at all
+  (`src/backend/sessionmanagement/service.py`), which is why its lazy path is the one AC-009 cannot
+  witness. If a witness exposes a divergence between two features, fix the module — do not relax the
+  witness.
+- **T-011** extends `tests/contract/singleton_install/` and may reuse
+  `SingletonSlot.read_args()` / `concurrent_installs`; it must keep the `SingletonSlot` field order and the
+  five `SLOTS` entries intact (T-009's and T-010's witnesses iterate `SLOTS` and assume exactly five).
+
+### Next
+
+S3.1 for **T-011**.

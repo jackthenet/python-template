@@ -16,6 +16,11 @@ Two things live here because more than one test category needs them:
   a simultaneous release rather than against the scheduler's ordering.
 * ``non_tracing_warnings`` — counts the replace WARNING (REQ-002) without
   counting the tracing decorator's own records.
+* ``concurrent_installs`` / ``record_constructions`` — the two pieces the
+  concurrency witnesses (change AC-010, EDGE-010, INV-001) need: N installs
+  released by one barrier, and a list of every instance whose **constructor
+  completed** inside a block, so "a read returned a half-written slot" is a
+  checkable statement rather than a phrase.
 * ``SingletonSlot.stamp`` / ``EventWatcher`` — the two pieces the cross-feature
   witnesses (change AC-005, AC-013, INV-002, INV-003) need on top of the trio:
   a way to mark one instance so a later read can tell it from every other
@@ -84,6 +89,11 @@ def _keep(instance: Any) -> None:
     """Dispose of nothing: a feature whose instance needs no teardown."""
 
 
+def _no_reader_args() -> tuple[Any, ...]:
+    """The arguments a feature's getter needs on a bare read: none, for four of the five."""
+    return ()
+
+
 class SingletonSlot(NamedTuple):
     """One singleton-owning feature: its public module, its trio, and a fresh instance."""
 
@@ -95,6 +105,7 @@ class SingletonSlot(NamedTuple):
     stamper: Callable[[], tuple[Any, Probe]]
     dispose: Callable[[Any], None] = _keep
     warning_keyword: str = ""
+    reader_args: Callable[[], tuple[Any, ...]] = _no_reader_args
 
     def install(self, instance: Any) -> Any:
         """Call the feature's public install operation (``AttributeError`` until it exists)."""
@@ -111,6 +122,16 @@ class SingletonSlot(NamedTuple):
     def new(self) -> Any:
         """Build a fresh, isolated instance of the feature's singleton class."""
         return self.factory()
+
+    def read_args(self) -> tuple[Any, ...]:
+        """The arguments this feature's getter needs on a bare read.
+
+        Session-management's default can only be created when a ``repository`` is
+        supplied (``session-management.md`` EDGE-003), so its reads carry one; the
+        other four getters take nothing. A witness calls this once per race so the
+        same repository is shared by the racing reads.
+        """
+        return self.reader_args()
 
     def stamp(self) -> tuple[Any, Probe]:
         """Build a fresh instance carrying a marker only that instance has.
@@ -295,6 +316,11 @@ def _stamp_sessionmanagement() -> tuple[Any, Probe]:
     return service, probe
 
 
+def _session_reader_args() -> tuple[Any, ...]:
+    """A repository for the session-management getter (EDGE-003: no default without one)."""
+    return (SqliteSessionRepository("sqlite:///:memory:"),)
+
+
 SESSIONMANAGEMENT_SLOT = SingletonSlot(
     module=backend.sessionmanagement,
     installer="set_session_service",
@@ -303,6 +329,7 @@ SESSIONMANAGEMENT_SLOT = SingletonSlot(
     factory=_new_session_service,
     stamper=_stamp_sessionmanagement,
     warning_keyword="session",
+    reader_args=_session_reader_args,
 )
 
 # One entry per singleton-owning feature (settings-public-registry-setter REQ-001).
@@ -390,6 +417,55 @@ def concurrent_reads(slot: SingletonSlot, count: int, args: tuple[Any, ...] = ()
 def non_tracing_warnings(records: list[Any]) -> list[Any]:
     """Captured WARNING records that are not the tracing decorator's own output."""
     return [r for r in records if r["level"].name == "WARNING" and not str(r).startswith(_TRACING_PREFIXES)]
+
+
+def concurrent_installs(slot: SingletonSlot, instances: list[Any], timeout: float = 5.0) -> list[BaseException]:
+    """``slot.install(instance)`` for every instance, each from its own barrier-released thread.
+
+    Every thread's exception is returned instead of the thread dying silently, so the
+    witness fails on the behaviour (EDGE-010: no install lost, no exception raised).
+    """
+    start = threading.Barrier(len(instances))
+    errors: list[BaseException] = []
+    guard = threading.Lock()
+
+    def _installer(instance: Any) -> None:
+        try:
+            start.wait(timeout=timeout)
+            slot.install(instance)
+        except BaseException as exc:  # reported through the assertion in the witness
+            with guard:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=_installer, args=(instance,)) for instance in instances]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return errors
+
+
+@contextmanager
+def record_constructions(cls: type) -> Iterator[list[Any]]:
+    """Every ``cls`` instance whose **constructor completed** inside the block.
+
+    A slot read that returns an object absent from this list returned something written
+    before its constructor finished — the half-written slot AC-010 forbids. Unlike
+    ``widened_lazy_create_window`` this records without holding anyone inside the
+    constructor, so it does not manufacture a race.
+    """
+    built: list[Any] = []
+    real_init = cls.__init__
+
+    def _recorded(self: Any, *args: Any, **kwargs: Any) -> None:
+        real_init(self, *args, **kwargs)
+        built.append(self)
+
+    cls.__init__ = _recorded
+    try:
+        yield built
+    finally:
+        cls.__init__ = real_init
 
 
 class EventWatcher:

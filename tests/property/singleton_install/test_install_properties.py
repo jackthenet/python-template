@@ -6,8 +6,13 @@ INV-003 (change-level IDs — PROBLEMS.md P-53), over REQ-001…REQ-005 and REQ-
 The strategy domain is the sequence the spec quantifies over — "for any sequence
 of installs on one feature's singleton": a list of booleans, each ``True`` an
 install of a fresh instance, each ``False`` a ``reset_*()`` (the only other
-operation the two invariants mention). INV-001 (last-install-wins under
-concurrency) is T-010's witness and is not here.
+operation the two invariants mention).
+
+T-010 adds INV-001 (last-install-wins). Its strategy is the same shape widened to
+the three operations the invariant names — install, reset, read — and its second
+half is the concurrency clause of the same invariant ("concurrent installs are
+last-writer-wins, and no install is lost silently"), run once per feature because
+a Hypothesis loop would only multiply the thread count, not the input space.
 """
 
 from __future__ import annotations
@@ -18,7 +23,13 @@ from typing import Any
 from eventbus_test_helpers import isolated_event_bus
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from singleton_install_test_helpers import SLOTS, EventWatcher, SingletonSlot, non_tracing_warnings
+from singleton_install_test_helpers import (
+    SLOTS,
+    EventWatcher,
+    SingletonSlot,
+    concurrent_installs,
+    non_tracing_warnings,
+)
 
 from backend.eventbus import get_event_bus
 
@@ -26,6 +37,14 @@ from backend.eventbus import get_event_bus
 # in-memory store for two of the five features). The invariant is about the shape of
 # the sequence, not its length.
 _SEQUENCE = st.lists(st.booleans(), min_size=1, max_size=6)
+
+# INV-001 quantifies over the three operations its wording names. ``read`` is in the
+# domain because the invariant is about what a read returns, not only about writes.
+_OPS = st.lists(st.sampled_from(("install", "reset", "read")), min_size=1, max_size=8)
+
+# The concurrency clause: installs racing for one slot. Small on purpose — the clause
+# is about the race, not about volume, and every racer is a real instance.
+_CONCURRENT_INSTALLS = 4
 
 
 class _Holder:
@@ -169,3 +188,82 @@ def test_inv_003_no_events_and_no_rebinding() -> None:
 
     with isolated_event_bus():  # these sequences reset the event bus slot; park the suite's live bus
         inner()
+
+
+def test_inv_001_last_install_wins(log_records: list[Any]) -> None:
+    """INV-001: for any install/reset/read sequence a read returns the most recent install's instance, and concurrent installs are last-writer-wins with no install lost silently.
+
+    The sequence half is the model check; the concurrency half is the same
+    invariant's second clause (``EDGE-010``), run once per feature outside the
+    Hypothesis loop — more examples would add threads, not input space.
+    """
+
+    @given(ops=_OPS)
+    @settings(max_examples=15, deadline=None)
+    def inner(ops: list[str]) -> None:
+        for slot in SLOTS:
+            _assert_read_returns_last_write(slot, ops)
+
+    with isolated_event_bus():  # these sequences reset the event bus slot; park the suite's live bus
+        inner()
+        for slot in SLOTS:
+            _assert_concurrent_installs_last_writer_wins(slot, log_records)
+
+
+def _assert_read_returns_last_write(slot: SingletonSlot, ops: list[str]) -> None:
+    """One feature, one sequence: every read returns the instance the model says the slot holds."""
+    slot.clear()
+    built: list[Any] = []  # every instance the sequence put in front of the slot: installed, or created by a read
+    current: Any = None  # what the model says the slot holds; None means empty
+    try:
+        for op in ops:
+            if op == "install":
+                instance = slot.new()
+                slot.install(instance)  # RED today: the install operation does not exist
+                built.append(instance)
+                current = instance
+            elif op == "reset":
+                slot.clear()
+                current = None
+            else:
+                read = slot.read(*slot.read_args())
+                if current is None:
+                    assert not any(read is instance for instance in built), (
+                        f"{slot.name()}: a read after a reset returned an instance the sequence had installed — "
+                        "the reset did not drop it"
+                    )
+                    built.append(read)
+                    current = read
+                else:
+                    assert read is current, (
+                        f"{slot.name()}: the read returned neither the last install nor a fresh default"
+                    )
+    finally:
+        for instance in built:
+            slot.dispose(instance)
+        slot.clear()
+
+
+def _assert_concurrent_installs_last_writer_wins(slot: SingletonSlot, log_records: list[Any]) -> None:
+    """INV-001's concurrency clause (EDGE-010): racing installs lose none of their writes, and every one of them warns."""
+    slot.clear()
+    first = slot.new()
+    slot.install(first)  # the slot is non-empty before the race and nothing empties it during it
+    racers = [slot.new() for _ in range(_CONCURRENT_INSTALLS)]
+    log_records.clear()
+    errors = concurrent_installs(slot, racers)
+    warnings = [w for w in non_tracing_warnings(log_records) if slot.warning_keyword in str(w).lower()]
+    try:
+        assert not errors, f"{slot.name()}: concurrent installs raised: {errors!r}"
+        final = slot.read(*slot.read_args())
+        assert any(final is racer for racer in racers), (
+            f"{slot.name()}: the slot ended on neither of the concurrently installed instances — an install was lost"
+        )
+        assert len(warnings) == _CONCURRENT_INSTALLS, (
+            f"{slot.name()}: {len(warnings)} WARNING(s) for {_CONCURRENT_INSTALLS} installs into a slot that stayed "
+            "non-empty throughout — one replaced the shared default silently"
+        )
+    finally:
+        for instance in [first, *racers]:
+            slot.dispose(instance)
+        slot.clear()

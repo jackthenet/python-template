@@ -25,9 +25,11 @@ from eventbus_test_helpers import UserCreated, isolated_event_bus, wait_for
 from settings_test_helpers import restore_singleton
 from singleton_install_test_helpers import (
     EVENTBUS_SLOT,
+    SESSIONMANAGEMENT_SLOT,
     SETTINGS_SLOT,
     SLOTS,
     EventWatcher,
+    SingletonSlot,
     non_tracing_warnings,
 )
 
@@ -189,3 +191,76 @@ def test_ac_013_install_publishes_no_event() -> None:
         get_event_bus().publish(sentinel)  # anti-vacuity: the demonstrably-arriving event proves the collector works
         watcher.drain()  # shutdown drains the queue (event-bus.md AC-008), so nothing is still in flight
         assert watcher.received == [sentinel], f"an install published an event: {watcher.received!r}"
+
+
+def test_ac_011_lazy_path_emits_one_traced_pair(log_records: list[Any]) -> None:
+    """AC-011 (REQ-007): the owner's lazy create emits one traced pair for the getter and none for the install operation.
+
+    The lazy path writes the slot **directly** — it never calls the public install
+    operation — so the only entry/exit pair the read produces is the getter's own, and
+    the instance whose constructor finished is what the next read returns.
+    """
+    with isolated_event_bus():
+        for slot in SLOTS:
+            if slot is SESSIONMANAGEMENT_SLOT:
+                # AC-011 names the four features of AC-009; this one creates no default
+                # without a repository (session-management.md EDGE-003), so it has no lazy
+                # path to trace. Its install/reset pair is AC-012 below.
+                continue
+            slot.clear()
+            log_records.clear()  # only the lazy read's own records may count
+            created = slot.read()
+            try:
+                pair = _traced_pair(log_records, slot.getter)
+                assert pair == (1, 1), (
+                    f"{slot.name()}: the lazy read emitted {pair[0]} entry / {pair[1]} exit record(s) of its own"
+                )
+                assert hasattr(slot.module, slot.installer), (
+                    f"{slot.name()}: {slot.installer}() does not exist, so 'no entry record for it' would be vacuous"
+                )
+                installer_entries = _traced_pair(log_records, slot.installer)[0]
+                assert installer_entries == 0, (
+                    f"{slot.name()}: the lazy path called the public install operation ({installer_entries} entry "
+                    "record(s)) — REQ-007 requires the owner to write its own slot directly"
+                )
+                assert slot.read() is created, f"{slot.name()}: the lazily created instance is not the shared default"
+            finally:
+                slot.dispose(created)
+                slot.clear()
+
+
+def test_ac_012_install_then_reset_then_default() -> None:
+    """AC-012 (REQ-008): install, then reset, and the next read builds a fresh default, not the installed instance."""
+    with isolated_event_bus():
+        for slot in SLOTS:
+            _witness_install_reset_default(slot)
+
+
+def _witness_install_reset_default(slot: SingletonSlot) -> None:
+    """One feature's AC-012 pair: install → read (the installed instance) → reset → read (a fresh default)."""
+    slot.clear()
+    installed = slot.new()
+    try:
+        slot.install(installed)  # RED today: the install operation does not exist
+        assert slot.read(*slot.read_args()) is installed, (
+            f"{slot.name()}: the installed instance is not the shared default"
+        )
+        slot.clear()  # reset_*(): the slot is empty again
+        fresh = slot.read(*slot.read_args())  # EDGE-003 carve-out: this read carries a repository
+        assert fresh is not installed, f"{slot.name()}: the reset did not drop the installed instance"
+        assert type(fresh) is type(installed), (
+            f"{slot.name()}: the read after the reset built no default of the feature's class"
+        )
+        assert slot.read(*slot.read_args()) is fresh, (
+            f"{slot.name()}: the created default did not become the shared default"
+        )
+    finally:
+        slot.dispose(installed)
+        slot.clear()  # for the event bus slot this also shuts the created default down
+
+
+def _traced_pair(records: list[Any], function_name: str) -> tuple[int, int]:
+    """The (entry, exit) record count of one traced function, matched on its own name."""
+    entries = [r for r in records if str(r).startswith(">>") and function_name in str(r)]
+    exits = [r for r in records if str(r).startswith("<<") and function_name in str(r)]
+    return len(entries), len(exits)
