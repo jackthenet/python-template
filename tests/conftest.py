@@ -13,7 +13,6 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from loguru import logger
 
 from backend.logging import setup_logger
 
@@ -60,9 +59,9 @@ def _stdlib_root_logging_restored() -> Iterator[None]:
     calls ``fileConfig(alembic.ini)``, which replaces the root logger's handler
     list and level and disables the pre-existing non-root loggers. That drops the
     logging feature's stdlib intercept handler (REQ-003) and raises the root level
-    above INFO, so every later test that routes stdlib records into loguru
-    (AC-004, AC-005, EDGE-005, the logging integration pipeline) silently loses
-    them — the full-suite flake, since the order is randomized. The snapshot and
+    above INFO, so every later test that routes stdlib records into the pipeline
+    (AC-004, AC-006, the logging integration pipeline) silently loses them — the
+    full-suite flake, since the order is randomized. The snapshot and
     restore keep the process-global state installed by ``setup_logger()`` intact;
     no test's assertions change.
     """
@@ -87,10 +86,9 @@ def log_records() -> Iterator[list[Any]]:
     Each record supports ``str(record)`` (the message text) and ``record["level"]`` /
     ``record["record"]`` (record fields), matching the suite's assertions.
 
-    The capture is dual-backend while the migration runs (structlog-logging T-002):
-    traced records and pipeline statements arrive through the stdlib handler on the
-    pipeline's own logger, direct loguru statements through loguru's sink. T-006
-    removes the loguru half together with the last loguru statement.
+    The capture is the pipeline's own stdlib handler (structlog-logging T-002/T-006):
+    traced records and feature statements arrive through it. The loguru sink half of
+    the dual capture is gone with the last loguru statement (T-006).
 
     The shared event bus is drained before the sinks are added: the bus
     dispatches events asynchronously on a background worker, so stale events
@@ -99,17 +97,13 @@ def log_records() -> Iterator[list[Any]]:
     pipeline mid-test. Draining first ensures the stale events are dispatched
     before the sinks exist, so the capture is stable for the test.
     """
-    from logging_coverage_test_helpers import loguru_sink, pipeline_capture
+    from logging_coverage_test_helpers import pipeline_capture
 
     records: list[Any] = []
 
     _drain_event_bus()
-    handler_id = logger.add(loguru_sink(records), level="DEBUG", catch=False)
-    try:
-        with pipeline_capture(records):
-            yield records
-    finally:
-        logger.remove(handler_id)
+    with pipeline_capture(records):
+        yield records
 
 
 def _drain_event_bus() -> None:

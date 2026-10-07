@@ -10,8 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from logging_test_helpers import captured_console, managed_sinks, pipeline_logger, wait_for_record
-from loguru import logger
+from logging_test_helpers import captured_console, managed_handlers, managed_sinks, pipeline_logger, wait_for_record
 
 from backend.logging import setup_logger
 
@@ -46,10 +45,10 @@ def test_ac_001_setup_logger_adds_sinks(session_settings: object) -> None:
 def test_ac_002_setup_logger_idempotent() -> None:
     """AC-002: subsequent setup_logger() calls are no-ops and add no new sinks."""
     setup_logger()
-    before = len(logger._core.handlers)
+    before = managed_handlers(pipeline_logger())
     setup_logger()
     setup_logger()
-    after = len(logger._core.handlers)
+    after = managed_handlers(pipeline_logger())
     assert before == after
 
 

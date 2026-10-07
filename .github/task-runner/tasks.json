@@ -783,7 +783,10 @@
           "tests/acceptance/logging_coverage/test_statements_via_feature.py",
           "tests/acceptance/logging_coverage/test_direct_loguru_kept.py (DELETED)",
           "tests/acceptance/logging/test_pipeline_backend.py",
-          "tests/contract/logging/test_dependency_contract.py"
+          "tests/contract/logging/test_dependency_contract.py",
+          "tests/conftest.py (allowed_files correction at S4.2 T-006: the loguru half of the log_records dual capture)",
+          "tests/logging_coverage_test_helpers.py (allowed_files correction at S4.2 T-006: the loguru capture helpers)",
+          "tests/acceptance/logging/test_logging.py (allowed_files correction at S4.2 T-006: the loguru handler-count probe)"
         ],
         "docs_files": [
           "docs/verification/traceability.md",

@@ -340,7 +340,7 @@ The logging-coverage feature (`docs/specs/logging-coverage.md`) traces all exist
 | REQ-007 | AC-007 | `test_traced_classes_have_concrete_threshold` | GREEN |
 | REQ-008 | AC-008 | `test_semantic_log_levels` | GREEN |
 | REQ-009 | AC-009 | `test_traced_class_docstrings_mention_tracing` | GREEN |
-| REQ-010 | AC-010 | `test_existing_direct_loguru_kept` — superseded by `structlog-logging` (the restated REQ-010 / AC-010 wording is witnessed by `test_ac_009_statements_go_through_get_logger`); the direct-backend witness is deleted in the implementation PR | GREEN (logging-coverage Phase 5) — superseded by structlog-logging S3.2, 2026-10-06 |
+| REQ-010 | AC-010 | `test_ac_009_statements_go_through_get_logger` — restated v2 wording (all existing one-off statements are kept as statements, written through the shared logging feature's exported logger; no feature module imports a logging backend directly); replaces the retired direct-backend witness, deleted by structlog-logging T-006 per spec §11 | GREEN (logging-coverage Phase 5) — superseded by structlog-logging S3.2, re-pointed by T-006, 2026-10-07 |
 | REQ-011 | AC-011 | `test_entrypoint_calls_setup_logger_once` | GREEN |
 | REQ-012 | AC-012 | `test_new_public_classes_traced_by_default` | GREEN |
 | REQ-013 | AC-013 | `test_sink_failure_does_not_interrupt` | GREEN |

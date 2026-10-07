@@ -19,8 +19,6 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from loguru import logger
-
 # --- The normative inventory: classes (spec section 3.1) -----------------
 from backend.authentication.protocols import AttemptTracker, WebAuthnProvider
 from backend.authentication.repositories import (
@@ -131,8 +129,9 @@ def parse_elapsed_ms(message: str) -> float | None:
 # --- Record capture -------------------------------------------------------
 # The suite reads a captured record in exactly three ways: ``str(record)`` for the
 # message text, ``record["level"].name`` for the level, and ``record["record"]`` for
-# the whole record. Both backends are normalised into one shape so no consumer has
-# to know which one produced a record.
+# the whole record. Every record reaches the capture through the logging pipeline, so
+# one normalised shape covers the whole suite (structlog-logging T-006 removed the
+# loguru half of the dual capture together with the backend).
 
 _LevelName = namedtuple("_LevelName", "name")
 
@@ -163,12 +162,6 @@ class CaptureRecord:
         if key == "record":
             return self._fields
         return self._fields[key]
-
-
-def capture_from_loguru(message: Any) -> CaptureRecord:
-    """Normalise a direct loguru statement (the backend T-004..T-006 retire)."""
-    record = message.record
-    return CaptureRecord(str(record.get("message", "")), record["level"].name, record)
 
 
 def capture_from_logrecord(record: logging.LogRecord) -> CaptureRecord:
@@ -265,15 +258,6 @@ def pipeline_capture(records: list[Any], level: str = "DEBUG") -> Iterator[None]
         feature.removeHandler(handler)
 
 
-def loguru_sink(records: list[Any]) -> Callable[[Any], None]:
-    """A loguru sink appending captured records to ``records`` (the dual-capture half)."""
-
-    def _sink(message: Any) -> None:
-        records.append(capture_from_loguru(message))
-
-    return _sink
-
-
 # --- Record capture for Hypothesis property tests -------------------------
 class _LiveMessages:
     """A live view of captured records as message-text strings.
@@ -306,15 +290,11 @@ def capture_records(level: str = "DEBUG") -> Iterator[_LiveMessages]:
 
     Yields a fresh live view of message-text strings per invocation, so
     Hypothesis iterations do not accumulate across each other. The view
-    reflects records added while the block is active. The capture is dual-backend
-    while the migration runs: traced records arrive through the pipeline, direct
-    loguru statements through loguru's own sink (the loguru half is removed by T-006).
+    reflects records added while the block is active. Every record arrives
+    through the logging pipeline (the loguru half of the dual capture was removed
+    by structlog-logging T-006).
     """
     raw: list[Any] = []
 
-    handler_id = logger.add(loguru_sink(raw), level=level, catch=False)
-    try:
-        with pipeline_capture(raw, level):
-            yield _LiveMessages(raw)
-    finally:
-        logger.remove(handler_id)
+    with pipeline_capture(raw, level):
+        yield _LiveMessages(raw)
