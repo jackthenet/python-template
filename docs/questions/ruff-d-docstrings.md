@@ -372,10 +372,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) This change first, `structure-map` rebases (Recommended)** — the map is generated, so it picks up the new docstring summaries for free on its first regeneration; and `D` covering `scripts/` is decided before `make_map.py` is written.
   - **(b) `structure-map` first, this change rebases** — the map exists while the backfill runs (useful navigation for a 43-file sweep), but its committed `STRUCTURE.md` goes stale the moment docstrings are added.
   - **(c) Either order, with a note in both PR bodies to regenerate `STRUCTURE.md` after merge** — no sequencing constraint, but whoever is second must re-run the generator.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) `ruff-d-docstrings` first, `structure-map` rebases** (user, 2026-10-07). The generated map picks up the new docstring summaries free on its first regeneration, and the "does `D` cover `scripts/`" decision (Q-3: no) is settled before `scripts/make_map.py` is written. Recorded as a `Depends on:` note in `docs/todo/structure-map.md`.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — ordering recorded in both TODO files; `AGENTS.md` edits (Q-24 here, `structure-map` Q-11) are sequenced by this decision
 
 ## Q-23 — Are `migrations/` files permanently exempt from `D`?
 - **Step:** P.2 Interrogate
@@ -400,10 +400,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — extend the existing line with the chosen convention and the no-filler rule (Recommended)** — one or two lines where the guidance already lives, so future code lands clean and the gate costs nothing later.
   - **(b) No — the ruff rule is the guidance; `AGENTS.md` stays untouched** — no `AGENTS.md` conflict with `structure-map`, but agents learn the rule only by failing the lint job.
   - **(c) Yes, and also add a docstring section to the `python-best-practices` skill** — better placement for agents, but that skill's content is out of this change's scope (`track-python-skill` committed it as-is).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — extend `AGENTS.md:737`** (user, 2026-10-07) with the enforced convention: Google-style sections (`Args:` / `Returns:` / `Raises:`) where a callable has parameters or a return, one-line summary + blank line (D205), and the no-filler rule. The `python-best-practices` skill is not touched.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `AGENTS.md` "General Code & Style Conventions" is in this change's file set; sequenced before `structure-map` (Q-22)
 
 ## Q-25 — How is "no behavior delta" proven for a ~200-docstring diff?
 - **Step:** P.2 Interrogate
@@ -414,10 +414,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Full suite + `ruff check .` + `ruff format --check .` + `mkdocs build --strict`, plus a one-off AST-equality check (docstrings stripped) recorded in the verification file (Recommended)** — cheap, mechanical, and it proves the claim rather than asserting it.
   - **(b) Full suite + lint/format/mkdocs only** — the repo's normal DOCS/CHORE evidence; the docstring-vs-code claim rests on review.
   - **(c) Targeted suite per feature + the full suite at the Phase 6 pre-merge gate** — faster during Phase 4, same final evidence.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Full suite + `ruff check .` + `ruff format --check .` + `uv run --group docs mkdocs build --strict` + a one-off AST-equality check (docstrings stripped) recorded in `docs/verification/ruff-d-docstrings.md`** (user, 2026-10-07). The AST check proves the executable code is byte-identical before and after the sweep — the claim is demonstrated, not asserted.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — Phase 5 evidence set for this change; the AST check is a throwaway script run during Phase 5, not a permanent `scripts/` addition
 
 ## Q-26 — What happens when a docstring reveals that a behavior claim is wrong?
 - **Step:** P.2 Interrogate
@@ -428,10 +428,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Record it as a finding, write the docstring that matches the code, and open a separate ISSUE TODO (Recommended)** — the docs change stays DOCS/CHORE and finishes; the defect gets its own RED/GREEN cycle.
   - **(b) Reclassify this change to ISSUE mid-flight per the Escalation Rules** — one change carries both, but the branch re-runs Phase P for ISSUE and the docstring work waits.
   - **(c) Stop the change entirely and wait for the human to decide** — safest, but it strands every feature already done.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Record it as a finding, write the docstring that matches the code, and open a separate ISSUE TODO** (user, 2026-10-07). This change stays DOCS/CHORE and finishes; the defect gets its own triage + RED/GREEN cycle. The TODO's "stop and reclassify as ISSUE" line is amended to this procedure in the P.4 scope record.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — escalation procedure recorded in the scope record; no mid-flight reclassification
 
 ## Q-27 — Version bump: none, or patch?
 - **Step:** P.2 Interrogate
