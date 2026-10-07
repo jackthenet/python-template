@@ -2650,3 +2650,215 @@ because the captured loguru tracing output otherwise floods the tracebacks):
 ### Next
 
 S3.1 for **T-011**.
+
+## S3.1 — T-011 test derivation (logging coverage — the five install operations) — 2026-10-07
+
+**Step.** S3.1, one atomic step: derive **T-011's** `tests_to_create` and nothing else. No implementation, no
+refactor, no other task's tests, no full suite, no push, no PROBLEMS.md entry, **no Phase 3 RED gate declared**
+(that is S3.2). Skill: `.agents/skills/test/SKILL.md`, Phase 3 FEATURE / CROSS-CUTTING section.
+
+**Task object re-read from `.github/task-runner/tasks.json` (the file wins, P-63).** `feature_group` "logging
+coverage — the five install operations in the logging-coverage inventory"; `requirements` `[REQ-010]`;
+`acceptance_criteria` `[AC-014, AC-015]`; `invariants` / `edge_cases` / `nfrs` all empty; `dependencies`
+`[T-001, T-002, T-003, T-004, T-005, T-009]` (Phase 4 ordering only); `tests_to_create` exactly the two node IDs
+below; `red_command` / `green_command` identical; `allowed_files.source_files` = the five feature modules
+(**fix-only** — the decorator belongs to the owning module, T-011 adds no new tracing);
+`allowed_files.test_files` = `tests/acceptance/singleton_install/test_install.py`,
+`tests/singleton_install_test_helpers.py` (read-only), `tests/acceptance/logging_coverage/test_inventory.py`,
+`tests/logging_coverage_test_helpers.py`; `design_constraints` — needs only T-001…T-005; **the
+`docs/specs/logging-coverage.md` §3.1 table is the normative inventory and no existing inventory row may change**;
+`@logged(slow_threshold_ms=5)`, default `include_args`, no local values in records; `completion_gates` — AC-014
+witnesses entry + exit with elapsed ms; the inventory carries a row for each install operation and each traced
+function; ruff clean on the changed paths; traceability PASS. **Verified field-for-field against the brief — no
+invented task object.**
+
+**The T-010 hand-off note is wrong about T-011 (finding F-63).** It says T-011 "extends
+`tests/contract/singleton_install/`". T-011's `tests_to_create` and `allowed_files` name
+`tests/acceptance/singleton_install/test_install.py` and `tests/acceptance/logging_coverage/test_inventory.py` —
+nothing under `tests/contract/`. The DAG wins; the contract directory was left untouched.
+
+### Files created / modified
+
+| File | Change | Lines (after) |
+|---|---|---|
+| `tests/acceptance/singleton_install/test_install.py` | **modified** — `test_ac_014_install_is_traced` + `_witness_install_traced` appended after `_witness_install_reset_default`; `_traced_records` extracted and `_traced_pair` now delegates to it; `_INSTALL_SLOW_THRESHOLD_MS` added; `level_name` / `parse_elapsed_ms` imported read-only from `logging_coverage_test_helpers` | 334 (was 266) |
+| `tests/acceptance/logging_coverage/test_inventory.py` | **modified** — `test_inventory_covers_install_operations` + `_spec_inventory_rows` + `_SPEC` / `_INSTALL_OPERATIONS` / `_INSTALL_SLOW_THRESHOLD_MS` / `_MIN_ROW_CELLS` added; module docstring extended | 104 (was 24) |
+| `tests/singleton_install_test_helpers.py` | **not touched** (read-only per the DAG) — `SLOTS` already names the five installers | 499 |
+| `tests/logging_coverage_test_helpers.py` | **not touched** — deliberately, see the interlock section | 172 |
+| `src/backend/{settings/registry,eventbus/eventbus,permissions/service,search/service,sessionmanagement/service}.py` | **not touched** — fix-only in this task and nothing to fix yet: the install operations do not exist (T-001…T-005 not implemented) | — |
+
+`git rev-parse --show-toplevel` =
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter` beside
+every count below.
+
+### Interlock with `crosscut/structlog-logging` (PR #74) — exact lines
+
+`git log -1 --format='%h %s' -- docs/specs/logging-coverage.md` →
+`1dbddb6 docs(spec): P.4 draft CROSS-CUTTING spec + amend six approved specs` — the version this change's P.4
+amended, and the version T-011's expectations come from. Nothing was fetched, merged or rebased, and no other
+worktree was touched.
+
+- `tests/acceptance/logging_coverage/test_inventory.py` — the **only** file this step changes that PR #74 also
+  edits. Added lines: **7–13** (docstring paragraph), **18** (`import pathlib`), **25–63** (the four module
+  constants + `_spec_inventory_rows`), **77–104** (`test_inventory_covers_install_operations`). Pre-existing
+  lines **1–6**, **14–17**, **19–24**, **66–75** (`test_inventory_covers_all_public_classes`) are byte-identical
+  to HEAD.
+- `tests/logging_coverage_test_helpers.py` — **zero lines changed by this step.** The DAG puts the
+  `INVENTORY_MODULE_FUNCTIONS` row additions in T-011's *implementation* step, not in derivation: the five
+  missing rows are exactly the RED the AC-015 witness has to fail on (finding F-64). This shrinks the interlock
+  footprint for T-011 to one file instead of two.
+- `tests/acceptance/singleton_install/test_install.py` — new import edge
+  `from logging_coverage_test_helpers import level_name, parse_elapsed_ms` (read-only; the helper itself is
+  unmodified). The four helpers the AC-014 witness reuses are `parse_elapsed_ms` and `level_name` from
+  `tests/logging_coverage_test_helpers.py`, and `SLOTS` / `SingletonSlot.installer` / `SingletonSlot.new` /
+  `SingletonSlot.install` / `SingletonSlot.dispose` / `SingletonSlot.clear` from
+  `tests/singleton_install_test_helpers.py`. Nothing was duplicated.
+
+### Collection (no import/collection error)
+
+`uv run pytest tests/acceptance/singleton_install/ tests/acceptance/logging_coverage/ --collect-only -q` →
+**30 tests collected in 0.39s**, no errors — `test_install.py` 13 (12 pre-existing + AC-014),
+`test_inventory.py` 2 (1 pre-existing + AC-015).
+
+### RED gate for T-011 (observed; the Phase 3 gate itself is S3.2's)
+
+`red_command` verbatim:
+
+```
+uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_014_install_is_traced tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations -v
+```
+
+**2 failed in 0.58s** — reproduced **3×** (two default random-order runs, one `-p no:randomly`).
+
+| Node | Failure reason (exact) |
+|---|---|
+| `…test_install.py::test_ac_014_install_is_traced` | `AssertionError: settings: set_settings_registry() does not exist, so it cannot be traced with @logged(slow_threshold_ms=5) (REQ-010)` / `assert None is not None` |
+| `…test_inventory.py::test_inventory_covers_install_operations` | `AssertionError: the executable inventory has no 'module function' row for ['set_event_bus', 'set_permission_service', 'set_search_service', 'set_session_service', 'set_settings_registry'], which docs/specs/logging-coverage.md §3.1 lists (AC-015)` / `assert not [...]` |
+
+**Why this is a valid RED.** Both are assertion failures on unimplemented behavior — the missing install
+operations and the missing inventory rows — not a collection, import, fixture or test-data error (collection
+clean above). The AC-014 witness resolves the installer with `getattr(slot.module, slot.installer, None)` and
+asserts it is not None, so a missing installer is an `AssertionError`, never an `AttributeError` (finding
+F-57/F-58 class of invalid RED avoided: no helper returns the wrong type, no `TypeError`). The AC-015 witness
+fails on the five rows specifically, and its first assertion already proves the §3.1 table lists exactly those
+five `module function` `set_*` rows — so the failure is "the executable inventory is behind the spec", not "the
+spec changed".
+
+### Anti-vacuity probes (scratch `_scratch_t011_probe.py`, deleted before the commit)
+
+Out-of-band, exactly as T-010 did — the witnesses were driven against stand-ins to prove they fail for the right
+reason and can pass:
+
+| Probe | Witness outcome |
+|---|---|
+| AC-014, installer present but **undecorated** (correct name) | `FAIL: settings: set_settings_registry() exists but is not traced with @logged (REQ-010)` |
+| AC-014, decorated with `slow_threshold_ms=50` | `FAIL: … slow_threshold_ms is 50.0, not 5 (docs/specs/logging-coverage.md §3.1 note)` |
+| AC-014, decorated with `include_args=True` | `FAIL: settings: the entry record formats arguments or local values into the record: <…SettingsRegistry object at 0x…>` |
+| AC-014, correct `@logged(slow_threshold_ms=5)` | **PASS** — records `['>> set_settings_registry called', '<< set_settings_registry returned in 0.001 ms', …]` (witness is satisfiable; exit at DEBUG; elapsed 0.001 ms ≪ 5 ms) |
+| AC-015, rows absent (current state) | `FAIL: … no 'module function' row for [the five]` |
+| AC-015, rows present but **untraced** | `FAIL: set_event_bus is not traced with @logged (AC-015)` |
+| AC-015, rows present, `slow_threshold_ms=50` | `FAIL: set_event_bus is not traced with @logged(slow_threshold_ms=5) (…§3.1 note)` |
+| AC-015, rows present and traced `@5` | **PASS** |
+| AC-015, unrelated inventory churn only (added `set_unrelated`, replaced `get_settings`, removed `setup_logger`) | `FAIL: … no 'module function' row for [the five]` — the witness keys on the five rows, not on churn |
+
+### Gates run
+
+- `uv run ruff check <two changed paths>` → **All checks passed!** (after one scoped `--fix` for an import-block
+  sort and one named constant for a magic value; `uv run ruff format <two changed paths>` → 1 reformatted, 1
+  unchanged). No repo-wide sweep.
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs, 784 test functions)** —
+  784 = the 782 recorded at T-010 plus the two functions derived here.
+- `uv run complexipy <two changed paths> --max-complexity-allowed 15` → **All functions are within the allowed
+  complexity** (max 10, `_spec_inventory_rows`; `test_inventory_covers_install_operations` 6,
+  `_witness_install_traced` 1).
+- AC-017 architecture scan (`uv run pytest tests/unit/architecture/test_singleton_slots.py -q`) →
+  **1 failed, 2 passed**, still exactly **12 foreign singleton-slot write(s)** — the new tests plant no private
+  slot write.
+- No-regression proof, every earlier task's recorded `red_command` re-run (targeted, never the full suite):
+  **T-001 10 failed · T-002 6 · T-003 6 · T-004 6 · T-005 6 · T-006 2 · T-007 1 failed + 2 passed · T-008 3 ·
+  T-009 20 · T-010 6** — every count identical to its recorded value.
+- Pre-existing logging-coverage tests: `uv run pytest tests/acceptance/logging_coverage/ -q` →
+  **1 failed, 16 passed** — the single failure is the new AC-015 node; all 16 pre-existing nodes pass.
+- Other consumers of the helper the new import edge touches
+  (`tests/property/logging_coverage/ tests/unit/logging_coverage/ tests/acceptance/search/test_search.py
+  tests/contract/search/test_search_contracts.py`) → **47 passed**.
+- State leak: `md5sum data/permissions.db settings/values.yaml` identical before/after the T-011 run
+  (`555e225f260ca009733a15d6a042a021`, `af81d2322fc8d15a398dc53a10391c1e`) — same values as the T-010 record.
+  `git status --porcelain` after the run: only the two intended test files.
+- `uv run mypy src/` not run — no `src/` file was touched by this step.
+
+### Findings (for the Problem Log / after-workflow-optimization; no PROBLEMS.md entry written by this step)
+
+- **F-63 — a hand-off note contradicted the DAG.** T-010's hand-off note listed
+  `tests/contract/singleton_install/` as a file T-011 extends; T-011's `tests_to_create`/`allowed_files` name
+  `tests/acceptance/singleton_install/test_install.py` and `tests/acceptance/logging_coverage/test_inventory.py`.
+  Had the note been followed, the derivation would have written tests outside the task's allowed files. The DAG
+  object is authoritative; re-read it per task (same class as P-63).
+- **F-64 — derivation vs implementation in the DAG wording.** T-011's `implementation_steps` put the
+  `INVENTORY_MODULE_FUNCTIONS` row additions in the same task as the witness. Adding them during S3.1 would have
+  removed the exact RED the AC-015 witness must fail on. The rows are therefore left to the implementation step —
+  which also keeps the `structlog-logging` interlock to one file.
+- **F-65 — anchoring an inventory expectation to the spec, not to helper data.** A witness that compared
+  `INVENTORY_MODULE_FUNCTIONS` against a list restated in the test would be satisfiable by editing test data.
+  `_spec_inventory_rows()` parses the §3.1 table of `docs/specs/logging-coverage.md` (32 rows: 19 classes + 13
+  module functions) and cross-checks it against the five names AC-015 names, so both the spec table and the
+  executable inventory have to be right.
+- **F-66 — `@logged` records carry `func.__qualname__`.** A witness that matches records on the public function
+  name only works for module-level functions; the probe had to rename its stand-in **before** wrapping it. If an
+  installer were ever nested, the record would name the qualname and the witness would miss it.
+- **F-67 — the AC-014 exit-level assertion is timing-sensitive in principle.** `@logged(slow_threshold_ms=5)`
+  escalates a slow call's exit record to WARNING, which would break "exit record at DEBUG". Measured 0.001 ms in
+  the probe; the assertion is kept strict per AC-014 and the failure message carries the measured elapsed ms and
+  the 5 ms threshold so any future flake is diagnosable rather than silent.
+- **F-68 — repo-relative path in a test.** `_SPEC = pathlib.Path("docs/specs/logging-coverage.md")` depends on
+  the pytest CWD being the repo root — the established pattern in this directory
+  (`Path("src/backend")`, `Path("src/main.py")`), noted because it is a rootdir dependency, not a bug.
+
+### Not done in this step (deliberate)
+
+No implementation in the five feature modules (fix-only, and there is nothing to fix before T-001…T-005 exist);
+no `@logged` added anywhere; no inventory row added; no other task's tests derived; no full suite; no push; no
+PROBLEMS.md entry; **no Phase 3 RED gate declared**. **T-012 was not touched** — it is human-blocked by the open
+D13 decision.
+
+### Hand-off for S3.2 (Phase 3 ruff + RED gate)
+
+Derived node IDs per task (the DAG's `tests_to_create`), with the RED count each task's `red_command` reproduces
+— note that every `red_command` also names pre-existing nodes the task must repair, so the count is of the
+command, not of the derived nodes:
+
+| Task | Derived node IDs (`tests_to_create`) | `red_command` RED |
+|---|---|---|
+| T-001 | 7: `test_ac_001_install_then_get_returns_instance`, `test_ac_040_set_settings_registry_installs_default`, `test_ac_041_replace_logs_one_warning`, `test_ac_042_concurrent_install_and_read`, `test_ac_043_install_then_reset_then_default`, `test_inv_011_last_install_wins`, `test_edge_033_concurrent_lazy_create` | 10 failed (10 nodes) |
+| T-002 | 2: `test_ac_016_install_then_reset_then_default`, `test_edge_012_concurrent_lazy_create` | 6 failed (6 nodes) |
+| T-003 | 2: `test_ac_044_install_then_reset_then_default`, `test_concurrent_lazy_create` | 6 failed (6 nodes) |
+| T-004 | 2: `test_ac_041_install_then_reset_then_default`, `test_edge_023_concurrent_install_and_lazy_create` | 6 failed (6 nodes) |
+| T-005 | 2: `test_ac_049_install_then_reset_then_default`, `test_edge_014_install_over_nonempty_default` | 6 failed (6 nodes) |
+| T-006 | 2: `test_ac_016_main_installs_through_setter`, `test_installed_registry_serves_feature_registration` | 2 failed (2 nodes) |
+| T-007 | 3 architecture nodes | 1 failed, 2 passed (3 nodes) |
+| T-008 | 1: `test_nfr_004_ruff_and_mypy_clean` | 3 failed (3 nodes) |
+| T-009 | 5: `test_ac_013_install_publishes_no_event`, `test_nfr_001_public_api_additive`, `test_nfr_002_install_latency`, `test_edge_007_reset_event_bus_still_shuts_down`, `test_inv_003_no_events_and_no_rebinding` | 20 failed (20 nodes) |
+| T-010 | 3: `test_nfr_003_slot_lock_is_short_lived`, `test_ac_012_install_then_reset_then_default`, `test_inv_001_last_install_wins` | 6 failed (6 nodes) |
+| **T-011** | 2: `tests/acceptance/singleton_install/test_install.py::test_ac_014_install_is_traced`, `tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations` | **2 failed (2 nodes)** |
+| T-012 | **BLOCKED-USER — not derived** (open D13 decision; do not touch) | — |
+
+S3.2 must: run `uv run ruff check` on the changed paths of every derived test (the two T-011 paths are already
+clean), re-run each task's `red_command` and record the Phase 3 RED gate once in this file using
+`docs/verification/TDD-evidence-template.md`, and update `docs/verification/traceability.md` with the T-011 rows
+(AC-014 → `test_ac_014_install_is_traced`, AC-015 → `test_inventory_covers_install_operations`). The row to
+update is `docs/verification/traceability.md:934` —
+`| REQ-010 | AC-014, AC-015 | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |` — the only row of
+this change's spec that T-011 supplies evidence for. (`check_traceability.py` already PASSes because the row
+exists; it enforces referential integrity, not status freshness.)
+
+Still open defects S3.2 owns:
+
+- **F-11** — `tests/acceptance/eventbus/test_eventbus.py::_concurrent_install_read_reset` has a
+  `_run(action)` signature mismatch (scheduled for S3.2).
+- **F-56** — the widened lazy-create window must cover every lazy leg including search (already applied in
+  `widened_lazy_create_window`; sensitivity 1 distinct read with `_singleton_lock` vs 8 without).
+- **F-63** — the T-010 hand-off note's wrong "extends" list for T-011 (this record supersedes it).
+
+Interlock lines changed by T-011 (for the later `crosscut/structlog-logging` merge): only
+`tests/acceptance/logging_coverage/test_inventory.py` lines **7–13, 18, 25–63, 77–104**;
+`tests/logging_coverage_test_helpers.py` untouched by this step.

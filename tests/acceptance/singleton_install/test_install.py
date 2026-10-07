@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 from eventbus_test_helpers import UserCreated, isolated_event_bus, wait_for
+from logging_coverage_test_helpers import level_name, parse_elapsed_ms
 from settings_test_helpers import restore_singleton
 from singleton_install_test_helpers import (
     EVENTBUS_SLOT,
@@ -35,6 +36,10 @@ from singleton_install_test_helpers import (
 
 from backend.eventbus import EventBus, get_event_bus
 from backend.settings import get_settings_registry, reset_settings_registry
+
+# docs/specs/logging-coverage.md §3.1 note: each install operation is traced with
+# @logged(slow_threshold_ms=5), the same threshold as its sibling get_* / reset_*.
+_INSTALL_SLOW_THRESHOLD_MS = 5
 
 
 class _Holder:
@@ -259,8 +264,71 @@ def _witness_install_reset_default(slot: SingletonSlot) -> None:
         slot.clear()  # for the event bus slot this also shuts the created default down
 
 
-def _traced_pair(records: list[Any], function_name: str) -> tuple[int, int]:
-    """The (entry, exit) record count of one traced function, matched on its own name."""
+def test_ac_014_install_is_traced(log_records: list[Any]) -> None:
+    """AC-014 (REQ-010): every install operation is traced with ``@logged(slow_threshold_ms=5)``.
+
+    The witness is the mirror image of AC-011: there the lazy read must emit the **getter's**
+    pair and none of the installer's, here the install must emit **its own** entry/exit pair,
+    with elapsed ms on the exit, at DEBUG, and with no argument or local value formatted into
+    either record (the decorator's default ``include_args``, REQ-010).
+    """
+    with isolated_event_bus():
+        for slot in SLOTS:
+            _witness_install_traced(slot, log_records)
+
+
+def _witness_install_traced(slot: SingletonSlot, records: list[Any]) -> None:
+    """One feature's AC-014 witness: its install operation's own traced entry/exit pair."""
+    installer = getattr(slot.module, slot.installer, None)
+    assert installer is not None, (
+        f"{slot.name()}: {slot.installer}() does not exist, so it cannot be traced with "
+        f"@logged(slow_threshold_ms={_INSTALL_SLOW_THRESHOLD_MS}) (REQ-010)"
+    )
+    assert getattr(installer, "__logged__", False) is True, (
+        f"{slot.name()}: {slot.installer}() exists but is not traced with @logged (REQ-010)"
+    )
+    assert getattr(installer, "slow_threshold_ms", None) == _INSTALL_SLOW_THRESHOLD_MS, (
+        f"{slot.name()}: {slot.installer}() slow_threshold_ms is "
+        f"{getattr(installer, 'slow_threshold_ms', None)!r}, not {_INSTALL_SLOW_THRESHOLD_MS} "
+        "(docs/specs/logging-coverage.md §3.1 note)"
+    )
+
+    slot.clear()
+    instance = slot.new()  # built before the record window opens: only the install's own records count
+    try:
+        records.clear()  # Given: the logging pipeline active at DEBUG
+        slot.install(instance)  # When: the install operation is called
+        entries, exits = _traced_records(records, slot.installer)
+        assert (len(entries), len(exits)) == (1, 1), (
+            f"{slot.name()}: the install emitted {len(entries)} entry / {len(exits)} exit record(s) of its own: "
+            f"{[str(r) for r in records]!r}"
+        )
+        assert str(entries[0]) == f">> {slot.installer} called", (
+            f"{slot.name()}: the entry record formats arguments or local values into the record: {entries[0]!r}"
+        )
+        elapsed_ms = parse_elapsed_ms(str(exits[0]))
+        assert elapsed_ms is not None, f"{slot.name()}: the exit record carries no elapsed ms: {exits[0]!r}"
+        assert level_name(exits[0]) == "DEBUG", (
+            f"{slot.name()}: the install's exit record is at {level_name(exits[0])}, not DEBUG "
+            f"(elapsed {elapsed_ms} ms against the {_INSTALL_SLOW_THRESHOLD_MS} ms slow-call threshold)"
+        )
+        assert all("object at 0x" not in str(r) for r in (*entries, *exits)), (
+            f"{slot.name()}: the installed instance is formatted into the install's records: "
+            f"{[str(r) for r in records]!r}"
+        )
+    finally:
+        slot.dispose(instance)
+        slot.clear()
+
+
+def _traced_records(records: list[Any], function_name: str) -> tuple[list[Any], list[Any]]:
+    """The entry and exit records of one traced function, matched on its own name."""
     entries = [r for r in records if str(r).startswith(">>") and function_name in str(r)]
     exits = [r for r in records if str(r).startswith("<<") and function_name in str(r)]
+    return entries, exits
+
+
+def _traced_pair(records: list[Any], function_name: str) -> tuple[int, int]:
+    """The (entry, exit) record count of one traced function, matched on its own name."""
+    entries, exits = _traced_records(records, function_name)
     return len(entries), len(exits)
