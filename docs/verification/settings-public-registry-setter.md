@@ -1780,3 +1780,245 @@ from T-006:
    and asserts four registered keys — and this step's two nodes are unaffected either way.
 5. `SLOTS` still holds exactly the five features; T-007 must not add a sixth, and the
    parametrized sets of T-009/T-010 read that table as-is.
+
+## S3.1 — T-007 test derivation (2026-10-07)
+
+One fresh subagent, one atomic step: derive **T-007**'s tests (group
+`test infrastructure — the 11 foreign-slot write sites + the architecture scan test`,
+`requirements` REQ-012 + REQ-013 (scan half), `acceptance_criteria` AC-017, `edge_cases`
+EDGE-008, `amended_spec_ids` none). Tests only — no `src/` file and no existing test file was
+touched (`git status --porcelain` shows the new test package and this record, nothing else), and
+the **11 test-side write sites were deliberately left in place**: the repository witness has to
+be RED precisely because they are still there (T-007's `implementation_steps` migrate them in
+Phase 4). The task object was read from `.github/task-runner/tasks.json` (identical to
+`docs/tasks/settings-public-registry-setter.tasks.json`); its three `tests_to_create` entries are
+three single-node strings and all three node IDs were written **exactly** as the DAG spells them.
+T-001's ten, T-002's six, T-003's six, T-004's six, T-005's six and T-006's two tests were not
+edited, and `tests/singleton_install_test_helpers.py` was not touched — the scan needs no helper
+there (see "The scanner").
+
+Every ID below is read together with its spec file (P-53): **AC-017** is defined in twelve spec
+files (`settings-coverage.md` AC-017 is the settings-registry view rule, `user-management.md`
+AC-017 the last-admin guard, `authentication.md` AC-017 the log-secret rule, `search.md` AC-017
+the timeout rule …), **REQ-012** and **REQ-013** in thirteen each, **EDGE-008** in thirteen
+(`settings.md` EDGE-008 is the LIST-kind rule, `event-bus.md` EDGE-008 the shutdown rule). The
+IDs mean what `docs/specs/settings-public-registry-setter.md` says here.
+`docs/verification/traceability.md` already carries `test_ac_017_status_transitions`,
+`test_ac_017_delete_last_admin`, `test_ac_017_reset_token_single_use`,
+`test_edge_008_handler_raises`, `test_edge_008_slider_out_of_range`,
+`test_edge_008_memory_repository` and `test_edge_008_reset_expired_token` for other features —
+none of them is this change's row.
+
+### Tests written (three nodes, verbatim from `tests_to_create`)
+
+| Test node | Category | Witnesses |
+|---|---|---|
+| `tests/unit/architecture/test_singleton_slots.py::test_ac_017_no_cross_package_slot_write` | unit | change-spec AC-017 / REQ-012 / REQ-013 over the **whole repository**: every `.py` under `src/` and `tests/` is AST-parsed and no file may write a slot owned by another package. Anti-vacuity guard first (below) |
+| `tests/unit/architecture/test_singleton_slots.py::test_ac_017_scanner_reports_planted_violation` | unit | AC-017's "the scan fires" half — planted fixtures in `tmp_path` for all three reference forms, each reported with its path, line, slot and form; plus the negative control that the migrated form is **not** reported |
+| `tests/unit/architecture/test_singleton_slots.py::test_edge_008_owner_slot_write_allowed` | unit | EDGE-008 — the owning module's own write is not reported, and the guard targets writes and imports only (a foreign **read** is legal) |
+
+New package `tests/unit/architecture/` with `__init__.py` carrying the one-line comment
+`# Architecture guards: source-scanning tests over src/ and tests/.` — the repo is mixed (42 test
+`__init__.py` files are 0 bytes, 20 carry a one-line comment, `tests/unit/__init__.py` among
+them); the commented form was used because the package's purpose is not self-evident from its
+name. No `tests/architecture_test_helpers.py` was created: the DAG allows it, the single-file form
+is preferred, and the scanner is only read by this file (F-37).
+
+### The scanner (inside the test file — what AC-017 actually checks)
+
+- **Owner table** (fixed, from the spec §3.1 / ADR-083): `backend.settings.registry._registry`,
+  `backend.eventbus.eventbus._default_bus`, `backend.permissions.service._permission_service`,
+  `backend.search.service._singleton`,
+  `backend.sessionmanagement.service._session_service`.
+- **Three reported forms.** `import` — an `ast.ImportFrom` of a private slot from its owning
+  module (the step that makes a foreign write possible, the in-test counterpart of the `TID251`
+  half); `write` — an `ast.Assign` whose target is an `ast.Subscript` rooted on a bare slot
+  **Name** or on a slot **Attribute** (`_mod._registry[0] = …`, the module-alias form the DAG
+  names); `embedded-write` — the same write spelled out inside an `ast.Constant` string, which is
+  how six of the eleven test-side sites reach the slot (they hand code strings to a subprocess).
+- **Reads are not violations.** The scanner looks only at assignment targets, so
+  `tests/eventbus_test_helpers.py` parking and restoring the live bus
+  (`saved = _eventbus_module._default_bus[0]`) is not reported — only its two writes are. That is
+  EDGE-008's "writes and imports only" boundary.
+- **Owner exemption (EDGE-008).** A file whose path ends with the owning module's path
+  (`src/backend/settings/registry.py` for `_registry`, …) may write its own slot; the exemption is
+  per slot, not per file, so an owner writing *another* feature's slot is still reported.
+- **The string-literal half is a regex, assembled from the owner table at import time**
+  (`(?:<dotted prefix>?)?_registry\s*\[\s*0\s*\]\s*=`), not a literal pattern in this file — see
+  F-36 for why that matters, and ADR-084 for the accepted heuristic cost (a comment or docstring
+  that spells the write out is reported).
+- **Scope**: `pathlib.Path("src").rglob("*.py")` + `Path("tests").rglob("*.py")`, CWD-relative
+  like `tests/acceptance/logging_coverage/test_new_classes_traced.py`. Measured scope: **83 files
+  under `src/`, 241 under `tests/`, 324 total**, scanned in ~0.6 s.
+- **Anti-vacuity guard.** `test_ac_017_no_cross_package_slot_write` first asserts that each of the
+  five owning modules' `src/` path is inside the scanned file set, so a wrong CWD cannot turn the
+  repository scan into a pass.
+- **`ponytail:` ceiling, recorded in the `_scan_file` docstring.** No import-binding resolution: a
+  write through an import alias is caught by the **import** half, not by the write half — measured
+  on `src/main.py`, where the aliased import at line 68 is reported and the write through that
+  alias at line 138 is not — and a write built through `getattr` is not caught at all. The file is
+  reported either way, which is what AC-017 asks. Upgrade path: a per-file `asname → slot` map.
+
+### RED evidence (`red_command`, verbatim)
+
+Worktree for every count below (`git rev-parse --show-toplevel`):
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+
+- `uv run pytest tests/unit/architecture/test_singleton_slots.py::test_ac_017_no_cross_package_slot_write
+  tests/unit/architecture/test_singleton_slots.py::test_ac_017_scanner_reports_planted_violation
+  tests/unit/architecture/test_singleton_slots.py::test_edge_008_owner_slot_write_allowed -v -p no:randomly`
+  → **1 failed, 2 passed in 0.72s**.
+- **RED, correct reason** — `AssertionError: 12 foreign singleton-slot write(s):` at
+  `test_singleton_slots.py:178` (an assertion in the test body, not a collection, fixture, import
+  or `ValidationError`):
+
+  | Site | Form |
+  |---|---|
+  | `src/main.py:68` | `import` of `_registry` |
+  | `tests/settings_test_helpers.py:132`, `:160`, `:180` | `write` of `_registry` |
+  | `tests/eventbus_test_helpers.py:77`, `:84` | `write` of `_default_bus` |
+  | `tests/acceptance/settings_coverage/test_setup_logger.py:31`, `:55` | `embedded-write` of `_registry` |
+  | `tests/acceptance/settings_coverage/test_wiring.py:18` | `embedded-write` of `_registry` |
+  | `tests/contract/logging/test_logging_contracts.py:35` | `embedded-write` of `_registry` |
+  | `tests/property/logging/test_logging_properties.py:42` | `embedded-write` of `_registry` |
+  | `tests/unit/logging/test_logging_edges.py:32` | `embedded-write` of `_registry` |
+
+  `src/main.py:138` (`_settings_registry_singleton[0] = _settings_registry`) is **not** in the list:
+  the write goes through the alias bound by the line-68 import, so the scanner reports the import
+  instead (the `ponytail:` ceiling above) — see F-33.
+
+- **The two GREEN nodes are witnesses by construction, not a missing witness.**
+  `test_ac_017_scanner_reports_planted_violation` and `test_edge_008_owner_slot_write_allowed`
+  assert against fixtures in `tmp_path`, so they pass as soon as the scanner exists — which is
+  exactly their role: they prove the scanner fires and does not over-fire, so the single RED above
+  is evidence about the repository, not evidence about a broken scanner. **S3.2 must expect
+  1 failed / 2 passed** from this `red_command`.
+- **Sensitivity — the witness's GREEN state is reachable by the planned fix** (out-of-band scratch
+  script, not committed): `src/` + `tests/` copied to a temp tree, scanned (**12 violations**),
+  then the DAG's migration applied mechanically to the sites (`set_settings_registry(…)` /
+  `set_event_bus(…)` at the five real statements and the six embedded code strings, plus deleting
+  the `src/main.py` private import) — 8 files rewritten, re-scan → **0 violations**, every rewritten
+  file still AST-parses. The witness is not satisfiable by deleting tests.
+- Collection: `uv run pytest --collect-only -q tests/unit/architecture` → **3 tests collected**;
+  over the touched paths (`tests/unit/architecture tests/unit/test_settings_test_isolation.py`) →
+  **4 tests collected in 0.11s**, zero collection errors.
+- Determinism + no state leak: the new file re-run twice (`-p no:randomly`, then with random order)
+  → **1 failed, 2 passed** both times (0.72s / 0.59s); `git status --porcelain` after the runs →
+  only `?? tests/unit/architecture/` (the planted fixtures live in `tmp_path`).
+- T-001's ten / T-002's six / T-003's six / T-004's six / T-005's six / T-006's two nodes re-run
+  after this derivation (each set's own `red_command` node list from the DAG): **10 failed**,
+  **6 failed**, **6 failed**, **6 failed**, **6 failed**, **2 failed** — same node sets, same
+  reasons as recorded at T-001 .. T-006. Nothing of the earlier tasks broke.
+- T-007's own `green_command` minus the new file — the six pre-existing files it also runs
+  (`tests/unit/test_settings_test_isolation.py tests/acceptance/settings_coverage/test_setup_logger.py
+  tests/acceptance/settings_coverage/test_wiring.py tests/contract/logging/test_logging_contracts.py
+  tests/property/logging/test_logging_properties.py tests/unit/logging/test_logging_edges.py`) →
+  **16 passed in 11.24s**. That is the baseline Phase 4 must preserve while it edits those very
+  files.
+
+### Quality gates (per-step scope)
+
+- Ruff gate on the two changed paths: `uv run ruff check <paths>` → **All checks passed**;
+  `uv run ruff format <paths>` → **1 file reformatted, 1 file left unchanged** (the first pass
+  reflowed the new file), then `ruff format --check` → **2 files already formatted**, and the
+  `red_command` was re-run after the reformat with the same result. No whole-repo sweep
+  (`ruff check .` / `ruff format --check .` is the Phase 5 gate).
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs, 753 test
+  functions)** — the function count rose from 750 (T-006) to 753, i.e. the three new functions are
+  seen by the script.
+- `uv run complexipy src tests --max-complexity-allowed 15` → clean. The first draft of `_scan_file`
+  scored **23** and failed the gate; it was split into `_import_violation` (4),
+  `_write_violations` (7) and `_embedded` (5), after which `uv run complexipy tests/unit/architecture
+  --max-complexity-allowed 15` reports **0** failures (`_scan_file` now 6; max in the file: 7).
+- `uv run mypy src/` → **Success: no issues found in 83 source files** (no `src/` file was changed
+  by this step; mypy covers `src/` only, so the test file is not type-checked).
+
+### Findings
+
+- **F-32 — the embedded-site count is six, not three.** The DAG's `implementation_steps` ("three of
+  them are inside subprocess code strings") and the spec/ADR repeat the P.5 figure of three;
+  measured, **six of the eleven** test-side sites are embedded in code strings
+  (`test_setup_logger.py:31` and `:55`, `test_wiring.py:18`, `test_logging_contracts.py:35`,
+  `test_logging_properties.py:42`, `test_logging_edges.py:32`) and only five are real statements
+  (`settings_test_helpers.py:132/:160/:180`, `eventbus_test_helpers.py:77/:84`). The string-literal
+  half of the scan is therefore load-bearing, not a hardening extra. No spec/ADR/DAG edit here
+  (S3.1 writes tests only); flagged for **S5.3/S6** and for **T-007 Phase 4**, which must migrate
+  six embedded sites, not three.
+- **F-33 — the scan reports 12 violations, not 11, and `src/main.py` contributes one of them, not
+  two.** `src/main.py:68` imports `_registry` under the alias `_settings_registry_singleton`, and the
+  write at `src/main.py:138` goes through that alias, so the scanner reports the **import** and not
+  the write (F-34's form list plus the documented ceiling). T-006's migration — delete the import,
+  call `set_settings_registry(…)` — removes both at once, and **T-007 Phase 4 must delete that
+  import line** (`src/main.py` is in T-007's `allowed_files`, and T-006's own task already rewrites
+  the write site): the witness cannot go GREEN while the import stays, whatever happens to the other
+  eleven. T-007 must not be expected to make the aliased write visible as a 13th violation.
+- **F-34 — the scanner reports three forms, and reads are legal.** The DAG names two forms
+  (import, subscript write); the embedded form is the third and is what AC-017 needs for the six
+  subprocess sites (F-32). A foreign **read** of a slot is not a violation — the guard targets
+  writes and imports (EDGE-008) — so `eventbus_test_helpers.py`'s park/restore reads stay legal
+  even after the migration; only its two writes are reported.
+- **F-35 — the embedded line number is `node.lineno + newlines before the match`.**
+  `test_wiring.py:16-20` builds its subprocess code by implicit string concatenation, which the AST
+  folds into **one** `Constant` spanning several source lines; reporting `node.lineno` alone would
+  point at the first line of the literal instead of the line the write is written on. Measured: the
+  reported line is 18, which is where the write text starts.
+- **F-36 — the test file must stay clean under the scan it participates in.** A literal
+  `f"_mod._registry[0] = …"` in this file would be an `ast.JoinedStr` whose `Constant` chunks are
+  `.` and `[0] = …` — the slot name is never adjacent to the write, so even the naive form would
+  not self-report; the pattern is nevertheless **assembled from the owner table at import time**
+  and the planted fixtures are built with f-strings, so no string constant in the file ever places
+  a slot name next to `[0] =`, and the docstrings never spell the write out either. Measured: the
+  repository scan reports 12 violations, **none** in `tests/unit/architecture/`. Planted violating
+  files live only in `tmp_path` (design constraint) — nothing planted can trip the repository scan
+  or the lint gate.
+- **F-37 — the scanner is written in Phase 3, not Phase 4.** `allowed_files` lists only test files,
+  and the repository witness cannot exist without the scanner, so the scan logic is part of S3.1's
+  deliverable. Consequence for **T-007 Phase 4**: its remaining work is exactly the 11-site
+  migration (plus the `src/main.py` import line, F-33) — the scan test itself should not need to
+  change, and if it does, that is a signal the migration is wrong.
+- **F-38 — the matrix rows stay `PENDING`.** `docs/verification/traceability.md` rows
+  `REQ-012 | AC-017`, `REQ-013 | AC-017, AC-018` and `EDGE-008` for this change were written at
+  P.4 with `—` test cells and are untouched by this step (S5.3 owns them). Flagged for **S5.3**:
+  the `REQ-012 | AC-017` row must cite
+  `test_ac_017_no_cross_package_slot_write` + `test_ac_017_scanner_reports_planted_violation`, and
+  the `EDGE-008` row `test_edge_008_owner_slot_write_allowed`. The change spec is already aligned:
+  its §10 table names both AC-017 nodes in one row and `test_edge_008_owner_slot_write_allowed`
+  under EDGE-008, and its §11 matrix maps `REQ-013 | AC-017, AC-018` to
+  `test_ac_017_scanner_reports_planted_violation` plus T-008's
+  `test_ac_018_ruff_bans_private_slot_import`.
+
+### Not done in this step (by design)
+
+No `src/` change; no migration of the 11 test-side sites or of the `src/main.py` import; no change
+to any earlier task's tests or to `tests/singleton_install_test_helpers.py`; no `pyproject.toml`
+`TID251` / `flake8-tidy-imports.banned-api` rule and no
+`tests/contract/singleton_install/test_lint_contract.py` (T-008: REQ-013 ban half, AC-018,
+EDGE-009); no `docs/verification/traceability.md` edit (S5.3); no `docs/todo/` or
+`docs/questions/` write and no question was raised; no full-suite run (Phase 5 gate); no
+`docs/workflow/PROBLEMS.md` entry — the only re-work was the in-step complexipy refactor of the
+subagent's own new file (F-37 context), which is an in-step fix-and-recheck, not a step re-entry.
+
+### Hand-off note for T-008 (ruff ban + lint contract test)
+
+- T-008 owns REQ-013's **ban half**, AC-018 and EDGE-009: the `TID251`
+  (`flake8-tidy-imports.banned-api`) rule in `pyproject.toml` plus
+  `tests/contract/singleton_install/test_lint_contract.py`. Do **not** re-witness the scan half —
+  AC-017's three nodes already cover it (F-29 is the mirror image: T-007 does not cover AC-016's
+  handle rule, T-008 does not cover the scan).
+- `TID251` keys must be **fully qualified** (`"backend.settings.registry._registry" = …`): a bare
+  name key (`"_registry"`) flags nothing (EDGE-009, measured in ADR-084's six probes). Importing
+  the public trio, or a public symbol from the owning module path, must stay unflagged — 13 such
+  test imports exist today and are **not** migrated (they belong to TODO
+  `public-api-import-boundary`).
+- AC-018 must check **both reference forms** (the `banned-api` entry and the `select` list
+  containing `TID251`), and owner writes must stay exempt from the *scan* while the *ban* still
+  fires for non-owner files — the two guards are deliberately different in width (ADR-084).
+- Order matters: T-008 lands **after** T-007's migration, otherwise the new ruff rule fails the
+  whole-repo lint gate on the 12 sites the scan already lists.
+- If the contract test plants a violating file, plant it in `tmp_path` and run
+  `ruff check --config <temp config>` against it — never inside the repository, for the same
+  reason F-36 gives for the scan.
+- **Interlock** (DAG `interlock`): `crosscut/structlog-logging` edits
+  `tests/contract/logging/test_logging_contracts.py`, `tests/property/logging/test_logging_properties.py`
+  and `tests/unit/logging/test_logging_edges.py` — three of the files T-007 Phase 4 migrates.
+  Whichever branch merges second rebases and keeps both edits; neither may overwrite the other.
