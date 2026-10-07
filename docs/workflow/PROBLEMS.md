@@ -582,3 +582,10 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 in-step fix + re-run (the subagent caught and resolved it within its own execution, per the in-step fix-and-recheck rule).
 - **Resolution:** the `_run` helper passes `encoding="utf-8"` explicitly. **Durable rule:** any test that asserts on the text output of a repo script must pass `encoding="utf-8"` (or `PYTHONUTF8=1` in the child env) — never rely on the platform locale; the same applies to `uv run python -c` over JSON with non-ASCII.
 - **Date:** 2026-10-07
+
+## P-68 — two derived tests were unsatisfiable by any correct implementation; the stub sensitivity pass is what caught them
+- **Problem:** in **S3.1 (T-002)** of `structure-map`, the subagent wrote two defective tests: (1) it extended the shared `_run` helper with a `cwd=` keyword but left the body pinned to `cwd=_REPO_ROOT`, so a test using `--out here.md` wrote a stray file into the **worktree root**; (2) its `_help_segment` helper matched argparse's `usage:` line instead of the option line, making the `--out`/`--max-depth` default clauses **unsatisfiable by any implementation** — a test that can never go GREEN.
+- **Step / Phase:** S3.1 Derive tests (T-002) — change structure-map / FEATURE
+- **Duration / iterations:** 1 in-step iteration (both found and fixed inside the same execution, per the in-step fix-and-recheck rule); the step still ran 2282 s / 50 tool uses.
+- **Resolution:** both fixed in-step; the subagent then proved sensitivity by driving a behaviour-correct **stub generator** through all 15 node IDs (15/15 pass against the stub, all fail against the absent module). **Durable rule:** the stub/sensitivity pass runs **before** RED is recorded, not after — it is the only check that surfaces a test no correct implementation could pass, which the RED gate itself cannot distinguish.
+- **Date:** 2026-10-07
