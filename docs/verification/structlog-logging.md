@@ -2960,3 +2960,58 @@ Orchestrator-directed integration step before Phase 5: `git merge origin/main` i
 | Docs gate (extra, cheap) | `uv run --group docs mkdocs build --strict` | **built** — no warnings, the two new spec pages resolve |
 
 **Integration state after the merge:** `main` contributed **no `src/` or `tests/` change** since the merge-base (its 48 commits are specs, planning records, guidance and dependency bumps), so the only code-affecting input is the dev-dependency bump set, and no in-scope fix was needed. Nothing was weakened, deleted or skipped. Phase 5 runs against this merged state.
+
+### S5.1 — full test suite (2026-10-07)
+
+**Phase 5 VERIFY, step 1 of 4.** Objective: run the full test suite plus the three category gates (AGENTS.md Phase 5 items 1–4) against the **merged-with-`main` state** — HEAD `7e539d3` (`Merge remote-tracking branch 'origin/main' into crosscut/structlog-logging`), working tree clean, all 7 DAG tasks `VERIFIED`. This is the **first full-suite run on the merged state** (the merge record above ran only targeted checks). Lint/types (S5.2), traceability (S5.3) and the report (S5.4) are later steps and are not touched here.
+
+Environment (identical for all four runs): `win32`, Python 3.14.5, pytest-9.1.1, hypothesis 6.168.3, respx 0.23.1, time-machine 3.5.1, pytest-randomly 5.0.0 — i.e. `main`'s bumped dev-dependency set from the merge, exercised end to end for the first time.
+
+#### The four commands and their summary lines (verbatim)
+
+| # | Command (verbatim) | Collected | Summary line (verbatim) |
+|---|---|---|---|
+| 1 (item 1) | `uv run pytest tests/ -v` | **761 items** | `760 passed, 1 skipped in 227.30s (0:03:47)` |
+| 2 (item 2) | `uv run pytest tests/acceptance/ -v` | 365 items | `364 passed, 1 skipped in 48.56s` |
+| 3 (item 3) | `uv run pytest tests/property/ -v` | 71 items | `71 passed in 57.49s` |
+| 4 (item 4) | `uv run pytest tests/contract/ -v` | 51 items | `51 passed in 83.95s (0:01:23)` |
+
+Exit code `0` for all four. No `failed`, no `error`, no `xfailed`/`xpassed`, no warnings summary in any run.
+
+#### Per-category counts (from the full run, `tests/` collection)
+
+| Category | Collected | Passed | Skipped | Failed |
+|---|---|---|---|---|
+| `tests/acceptance/` | 365 | 364 | 1 | 0 |
+| `tests/contract/` | 51 | 51 | 0 | 0 |
+| `tests/integration/` | 30 | 30 | 0 | 0 |
+| `tests/property/` | 71 | 71 | 0 | 0 |
+| `tests/unit/` | 244 | 244 | 0 | 0 |
+| **Total** | **761** | **760** | **1** | **0** |
+
+The category totals sum to the full-suite total exactly (365 + 51 + 30 + 71 + 244 = 761), so no test is orphaned outside the five categories and none was silently deselected. The 761 collected matches the S4.3 (T-006) `--collect-only -q` count of 761 — the collection count is unchanged across the merge and the whole of Phase 4.
+
+#### The single skip — classified, not a failure
+
+`SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host`
+
+- **Pre-existing and environmental, not a regression.** The `pytest.skip("symlinks not available on this host")` guard is present verbatim at the same line in `origin/main` (`git show origin/main:tests/acceptance/filemanagement/test_filemanagement.py` → line 364), and `git log origin/main..HEAD -- tests/acceptance/filemanagement/test_filemanagement.py` is **empty** — this change never touched that file. It is a host-capability guard (Windows host without symlink privileges), unrelated to logging, and it is the same skip recorded by earlier changes' full-suite runs.
+- It is **not** a skip this change introduced to hide a failure: no test anywhere was skipped, weakened or deleted for this change (the only authorized test deletion in the change — `test_existing_direct_loguru_kept` — is recorded in the S4.2 T-006 table as an authorized spec-driven deletion, and the deletion is why the acceptance count reflects the amended spec).
+
+#### Failure classification table
+
+| Test | Result | Classification | Basis |
+|---|---|---|---|
+| — | **no failures** | n/a | 0 failed / 0 error across all four runs; nothing to classify |
+
+**No failures in any of the four runs**, so no pre-existing-vs-regression classification was needed and no base-state re-run was performed. The merge of `main`'s 48 commits (dev-dependency bumps: hypothesis 6.168.3, mypy 2.4.0, ruff 0.16.10 — plus docs/specs/planning records, no `src/` or `tests/` change) introduced **no regression**, and this change introduced **no regression** in `main`'s tests: every category that `main` owns (settings, settings-coverage, permissions, structure-map-adjacent, search, session-management, user-management, authentication, mail, file-management, eventbus) passes.
+
+#### Ordering independence (free evidence from pytest-randomly)
+
+Each run used a different random ordering seed — full `3981050221`, acceptance `1908578144`, property `3228429449`, contract `1797480268` — and all four passed. The suite's GREEN is therefore not an artifact of one execution order, which matters for this change because it rewrites the process-wide logging configuration (`setup_logging` / `get_logger`) and its `tests/conftest.py` reset fixture is what keeps that global state from leaking between tests.
+
+#### Scope discipline for this step
+
+No test file, no `src/` file, no spec, no task file, no `docs/todo/`, no `docs/questions/` was modified. The only file this step writes is this verification record. Nothing was re-run at `origin/main` state (no failure to classify), and no branch was switched in this worktree.
+
+**Phase 5 (S5.1) gate: PASS — full suite 760 passed / 1 skipped (pre-existing environmental) / 0 failed; acceptance 364 + 1 skipped, property 71, contract 51, all GREEN.** Next: S5.2 — lint (`uv run ruff check .`, whole-repo) + types (`uv run mypy src/`).
