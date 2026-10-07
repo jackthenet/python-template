@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/ruff-d-docstrings.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 1  <!-- round 1, 2026-10-07: Q-1..Q-4 answered; round 2 (Q-5..Q-7 + the Q-3/Q-4 conflict) raised the same day -->
+- **Status:** ALL ANSWERED  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
+- **Answer rounds:** 7  <!-- r1 Q-1..Q-4 · r2 Q-5..Q-7 + Q-29 · r3 Q-9..Q-12 · r4 Q-13..Q-17 · r5 Q-18..Q-21, Q-23 · r6 Q-22, Q-24..Q-26 · r7 Q-27, Q-28. Q-8, Q-10, Q-21 closed by implication -->
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -441,10 +441,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(a) None — follow the DOCS/CHORE rule (Recommended)** — consistent with `update-readme`/`workflow-docs-nits`; the published site is rebuilt from `main` regardless of the version string.
   - **(b) `patch` — treat the published docs change as a release-visible fix** — signals the docs change, but it deviates from the version table and needs the reason recorded.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) None — follow the DOCS/CHORE rule** (user, 2026-10-07). No bump at S6.4. Note: the version is **1.0.0** today (bumped by `structlog-logging` in `137b7e9`), not the 0.6.1 quoted in the context above.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — S6.4 skips the bump for this change
 
 ## Q-28 — Does this change align the pre-commit ruff pin with the dev pin?
 - **Step:** P.2 Interrogate
@@ -455,10 +455,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — bump the hook rev to the ruff version the dev group pins (Recommended)** — one line, and it removes a known source of local-vs-CI disagreement before the new rules start biting.
   - **(b) No — leave the pin alone; it is a separate chore** — keeps this change's diff to docstrings + `select`, but the skew stays live.
   - **(c) Yes, and pin both sides to an exact version (`ruff==0.16.9`)** — removes drift permanently, but changes the project's `>=` pinning convention for ruff.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — bump the `ruff-pre-commit` hook rev to match the dev pin (v0.16.9)** (user, 2026-10-07). One line in `.pre-commit-config.yaml:11`; the `>=` pinning convention in `pyproject.toml:62` is unchanged. The hook runs `ruff-check --fix`, so with Q-12's widened `fixable` list the hook and CI must agree on the rule set.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `.pre-commit-config.yaml` joins this change's file set
 
 ## Q-29 — Q-3 (gate `src/` only) contradicts Q-4 (backfill **and** gate `tests/`)
 - **Step:** P.3 Answer — orchestrator-raised conflict, round 2 (2026-10-07)
