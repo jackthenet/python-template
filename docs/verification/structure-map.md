@@ -205,3 +205,126 @@ P.5 gate **passed**: the specification is self-consistent and smoke-tested. `doc
 `DRAFT — P.5 self-consistency passed; awaiting human approval (S1.4)`. Next atomic step: **S1.4** (commit the spec in
 the change worktree, open the approval PR). The orchestrator sets `Status: READY` in `docs/todo/structure-map.md` on
 `main` after verifying this handoff.
+
+---
+
+## Phase 2 — S2.1 ADRs (2026-10-08)
+
+Executed in the change worktree `C:/workspace/active-projects/python-template_kopie-worktrees/feature/structure-map`
+(`git rev-parse --show-toplevel` printed alongside every measurement below), branch
+`feature/structure-map`, HEAD **`aabf878`** (the branch was fast-forwarded onto `origin/main`'s tip,
+so it carries the merged `structlog-logging` change — PR #74, merge `c7a9119`, version 1.0.0 — and
+every other merged change). Spec approval gate **read from the cache, not re-run**: spec PR #69 merged
+as `570bfbc` (2026-10-06T06:52:57Z).
+
+### Verdict: two ADRs written, one candidate skipped
+
+The ADR threshold (AGENTS.md "Phase 2: DECOMPOSE" / decompose skill S2.1 — new dependency, new
+pattern/architecture element, or cross-feature interface) was applied per candidate decision:
+
+| Candidate decision | Threshold verdict | Where recorded |
+|---|---|---|
+| `STRUCTURE.md` as a **committed, generated artifact** with a **check-only, advisory** local pre-commit hook and **no CI job** (REQ-021, REQ-023, REQ-026, REQ-027) | **Clears it — new pattern/architecture element.** No repo-owned generated committed artifact exists (finding F-03), and "advisory, never a gate" departs from the repo's gate-heavy convention on two axes at once (12 CI jobs; the two formatter hooks auto-fix) | `docs/decisions/ADR-085-committed-generated-structure-map-check-only-local-hook.md` |
+| `scripts/` **joining the type gate** (REQ-025) + the generator living in `scripts/` under a stdlib-only budget (REQ-001) | **Clears it — repo-wide tooling interface.** It changes what the `mypy` gate covers, and the gate map over the repository's Python is asymmetric today (finding F-04); the placement choice (not `src/`) is what keeps coverage, complexipy and bandit scopes untouched | `docs/decisions/ADR-086-scripts-type-checked-tree.md` |
+| The generator's **determinism contract** (REQ-019, REQ-020 path form, REQ-018 summary normalization) | **Skipped — the spec restated.** REQ-019/REQ-020/REQ-018 are normative requirements with AC-019/AC-020/AC-018 and property witnesses INV-001/INV-003; there is no rejected alternative and no interface beyond the artifact itself. The one decision-shaped element inside the candidate — byte-exact `--check` **plus** the `\r\n` → `\n` normalisation **instead of** a repo-wide `.gitattributes` rule (REQ-005, INV-004, EDGE-016, spec §13) — is a consequence of the freshness mechanism, so it is folded into ADR-085 (Decision bullet 4, Alternatives bullet 4) rather than getting its own ADR | ADR-085 (folded) |
+
+No new dependency: confirmed from `docs/specs/structure-map.md` §5 REQ-001 (stdlib only — `ast`,
+`argparse`, `pathlib`, `subprocess`, `sys`, plus `collections`/`re`/`dataclasses`) and NFR-003
+(`deptry` stays clean). Neither ADR introduces or implies a dependency; the P.5 Dependency
+Smoke-Test result stands.
+
+### ADR numbering — reservation recorded to prevent a merge collision
+
+| Number | State | Owner |
+|---|---|---|
+| ADR-081 | **absent on disk, reserved** | `api-keys` (`docs/todo/api-keys.md:64`, `docs/questions/api-keys.md:740`/`:808`; noted by ADR-082's Numbering paragraph) |
+| ADR-082 | present on this branch (highest file here) | `structlog-logging` (merged) |
+| ADR-083, ADR-084 | **authored on the in-flight branch `crosscut/settings-public-registry-setter`, not in this worktree** — `ADR-083-public-install-operation-feature-singletons.md`, `ADR-084-two-guards-singleton-slot-tid251-scan-test.md` | `settings-public-registry-setter` |
+| **ADR-085, ADR-086** | **taken by this change** | `structure-map` |
+
+Verified with `git ls-tree -r --name-only crosscut/settings-public-registry-setter docs/decisions |
+grep -E 'ADR-08[0-9]'` → ADR-080, ADR-082, ADR-083, ADR-084. This change therefore starts at 085 so
+the two PRs cannot collide on a number; if `settings-public-registry-setter` merges first, no renumber
+is needed on either side.
+
+### Re-measured facts at `aabf878` (the Phase P table above predates the `structlog-logging` merge)
+
+All measured in this worktree (`git rev-parse --show-toplevel` =
+`C:/workspace/active-projects/python-template_kopie-worktrees/feature/structure-map`), HEAD `aabf878`:
+
+| Measurement | At `aabf878` | At the P.4/P.5 base (`249bb32` / `570bfbc`-era head) |
+|---|---|---|
+| Tracked files (all) | **595** | 570 (572 at the P.5 head) |
+| Tracked `.py` | **339** | 324 |
+| `.py` under `src/` | **84** | 83 |
+| `scripts/` · `migrations/` · `docs/` · `.agents/` · `.github/` · `userdocs/` | 3 · 6 · **210** · 16 · 9 · 2 | 3 · 6 · 200 · 16 · 9 · 2 |
+| Root-level tracked files | 9 | 9 |
+| `__init__.py` · `tests/**/conftest.py` · `tests/**/*_test_helpers.py` | 70 · 17 · 11 | 70 · 17 · 11 |
+| **Packages-scope modules (REQ-011)** | **118** = 84 + 3 + 3 + 17 + 11 | 117 |
+| `.py` outside `src/` and `tests/` | **7** = 3 `scripts/` + 3 `migrations/` + 1 `.github/hooks/ruff-post-edit.py` | 7 |
+| `src/backend/logging/` | 6 modules, **1 119 lines** (`_pipeline.py` 395, `_decorator.py` 253, `_renderers.py` 269, `feature_settings.py` 113, `_settings.py` 64, `__init__.py` 25) | (pre-merge file set) |
+| `uv run mypy scripts/` | **1 error in 1 file (checked 3 source files)** — `scripts/verify_spec.py:74: Item "TextIO" of "TextIO \| Any" has no attribute "reconfigure" [union-attr]` | 1 error (same file/line) |
+| `mypy` gate scope | `uv run mypy src/` only (quality.yml `type-check`); `ty` is `root = ["./src"]` and informational | same |
+| Coverage / complexipy / bandit scope | `source = ["src/backend", "src/frontend"]`, `fail_under` floor 92 · `paths = ["src", "tests"]`, max-complexity 15 · `bandit -r src/` | same |
+| CI jobs | **12** across 3 workflows (`lint.yml` 1, `quality.yml` 8, `spec-validation.yml` 3) | same |
+| `repo: local` pre-commit hooks | 2 (`deptry`, `mkdocs-build`), both `language: system` + `pass_filenames: false`; the two formatter hooks (`ruff-check --fix`, `ruff-format`) rewrite files | same |
+| `STRUCTURE.md` | does not exist yet (correct at S2.1) | — |
+| `.gitattributes` / `git config core.autocrlf` | **absent** / **`true`** | absent / `true` |
+| `make_map` references anywhere in `.github`, `AGENTS.md`, `.agents` | **none** | none |
+| `pyproject.toml` version | `1.0.0` | pre-`structlog-logging` |
+
+### Findings
+
+- **F-01 — the NFR-002 margin is thinner than the spec states.** The spec's projection (≈1 875 lines,
+  margin ≈125 under the 2 000 ceiling) was computed over 324 `.py` / 117 Packages-scope modules; at
+  `aabf878` the tree is 339 `.py` / **118** Packages-scope modules and `docs/` grew to 210 files. No
+  re-projection was attempted in S2.1 (that is generator work); **Phase 4 must generate and Phase 5
+  must record the actual line count against NFR-002**, and the REQ-017 field cap is the named safety
+  valve. Not a spec amendment — the ceiling and the content policy are unchanged.
+- **F-02 — REQ-025's premise still holds after the merge:** `uv run mypy scripts/` reports exactly one
+  pre-existing error, in `scripts/verify_spec.py:74`, 3 source files checked. The widened gate is
+  clean-able with the one behaviour-preserving fix the spec scopes.
+- **F-03 — the "new pattern" claim had to be narrowed to stay true.** `uv.lock` *is* a committed
+  generated file, so "no committed generated artifact exists" would be false; what does not exist is a
+  **repo-owned generator** whose output is committed **and whose freshness is checked** (`uv.lock` is
+  produced by an external tool and CI runs `uv sync --only-group dev`, not `--locked`, so nothing
+  checks it). ADR-085's Context is worded to that narrower, measured claim.
+- **F-04 — the gate map over the repository's Python is asymmetric today** (table above): `scripts/`
+  is already covered by `ruff` and `deptry` (its pre-commit `files` regex includes `scripts/`) but not
+  by `mypy`, `ty`, coverage, complexipy or bandit. ADR-086 states the asymmetry so the widening is a
+  decision, not an accident, and records that `migrations/` and `.github/hooks/` stay outside the type
+  gate.
+- **F-05 — ADR-083/ADR-084 are claimed by another in-flight branch** (verified by `git ls-tree`, not
+  by this worktree's `ls`). Starting here at 085 avoids the collision; the reservation is recorded
+  above so the two PRs do not fight at merge time.
+- **F-06 — the "advisory, never a gate" departure is measurable:** 12 CI jobs exist today and AC-023's
+  "no file under `.github/workflows/` mentions `make_map.py`" currently holds trivially (grep over
+  `.github`, `AGENTS.md`, `.agents` returns nothing). ADR-085 records why no 13th job is added.
+- **F-07 — finding 8 still stands at this head:** no `.gitattributes`, `core.autocrlf=true`, so the
+  REQ-005 newline normalisation remains necessary (ADR-085 Decision bullet 4).
+- **F-08 — spec §14's `chore/remove-spec-tdd-driver` row is stale (PR #62 is merged).** The spec
+  records it as open and requires regenerating `STRUCTURE.md` after it merges. It merged as `a2000c2`
+  and is reachable from this branch (`git log HEAD --grep='remove-spec-tdd'`), and `.github/` now has
+  9 tracked files — so the condition is already satisfied and the map's counts already include it.
+  No spec amendment needed (the requirement is met, not contradicted); ADR-085's Sequencing bullet
+  states the current fact. **S2.2 must not create a task for it.**
+- **F-09 — `uv.lock` is rewritten by the first `uv run` in this worktree** (`python-template`
+  `0.6.1` → `1.0.0`, the version bump that `structlog-logging` landed): finding 7 / Problem Log P-42
+  still bites at this head. `git checkout -- uv.lock` before every commit; this step did exactly that
+  and committed only the three Markdown files.
+
+### Gate
+
+- **S2.1 gate: PASS.** Two ADRs in house format (Status / Context / Decision / Consequences /
+  Alternatives Considered / References, per `docs/decisions/ADR-000-template.md`), each citing the
+  spec IDs it justifies and the measured facts above; one candidate explicitly skipped with rationale.
+- Files written by this step: `docs/decisions/ADR-085-…md`,
+  `docs/decisions/ADR-086-…md`, this section of `docs/verification/structure-map.md`.
+- **Nothing else was touched**: no implementation code, no test, no `STRUCTURE.md`, no `AGENTS.md`, no
+  workflow, no `.pre-commit-config.yaml`, no `pyproject.toml`, no `docs/tasks/`, no
+  `.github/task-runner/tasks.json` (that is S2.2), no `docs/todo/` or `docs/questions/`.
+- `ruff`: **n/a** — only Markdown was written and `[tool.ruff] extend-exclude = ["**/*.md"]`.
+- Next atomic step: **S2.2 — decompose the spec into `docs/tasks/structure-map.tasks.json` and copy it
+  to `.github/task-runner/tasks.json`**, with ADR-085/ADR-086 as design constraints (regenerate the map
+  last; no CI map job; `mypy scripts/` + the `verify_spec.py` fix in one task; no coverage/complexipy
+  scope change).
