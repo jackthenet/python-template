@@ -1,5 +1,8 @@
 # Spec: Event Bus
 
+## Changelog
+- v2 (2026-10-06): REQ-008 added — public install operation for the shared default bus (`set_event_bus()`), with REQ-006's singleton-surface enumeration and NFR-004's public-API list extended to name it, and AC-013..AC-016, EDGE-011, EDGE-012 added. Change `settings-public-registry-setter` (CROSS-CUTTING); see `docs/specs/settings-public-registry-setter.md`. No existing ID was renumbered, restated or deleted.
+
 ## 1. Overview & Objectives
 - **Feature Name:** Event Bus
 - **Target Component:** `src/backend/eventbus/`
@@ -46,6 +49,7 @@ class EventBus:
     def __exit__(self, *exc: object) -> None: ...
 
 def get_event_bus() -> EventBus: ...                  # shared default (singleton)
+def set_event_bus(bus: EventBus) -> None: ...         # install a configured bus as the shared default
 def reset_event_bus() -> None: ...                    # reset the default (tests)
 ```
 
@@ -76,8 +80,9 @@ class OrderPlaced(BaseEvent):
 | REQ-003 | The event bus isolates handler errors: a handler's exception is caught and logged, other handlers for the same event still run, and the exception never propagates to the publisher. |
 | REQ-004 | The event bus is thread-safe: `publish()`, `subscribe()`, and `unsubscribe()` may be called from multiple threads concurrently without lost events or crashes. |
 | REQ-005 | The event bus manages its worker lifecycle: the worker starts lazily on the first `publish()`, `shutdown()` gracefully drains events enqueued before it then stops, `start()`/`shutdown()` are idempotent, and the bus is usable as a context manager. |
-| REQ-006 | The event bus provides a shared default instance: `get_event_bus()` returns a singleton for features, the `EventBus` class is instantiable for tests/DI, and `reset_event_bus()` resets the default for tests. |
+| REQ-006 | The event bus provides a shared default instance: `get_event_bus()` returns a singleton for features, the `EventBus` class is instantiable for tests/DI, `set_event_bus()` installs a configured bus as the shared default (REQ-008), and `reset_event_bus()` resets the default for tests. |
 | REQ-007 | The event bus bounds memory via a bounded queue: the queue is capped at `max_queue_size`, and when full, excess events are dropped, logged, and counted. |
+| REQ-008 | The event bus provides a public install operation: `set_event_bus(bus)` installs the given `EventBus` as the shared default, so a later `get_event_bus()` returns exactly that instance. It replaces a non-empty default unconditionally and logs one WARNING when it does (none when the slot was empty); it is not retroactive; it accepts no `None` (clearing stays `reset_event_bus()`); it performs no runtime type check; it publishes no event; it neither shuts down nor starts the bus it replaces (lifecycle stays with the caller — only `reset_event_bus()` shuts down, REQ-005); and install, lazy create and reset are mutually exclusive under one module-level lock. |
 
 ## 5. Acceptance Criteria
 
@@ -95,6 +100,10 @@ class OrderPlaced(BaseEvent):
 | AC-010 | REQ-005 | **Given** a bus used as a context manager, **When** the `with` block exits, **Then** the bus is shut down. |
 | AC-011 | REQ-006 | **Given** the event bus module, **When** `get_event_bus()` is called twice, **Then** the same instance is returned (singleton). |
 | AC-012 | REQ-007 | **Given** a bus with `max_queue_size=N`, **When** more than N events are published faster than they are consumed, **Then** the queue size never exceeds N, **And** excess events are dropped and `dropped_count` increases. |
+| AC-013 | REQ-008 | **Given** the shared default is unset and a fresh `EventBus`, **When** `set_event_bus(bus)` is called, **Then** it returns `None`, **And** `get_event_bus()` returns that exact bus. |
+| AC-014 | REQ-008 | **Given** the shared default already holds a bus, **When** `set_event_bus(other)` is called, **Then** no exception is raised, **And** `get_event_bus()` returns `other`, **And** exactly one WARNING record is logged naming the shared default; **And** **Given** the shared default is unset, **When** `set_event_bus(bus)` is called, **Then** no WARNING record is logged. |
+| AC-015 | REQ-008 | **Given** the shared default is unset, **When** 8 threads call `get_event_bus()` concurrently, **Then** all return the same bus; **And** **Given** the shared default holds a bus, **When** threads install, read and reset concurrently, **Then** every read returns a whole bus and no thread crashes. |
+| AC-016 | REQ-008 | **Given** a bus installed with `set_event_bus(a)`, **When** `reset_event_bus()` is called and then `get_event_bus()`, **Then** the returned bus is a freshly created default and is not `a`. |
 
 ## 6. Invariants
 
@@ -119,6 +128,8 @@ class OrderPlaced(BaseEvent):
 | EDGE-008 | A handler that raises | The exception is caught, logged, other handlers continue; the publisher is unaffected. |
 | EDGE-009 | `start()` when the worker is already running | No-op (idempotent). |
 | EDGE-010 | `publish()` with an event type that has no registered handlers | The event is enqueued and dispatched to no handlers (no error). |
+| EDGE-011 | `set_event_bus(other)` replacing a shared default bus whose worker is running | The replaced bus is not shut down by the install and keeps dispatching until its owner shuts it down; the installed bus is not started before its first `publish()`. |
+| EDGE-012 | Two threads lazily create the shared default bus at the same moment | Exactly one bus becomes the shared default and both callers receive it (the create race is closed by the module lock). |
 
 ## 8. Non-Functional Requirements
 
@@ -127,7 +138,7 @@ class OrderPlaced(BaseEvent):
 | NFR-001 | Performance | `publish()` is non-blocking: it returns without waiting for handlers, in < 1 ms (median) under normal load. |
 | NFR-002 | Reliability | A handler's failure never prevents other handlers from receiving the event and never crashes the worker. |
 | NFR-003 | Resource | The event bus uses exactly one background worker thread and a bounded queue; memory usage is bounded by `max_queue_size`. |
-| NFR-004 | Contract | The public API (`EventBus`, `get_event_bus`, `reset_event_bus`) is backward-compatible; adding optional parameters must not break existing callers. |
+| NFR-004 | Contract | The public API (`EventBus`, `get_event_bus`, `set_event_bus`, `reset_event_bus`) is backward-compatible; adding optional parameters must not break existing callers. |
 
 ## 9. Test Strategy
 
@@ -145,6 +156,11 @@ class OrderPlaced(BaseEvent):
 | AC-010 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_010_context_manager` |
 | AC-011 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_011_singleton` |
 | AC-012 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_012_bounded_queue_drop` |
+| REQ-008 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_013_set_event_bus_installs_default` |
+| AC-013 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_013_set_event_bus_installs_default` |
+| AC-014 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_014_replace_logs_one_warning` |
+| AC-015 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_015_concurrent_install_read_reset` |
+| AC-016 | acceptance | `tests/acceptance/eventbus/test_eventbus.py` | `test_ac_016_install_then_reset_then_default` |
 | INV-001 | property | `tests/property/eventbus/test_eventbus_properties.py` | `test_inv_001_exactly_once` |
 | INV-002 | property | `tests/property/eventbus/test_eventbus_properties.py` | `test_inv_002_isolation` |
 | INV-003 | property | `tests/property/eventbus/test_eventbus_properties.py` | `test_inv_003_queue_bounded` |
@@ -159,6 +175,8 @@ class OrderPlaced(BaseEvent):
 | EDGE-008 | unit | `tests/unit/eventbus/test_eventbus_edges.py` | `test_edge_008_handler_raises` |
 | EDGE-009 | unit | `tests/unit/eventbus/test_eventbus_edges.py` | `test_edge_009_start_idempotent` |
 | EDGE-010 | unit | `tests/unit/eventbus/test_eventbus_edges.py` | `test_edge_010_no_handlers` |
+| EDGE-011 | unit | `tests/unit/eventbus/test_eventbus_edges.py` | `test_edge_011_replaced_bus_not_shut_down` |
+| EDGE-012 | unit | `tests/unit/eventbus/test_eventbus_edges.py` | `test_edge_012_concurrent_lazy_create` |
 | NFR-001 | contract | `tests/contract/eventbus/test_eventbus_contracts.py` | `test_nfr_001_publish_non_blocking_budget` |
 | NFR-002 | contract | `tests/contract/eventbus/test_eventbus_contracts.py` | `test_nfr_002_handler_failure_isolation` |
 | NFR-003 | contract | `tests/contract/eventbus/test_eventbus_contracts.py` | `test_nfr_003_single_worker_bounded_queue` |
@@ -183,6 +201,12 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | REQ-005 | AC-010 | `test_ac_010_context_manager` | PENDING |
 | REQ-006 | AC-011 | `test_ac_011_singleton` | PENDING |
 | REQ-007 | AC-012 | `test_ac_012_bounded_queue_drop` | PENDING |
+| REQ-008 | AC-013 | `test_ac_013_set_event_bus_installs_default` | PENDING |
+| REQ-008 | AC-014 | `test_ac_014_replace_logs_one_warning` | PENDING |
+| REQ-008 | AC-015 | `test_ac_015_concurrent_install_read_reset` | PENDING |
+| REQ-008 | AC-016 | `test_ac_016_install_then_reset_then_default` | PENDING |
+| EDGE-011 | — | `test_edge_011_replaced_bus_not_shut_down` | PENDING |
+| EDGE-012 | — | `test_edge_012_concurrent_lazy_create` | PENDING |
 | INV-001 | — | `test_inv_001_exactly_once` | PENDING |
 | INV-002 | — | `test_inv_002_isolation` | PENDING |
 | INV-003 | — | `test_inv_003_queue_bounded` | PENDING |

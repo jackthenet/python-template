@@ -2767,7 +2767,7 @@ The orchestrator **approved extending T-006's `allowed_files.test_files`** with 
 | `tests/logging_coverage_test_helpers.py` | the loguru capture surface (`capture_from_loguru`, `loguru_sink`, and the loguru sink inside `capture_records`) |
 | `tests/acceptance/logging/test_logging.py` | the `from loguru import logger` import and the `len(logger._core.handlers)` probe in `test_ac_002_setup_logger_idempotent` |
 
-Rationale (three independent reasons, all measured in S4.1): (1) **AC-001 / REQ-001 searches `src/` *and* `tests/`** (`_SEARCHED_TREES = ("src", "tests")` in `test_pipeline_backend.py:104`), so its clause cannot pass while those three modules still import the backend; (2) `uv sync` drops `loguru` from the environment, so leaving the imports would break **collection suite-wide**, not one test; (3) the change's own records already assign these files to T-006 — `tests/conftest.py:90-93` said in prose *"T-006 removes the loguru half"*, and T-006's own `design_constraints[1]` names the test-tree imports as part of its precondition. The DAG simply never listed them. Logged as friction: `docs/workflow/PROBLEMS.md` **P-48**.
+Rationale (three independent reasons, all measured in S4.1): (1) **AC-001 / REQ-001 searches `src/` *and* `tests/`** (`_SEARCHED_TREES = ("src", "tests")` in `test_pipeline_backend.py:104`), so its clause cannot pass while those three modules still import the backend; (2) `uv sync` drops `loguru` from the environment, so leaving the imports would break **collection suite-wide**, not one test; (3) the change's own records already assign these files to T-006 — `tests/conftest.py:90-93` said in prose *"T-006 removes the loguru half"*, and T-006's own `design_constraints[1]` names the test-tree imports as part of its precondition. The DAG simply never listed them. Logged as friction: `docs/workflow/PROBLEMS.md` **P-55** (logged as **P-48** on this branch; renumbered to the next free id when `origin/main` was merged, which had already taken P-48 — see the merge note in §Merge of main).
 
 #### 2. Per-file diff summary
 
@@ -2932,3 +2932,31 @@ No docstring asserts behavior the code no longer has, so there is nothing stale 
 Out of scope, untouched: `docs/specs/`, `docs/todo/`, `docs/questions/`, every test file, both task files (T-006 `status` stays `PENDING` — that is S4.4's job).
 
 **Phase 4 (S4.3, T-006) gate: PASS — no structural changes needed, ruff clean on the changed paths, GREEN from S4.2 intact.** Next: S4.4 (T-006) — commit + set status `VERIFIED`.
+
+### Merge of main (2026-10-07)
+
+Orchestrator-directed integration step before Phase 5: `git merge origin/main` into `crosscut/structlog-logging` (no rebase). `main` had advanced 48 commits past the merge-base `0e4a1b7` (merged spec PRs #73 `crosscut/settings-public-registry-setter` and #69 `feature/structure-map`, two dependabot bumps, the `value-triage-gate` guidance change, planning records); the branch had 42 commits. Local `main` was already equal to `origin/main` (`e711525`), so no fast-forward was needed and the primary worktree was not touched.
+
+**Conflicts — 1 content conflict; everything else auto-merged and was verified, not trusted blindly:**
+
+| Path | Merge | Resolution |
+|---|---|---|
+| `docs/workflow/PROBLEMS.md` | **CONFLICT** | Union of the appended entries. `main`'s P-48…P-54 + P-50 (recurrence 4) are kept verbatim, in `main`'s order. This branch's **P-48** (DAG `allowed_files` gap) collides with `main`'s P-48 and is renumbered to **P-55** (next free id, `main`'s highest being P-54) with a numbering note — the established collision convention (P-47 was renumbered the same way; no entry already on `main` is reordered or renumbered). The cross-reference at §S4.1 (T-006) is updated to P-55 with the renumbering recorded, not silently rewritten. |
+| `docs/verification/traceability.md` | auto-merged | Verified as a true union: 404 base rows → 426 on `main` (+22: the `settings-public-registry-setter` matrix and the amended-spec IDs) → 432 merged (`main`'s rows + this change's 6). The re-pointed `logging-coverage` REQ-010/AC-010 row (`test_direct_loguru_kept` → `test_ac_009_statements_go_through_get_logger`) survived, and the deleted `test_existing_direct_loguru_kept` row stays deleted. |
+| `pyproject.toml` | auto-merged | Verified both sides kept: this change's `loguru` → `structlog` swap and the `DEP002` shrink, **and** `main`'s bumps (`hypothesis 6.168.3`, `mypy 2.4.0`, `ruff 0.16.10`). The `loguru` word left at `pyproject.toml:161` is the pre-existing dated `[tool.ty.analysis]` comment already recorded as out of scope in the S4.2 T-006 table — untouched. |
+| `uv.lock` | auto-merged | Not hand-edited: `uv lock` re-resolved it (113 packages, byte-identical to the auto-merge → the auto-merge was already consistent: no `loguru`, `structlog 26.1.0`, `hypothesis 6.168.3`, `mypy 2.4.0`, `ruff 0.16.10`), then `uv sync --group docs` refreshed the worktree environment. |
+| `AGENTS.md` | auto-merged | Verified both sides kept: `main`'s value-triage gate (P.1 row, `Status: DROPPED`, the “Backlog value triage” section, the P.4 precondition) and this change's T-007 rewrite of the “Using the Logging Feature” section (`get_logger()`, `setup_logger()`, renderer, no backend import). `git diff origin/main -- AGENTS.md` now shows **only** the logging section. |
+| `.agents/skills/**`, `docs/todo/**`, `docs/questions/**`, `docs/specs/**` | clean | `main` is authoritative and was taken as-is (skills `git`/`specify`, the todo/questions records incl. the `value-triage-gate` archive moves, the six specs `settings-public-registry-setter` P.4 amended). This change's amended `docs/specs/logging.md` (v3) and `docs/specs/logging-coverage.md` (v2) are ancestors of the merge-base, so they are on `main` unchanged and survive — the branch touched no spec after the merge-base. |
+
+**Post-merge checks (targeted — the full suite is S5.1, not run here):**
+
+| Check | Command (verbatim) | Result |
+|---|---|---|
+| Traceability | `uv run python scripts/check_traceability.py` | **PASS** — 815 matrix rows, 136 spec IDs, 745 test functions |
+| Dependencies | `uv run deptry .` | **Success! No dependency issues found.** (90 files) |
+| Lint (repo-wide, the Phase 5 scope) | `uv run ruff check .` | **All checks passed!** |
+| Types | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| Logging + settings-coverage tests | `uv run pytest tests/acceptance/logging tests/unit/logging tests/contract/logging tests/acceptance/logging_coverage tests/unit/test_settings_coverage.py -q` | **98 passed** in 11.20s |
+| Docs gate (extra, cheap) | `uv run --group docs mkdocs build --strict` | **built** — no warnings, the two new spec pages resolve |
+
+**Integration state after the merge:** `main` contributed **no `src/` or `tests/` change** since the merge-base (its 48 commits are specs, planning records, guidance and dependency bumps), so the only code-affecting input is the dev-dependency bump set, and no in-scope fix was needed. Nothing was weakened, deleted or skipped. Phase 5 runs against this merged state.

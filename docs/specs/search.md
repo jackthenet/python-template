@@ -1,6 +1,7 @@
 # Spec: Search (Backend, Cross-Cutting)
 
 ## Changelog
+- v4 (2026-10-06): REQ-024 added — public install operation for the shared default search service (`set_search_service()`), with REQ-017's singleton-surface enumeration, the §3 Public API list and REQ-015's traced-module-function list extended to name it, and AC-038..AC-041, EDGE-022, EDGE-023 added; the existing `_singleton_lock` now also covers the install path. Change `settings-public-registry-setter` (CROSS-CUTTING); see `docs/specs/settings-public-registry-setter.md`. No existing ID was renumbered, restated or deleted.
 - v3 (2026-10-02): NFR-001 single-source query budget made **environment-aware** (10k items): < ~300 ms (median) locally, < ~600 ms (median) on CI (detected via the `CI` environment variable) — the local budget stays strict; only the CI budget is raised, because CI runners are slower than local hardware (precedent: settings NFR-001 v3, `docs/verification/perf-budget-env-aware.md`).
 - v2 (2026-09-25): NFR-001 single-source query budget increased from 100 ms to ~300 ms (10k items) — the source's query path fetches full Pydantic models via the repository ABC; a lighter path requires a persistence-contract change (out of scope for the search feature).
 
@@ -238,6 +239,8 @@ def get_search_service(
 ) -> SearchService: ...   # module singleton (first call creates it; later calls return it)
 
 def reset_search_service() -> None: ...   # clears the singleton (tests)
+
+def set_search_service(service: SearchService) -> None: ...   # install a configured service as the shared default
 ```
 
 ### 3.1 Feature settings (registered via `register_settings`)
@@ -270,10 +273,10 @@ src/backend/search/
 ├── events.py      # SourceRegistered, SourceUnregistered, SourceQueryFailed, EventPublisher
 ├── feature_settings.py  # register_settings
 ├── feature_actions.py   # register_actions (search.search)
-└── service.py     # SearchService, InMemorySource, get_search_service, reset_search_service
+└── service.py     # SearchService, InMemorySource, get_search_service, set_search_service, reset_search_service
 ```
 
-**Public API** (the NFR-003 contract): `SearchService`, `InMemorySource`, `SearchSource`, `SourceField`, `SourceItem`, `SourcePage`, `SourceQueryContext`, `FieldType`, `FilterOperator`, `FilterCondition`, `FilterGroup`, `Sort`, `SearchQuery`, `SearchResultItem`, `SourceFailure`, `SearchResult`, `SearchError`, `UnknownSourceError`, `MalformedQueryError`, `SourceQueryFailedError`, `SourceRegistered`, `SourceUnregistered`, `SourceQueryFailed`, `EventPublisher`, `register_settings`, `register_actions`, `get_search_service`, `reset_search_service`.
+**Public API** (the NFR-003 contract): `SearchService`, `InMemorySource`, `SearchSource`, `SourceField`, `SourceItem`, `SourcePage`, `SourceQueryContext`, `FieldType`, `FilterOperator`, `FilterCondition`, `FilterGroup`, `Sort`, `SearchQuery`, `SearchResultItem`, `SourceFailure`, `SearchResult`, `SearchError`, `UnknownSourceError`, `MalformedQueryError`, `SourceQueryFailedError`, `SourceRegistered`, `SourceUnregistered`, `SourceQueryFailed`, `EventPublisher`, `register_settings`, `register_actions`, `get_search_service`, `set_search_service`, `reset_search_service`.
 
 **Feature-source modules (additive; D19):**
 
@@ -317,15 +320,16 @@ Each normative requirement MUST have a stable ID. These IDs propagate through th
 | REQ-012 | Normalization: text matching is case-insensitive (case-folded) + Unicode NFC + trimmed; number/boolean/datetime are exact; the service normalizes the free text before fan-out; sources apply the same normalization to their string values. |
 | REQ-013 | Settings: the feature-owned `register_settings(registry)` registers `search.default_page_size` (default 100), `search.max_page_size` (default 1000), `search.source_timeout` (default 5000 ms); all are read live on each operation; unregistered keys fall back to the hardcoded defaults. |
 | REQ-014 | Events: `SourceRegistered`/`SourceUnregistered`/`SourceQueryFailed` are published to the injected publisher; NO per-query event; non-sensitive data only (no query text, no result content); a `None` publisher means no events and no error. |
-| REQ-015 | Observability: the service is traced with `@logged_class` (`include_args=False`, `slow_threshold_ms=100`); the module functions (`register_settings`, `register_actions`, `get_search_service`, `reset_search_service`) are traced with `@logged`; query text and result content never appear in log records. |
+| REQ-015 | Observability: the service is traced with `@logged_class` (`include_args=False`, `slow_threshold_ms=100`); the module functions (`register_settings`, `register_actions`, `get_search_service`, `set_search_service`, `reset_search_service`) are traced with `@logged`; query text and result content never appear in log records. |
 | REQ-016 | Security: `search` enforces `require_permission("search.search")` at entry via the shared `Principal`/`PermissionChecker` plumbing (trailing `principal` parameter; standalone mode when no checker is injected) before returning results; the feature declares the `search.search` action via the feature-owned `register_actions(catalog)`. |
-| REQ-017 | Testability: a public `InMemorySource` for tests/DI; module singleton `get_search_service()` + `reset_search_service()`; `SearchService.reset()` for registration isolation. |
+| REQ-017 | Testability: a public `InMemorySource` for tests/DI; module singleton `get_search_service()` + `set_search_service()` (REQ-024) + `reset_search_service()`; `SearchService.reset()` for registration isolation. |
 | REQ-018 | Thread safety: the registry and the query path are safe for concurrent use; no partial state on concurrent register/query (a query sees either the old or the new registration). |
 | REQ-019 | Per-source timeout: each source query runs in a worker thread; exceeding the live `search.source_timeout` (ms) → a source failure with reason `timeout` (failure marker for global; `SourceQueryFailedError` for single-source); the timed-out thread is abandoned (bounded by the pool). |
 | REQ-020 | user-management source: an additive `search_source.py` module exposes users as a search source named `usermanagement` (fields: `username`, `email`, `display_name` — string, searchable/filterable/sortable/display; `is_active` — boolean, filterable/sortable/display; `created_at`, `updated_at` — datetime, filterable/sortable/display; the query function over the existing `UserRepository.list_all` (called with `include_inactive=True` so the `is_active` field is meaningful); `item_id` = the user id; default ordering `username` ascending). |
 | REQ-021 | file-management source: an additive `search_source.py` module exposes files as a search source named `filemanagement` (fields: `key`, `namespace`, `original_filename` — string, searchable/filterable/sortable/display; `detected_mime_type` — string, filterable/sortable/display; `size` — number, filterable/sortable/display; `created_at`, `updated_at` — datetime, filterable/sortable/display; the query function over the existing `FileRepository.list_by_namespace`; `item_id` = the file id; default ordering `created_at` ascending). |
 | REQ-022 | session-management source: an additive `search_source.py` module exposes sessions as a search source named `sessionmanagement` (fields: `session_id` — string, searchable/filterable/sortable/display; `user_id` — string, filterable/sortable/display; `created_at`, `expires_at` — datetime, filterable/sortable/display; `revoked` — boolean, filterable/sortable/display; `login_method` — string, filterable/sortable/display; the query function over the existing `SessionRepository.list_all`; `item_id` = the session id; default ordering `created_at` descending); requires the additive `SessionRepository.list_all()` ABC method (authentication; backward-compatible per authentication NFR-003). |
 | REQ-023 | Backend-only: an in-process service (no HTTP/REST layer, no frontend); any in-process caller may use it. |
+| REQ-024 | The search feature provides a public install operation: `set_search_service(service)` installs the given `SearchService` as the shared default, so a later `get_search_service()` returns exactly that instance. It replaces a non-empty default unconditionally and logs one WARNING when it does (none when the slot was empty); it is not retroactive; it accepts no `None` (clearing stays `reset_search_service()`); it performs no runtime type check; it publishes no event; and install, lazy create and reset stay mutually exclusive under the module's existing `_singleton_lock`. |
 
 ## 5. Acceptance Criteria
 
@@ -370,6 +374,10 @@ Each acceptance criterion MUST have a stable ID and MUST reference at least one 
 | AC-035 | REQ-021 | **Given** a `FileRepository` with files, **When** `build_file_source(repository)` is registered and `search` is called over files (free text on key/namespace/original_filename; filters on detected_mime_type/size/created_at/updated_at), **Then** matching files are returned with `feature == "filemanagement"`, `item_id` = the file id, and the declared display fields. |
 | AC-036 | REQ-022 | **Given** a `SessionRepository` with sessions, **When** `build_session_source(repository)` is registered and `search` is called over sessions (filters on user_id/created_at/expires_at/revoked/login_method), **Then** matching sessions are returned with `feature == "sessionmanagement"`, `item_id` = the session id, and the declared display fields. |
 | AC-037 | REQ-023 | **Given** the search feature's public API, **When** inspected, **Then** it is an in-process service only (no HTTP/REST surface, no frontend dependency). |
+| AC-038 | REQ-024 | **Given** the shared default is unset and a `SearchService` built with an isolated source registry, **When** `set_search_service(service)` is called, **Then** it returns `None`, **And** `get_search_service()` returns that exact instance. |
+| AC-039 | REQ-024 | **Given** the shared default already holds a service, **When** `set_search_service(other)` is called, **Then** no exception is raised, **And** `get_search_service()` returns `other`, **And** exactly one WARNING record is logged naming the shared default; **And** **Given** the shared default is unset, **When** `set_search_service(service)` is called, **Then** no WARNING record is logged. |
+| AC-040 | REQ-024 | **Given** the shared default is unset, **When** 8 threads call `get_search_service()` concurrently, **Then** all return the same instance; **And** **Given** the shared default holds a service, **When** threads install, read and reset concurrently, **Then** every read returns a whole instance and no thread crashes. |
+| AC-041 | REQ-024 | **Given** a service installed with `set_search_service(a)`, **When** `reset_search_service()` is called and then `get_search_service()`, **Then** the returned service is a freshly created default and is not `a`. |
 
 ## 6. Invariants
 
@@ -408,6 +416,8 @@ State invariants that hold over a large input space. These become Hypothesis pro
 | EDGE-019 | A concurrent register + search (one thread registers while another searches) | No crash; the search sees either the old or the new registration (no partial state) |
 | EDGE-020 | A global fan-out where a filter/sort is valid for some sources but references a field absent or non-filterable in another source in the fan-out | A `MalformedQueryError` is raised (strict validation against every source in the fan-out) |
 | EDGE-021 | `register_source` with an invalid source declaration (name/field name not matching the patterns, duplicate field names, unknown field type) | A `ValueError` is raised (argument-level) |
+| EDGE-022 | `set_search_service(other)` replacing a non-empty shared default whose sources are registered | The default is replaced, exactly one WARNING is logged, no exception is raised; the replaced service keeps its registrations for every caller that holds it |
+| EDGE-023 | A concurrent install and lazy create on the search singleton | The module lock serialises them; the read returns a whole instance and exactly one of the two instances ends in the slot |
 
 ## 8. Non-Functional Requirements
 
@@ -478,6 +488,10 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | AC-035 | acceptance | `tests/acceptance/search/test_feature_sources.py` | `test_ac_035_file_source` |
 | AC-036 | acceptance | `tests/acceptance/search/test_feature_sources.py` | `test_ac_036_session_source` |
 | AC-037 | contract | `tests/contract/search/test_search_contracts.py` | `test_ac_037_backend_only_api` |
+| AC-038 | acceptance | `tests/acceptance/search/test_singleton_install.py` | `test_ac_038_set_search_service_installs_default` |
+| AC-039 | acceptance | `tests/acceptance/search/test_singleton_install.py` | `test_ac_039_replace_logs_one_warning` |
+| AC-040 | acceptance | `tests/acceptance/search/test_singleton_install.py` | `test_ac_040_concurrent_install_read_reset` |
+| AC-041 | acceptance | `tests/acceptance/search/test_singleton_install.py` | `test_ac_041_install_then_reset_then_default` |
 | INV-001 | property | `tests/property/search/test_search_properties.py` | `test_inv_001_registration_idempotent_atomic` |
 | INV-002 | property | `tests/property/search/test_search_properties.py` | `test_inv_002_query_deterministic` |
 | INV-003 | property | `tests/property/search/test_search_properties.py` | `test_inv_003_pagination_consistency` |
@@ -504,6 +518,8 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | EDGE-019 | integration | `tests/integration/search/test_search_integration.py` | `test_edge_019_concurrent_register_search` |
 | EDGE-020 | unit | `tests/unit/search/test_search_edges.py` | `test_edge_020_fanout_strict_validation` |
 | EDGE-021 | unit | `tests/unit/search/test_search_edges.py` | `test_edge_021_invalid_source_declaration` |
+| EDGE-022 | unit | `tests/unit/search/test_search_edges.py` | `test_edge_022_install_over_nonempty_default` |
+| EDGE-023 | unit | `tests/unit/search/test_search_edges.py` | `test_edge_023_concurrent_install_and_lazy_create` |
 | NFR-001 | contract | `tests/contract/search/test_search_contracts.py` | `test_nfr_001_performance_budgets` |
 | NFR-002 | contract | `tests/contract/search/test_search_contracts.py` | `test_nfr_002_no_query_or_results_in_logs_events` |
 | NFR-003 | contract | `tests/contract/search/test_search_contracts.py` | `test_nfr_003_public_api_contract` |
@@ -557,6 +573,12 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | REQ-021 | AC-035 | `test_ac_035_file_source` | PENDING |
 | REQ-022 | AC-036 | `test_ac_036_session_source` | PENDING |
 | REQ-023 | AC-037 | `test_ac_037_backend_only_api` | PENDING |
+| REQ-024 | AC-038 | `test_ac_038_set_search_service_installs_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-024 | AC-039 | `test_ac_039_replace_logs_one_warning` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-024 | AC-040 | `test_ac_040_concurrent_install_read_reset` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-024 | AC-041 | `test_ac_041_install_then_reset_then_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| EDGE-022 | — | `test_edge_022_install_over_nonempty_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| EDGE-023 | — | `test_edge_023_concurrent_install_and_lazy_create` | PENDING (settings-public-registry-setter 2026-10-06) |
 | INV-001 | — | `test_inv_001_registration_idempotent_atomic` | PENDING |
 | INV-002 | — | `test_inv_002_query_deterministic` | PENDING |
 | INV-003 | — | `test_inv_003_pagination_consistency` | PENDING |

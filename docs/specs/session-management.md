@@ -1,5 +1,8 @@
 # Spec: Session Management
 
+## Changelog
+- v2 (2026-10-06): REQ-023 added — public install operation for the shared default session service (`set_session_service()`), with REQ-020's singleton-surface enumeration, the §3 API block, REQ-022's traced-module-function list and NFR-003's public-API contract list extended to name it, and AC-046..AC-049, EDGE-013, EDGE-014 added. Change `settings-public-registry-setter` (CROSS-CUTTING); see `docs/specs/settings-public-registry-setter.md`. AC-041, AC-042 and AC-043 (create-once, first-call-without-repository `ValueError`, reset-clears) are unchanged. No existing ID was renumbered, restated or deleted.
+
 ## 1. Overview & Objectives
 - **Feature Name:** Session Management
 - **Target Component:** `src/backend/sessionmanagement/` (new feature package) plus additive, backward-compatible extensions to `src/backend/authentication/` (login schema, `Session` table columns, `SessionRepository` ABC)
@@ -87,6 +90,7 @@ def get_session_service(repository: SessionRepository | None = None,
                         settings_registry: SettingsRegistry | None = None) -> SessionService: ...  # module singleton
     # first call creates the singleton and requires a repository; later calls return the existing instance
 def reset_session_service() -> None: ...                              # clears the singleton (tests)
+def set_session_service(service: SessionService) -> None: ...          # install a configured service as the shared default
 
 # --- Additive extension of authentication's SessionRepository ABC (REQ-017) ---
 # Existing methods unchanged: add, get_by_token_hash, revoke, revoke_all_for_user; `delete_expired` is extended below (backward-compatible).
@@ -159,9 +163,10 @@ Each normative requirement MUST have a stable ID. These IDs propagate through th
 | REQ-017 | Session store reuse: the feature reuses authentication's `Session` table and `SessionRepository` (constructor-injected); the ABC is extended additively with `get`, `list_for_user`, `revoke_user_sessions`, and an optional `limit` on `delete_expired` (backward-compatible per authentication NFR-003); no second session store. |
 | REQ-018 | Typed events are published to the injected publisher: `SessionRevoked(user_id, session_id)`, `AllSessionsRevoked(user_id, excluded_session_id)`, `ExpiredSessionsDeleted(count)`, `SessionsListed(user_id, count)`; a `None` publisher means no events and no subscriptions. |
 | REQ-019 | Settings: the feature registers `sessionmanagement.max_listed_sessions` (default 100), `sessionmanagement.max_sessions_per_user` (default 5), `sessionmanagement.cleanup_batch_size` (default 1000) via the feature-owned `register_settings(registry)` and reads them live on each operation; unregistered keys fall back to the hardcoded defaults. |
-| REQ-020 | Construction: `SessionService` is constructed with a `SessionRepository` and an optional `event_bus` (structural `EventPublisher` protocol; `None` → no events/subscriptions) and an optional `settings_registry` (`None` → shared `get_settings_registry()`); `get_session_service()` is the module singleton for application use (first call creates it and requires a repository; subsequent calls return the existing instance); `reset_session_service()` clears the singleton (tests). |
+| REQ-020 | Construction: `SessionService` is constructed with a `SessionRepository` and an optional `event_bus` (structural `EventPublisher` protocol; `None` → no events/subscriptions) and an optional `settings_registry` (`None` → shared `get_settings_registry()`); `get_session_service()` is the module singleton for application use (first call creates it and requires a repository; subsequent calls return the existing instance); `set_session_service()` installs a configured instance as the shared default (REQ-023); `reset_session_service()` clears the singleton (tests). |
 | REQ-021 | Secrets: raw session tokens and token hashes never appear in list entries, log records, events, or error messages (only session ids) (extends authentication NFR-002 / REQ-021). |
-| REQ-022 | Observability: `SessionService` is traced with `@logged_class` (`include_args=False`, `slow_threshold_ms=100`); the module functions (`register_settings`, `get_session_service`, `reset_session_service`) are traced with `@logged`. |
+| REQ-022 | Observability: `SessionService` is traced with `@logged_class` (`include_args=False`, `slow_threshold_ms=100`); the module functions (`register_settings`, `get_session_service`, `set_session_service`, `reset_session_service`) are traced with `@logged`. |
+| REQ-023 | The session-management feature provides a public install operation: `set_session_service(service)` installs the given `SessionService` as the shared default, so a later `get_session_service()` returns exactly that instance — with no `repository` argument required (the installed instance is already constructed). It replaces a non-empty default unconditionally and logs one WARNING when it does (none when the slot was empty); it is not retroactive; it accepts no `None` (clearing stays `reset_session_service()`, and the AC-042 rule — a first `get_session_service()` without a repository raises `ValueError` — is unchanged); it performs no runtime type check; it publishes no event; and install, lazy create and reset are mutually exclusive under one module-level lock. |
 
 ## 5. Acceptance Criteria
 
@@ -214,6 +219,10 @@ Each acceptance criterion MUST have a stable ID and MUST reference at least one 
 | AC-043 | REQ-020 | **Given** an existing singleton, **When** `reset_session_service()` is called, **Then** the singleton is cleared (a subsequent `get_session_service(repository)` creates a new instance). |
 | AC-044 | REQ-021 | **Given** any `SessionEntry`, log record, published event, or error message produced by this feature, **When** inspected, **Then** no raw session token or token hash appears (only session ids). |
 | AC-045 | REQ-022 | **Given** `SessionService`, **When** its methods are called, **Then** entry/exit/exception records are produced by `@logged_class` **and** no log record contains a raw token or token hash. |
+| AC-046 | REQ-023 | **Given** the shared default is unset and a `SessionService` built with a repository, **When** `set_session_service(service)` is called, **Then** it returns `None`, **And** a later `get_session_service()` — with no `repository` argument — returns that exact instance. |
+| AC-047 | REQ-023 | **Given** the shared default already holds a service, **When** `set_session_service(other)` is called, **Then** no exception is raised, **And** `get_session_service()` returns `other`, **And** exactly one WARNING record is logged naming the shared default; **And** **Given** the shared default is unset, **When** `set_session_service(service)` is called, **Then** no WARNING record is logged. |
+| AC-048 | REQ-023 | **Given** the shared default holds a service, **When** threads install, read and reset concurrently, **Then** every read returns a whole instance and no thread crashes. |
+| AC-049 | REQ-023 | **Given** a service installed with `set_session_service(a)`, **When** `reset_session_service()` is called and then `get_session_service(repository)`, **Then** the returned service is a freshly created instance and is not `a`. |
 
 ## 6. Invariants
 
@@ -243,6 +252,8 @@ State invariants that hold over a large input space. These become Hypothesis pro
 | EDGE-010 | Concurrent revocation and listing (one thread revokes while another lists) | No crash; the list reflects a consistent revocation state (a row is either present or absent, never partial). |
 | EDGE-011 | Cap eviction at login when the user already has exactly `max_sessions_per_user` valid sessions | The oldest session is evicted; the new session is kept. |
 | EDGE-012 | `cleanup_expired` with fewer expired rows than `cleanup_batch_size` | All expired rows are deleted; the count is returned. |
+| EDGE-013 | `get_session_service()` with no `repository` after `reset_session_service()` / after `set_session_service(a)` | After a reset it still raises `ValueError` (AC-042 unchanged); after an install it returns the installed instance with no `repository` argument. |
+| EDGE-014 | `set_session_service(other)` replacing a non-empty shared default | The default is replaced, exactly one WARNING is logged, no exception is raised; the replaced service keeps working for every caller that holds it. |
 
 ## 8. Non-Functional Requirements
 
@@ -250,7 +261,7 @@ State invariants that hold over a large input space. These become Hypothesis pro
 |----|----------|-------------|
 | NFR-001 | Performance | Listing 100 sessions completes in ≤ 100 ms at p95; revoking all sessions for a user with 1000 sessions completes in ≤ 500 ms at p95; cleanup of 1000 expired rows completes in ≤ 500 ms at p95 — all measured on local hardware against a local SQLite database with the shared logging feature configured at its default INFO level with a synchronous console sink (DEBUG method tracing off); the budgets hold including the per-call logging overhead at that level. |
 | NFR-002 | Security | Raw session tokens, token hashes, and passwords never appear in log records, events, error messages, or list entries (only session ids); tokens remain ≥ 256-bit random and stored only as SHA-256 hashes (authentication REQ-006, NFR-002). |
-| NFR-003 | Contract | The public API of `backend.sessionmanagement` (`SessionService`, `SessionEntry`, the 4 events, `register_settings`, `get_session_service`, `reset_session_service`) is a backward-compatibility contract; the `SessionRepository` ABC extension is additive and backward-compatible per authentication NFR-003. |
+| NFR-003 | Contract | The public API of `backend.sessionmanagement` (`SessionService`, `SessionEntry`, the 4 events, `register_settings`, `get_session_service`, `set_session_service`, `reset_session_service`) is a backward-compatibility contract; the `SessionRepository` ABC extension is additive and backward-compatible per authentication NFR-003. |
 | NFR-004 | Observability | `SessionService` is traced with `@logged_class` (`include_args=False`, `slow_threshold_ms=100`; entry/exit/exception per public method); module functions are traced with `@logged`; lifecycle events are published to the injected publisher. |
 | NFR-005 | Reliability | The service and the SQLite repositories are safe for concurrent use from multiple threads (each operation opens its own session; SQLite busy-timeout serializes concurrent writers; authentication NFR-005). |
 
@@ -340,6 +351,10 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | AC-043 | acceptance | `tests/acceptance/sessionmanagement/test_singleton.py` | `test_ac_043_reset_session_service` |
 | AC-044 | acceptance | `tests/acceptance/sessionmanagement/test_observability.py` | `test_ac_044_no_tokens_in_outputs` |
 | AC-045 | acceptance | `tests/acceptance/sessionmanagement/test_observability.py` | `test_ac_045_traced_methods_no_tokens_in_logs` |
+| AC-046 | acceptance | `tests/acceptance/sessionmanagement/test_singleton.py` | `test_ac_046_set_session_service_installs_default` |
+| AC-047 | acceptance | `tests/acceptance/sessionmanagement/test_singleton.py` | `test_ac_047_replace_logs_one_warning` |
+| AC-048 | acceptance | `tests/acceptance/sessionmanagement/test_singleton.py` | `test_ac_048_concurrent_install_read_reset` |
+| AC-049 | acceptance | `tests/acceptance/sessionmanagement/test_singleton.py` | `test_ac_049_install_then_reset_then_default` |
 | INV-001 | property | `tests/property/sessionmanagement/test_sessionmanagement_properties.py` | `test_inv_001_revocation_idempotent` |
 | INV-002 | property | `tests/property/sessionmanagement/test_sessionmanagement_properties.py` | `test_inv_002_valid_only_listing` |
 | INV-003 | property | `tests/property/sessionmanagement/test_sessionmanagement_properties.py` | `test_inv_003_cap_held_after_login` |
@@ -357,6 +372,8 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | EDGE-010 | integration | `tests/integration/sessionmanagement/test_concurrency.py` | `test_edge_010_concurrent_revocation_and_listing` |
 | EDGE-011 | acceptance | `tests/acceptance/sessionmanagement/test_cap_eviction.py` | `test_edge_011_cap_eviction_at_exact_cap` |
 | EDGE-012 | acceptance | `tests/acceptance/sessionmanagement/test_cleanup.py` | `test_edge_012_cleanup_below_batch_size` |
+| EDGE-013 | unit | `tests/unit/sessionmanagement/test_validation.py` | `test_edge_013_repository_rule_after_install_and_reset` |
+| EDGE-014 | unit | `tests/unit/sessionmanagement/test_validation.py` | `test_edge_014_install_over_nonempty_default` |
 | NFR-001 | contract | `tests/contract/sessionmanagement/test_performance.py` | `test_nfr_001_list_100_sessions_budget`, `test_nfr_001_revoke_1000_sessions_budget`, `test_nfr_001_cleanup_1000_rows_budget` |
 | NFR-002 | property | `tests/property/sessionmanagement/test_sessionmanagement_properties.py` | `test_inv_004_no_tokens_in_outputs` (shared with INV-004) |
 | NFR-003 | contract | `tests/contract/sessionmanagement/test_contract.py` | `test_nfr_003_public_api_contract` |
@@ -391,6 +408,12 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | REQ-020 | AC-041, AC-042, AC-043 | `test_ac_041_singleton_created_once`, `test_ac_042_singleton_first_call_without_repository_value_error`, `test_ac_043_reset_session_service` | PENDING |
 | REQ-021 | AC-044 | `test_ac_044_no_tokens_in_outputs` | PENDING |
 | REQ-022 | AC-045 | `test_ac_045_traced_methods_no_tokens_in_logs` | PENDING |
+| REQ-023 | AC-046 | `test_ac_046_set_session_service_installs_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-023 | AC-047 | `test_ac_047_replace_logs_one_warning` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-023 | AC-048 | `test_ac_048_concurrent_install_read_reset` | PENDING (settings-public-registry-setter 2026-10-06) |
+| REQ-023 | AC-049 | `test_ac_049_install_then_reset_then_default` | PENDING (settings-public-registry-setter 2026-10-06) |
+| EDGE-013 | — | `test_edge_013_repository_rule_after_install_and_reset` | PENDING (settings-public-registry-setter 2026-10-06) |
+| EDGE-014 | — | `test_edge_014_install_over_nonempty_default` | PENDING (settings-public-registry-setter 2026-10-06) |
 | INV-001 | — | `test_inv_001_revocation_idempotent` | PENDING |
 | INV-002 | — | `test_inv_002_valid_only_listing` | PENDING |
 | INV-003 | — | `test_inv_003_cap_held_after_login` | PENDING |

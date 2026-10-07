@@ -1,6 +1,7 @@
 # Spec: logging-coverage
 
 ## Changelog
+- v3 (2026-10-06): Amendment (change `settings-public-registry-setter`, CROSS-CUTTING) — **inventory rows only, no ID changed or added**: the §3.1 inventory gains five `module function` rows for the new public install operations (`set_settings_registry()`, `set_event_bus()`, `set_permission_service()`, `set_search_service()`, `set_session_service()`), each traced with `@logged` at a concrete `slow_threshold_ms` per REQ-007 and covered by REQ-001 (the inventory is normative). The test-side inventory helper gains the five entries. The permissions, search and session-management singleton getters/resets remain absent from the inventory (a pre-existing gap: the permissions pair is untraced in code) — recorded as a follow-up candidate in `docs/verification/settings-public-registry-setter.md`, not fixed here.
 - v2 (2026-10-04): Amendment (change `structlog-logging`, ADR-082). REQ-010 and AC-010 restated: the "direct backend statements are kept" policy is retired — one-off statements stay, but they are written through the shared logging feature's exported logger instead of an imported backend. Goal, Design Pattern, Dependencies and D1 wording aligned with the restated IDs (no ID change). `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` is deleted by the implementation PR (it exists solely to enforce the retired wording) and its replacement is `tests/acceptance/logging_coverage/test_statements_via_feature.py`. REQ-011 and AC-011 corrected to the no-argument `setup_logger()` call: the entrypoint never passes a `Settings` object (it has never done so on disk, and the level and sinks come from the settings registry), so the call is written as `setup_logger()` (§1, D5, §3.3).
 
 ## 1. Overview & Objectives
@@ -59,8 +60,13 @@ trace).
 | `hash_token(token)` | authentication | module function | `@logged` | `False` | sensible |
 | `get_event_bus()` | eventbus | module function | `@logged` | default | sensible |
 | `reset_event_bus()` | eventbus | module function | `@logged` | default | sensible |
+| `set_event_bus(bus)` | eventbus | module function | `@logged` | default | sensible |
 | `get_settings_registry()` | settings | module function | `@logged` | default | sensible |
 | `reset_settings_registry()` | settings | module function | `@logged` | default | sensible |
+| `set_settings_registry(registry)` | settings | module function | `@logged` | default | sensible |
+| `set_permission_service(service)` | permissions | module function | `@logged` | default | sensible |
+| `set_search_service(service)` | search | module function | `@logged` | default | sensible |
+| `set_session_service(service)` | sessionmanagement | module function | `@logged` | default | sensible |
 | `get_settings()` | logging | module function | `@logged` | default | sensible |
 | `setup_logger()` | logging | module function | `@logged` | default | sensible |
 
@@ -72,6 +78,11 @@ Notes:
   the log record). Secret/credential handlers MUST use `False`.
 - `logged` / `logged_class` (the decorators themselves) are NOT traced (they are the
   tracing mechanism).
+- The five `set_*` install-operation rows were added by change `settings-public-registry-setter`
+  (`docs/specs/settings-public-registry-setter.md` REQ-010): each install operation is a public
+  module function of its owning feature and is traced with `@logged(slow_threshold_ms=5)`, the
+  same threshold as its sibling `get_*` / `reset_*` functions. The inventory is not yet complete
+  for the permissions, search and session-management singleton getters/resets (pre-existing gap).
 
 ### 3.2 Tracing annotation patterns
 
