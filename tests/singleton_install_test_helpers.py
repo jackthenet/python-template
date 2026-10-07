@@ -37,9 +37,17 @@ from typing import Any, NamedTuple
 import pytest
 
 import backend.eventbus
+import backend.permissions
 import backend.settings
 from backend.eventbus import EventBus
+from backend.permissions import (
+    MemoryGrantRepository,
+    MemoryRoleRepository,
+    MemorySystemPrincipalRepository,
+    PermissionService,
+)
 from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.usermanagement import SqliteUserRepository, UserManager
 
 # The tracing decorator's own record prefixes (entry / exit / exception). A slow
 # traced call escalates its exit record to WARNING, so a WARNING count that has
@@ -94,10 +102,29 @@ EVENTBUS_SLOT = SingletonSlot(
     factory=EventBus,
 )
 
+
+def _new_permission_service() -> PermissionService:
+    """A permission service over in-memory repositories (user-roles-permissions.md REQ-023)."""
+    return PermissionService(
+        MemoryRoleRepository(),
+        MemoryGrantRepository(),
+        MemorySystemPrincipalRepository(),
+        UserManager(SqliteUserRepository("sqlite:///:memory:")),
+    )
+
+
+PERMISSIONS_SLOT = SingletonSlot(
+    module=backend.permissions,
+    installer="set_permission_service",
+    getter="get_permission_service",
+    reset="reset_permission_service",
+    factory=_new_permission_service,
+)
+
 # One entry per singleton-owning feature (settings-public-registry-setter REQ-001).
-# settings at T-001, eventbus at T-002; T-003 (permissions), T-004 (search) and
+# settings at T-001, eventbus at T-002, permissions at T-003; T-004 (search) and
 # T-005 (sessionmanagement) append their entry here.
-SLOTS: tuple[SingletonSlot, ...] = (SETTINGS_SLOT, EVENTBUS_SLOT)
+SLOTS: tuple[SingletonSlot, ...] = (SETTINGS_SLOT, EVENTBUS_SLOT, PERMISSIONS_SLOT)
 
 
 class _CreateWindow:

@@ -901,3 +901,179 @@ owns it for all tasks; this section records T-002's derivation and its targeted 
 **Next step: S3.1 (T-003)** — derive the `permissions` task's tests; T-003 appends its
 entry to `SLOTS` and may reuse `concurrent_reads`, `widened_lazy_create_window` and
 `non_tracing_warnings` unchanged.
+
+## S3.1 — T-003 test derivation (2026-10-07)
+
+One fresh subagent, one atomic step: derive **T-003**'s tests (group `permissions`,
+`requirements` REQ-001 .. REQ-010 + REQ-014 + REQ-016, `amended_spec_ids`
+`user-roles-permissions.md` v2 REQ-030, AC-041, AC-042, AC-043, AC-044, EDGE-027,
+EDGE-028). Tests only — no `src/` file was touched (`git status --porcelain` shows two
+modified test files and one new test file, nothing else). The task object was read from
+`.github/task-runner/tasks.json` (sha256 `abdc38ef…43e255`, identical to
+`docs/tasks/settings-public-registry-setter.tasks.json`); its two `tests_to_create` entries
+expand to **six** `path::test_name` nodes (the first entry packs four), and all six node
+IDs were written **exactly** as the DAG spells them. T-001's ten and T-002's six tests
+were not edited.
+
+### Tests written (six nodes, verbatim from `tests_to_create`)
+
+| Test node | Category | Witnesses |
+|---|---|---|
+| `tests/acceptance/permissions/test_singleton_install.py::test_ac_041_set_permission_service_installs_default` | acceptance | `user-roles-permissions.md` v2 AC-041 (REQ-030; change REQ-001) |
+| `tests/acceptance/permissions/test_singleton_install.py::test_ac_042_replace_logs_one_warning` | acceptance | AC-042 (+ REQ-002 WARNING rule, change INV-002 for this feature) |
+| `tests/acceptance/permissions/test_singleton_install.py::test_ac_043_concurrent_install_read_reset` | acceptance | AC-043 (+ change REQ-006 module lock, change AC-009) |
+| `tests/acceptance/permissions/test_singleton_install.py::test_ac_044_install_then_reset_then_default` | acceptance | AC-044 (change REQ-008 reset pair) |
+| `tests/unit/permissions/test_edge_cases.py::test_install_over_nonempty_default` | unit | EDGE-027 (change REQ-003 lifecycle neutrality + REQ-002 WARNING) |
+| `tests/unit/permissions/test_edge_cases.py::test_concurrent_lazy_create` | unit | EDGE-028 (change REQ-006/REQ-007 guarded lazy create) |
+
+No new test package or `__init__.py` was needed — `tests/acceptance/permissions/` already
+exists and `tests/unit/permissions/test_edge_cases.py` already carries the feature's
+edge-case witnesses. T-003 has no `INV`/`NFR` ID of its own, so no property or contract
+file was created (the change spec's INV-001 .. INV-003 and the REQ-016 catalog witness
+`test_ac_020_permission_catalog_unchanged` belong to T-009/T-010).
+
+### Shared helper: `tests/singleton_install_test_helpers.py` (T-003's append)
+
+- **`PERMISSIONS_SLOT`** appended to `SLOTS` (`module=backend.permissions`,
+  `installer="set_permission_service"`, `getter="get_permission_service"`,
+  `reset="reset_permission_service"`, `factory=_new_permission_service`), so
+  `SLOTS == (SETTINGS_SLOT, EVENTBUS_SLOT, PERMISSIONS_SLOT)`. The factory builds a
+  `PermissionService` over the three in-memory repositories plus a `UserManager` on
+  `sqlite:///:memory:` — the construction AC-041 names ("a `PermissionService` built with
+  in-memory repositories", REQ-023) — and holds no file, bus or settings state, so the
+  instances are isolated. T-001's and T-002's tests use their own slot objects, so the
+  append changes nothing in them (verified below).
+- The trio is reached **only** through the slot object; nothing in the new tests writes
+  `from backend.permissions import set_permission_service`. That is what keeps the RED
+  signal inside the test body instead of a collection error that would take the 59
+  pre-existing tests in the two permissions packages down with it.
+- `concurrent_reads`, `widened_lazy_create_window` and `non_tracing_warnings` are reused
+  unchanged, as T-002 left them. The widened window is mandatory here: the unguarded lazy
+  path in `get_permission_service()` (read slot → build the SQLite-wired default → write it
+  back) is microseconds wide under the GIL, so without it EDGE-028 and AC-043's first half
+  would pass before the module lock exists and would not be RED at all.
+- Isolation: `shared_permission_slot_reset()` in the acceptance file, and the same
+  `reset_permission_service()` / `reset_permission_service()` pair inline in the two unit
+  tests — public API only, no private-slot write. See F-10.
+
+### Collection and RED evidence
+
+Worktree for every count below (`git rev-parse --show-toplevel`):
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+
+- Collection (not a RED signal if it breaks): `uv run pytest --collect-only -q
+  tests/acceptance/permissions tests/unit/permissions` → **65 tests collected in 0.44s**
+  (59 before this step), zero collection errors. All six new nodes collect as tests.
+- The task's `red_command` run **verbatim** (six node IDs, targeted — the full suite is a
+  Phase 5 gate): **6 failed in 0.75s**. Failure reason per test:
+  - `test_ac_041…`, `test_ac_042…`, `test_ac_044…`, `test_install_over_nonempty_default`
+    — all four: `AttributeError: module 'backend.permissions' has no attribute
+    'set_permission_service'` (raised inside the test body via `SingletonSlot.install`)
+    → the install operation the task adds does not exist. Correct reason.
+  - `test_ac_043_concurrent_install_read_reset` — `AssertionError: lazy create race built
+    8 services` (`assert 8 == 1`): eight concurrent readers built eight services on the
+    unguarded lazy path. Correct reason.
+  - `test_concurrent_lazy_create` — `AssertionError: lazy create race built 2 services`
+    (`assert 2 == 1`): the two-thread form of the same missing lock. Correct reason.
+  - No collection, setup, fixture or import error; no `ValidationError`/`ValueError` from
+    test data (services come from the slot factory over in-memory repositories; the one
+    role name `editor` is in-domain for `_ROLE_NAME_PATTERN`); no Hypothesis strategy
+    involved (T-003 has no `INV` ID).
+- T-001's ten nodes re-run unchanged after the `SLOTS` append: **10 failed in 1.05s**;
+  T-002's six nodes: **6 failed in 0.67s** — same reasons as recorded at T-001/T-002
+  (eight `AttributeError … set_settings_registry`, `assert 8 == 1`, `assert 2 == 1`; four
+  `AttributeError … set_event_bus`, `built 8 buses`, `built 2 buses`). Nothing of the
+  earlier tasks broke.
+- Determinism + no state leak: the two touched test files re-run twice
+  (`uv run pytest tests/acceptance/permissions tests/unit/permissions -q -p no:randomly`)
+  → **`6 failed, 59 passed`** both times (4.73s / 4.67s). Exactly the six new tests fail;
+  all 59 pre-existing permissions tests still pass, so the new tests leave the shared
+  permission-service slot as they found it.
+- Neighbouring permissions suites smoke-checked (they share the module singleton):
+  `uv run pytest tests/contract/permissions tests/integration/permissions -q` → **4
+  passed**; all four permissions test directories together with random order enabled →
+  **6 failed, 63 passed** — `tests/integration/permissions/test_persistence.py`, which
+  reads and resets the same shared slot, is unaffected.
+
+### Quality gates (per-step scope)
+
+- Ruff gate on the three changed paths: `uv run ruff check <paths>` → **All checks
+  passed**; `uv run ruff format <paths>` → **3 files reformatted**, after which
+  `ruff check` and `ruff format --check` are both clean on those paths. The whole-repo
+  sweep (`ruff check .` / `ruff format --check .`) is the Phase 5 gate and was not run.
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs,
+  736 test functions)** — still green; the function count rose from 730 (T-002) to 736,
+  i.e. the six new functions are seen by the script.
+- `uv run python scripts/verify_spec.py docs/specs/user-roles-permissions.md` →
+  **Traceability: PASS**, including `✓ AC-041/AC-042/AC-043/AC-044 have executable test`.
+- `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within
+  the allowed complexity** (the new test functions and the helper append included).
+- `uv run mypy src/` → **Success: no issues found in 83 source files** (no `src/` file was
+  changed by this step).
+
+### Findings
+
+- **F-10 — the permissions slot cannot be *saved*, so the new tests reset it before and
+  after.** The hand-off pattern `get_*(required=False)` + `restore_singleton(saved)` has no
+  permissions form: `get_permission_service()` takes no `required` flag, so reading the
+  current instance would *construct* one, and putting a saved instance back would need the
+  install operation T-003 adds — which would raise `AttributeError` in the `finally` and
+  mask the real RED. `restore_singleton` in `tests/settings_test_helpers.py` is
+  settings-specific (it writes `backend.settings.registry._registry[0]`, the pattern this
+  change bans). The tests therefore reset the slot on entry and on exit: the slot's state
+  at module import is "unset", so each block starts from the AC's "shared default is
+  unset" precondition and leaves that pristine state behind, through public API only.
+  T-007 (test infrastructure) can turn this into a real save/restore once all five install
+  operations exist.
+- **F-11 — a latent broken witness in T-002's AC-015 (reported, not fixed: out of this
+  task's scope).** `tests/acceptance/eventbus/test_eventbus.py::_concurrent_install_read_reset`
+  builds its install threads as `threading.Thread(target=_run, args=(EVENTBUS_SLOT.install,
+  bus))` while `_run(action)` takes a single argument, so every install thread raises
+  `TypeError` into `errors` and never installs. It is invisible today because AC-015 fails
+  earlier at the lazy-create assert (`lazy create race built 8 buses`), but it will surface
+  as a false failure once T-002 is implemented and the lazy half goes GREEN. T-003's
+  equivalent threads the instance through (`_run(action, *args)` → `action(*args)`), which
+  is the one-line shape T-002 needs. T-002's test file was **not** touched.
+- **F-12 — AC-043 witnesses the lazy-create half first** (same shape as F-3/F-7): it fails
+  on `len(window.instances) == 1` before reaching the install/read/reset half, because the
+  lazy half is the half observably broken today. T-003's implementation must make the lazy
+  half pass **and** keep the install/read/reset half meaningful — read AC-043 as two halves.
+- **F-13 — the lazy-create witness touches the on-disk default databases, and that is the
+  AC.** `get_permission_service()`'s lazy path wires the SQLite repositories at
+  `DEFAULT_DATABASE_URL` / `DEFAULT_USER_DATABASE_URL`, so the concurrent readers each open
+  `./data/permissions.db` and `./data/usermanagement/users.db` (gitignored, already created
+  by `tests/integration/permissions/test_persistence.py`). Observed: no SQLite locking
+  error and no measurable slowdown (the engines set a 30 s busy timeout,
+  `src/backend/permissions/repositories.py:61`), so no single-threaded table warm-up was
+  added — the race being witnessed is the slot write, not the DDL.
+- **F-14 — traceability Test cells still left to S5.3** (unchanged from F-5/F-9): the rows
+  for `REQ-030 (user-roles-permissions.md v2) | AC-041 .. AC-044` and
+  `EDGE-027, EDGE-028 (user-roles-permissions.md v2)` exist in
+  `docs/verification/traceability.md` as `PENDING` with `—` Test cells (written at P.4);
+  the DAG assigns the matrix fill to S5.3 and this step's commit is scoped to the test
+  files plus this record. `check_traceability.py` stays green either way. Flagged so S5.3
+  fills those rows with the six node IDs above.
+- No new question for the user: nothing in `user-roles-permissions.md` v2 or the change
+  spec left a decision open for these six witnesses. The AC-010 vs `settings.md` AC-042
+  concurrency-coverage divergence recorded at S2.2 is unaffected — this task's AC-043
+  covers install + read + **reset**, as the stronger change-spec rule requires.
+
+### Not done in this step (by instruction)
+
+No `src/` change, no other DAG task's tests, no full test-suite run, no write to
+`docs/todo/` or `docs/questions/`, no change to `tests/eventbus_test_helpers.py`,
+`tests/settings_test_helpers.py` or T-001's/T-002's tests (F-11 reported, not fixed), no
+push, no todo-list change, no subagent, no background work. No `docs/workflow/PROBLEMS.md`
+entry: this step had no relaunch, no iteration and no block (next free id stays **P-63**).
+**The Phase 3 RED gate is not declared here** — S3.2 owns it for all tasks; this section
+records T-003's derivation and its targeted run only.
+
+**Next step: S3.1 (T-004)** — derive the `search` task's tests; T-004 appends its entry to
+`SLOTS` and may reuse `concurrent_reads` and `non_tracing_warnings` unchanged, but its
+lazy-create witness differs: `src/backend/search/service.py:547` already has a
+module-level `_singleton_lock` and `get_search_service()` / `reset_search_service()` take
+it today, so search's lazy path is **already** closed — `test_edge_023_concurrent_install_and_lazy_create`
+must be RED for the missing `set_search_service`, not for a create race, and
+`widened_lazy_create_window` must not be used to force a failure the existing lock
+prevents. `get_search_service()` also takes optional `event_bus` / `settings_registry` /
+`permission_service` arguments, so the slot read may need `concurrent_reads(..., args=...)`.
