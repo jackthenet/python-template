@@ -104,6 +104,28 @@ _REMOVED_BACKEND_PACKAGES = frozenset({"loguru"})
 _SEARCHED_TREES = ("src", "tests")
 
 
+def _imports_removed_backend(package: str) -> bool:
+    """Whether a dotted import root is one of the removed backend packages."""
+    return package.split(".", maxsplit=1)[0] in _REMOVED_BACKEND_PACKAGES
+
+
+def _imported_names(node: ast.AST) -> list[str]:
+    """The removed-backend names an import node refers to (``[]`` for any other node)."""
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names if _imports_removed_backend(alias.name)]
+    if isinstance(node, ast.ImportFrom) and _imports_removed_backend(node.module or ""):
+        return [f"{node.module}.{alias.name}" for alias in node.names]
+    return []
+
+
+def _first_backend_import(module: ast.Module) -> list[str]:
+    """The names of the first removed-backend import in a parsed module (``[]`` when it imports none)."""
+    for node in ast.walk(module):
+        if names := _imported_names(node):
+            return names
+    return []
+
+
 def _backend_import_offenders() -> list[str]:
     """Every module under ``src/`` or ``tests/`` that imports the removed logging backend.
 
@@ -115,20 +137,8 @@ def _backend_import_offenders() -> list[str]:
     for tree in _SEARCHED_TREES:
         for path in sorted((_REPO_ROOT / tree).rglob("*.py")):
             module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for node in ast.walk(module):
-                if isinstance(node, ast.Import):
-                    names = [
-                        alias.name for alias in node.names if alias.name.split(".")[0] in _REMOVED_BACKEND_PACKAGES
-                    ]
-                elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
-                    _REMOVED_BACKEND_PACKAGES
-                ):
-                    names = [f"{node.module}.{alias.name}" for alias in node.names]
-                else:
-                    continue
-                if names:
-                    offenders.append(f"{path.relative_to(_REPO_ROOT).as_posix()} -> {sorted(names)}")
-                    break
+            if names := _first_backend_import(module):
+                offenders.append(f"{path.relative_to(_REPO_ROOT).as_posix()} -> {sorted(names)}")
     return offenders
 
 

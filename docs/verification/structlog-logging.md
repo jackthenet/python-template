@@ -3015,3 +3015,63 @@ Each run used a different random ordering seed — full `3981050221`, acceptance
 No test file, no `src/` file, no spec, no task file, no `docs/todo/`, no `docs/questions/` was modified. The only file this step writes is this verification record. Nothing was re-run at `origin/main` state (no failure to classify), and no branch was switched in this worktree.
 
 **Phase 5 (S5.1) gate: PASS — full suite 760 passed / 1 skipped (pre-existing environmental) / 0 failed; acceptance 364 + 1 skipped, property 71, contract 51, all GREEN.** Next: S5.2 — lint (`uv run ruff check .`, whole-repo) + types (`uv run mypy src/`).
+
+---
+
+### S5.2 — lint + types (2026-10-07)
+
+**Phase 5 VERIFY, step 2 of 4.** Objective: the **whole-repo lint sweep** (the one full-repo run in the workflow — per-task steps linted only their changed paths) plus the type gate, dependency gate and docs gate, run against the merged-with-`main` state at HEAD `c5ab5f7`, working tree clean. Traceability (S5.3) and the report (S5.4) are later steps and are not touched here. Environment as in S5.1 (`win32`, Python 3.14.5, ruff/mypy/ty/deptry/mkdocs from the merged dev-dependency set).
+
+#### Gate table (verbatim command → verbatim result → the CI job it matches)
+
+| Gate | Command (verbatim) | Result (verbatim) | CI job it matches |
+|---|---|---|---|
+| **Lint — whole-repo sweep** | `uv run ruff check .` | **`All checks passed!`** | `lint.yml` → `lint` → *Run ruff* (also the pre-commit hook) |
+| Formatting | `uv run ruff format --check .` | **`338 files already formatted`** | `lint.yml` → `lint` → *Check formatting* |
+| **Types (gate)** | `uv run mypy src/` | **`Success: no issues found in 84 source files`** | `quality.yml` → `type-check` → *Run mypy (gate)* |
+| Types (informational) | `uv run ty check src/` | `Found 153 diagnostics` (`main`: 152) — **informational, `continue-on-error: true`**, see the classification below | `quality.yml` → `type-check` → *Run ty (informational)* |
+| **Dependencies** | `uv run deptry .` | `Scanning 90 files...` → **`Success! No dependency issues found.`** | `quality.yml` → `dependencies` → *Run deptry (gate)* |
+| **Docs** | `uv run --group docs mkdocs build --strict` | exit **0**, `Documentation built in 1.57 seconds`, **no build/link warnings** (only the vendor's MkDocs-2.0 advisory banner) | `quality.yml` → `docs` → *Run mkdocs build (gate)* |
+| **Complexity** (extra CI gate found while matching CI) | `uv run complexipy src tests --max-complexity-allowed 15` | first run **exit 1 — 2 `FAILED`**; after the in-scope fix: **exit 0, 0 `FAILED`** | `quality.yml` → `complexity` → *Run complexipy (gate)* |
+
+**Pre-existing lint errors: none.** The whole-repo sweep is clean across all 338 formatted files, so there was nothing to fix outside the change's scope and nothing to classify as a pre-existing lint failure. The `deptry` result confirms the dependency swap is complete and clean: `loguru` is gone from the dependency set and `structlog` is used, with no unused, missing, misplaced or transitive-only dependency reported.
+
+**Formatting decision (the "don't reformat unrelated files" case).** `ruff format --check .` reports *338 files already formatted* — **zero** files would be reformatted, so the question of reformatting files this change did not touch never arose and no file was reformatted by this step. The check was run read-only (`--check`), never `--fix`/`format` repo-wide.
+
+#### The one failing gate — found by matching CI exactly, fixed in scope
+
+The step's task-definition names ruff, mypy, ty, deptry and mkdocs. `quality.yml` carries one more whole-tree gate, `complexity` (`uv run complexipy src tests --max-complexity-allowed 15`), so it was run too — the point of S5.2 is to reproduce the CI gate set locally before the PR. It **failed**, and the baseline check settles the classification: the same command in the primary worktree on `main` exits **0**, so both offenders are **introduced by this change**, not pre-existing.
+
+| Function | File | Cognitive complexity | Classification |
+|---|---|---|---|
+| `_backend_import_offenders` | `tests/acceptance/logging/test_pipeline_backend.py` (new in T-006) | **28 → 6** | introduced by this change |
+| `test_inv_005_required_fields_present` | `tests/property/logging/test_pipeline_invariants.py` (new in T-005) | **21 → 7** | introduced by this change |
+
+**Fix — test-side decomposition only; no assertion changed, no test weakened, deleted, skipped or converted.**
+
+- `_backend_import_offenders`: the triple-nested loop with the `if/elif/else` node dispatch is split into three small helpers — `_imports_removed_backend` (complexity **0**), `_imported_names` (**8**), `_first_backend_import` (**3**) — and the outer scan keeps its shape (**6**). The original `break`-after-the-first-offending-node semantics are preserved (the helper *returns* the first offending node's names). Behaviour verified identical by feeding parsed modules to the refactored helpers: `import loguru` → `['loguru']`; `from loguru import logger` → `['loguru.logger']`; `from loguru.extra import x` → `['loguru.extra.x']`; `import loguru.foo` → `['loguru.foo']`; `from backend.logging import get_logger` → `[]`; `import structlog` → `[]`; repo-wide scan → `[]` (the AC-001 assertion is unchanged and still passes).
+- `test_inv_005_required_fields_present`: the kind/level dispatch moves to a module-level `_emit_probe` (**6**) that emits the generated probe and returns its record predicate; `inner` keeps **every assertion verbatim** (**7**).
+- One ruff follow-up caught inside the fix: `PLC0207` on the extracted `package.split(".")[0]` → `split(".", maxsplit=1)[0]` (identical result, one fewer split).
+
+**Re-check after the fix (all re-run, not inferred):** `uv run complexipy src tests --max-complexity-allowed 15` → **exit 0, 0 FAILED**; `uv run ruff check <the 2 files>` → `All checks passed!`; `uv run ruff format --check <the 2 files>` → `2 files already formatted`; the two touched files → `8 passed`; their two logging test directories (`tests/acceptance/logging tests/property/logging`) → `21 passed`; and because test code changed after S5.1, the **full suite was re-run**: `uv run pytest tests/ -q` → **`760 passed, 1 skipped in 230.77s (0:03:50)`** — byte-for-byte the S5.1 result (same single pre-existing environmental skip), so the S5.1 gate still holds on the post-fix state.
+
+#### ty diagnostics — report-only, classified, deliberately not fixed
+
+`main` 152 → branch 153. The category-level diff is small and entirely inside this change's own new module:
+
+| Δ | Diagnostic | Location |
+|---|---|---|
+| −2 | `unresolved-attribute: Object of type (\`(...) -> Any\`) has no attribute \`__qualname__\`` | the removed loguru decorator (gone with `_setup.py`) |
+| +1 | `redundant-cast: Value is already of type Literal["text", "json"]` | `src/backend/logging/_pipeline.py:216` |
+| +1 | `invalid-argument-type: Argument to ProcessorFormatter.__init__ is incorrect` | `_pipeline.py:234` (structlog's stub wants `MutableMapping[str, Any]`, the renderer protocol passes `dict[str, Any]`) |
+| +1 | `deprecated: The overload of getLevelName is deprecated` | `_pipeline.py:221` (`logging.getLevelNamesMapping()` is the 3.11+ replacement) |
+
+The other ~150 are **pre-existing and identical on `main`** — dominated by `invalid-type-form` on `@logged_class`-decorated classes used as annotations, plus `unsupported-base`, SQLAlchemy `Select.where`/`order_by` and `type: ignore` noise across every feature.
+
+**Not a gate failure and not fixed here:** CI marks the step *informational* (`continue-on-error: true`), the type gate is mypy, and mypy is clean on all 84 source files. All three new diagnostics sit in runtime code this change owns, and editing that code would invalidate the S5.1 full-suite evidence to silence a non-gate warning — so they are recorded as follow-ups (each is a one-line change: drop the redundant `cast`; widen the renderer's event-dict annotation to `MutableMapping[str, Any]`; swap `getLevelName` for `getLevelNamesMapping`, keeping the `isinstance(level, int)` fallback).
+
+#### Scope discipline for this step
+
+Two files changed, both test files named above, plus this record. No `src/` file, no spec, no `pyproject.toml`/`uv.lock`, no task file, no `docs/todo/`, no `docs/questions/`. No test was weakened, deleted, skipped or converted; the assertions in both refactored tests are character-identical. Nothing was pushed, no branch was switched, and the `site/` directory `mkdocs build` writes is gitignored — the tree is clean apart from the two test files and this record.
+
+**Phase 5 (S5.2) gate: PASS — `uv run ruff check .` clean whole-repo (matches `lint.yml`), `ruff format --check .` clean, `uv run mypy src/` clean (84 files), `uv run deptry .` clean, `mkdocs build --strict` exit 0, `complexipy` clean after one in-scope test-side fix; ty informational-only, classified, no gate impact.** Next: S5.3 — update the traceability matrix (every REQ of `docs/specs/structlog-logging.md` + the rows of every affected feature).

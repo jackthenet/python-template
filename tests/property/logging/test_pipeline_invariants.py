@@ -296,6 +296,30 @@ def test_inv_003_elapsed_non_negative() -> None:
     inner()
 
 
+def _emit_probe(kind: str, level: str) -> Callable[[dict[str, Any]], bool]:
+    """Emit one INV-005 probe of the generated kind at the generated level.
+
+    Returns the predicate selecting the record that probe must produce: the exception
+    field for the raising probe, ``elapsed_ms`` for a traced one, the bare event otherwise.
+    """
+    if kind == "statement":
+        token = "inv_005_statement_probe"
+        getattr(bound_logger("inv_005_statement_logger"), level.lower())(token)
+        return _record_for(token)
+    if kind == "raising":
+        token = "inv_005_raising_probe"
+        with pytest.raises(RuntimeError):
+            logged(level=level)(inv_005_raising_probe)()
+        return _record_for(token, "exception")
+    token = "inv_005_async_probe" if kind == "async" else "inv_005_sync_probe"
+    traced = logged(level=level)(inv_005_async_probe if kind == "async" else inv_005_sync_probe)
+    if kind == "async":
+        asyncio.run(traced())
+    else:
+        traced()
+    return _record_for(token, "elapsed_ms")
+
+
 def test_inv_005_required_fields_present() -> None:
     """INV-005 / REQ-011: every record the pipeline emits carries level, logger, event, timestamp, file and line; a traced exit record additionally carries elapsed_ms."""
     setup_logger()
@@ -309,24 +333,7 @@ def test_inv_005_required_fields_present() -> None:
     )
     def inner(kind: str, level: str) -> None:
         before = file_size(path)
-
-        if kind == "statement":
-            token = "inv_005_statement_probe"
-            getattr(bound_logger("inv_005_statement_logger"), level.lower())(token)
-            predicate = _record_for(token)
-        elif kind == "raising":
-            token = "inv_005_raising_probe"
-            with pytest.raises(RuntimeError):
-                logged(level=level)(inv_005_raising_probe)()
-            predicate = _record_for(token, "exception")
-        else:
-            token = "inv_005_async_probe" if kind == "async" else "inv_005_sync_probe"
-            traced = logged(level=level)(inv_005_async_probe if kind == "async" else inv_005_sync_probe)
-            if kind == "async":
-                asyncio.run(traced())
-            else:
-                traced()
-            predicate = _record_for(token, "elapsed_ms")
+        predicate = _emit_probe(kind, level)
 
         record = wait_for_record_since(path, before, predicate, timeout=_WAIT_TIMEOUT_S)
         assert record is not None, f"INV-005: the {kind} call emitted no record the test could wait for"
