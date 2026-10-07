@@ -2,17 +2,25 @@
 
 These tests verify externally observable behavior only: non-blocking publish,
 typed event dispatch, handler error isolation, thread safety, lifecycle, the
-shared default instance, and bounded-queue backpressure.
+shared default instance, bounded-queue backpressure, and (event-bus.md v2) the
+public install operation for the shared default.
 """
 
 from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import pytest
 from eventbus_test_helpers import BaseEvent, OrderPlaced, UserCreated, isolated_event_bus, wait_for
+from singleton_install_test_helpers import (
+    EVENTBUS_SLOT,
+    concurrent_reads,
+    non_tracing_warnings,
+    widened_lazy_create_window,
+)
 
 from backend.eventbus import EventBus, get_event_bus, reset_event_bus
 
@@ -20,6 +28,10 @@ _PUBLISH_BUDGET_S = 0.01
 _MAX_QUEUE_SIZE = 3
 _MIN_DROPPED = 1
 _DRAIN_COUNT = 2
+_CONCURRENT_READERS = 8
+_CONCURRENT_INSTALLS = 8
+_CONCURRENT_RESETS = 2
+_BARRIER_TIMEOUT = 5.0
 
 
 @pytest.fixture
@@ -213,3 +225,100 @@ def test_ac_012_bounded_queue_drop() -> None:
         assert b.pending_count <= _MAX_QUEUE_SIZE, f"queue exceeded max_queue_size: {b.pending_count}"
     finally:
         b.shutdown()
+
+
+# --- Public install operation (event-bus.md v2 REQ-008, AC-013 .. AC-016) ---
+
+
+def test_ac_013_set_event_bus_installs_default() -> None:
+    """AC-013: installing a bus into an unset shared default returns None and makes it the default."""
+    with isolated_event_bus():
+        EVENTBUS_SLOT.clear()  # Given: the shared default is unset
+        bus = EVENTBUS_SLOT.new()
+        try:
+            assert EVENTBUS_SLOT.install(bus) is None
+            assert get_event_bus() is bus
+        finally:
+            bus.shutdown()
+
+
+def test_ac_014_replace_logs_one_warning(log_records: list[Any]) -> None:
+    """AC-014: replacing a held default logs exactly one WARNING naming it; installing into an unset slot logs none."""
+    with isolated_event_bus():
+        EVENTBUS_SLOT.clear()
+        first = EVENTBUS_SLOT.new()
+        EVENTBUS_SLOT.install(first)  # unset slot: no WARNING
+        assert not non_tracing_warnings(log_records), f"install into an unset slot warned: {log_records!r}"
+        log_records.clear()
+        second = EVENTBUS_SLOT.new()
+        EVENTBUS_SLOT.install(second)  # held slot: exactly one WARNING, no exception
+        warnings = non_tracing_warnings(log_records)
+        assert len(warnings) == 1, f"expected exactly one replace WARNING, got {warnings!r}"
+        assert "bus" in str(warnings[0]).lower(), f"the WARNING does not name the shared default: {warnings[0]!r}"
+        assert get_event_bus() is second
+        first.shutdown()
+        second.shutdown()
+
+
+def test_ac_015_concurrent_install_read_reset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-015: concurrent lazy creates yield one bus; concurrent install/read/reset never tear the slot."""
+    with isolated_event_bus():
+        # Unset default: 8 threads read it into existence at the same moment.
+        EVENTBUS_SLOT.clear()
+        with widened_lazy_create_window(monkeypatch, EventBus) as window:
+            reads = concurrent_reads(EVENTBUS_SLOT, _CONCURRENT_READERS)
+        assert len(window.instances) == 1, f"lazy create race built {len(window.instances)} buses"
+        assert all(b is reads[0] for b in reads), "concurrent readers did not receive one shared bus"
+
+        # Held default: installs, reads and resets interleaved (EDGE-010 for this feature).
+        EVENTBUS_SLOT.install(EVENTBUS_SLOT.new())
+        installed = [EVENTBUS_SLOT.new() for _ in range(_CONCURRENT_INSTALLS)]
+        try:
+            errors = _concurrent_install_read_reset(installed)
+            assert not errors, f"install/read/reset threads raised: {errors!r}"
+            assert isinstance(get_event_bus(), EventBus), "the slot ended up torn"
+        finally:
+            for bus in installed:
+                bus.shutdown()
+
+
+def test_ac_016_install_then_reset_then_default() -> None:
+    """AC-016: after install then reset, the getter returns a freshly created bus, not the installed one."""
+    with isolated_event_bus():
+        installed = EVENTBUS_SLOT.new()
+        EVENTBUS_SLOT.install(installed)
+        EVENTBUS_SLOT.clear()  # reset_event_bus(): clears the slot and shuts this bus down
+        default = get_event_bus()
+        assert isinstance(default, EventBus)
+        assert default is not installed
+
+
+def _concurrent_install_read_reset(installed: list[EventBus]) -> list[BaseException]:
+    """Install ``installed``, read and reset the shared slot from barrier-released threads.
+
+    Returns every exception the threads raised (an ``AssertionError`` from a read
+    that saw a torn slot included) instead of letting a thread die silently.
+    """
+    start = threading.Barrier(_CONCURRENT_INSTALLS + _CONCURRENT_READERS + _CONCURRENT_RESETS)
+    errors: list[BaseException] = []
+
+    def _run(action: Callable[[], None]) -> None:
+        try:
+            start.wait(timeout=_BARRIER_TIMEOUT)
+            action()
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_run, args=(EVENTBUS_SLOT.install, bus)) for bus in installed]
+    threads += [threading.Thread(target=_run, args=(_read_whole_bus,)) for _ in range(_CONCURRENT_READERS)]
+    threads += [threading.Thread(target=_run, args=(EVENTBUS_SLOT.clear,)) for _ in range(_CONCURRENT_RESETS)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return errors
+
+
+def _read_whole_bus() -> None:
+    """A read must yield a whole ``EventBus`` — never a half-written slot."""
+    assert isinstance(EVENTBUS_SLOT.read(), EventBus)

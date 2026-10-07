@@ -747,3 +747,157 @@ section records T-001's derivation and its targeted run only.
 
 **Next step: S3.1 (T-002)** — derive the `eventbus` task's tests; T-002 appends its entry to
 `SLOTS` in `tests/singleton_install_test_helpers.py` and must not edit T-001's tests.
+
+## S3.1 — T-002 test derivation (2026-10-07)
+
+One fresh subagent, one atomic step: derive **T-002**'s tests (group `eventbus`,
+`requirements` REQ-001 .. REQ-009 + REQ-010 + REQ-014, `amended_spec_ids`
+`event-bus.md` v2 REQ-008, AC-013, AC-014, AC-015, AC-016, EDGE-011, EDGE-012).
+Tests only — no `src/` file was touched (`git status --porcelain` shows three modified
+test files and nothing else). The task object was read from
+`.github/task-runner/tasks.json` (sha256 `abdc38ef…43e255`, identical to
+`docs/tasks/settings-public-registry-setter.tasks.json`); its two `tests_to_create`
+entries expand to **six** `path::test_name` nodes (the first entry packs four), and all
+six node IDs were written **exactly** as the DAG spells them. T-001's ten tests were not
+edited.
+
+### Tests written (six nodes, verbatim from `tests_to_create`)
+
+| Test node | Category | Witnesses |
+|---|---|---|
+| `tests/acceptance/eventbus/test_eventbus.py::test_ac_013_set_event_bus_installs_default` | acceptance | `event-bus.md` v2 AC-013 (REQ-008; change REQ-001) |
+| `tests/acceptance/eventbus/test_eventbus.py::test_ac_014_replace_logs_one_warning` | acceptance | AC-014 (+ REQ-002 WARNING rule, INV-002 for this feature) |
+| `tests/acceptance/eventbus/test_eventbus.py::test_ac_015_concurrent_install_read_reset` | acceptance | AC-015 (+ REQ-006 module lock, EDGE-010) |
+| `tests/acceptance/eventbus/test_eventbus.py::test_ac_016_install_then_reset_then_default` | acceptance | AC-016 (change REQ-008 pair; event-bus REQ-005 reset unchanged) |
+| `tests/unit/eventbus/test_eventbus_edges.py::test_edge_011_replaced_bus_not_shut_down` | unit | EDGE-011 (change REQ-003 / D14 lifecycle neutrality) |
+| `tests/unit/eventbus/test_eventbus_edges.py::test_edge_012_concurrent_lazy_create` | unit | EDGE-012 (change REQ-006/REQ-007 guarded lazy create) |
+
+No new test package or `__init__.py` was needed — both target files already exist and
+already carry the feature's AC-001 .. AC-012 / EDGE-001 .. EDGE-010 witnesses.
+
+### Shared helper: `tests/singleton_install_test_helpers.py` (T-002's append)
+
+- **`EVENTBUS_SLOT`** appended to `SLOTS` (`module=backend.eventbus`,
+  `installer="set_event_bus"`, `getter="get_event_bus"`, `reset="reset_event_bus"`,
+  `factory=EventBus`), so `SLOTS == (SETTINGS_SLOT, EVENTBUS_SLOT)`. T-001's tests use
+  `SETTINGS_SLOT` directly, so appending changes nothing in them (verified below). The
+  trio is still resolved by `getattr` at call time, which is what keeps the RED signal
+  in the test body instead of in a module-level import.
+- **`concurrent_reads(slot, count, args=(), timeout=5.0)`** — new: `slot.read(*args)`
+  from `count` threads released by one `threading.Barrier`, with every thread's exception
+  collected and asserted empty. Needed by two of this task's nodes (AC-015's 8-reader
+  half, EDGE-012's 2-reader case) and reusable unchanged by T-003/T-004/T-005
+  (`user-roles-permissions.md` AC-043, `search.md` AC-040, `session-management.md`
+  AC-048 — the last one passes its `repository` through `args`).
+- `widened_lazy_create_window` and `non_tracing_warnings` are **reused as T-001 wrote
+  them** — the eventbus lazy window is exactly the settings one (the unguarded window is
+  microseconds wide under the GIL, so without it EDGE-012/AC-015 would pass before the
+  lock exists and would not be RED at all).
+- Isolation: every new test runs inside `isolated_event_bus()` (the existing
+  park/restore helper in `tests/eventbus_test_helpers.py`, **read but not changed** — its
+  two private-slot writes are T-007's), so the suite's live shared bus is parked, the
+  block works on a scratch instance, and the scratch is shut down and the parked bus put
+  back on exit. Buses the tests build are shut down in a `finally`. `reset_event_bus()`
+  is only ever called inside that park, never on the live shared instance.
+
+### Collection and RED evidence
+
+Worktree for every count below (`git rev-parse --show-toplevel`):
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+
+- Collection (not a RED signal if it breaks): `uv run pytest --collect-only -q
+  tests/acceptance/eventbus tests/unit/eventbus` → **28 tests collected in 0.18s**, zero
+  collection errors; across all touched + T-001 files
+  (`tests/acceptance/eventbus tests/unit/eventbus tests/acceptance/singleton_install
+  tests/acceptance/settings tests/property/settings tests/unit/settings`) → **119 tests
+  collected in 0.33s**, zero collection errors. All six new nodes collect as tests.
+- The task's `red_command` run **verbatim** (six node IDs, targeted — the full suite is a
+  Phase 5 gate): **6 failed in 0.50s**. Failure reason per test:
+  - `test_ac_013…`, `test_ac_014…`, `test_ac_016…`, `test_edge_011…` — all four:
+    `AttributeError: module 'backend.eventbus' has no attribute 'set_event_bus'`
+    (raised inside the test body via `SingletonSlot.install`) → the install operation the
+    task adds does not exist. Correct reason.
+  - `test_ac_015_concurrent_install_read_reset` — `AssertionError: lazy create race built
+    8 buses` (`len(window.instances) == 1`): eight concurrent readers built eight buses on
+    the unguarded lazy path. Correct reason.
+  - `test_edge_012_concurrent_lazy_create` — `AssertionError: lazy create race built
+    2 buses`: the two-thread form of the same missing lock. Correct reason.
+  - No collection, setup, fixture or import error; no `ValidationError`/`ValueError` from
+    test data (the events are the suite's own `UserCreated`/`OrderPlaced` helpers); no
+    Hypothesis strategy involved (T-002 has no `INV` ID — the change spec's INV-001 ..
+    INV-003 property witnesses belong to T-009).
+- T-001's ten nodes re-run unchanged after the `SLOTS` append: **10 failed in 0.67s**,
+  same reasons as recorded at T-001 (eight `AttributeError … set_settings_registry`,
+  `assert 8 == 1` in AC-042, `assert 2 == 1` in EDGE-033). Nothing of T-001 broke.
+- Determinism + no state leak: the two touched files re-run twice
+  (`uv run pytest tests/acceptance/eventbus tests/unit/eventbus -q -p no:randomly`) →
+  **`6 failed, 22 passed`** both times (3.01s / 3.03s). Exactly the six new tests fail;
+  all 22 pre-existing eventbus tests still pass, so the new tests leave the shared bus and
+  its subscribers as they found them.
+- Neighbouring eventbus suites smoke-checked (they share `isolated_event_bus` and the
+  helper module): `uv run pytest tests/contract/eventbus tests/integration/eventbus
+  tests/property/eventbus -q` → **9 passed**; `uv run pytest
+  tests/acceptance/settings_coverage tests/contract/logging -q` → **12 passed**.
+
+### Quality gates (per-step scope)
+
+- Ruff gate on the three changed paths: `uv run ruff check <paths>` → **All checks
+  passed**; `uv run ruff format <paths>` → **3 files left unchanged**. The whole-repo
+  sweep (`ruff check .` / `ruff format --check .`) is the Phase 5 gate and was not run.
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs,
+  730 test functions)** — still green; the test-function count rose from 724 (T-001) to
+  730, i.e. the six new functions are seen by the script.
+- `uv run python scripts/verify_spec.py docs/specs/event-bus.md` → **Traceability: PASS**,
+  including `✓ AC-013/AC-014/AC-015/AC-016 have executable test` (the four witnesses now
+  exist).
+- `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within
+  the allowed complexity** (the new test functions and the new helper included).
+- `uv run mypy src/` → **Success: no issues found in 83 source files** (no `src/` file was
+  changed by this step).
+
+### Findings
+
+- **F-6 — the AC-014 WARNING assertion is wording-agnostic.** `event-bus.md` AC-014 and
+  the change spec §9 require the WARNING to *name the feature's shared default* but fix no
+  exact message (the §9 example is `settings: shared default registry replaced`, and the
+  eventbus module's house prefix is `event bus: …`). The test therefore asserts
+  **exactly one** non-tracing WARNING **and** `"bus" in str(record).lower()` — strong
+  enough to fail a record that does not name the shared default, loose enough that T-002
+  is not forced into one phrasing. The tracing records (`>>` / `<<` / `!!`) are excluded by
+  `non_tracing_warnings` (F-4 still applies: `set_event_bus`'s own exit record contains
+  `bus`).
+- **F-7 — AC-015 witnesses the lazy-create half first** (same shape as F-3): the test
+  fails on `len(window.instances) == 1` before it reaches the install/read/reset half,
+  because the lazy half is the half that is observably broken today. T-002's implementation
+  must make the lazy half pass **and** keep the install/read/reset half meaningful — the
+  reviewer should read AC-015 as two halves. The reset threads in the second half do shut
+  buses down (`reset_event_bus()` keeps that semantics, event-bus REQ-005); the assertion
+  is that every read still yields a whole `EventBus` and no thread raises, which a shut-down
+  bus satisfies.
+- **F-8 — EDGE-011 installs over the parked scratch bus, not over a reset slot.** Inside
+  `isolated_event_bus()` the slot already holds the scratch instance, so the test's first
+  `install(replaced)` replaces it (one WARNING, deliberately not asserted there) and the
+  second install is the EDGE-011 replace. That is the helper's own parking pattern and it
+  additionally exercises D14: the scratch bus is left alive for the helper's `finally` to
+  shut down, exactly as `tests/eventbus_test_helpers.py:76-82` assumes.
+- **F-9 — traceability Test cells still left to S5.3** (unchanged from F-5): the rows for
+  `REQ-008 (event-bus.md v2) | AC-013..AC-016` and `EDGE-011, EDGE-012 (event-bus.md v2)`
+  exist in `docs/verification/traceability.md` as `PENDING` with `—` Test cells (written at
+  P.4); the DAG assigns the matrix fill to S5.3 and this step's commit is scoped to the
+  test files plus this record. `check_traceability.py` stays green either way. Flagged so
+  S5.3 fills those two rows with the six node IDs above.
+- No new question for the user: nothing in `event-bus.md` v2 or the change spec left a
+  decision open for these six witnesses.
+
+### Not done in this step (by instruction)
+
+No `src/` change, no other DAG task's tests, no full test-suite run, no write to
+`docs/todo/` or `docs/questions/`, no change to `tests/eventbus_test_helpers.py` or
+`tests/settings_test_helpers.py`, no push, no todo-list change, no subagent, no background
+work. No `docs/workflow/PROBLEMS.md` entry: this step had no relaunch, no iteration and no
+block (next free id stays **P-63**). **The Phase 3 RED gate is not declared here** — S3.2
+owns it for all tasks; this section records T-002's derivation and its targeted run only.
+
+**Next step: S3.1 (T-003)** — derive the `permissions` task's tests; T-003 appends its
+entry to `SLOTS` and may reuse `concurrent_reads`, `widened_lazy_create_window` and
+`non_tracing_warnings` unchanged.

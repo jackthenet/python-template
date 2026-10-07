@@ -5,10 +5,15 @@ Two things live here because more than one test category needs them:
 * ``SLOTS`` — the table the parametrized witnesses run over: one entry per
   singleton-owning feature, holding its public-API module, the names of its
   ``set_*`` / ``get_*`` / ``reset_*`` trio, and a factory for a fresh, isolated
-  instance. T-001 adds the settings entry; T-002..T-005 append their own entry
-  here, so no earlier task's tests change when a feature joins the table.
+  instance. T-001 adds the settings entry; T-002 (eventbus), T-003
+  (permissions), T-004 (search) and T-005 (sessionmanagement) append their own
+  entry here, so no earlier task's tests change when a feature joins the table.
 * ``widened_lazy_create_window`` — makes the owning module's lazy-create race
-  observable (EDGE-033, AC-042) instead of leaving it to the scheduler.
+  observable (EDGE-033, AC-042, event-bus EDGE-012) instead of leaving it to
+  the scheduler.
+* ``concurrent_reads`` — the same slot read from N barrier-released threads, so
+  a concurrency AC (AC-042, ``event-bus.md`` AC-015, ...) is witnessed against
+  a simultaneous release rather than against the scheduler's ordering.
 * ``non_tracing_warnings`` — counts the replace WARNING (REQ-002) without
   counting the tracing decorator's own records.
 
@@ -31,7 +36,9 @@ from typing import Any, NamedTuple
 
 import pytest
 
+import backend.eventbus
 import backend.settings
+from backend.eventbus import EventBus
 from backend.settings import SettingsRegistry, YamlValueRepository
 
 # The tracing decorator's own record prefixes (entry / exit / exception). A slow
@@ -79,10 +86,18 @@ SETTINGS_SLOT = SingletonSlot(
     factory=_new_settings_registry,
 )
 
+EVENTBUS_SLOT = SingletonSlot(
+    module=backend.eventbus,
+    installer="set_event_bus",
+    getter="get_event_bus",
+    reset="reset_event_bus",
+    factory=EventBus,
+)
+
 # One entry per singleton-owning feature (settings-public-registry-setter REQ-001).
-# Only settings exists at T-001; T-002 (eventbus), T-003 (permissions), T-004
-# (search) and T-005 (sessionmanagement) append their entry here.
-SLOTS: tuple[SingletonSlot, ...] = (SETTINGS_SLOT,)
+# settings at T-001, eventbus at T-002; T-003 (permissions), T-004 (search) and
+# T-005 (sessionmanagement) append their entry here.
+SLOTS: tuple[SingletonSlot, ...] = (SETTINGS_SLOT, EVENTBUS_SLOT)
 
 
 class _CreateWindow:
@@ -120,6 +135,39 @@ def widened_lazy_create_window(
         yield window
     finally:
         window.creating.set()  # never leave a waiter blocked on a create that failed
+
+
+def concurrent_reads(slot: SingletonSlot, count: int, args: tuple[Any, ...] = (), timeout: float = 5.0) -> list[Any]:
+    """``slot.read(*args)`` from ``count`` threads released by one barrier.
+
+    ``args`` is for a getter that needs them (session-management's takes a
+    ``repository``). Every thread's exception is collected, so a concurrency
+    witness fails on the behaviour instead of losing a thread silently.
+    """
+    start = threading.Barrier(count)
+    results: list[Any] = []
+    errors: list[BaseException] = []
+    guard = threading.Lock()
+
+    def _reader() -> None:
+        try:
+            start.wait(timeout=timeout)
+            value = slot.read(*args)
+        except BaseException as exc:  # reported through the assertion below
+            with guard:
+                errors.append(exc)
+            return
+        with guard:
+            results.append(value)
+
+    threads = [threading.Thread(target=_reader) for _ in range(count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, f"reader threads raised: {errors!r}"
+    assert len(results) == count, f"only {len(results)} of {count} readers completed"
+    return results
 
 
 def non_tracing_warnings(records: list[Any]) -> list[Any]:
