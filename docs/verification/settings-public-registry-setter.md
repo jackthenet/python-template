@@ -605,3 +605,145 @@ amended specs' test-strategy sections.
 
 **Next step: S3.1** — derive tests per DAG task (one fresh subagent per task's `tests_to_create`),
 then S3.2 (ruff on the changed paths + confirm RED, targeted).
+
+---
+
+## S3.1 — T-001 test derivation (2026-10-07)
+
+One fresh subagent, one atomic step: derive **T-001**'s tests (group `settings`,
+`requirements` REQ-001 + REQ-026, `acceptance_criteria` AC-001, `amended_spec_ids`
+`settings.md` v5 AC-040, AC-041, AC-042, AC-043, INV-011, EDGE-030, EDGE-031, EDGE-032,
+EDGE-033). Tests only — no `src/` file was touched (`git status --porcelain` shows three
+modified test files and two new test paths, nothing else). The task object was read from
+`.github/task-runner/tasks.json`; its seven `tests_to_create` entries expand to **ten**
+`path::test_name` nodes (the last entry packs four), and all ten node IDs were written
+**exactly** as the DAG spells them.
+
+### Tests written (ten nodes, verbatim from `tests_to_create`)
+
+| Test node | Category | Witnesses |
+|---|---|---|
+| `tests/acceptance/singleton_install/test_install.py::test_ac_001_install_then_get_returns_instance` | acceptance | AC-001 (REQ-001) |
+| `tests/acceptance/settings/test_settings.py::test_ac_040_set_settings_registry_installs_default` | acceptance | `settings.md` v5 AC-040 (REQ-026) |
+| `tests/acceptance/settings/test_settings.py::test_ac_041_replace_logs_one_warning` | acceptance | AC-041 (+ REQ-002 WARNING rule) |
+| `tests/acceptance/settings/test_settings.py::test_ac_042_concurrent_install_and_read` | acceptance | AC-042 (+ INV-011/REQ-003 lock) |
+| `tests/acceptance/settings/test_settings.py::test_ac_043_install_then_reset_then_default` | acceptance | AC-043 |
+| `tests/property/settings/test_settings_properties.py::test_inv_011_last_install_wins` | property (hypothesis) | INV-011 |
+| `tests/unit/settings/test_settings_edges.py::test_edge_030_install_over_nonempty_default` | unit | EDGE-030 |
+| `tests/unit/settings/test_settings_edges.py::test_edge_031_install_then_reset_creates_default` | unit | EDGE-031 |
+| `tests/unit/settings/test_settings_edges.py::test_edge_032_required_false_after_install` | unit | EDGE-032 |
+| `tests/unit/settings/test_settings_edges.py::test_edge_033_concurrent_lazy_create` | unit | EDGE-033 |
+
+New files: `tests/acceptance/singleton_install/__init__.py` (empty, like every other
+`tests/` package) and `tests/singleton_install_test_helpers.py`.
+
+### Shared helper: `tests/singleton_install_test_helpers.py`
+
+- `SingletonSlot` — a `NamedTuple` with exactly the five DAG fields (`module`, `installer`,
+  `getter`, `reset`, `factory`). `installer` / `getter` / `reset` are **attribute-name
+  strings** resolved by `getattr` at call time, never imported. That is what makes the RED
+  signal correct: a feature whose install operation does not exist yet fails **inside** the
+  test body with `AttributeError: module 'backend.settings' has no attribute
+  'set_settings_registry'`, instead of a module-level import that would turn into a
+  **collection error** and take the ~60 pre-existing tests in
+  `tests/acceptance/settings/test_settings.py` down with it.
+- `SLOTS` — the table the parametrized witnesses run over. T-001 can only contribute the
+  settings entry (the other four install operations do not exist), so `SLOTS ==
+  (SETTINGS_SLOT,)`; **T-002..T-005 append their own entry here and change none of T-001's
+  tests** (the DAG's `design_constraints` requirement).
+- `widened_lazy_create_window(monkeypatch, cls)` — holds the creating thread inside
+  `cls.__init__` (after the instance is built, before the slot write) and records every
+  instance built. Needed because the unguarded lazy window is microseconds wide under the
+  GIL: a plain two-thread lazy-create test **passes before the module lock exists**, so it
+  would not be RED at all.
+- `non_tracing_warnings(records)` — WARNING records that are not the tracing decorator's
+  own (`>>`, `<<`, `!!` prefixes). See finding F-4.
+- Isolation: the settings factory builds
+  `SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp(...)))`, so no
+  value is ever written to the shared default `settings/` directory, and every test that
+  touches the shared slot saves it with `get_settings_registry(required=False)` and restores
+  it in a `finally` with `restore_singleton(saved)` — the house pattern of
+  `test_ac_018_singleton`. `tests/settings_test_helpers.py` was **read, not changed**
+  (its private-slot writes belong to T-007); the new tests deliberately do **not** use
+  `install_isolated_registry` / `isolated_registry`, which write
+  `backend.settings.registry._registry[0]` directly — the exact pattern this change bans.
+
+### Collection and RED evidence
+
+Worktree for every count below (`git rev-parse --show-toplevel`):
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter`.
+
+- Collection (not a RED signal if it breaks): `uv run pytest --collect-only -q
+  tests/acceptance/singleton_install tests/acceptance/settings tests/property/settings
+  tests/unit/settings` → **91 tests collected in 1.13s**, zero collection errors — all ten
+  new nodes collect as tests.
+- The task's `red_command` run **verbatim** (ten node IDs, targeted — the full suite is a
+  Phase 5 gate): **10 failed in 1.09s**. Failure reason per test:
+  - `test_ac_001…`, `test_ac_040…`, `test_ac_041…`, `test_ac_043…`, `test_inv_011…`
+    (shrunk by hypothesis to `ops=['install']`), `test_edge_030…`, `test_edge_031…`,
+    `test_edge_032…` — all eight:
+    `AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'`
+    → the install operation the task adds does not exist. Correct reason.
+  - `test_edge_033_concurrent_lazy_create` — `assert 2 == 1` where `2 =
+    len(window.instances)`: the two racing readers each built a `SettingsRegistry`. The
+    unguarded lazy path, witnessed deterministically. Correct reason.
+  - `test_ac_042_concurrent_install_and_read` — `assert 8 == 1`: eight concurrent readers
+    built eight instances. Its install/read half is only reached once the lazy-create half
+    is GREEN (see F-3). Correct reason.
+  - No collection, setup, fixture or import error; no `ValidationError`/`ValueError` from
+    test data; no Hypothesis strategy generating out-of-domain input (the strategy draws
+    operation names only).
+- Determinism + no state leak: the four touched files re-run twice
+  (`uv run pytest tests/acceptance/singleton_install tests/acceptance/settings/test_settings.py
+  tests/unit/settings/test_settings_edges.py tests/property/settings/test_settings_properties.py
+  -q -p no:randomly`) → **`10 failed, 78 passed`** both times. Exactly the ten new tests
+  fail; every pre-existing test in those files still passes, so the new tests leave the
+  shared settings singleton as they found it.
+
+### Quality gates (per-step scope)
+
+- Ruff gate on the six changed paths: `uv run ruff check <paths>` → **All checks passed**;
+  `uv run ruff format --diff <paths>` → **6 files already formatted**. The whole-repo sweep
+  (`ruff check .` / `ruff format --check .`) is the Phase 5 gate and was not run here.
+- `uv run python scripts/check_traceability.py` → **PASS (796 matrix rows, 136 spec IDs,
+  724 test functions)** — still green.
+- `uv run python scripts/verify_spec.py docs/specs/settings.md` → **Traceability: PASS**,
+  including `✓ INV-011 has property test` (the property witness now exists).
+- `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within the
+  allowed complexity** (the new test functions included).
+- `uv run mypy src/` → **Success: no issues found in 83 source files** (no `src/` file was
+  changed by this step).
+
+### Findings
+
+- **F-3 — AC-042/EDGE-033 witness the unguarded lazy path first.** Both race tests fail on
+  the *lazy-create* half (8 instances / 2 instances), not on the install half, because the
+  lazy half is asserted first and is the half that is observably broken today. T-001's
+  implementation must make the lazy half pass **and** keep the install/read half meaningful;
+  the reviewer should read the AC-042 test as two halves, not one.
+- **F-4 — the WARNING count must exclude tracing records.** `@logged(slow_threshold_ms=5)`
+  escalates the *exit* record to WARNING, and that record
+  (`<< set_settings_registry returned in X ms`) contains the substring `registry`, so a
+  "WARNING records mentioning registry" count would over-count AC-041/EDGE-030. The helper
+  filters on the `>>` / `<<` / `!!` prefixes instead, and asserts **exactly one** non-tracing
+  WARNING.
+- **F-5 — traceability Test cells are left to S5.3.** AGENTS.md Phase 3 item 8 says update
+  the matrix with test references, but the rows for these IDs were written at P.4 as
+  `PENDING` with `—` Test cells, the DAG assigns the traceability update to **S5.3**, and
+  this step's brief scoped the commit to the test files plus this record. The rows are
+  unchanged here; the Phase 3 gate only requires `check_traceability.py` to stay green, which
+  it does. Flagged so the orchestrator can confirm S5.3 fills the cells for AC-001, AC-040
+  .. AC-043, INV-011 and EDGE-030 .. EDGE-033.
+- No new question for the user: nothing in the spec left a decision open, and the AC-010 vs
+  `settings.md` AC-042 concurrency-coverage divergence already recorded at S2.2 is unchanged
+  (this step witnesses `settings.md` AC-042 as written).
+
+### Not done in this step (by instruction)
+
+No `src/` change, no other DAG task's tests, no full test-suite run, no write to
+`docs/todo/` or `docs/questions/`, no push, no todo-list change, no subagent, no background
+work. **The Phase 3 RED gate is not declared here** — S3.2 owns it for all tasks; this
+section records T-001's derivation and its targeted run only.
+
+**Next step: S3.1 (T-002)** — derive the `eventbus` task's tests; T-002 appends its entry to
+`SLOTS` in `tests/singleton_install_test_helpers.py` and must not edit T-001's tests.

@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import tempfile
 
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
-from settings_test_helpers import EventCollector
+from settings_test_helpers import EventCollector, restore_singleton
+from singleton_install_test_helpers import SETTINGS_SLOT
 
 from backend.settings import (
     SelectOption,
@@ -22,10 +23,13 @@ from backend.settings import (
     SliderSpec,
     Template,
     YamlValueRepository,
+    get_settings_registry,
+    reset_settings_registry,
 )
 from backend.settings.repository import YamlTemplateRepository
 
 _MAX_EXAMPLES = 40
+_MAX_OPS = 12
 
 
 def _text_value() -> SearchStrategy[str]:
@@ -277,3 +281,34 @@ def test_inv_010_status_derivation(pair) -> None:
     current = registry.get_value(definition.key)
     expected = SettingStatus.MODIFIED if current != definition.default else SettingStatus.DEFAULT
     assert registry.get_status(definition.key) == expected
+
+
+@settings(max_examples=_MAX_EXAMPLES, deadline=2000, suppress_health_check=[HealthCheck.too_slow])
+@given(ops=st.lists(st.sampled_from(("install", "reset", "get")), min_size=1, max_size=_MAX_OPS))
+def test_inv_011_last_install_wins(ops: list[str]) -> None:
+    """INV-011: every read returns the most recently installed registry, or a fresh default when the slot was empty.
+
+    The model tracks what the slot should hold after each operation: an install
+    sets it, a reset empties it, and a read either returns the installed object
+    by identity or creates the default that becomes the slot's new content. No
+    install in the sequence is ever lost.
+    """
+    saved = get_settings_registry(required=False)
+    try:
+        current: SettingsRegistry | None = None
+        for op in ops:
+            if op == "install":
+                current = SETTINGS_SLOT.new()
+                SETTINGS_SLOT.install(current)
+            elif op == "reset":
+                reset_settings_registry()
+                current = None
+            else:
+                read = get_settings_registry()
+                if current is None:
+                    assert isinstance(read, SettingsRegistry)  # a default was created
+                    current = read
+                else:
+                    assert read is current
+    finally:
+        restore_singleton(saved)

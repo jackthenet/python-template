@@ -1,18 +1,25 @@
 """Unit tests for the settings feature edge cases (docs/specs/settings.md).
 
-Covers EDGE-001 .. EDGE-029.
+Covers EDGE-001 .. EDGE-033.
 """
 
 from __future__ import annotations
 
 import tempfile
+import threading
 from collections.abc import Iterator
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ruamel.yaml import YAML
-from settings_test_helpers import EventCollector
+from settings_test_helpers import EventCollector, restore_singleton
+from singleton_install_test_helpers import (
+    SETTINGS_SLOT,
+    non_tracing_warnings,
+    widened_lazy_create_window,
+)
 
 from backend.eventbus import EventBus
 from backend.settings import (
@@ -23,6 +30,8 @@ from backend.settings import (
     SettingsRegistry,
     SliderSpec,
     YamlValueRepository,
+    get_settings_registry,
+    reset_settings_registry,
 )
 from backend.settings.exceptions import (
     SettingsNotFoundError,
@@ -34,6 +43,7 @@ from backend.settings.exceptions import (
 from backend.settings.repository import YamlTemplateRepository
 
 _EVENT_COUNT = 2
+_WINDOW_TIMEOUT = 5.0
 
 
 @pytest.fixture
@@ -335,3 +345,84 @@ def test_edge_028_invalid_template_name(registry: SettingsRegistry) -> None:
 def test_edge_029_slider_max_off_grid() -> None:
     with pytest.raises(SettingsValidationError):
         SliderSpec(min=0, max=11, step=2)
+
+
+# --- Public install operation (settings.md v5 EDGE-030 .. EDGE-033, REQ-026) ---
+
+
+def test_edge_030_install_over_nonempty_default(log_records: list[Any]) -> None:
+    """EDGE-030: installing over a held default — even the same instance again — replaces it and logs one WARNING."""
+    saved = get_settings_registry(required=False)
+    try:
+        reset_settings_registry()
+        first = SETTINGS_SLOT.new()
+        SETTINGS_SLOT.install(first)
+        log_records.clear()
+
+        second = SETTINGS_SLOT.new()
+        SETTINGS_SLOT.install(second)
+        assert get_settings_registry() is second
+        assert len(non_tracing_warnings(log_records)) == 1
+
+        log_records.clear()
+        SETTINGS_SLOT.install(second)  # the same instance a second time
+        assert get_settings_registry() is second
+        assert len(non_tracing_warnings(log_records)) == 1
+    finally:
+        restore_singleton(saved)
+
+
+def test_edge_031_install_then_reset_creates_default() -> None:
+    """EDGE-031: install, reset, read — the read returns a freshly created default, not the installed registry."""
+    saved = get_settings_registry(required=False)
+    try:
+        installed = SETTINGS_SLOT.new()
+        SETTINGS_SLOT.install(installed)
+        reset_settings_registry()
+        default = get_settings_registry()
+        assert isinstance(default, SettingsRegistry)
+        assert default is not installed
+    finally:
+        restore_singleton(saved)
+
+
+def test_edge_032_required_false_after_install() -> None:
+    """EDGE-032: required=False returns the installed registry, and after a reset returns None and creates nothing."""
+    saved = get_settings_registry(required=False)
+    try:
+        reset_settings_registry()
+        installed = SETTINGS_SLOT.new()
+        SETTINGS_SLOT.install(installed)
+        assert get_settings_registry(required=False) is installed
+
+        reset_settings_registry()
+        assert get_settings_registry(required=False) is None
+        assert get_settings_registry(required=False) is None  # the guarded read still creates nothing
+    finally:
+        restore_singleton(saved)
+
+
+def test_edge_033_concurrent_lazy_create(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EDGE-033: two threads that reach the empty slot at the same moment yield exactly one shared default."""
+    saved = get_settings_registry(required=False)
+    try:
+        reset_settings_registry()
+        reads: dict[str, SettingsRegistry | None] = {}
+
+        def _reader(name: str) -> None:
+            reads[name] = get_settings_registry()
+
+        with widened_lazy_create_window(monkeypatch, SettingsRegistry) as window:
+            first = threading.Thread(target=_reader, args=("first",))
+            first.start()
+            assert window.creating.wait(timeout=_WINDOW_TIMEOUT), "no lazy create was observed"
+            second = threading.Thread(target=_reader, args=("second",))
+            second.start()
+            first.join()
+            second.join()
+
+        assert isinstance(reads["first"], SettingsRegistry)
+        assert len(window.instances) == 1  # the create race is closed by the module lock
+        assert reads["first"] is reads["second"]
+    finally:
+        restore_singleton(saved)
