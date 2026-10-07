@@ -2862,3 +2862,189 @@ Still open defects S3.2 owns:
 Interlock lines changed by T-011 (for the later `crosscut/structlog-logging` merge): only
 `tests/acceptance/logging_coverage/test_inventory.py` lines **7–13, 18, 25–63, 77–104**;
 `tests/logging_coverage_test_helpers.py` untouched by this step.
+
+---
+
+## S3.1 — T-012 test derivation (AGENTS.md guidance contract: REQ-015 / AC-019) — 2026-10-07
+
+**Step.** S3.1, one atomic step: derive **T-012's** `tests_to_create` (one contract node) and confirm its
+RED. No implementation — **`AGENTS.md` was not touched** (it is T-012's Phase 4 source file), no other
+task's tests, no full suite, no push, no PROBLEMS.md entry, **no Phase 3 RED gate declared** (that is
+S3.2). Skill: `.agents/skills/test/SKILL.md`, Phase 3 FEATURE / CROSS-CUTTING section; category per
+AGENTS.md "Test Category Hierarchy" — **contract** (`tests/contract/`), matching spec §10.
+
+**First action: the branch was brought up to date with `main`** (`git merge main --no-edit` → merge commit
+**`b421d12`**), because `crosscut/structlog-logging` merged on 2026-10-07 (PR #74 → `c7a9119`) and this
+branch's tip (`c727a33`) predated it. Two conflicts, **both outside `src/`, `docs/specs/` and `tests/`**,
+both resolved by reading both sides — no abort:
+
+| Conflicted path | Resolution |
+|---|---|
+| `.github/task-runner/tasks.json` | **ours** (`git checkout --ours`). The file is the *active build environment*, and the two sides held two different DAGs: ours = `settings-public-registry-setter`, 12 tasks; `main`'s = `structlog-logging`, 7 tasks, already merged and therefore stale on `main`. Verified after resolution: `"feature": "settings-public-registry-setter"`, 12 `task_id` keys. |
+| `docs/workflow/PROBLEMS.md` | **union, append-only order**: `main`'s P-55…P-62 first, then this branch's P-63 and P-64, each entry keeping its `- **Date:**` line (the shared trailing line after the marker belonged to the last entry of both sides, so P-62's Date line was restored). No entry renumbered or reordered. |
+
+What the merge brought in that matters here: `AGENTS.md` was edited by `structlog-logging` T-007, so the
+`Using the …` heading line numbers were **re-measured after the merge** (below), and
+`src/backend/settings/registry.py` was rewritten. Spot-check that the merge did not perturb an earlier
+task's recorded RED: **T-001's `red_command` re-run → still `10 failed`**, identical to its recorded count.
+
+**Task object re-read from `.github/task-runner/tasks.json` (the file wins, P-63).** `feature_group`
+"guidance — AGENTS.md 'Using the …' sections"; `requirements` `[REQ-015]`; `acceptance_criteria`
+`[AC-019]`; `invariants` / `edge_cases` / `non_functional` empty; `tests_to_create` exactly the one node ID
+below; `red_command` == `green_command`; `allowed_files.source_files` = `AGENTS.md` only,
+`allowed_files.test_files` = this new file (the package `__init__.py` came from T-008); `dependencies`
+`[T-001…T-005, T-009, T-008]` (Phase 4 ordering only); `implementation_steps` — five bullets in the three
+existing sections **plus the two new sections**, "the contract test reads AGENTS.md and asserts each of the
+five install operations is named in its feature's section together with the WARNING semantics and the reset
+seam"; `design_constraints` — the **D13 DIVERGENCE** flag ("do not start this task before it is recorded").
+**Verified field-for-field against the brief — no invented task object.**
+
+**The D13 blocker is closed by Q-30 (ANSWERED, 2026-10-07, `docs/questions/settings-public-registry-setter.md`).**
+Answer: *add `## Using the Permissions Feature` and `## Using the Session Management Feature` to `AGENTS.md`,
+with D13's "no new section" clause amended in that change's own PR.* So AC-019 is satisfied **literally** and
+the witness asserts the five operations **each inside its own feature's section**. This section supersedes the
+T-011 hand-off row "T-012 — BLOCKED-USER — not derived".
+
+### Files created / modified
+
+| File | Change | Lines (after) |
+|---|---|---|
+| `tests/contract/singleton_install/test_guidance_contract.py` | **created** — `test_ac_019_agents_md_names_installer` + `_section` / `_bullets` / `_names_install_rule` / `_guidance_findings`, `_FEATURES` / `_WARNING` / `_REPLACE_MARKERS` / `_GENERIC_RESET` | 145 |
+| `tests/contract/singleton_install/__init__.py` | **not touched** (created by T-008) | — |
+| `AGENTS.md` | **not touched** — T-012's implementation file (Phase 4). Read read-only by the witness. | 1177 |
+| `docs/verification/settings-public-registry-setter.md` | this section | — |
+
+`git rev-parse --show-toplevel` =
+`C:/workspace/active-projects/python-template_kopie-worktrees/crosscut/settings-public-registry-setter` beside
+every measurement below.
+
+### Derivation: AC-019's three clauses → the witness
+
+AC-019: **Given** `AGENTS.md`, **When** its five "Using the …" sections are read, **Then** each names that
+feature's install operation, **And** each states that installing over a non-empty default logs a WARNING,
+**And** each keeps `reset_*()` as the test seam. REQ-015 fixes the granularity: **one bullet** in that
+feature's section naming all three. The witness therefore resolves, per feature, the section body
+(`## <heading>` up to the next `## `), then looks for **one bullet** carrying all three clauses.
+
+| Feature | Section heading asserted | Install op | Reset op | Source of the heading |
+|---|---|---|---|---|
+| settings | `Using the Settings Feature` (`AGENTS.md:814`) | `set_settings_registry` | `reset_settings_registry` | exists today |
+| eventbus | `Using the Event Bus Feature` (`:792`) | `set_event_bus` | `reset_event_bus` | exists today |
+| permissions | `Using the Permissions Feature` — **absent today** | `set_permission_service` | `reset_permission_service` | **Q-30** |
+| search | `Using the Search Feature` (`:972`) | `set_search_service` | `reset_search_service` | exists today |
+| sessionmanagement | `Using the Session Management Feature` — **absent today** | `set_session_service` | `reset_session_service` | **Q-30** |
+
+Function names come from the spec's §3.1 owner table (`docs/specs/settings-public-registry-setter.md:78-82`),
+not from the code — none of the five install operations exists yet. The WARNING clause is witnessed by the
+literal `WARNING` (AC-003's level) plus a replace marker (`non-empty` / `replace*`) — the two words REQ-015
+itself uses ("replace-plus-WARNING semantics"). The reset clause accepts the feature's own `reset_<slot>()`
+**or** the generic `reset_*()` spelling AC-019 uses. Nothing else about the prose is pinned: the test does not
+fix the bullet's wording, its position in the section, or the sections' other content, so it cannot dictate a
+style on T-012's implementation. `AGENTS.md` is resolved through `Path(__file__).resolve().parents[3]`, never
+the caller's CWD (P-57).
+
+### Collection (no import/collection error)
+
+`uv run pytest tests/contract/singleton_install/ --collect-only -q` → **9 tests collected in 0.46s**, no
+errors — `test_api_contract.py` 4, `test_lint_contract.py` 3, `test_performance_contract.py` 1,
+`test_guidance_contract.py` 1 (new).
+
+### RED gate for T-012 (observed; the Phase 3 gate itself is S3.2's)
+
+`red_command` verbatim:
+
+```
+uv run pytest tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer -v
+```
+
+**1 failed in 0.29s** — reproduced **3×** (two default random-order runs, one `-p no:randomly`).
+Failure mode: **`AssertionError`**, not a collection/import/fixture error. Exact assertion message:
+
+```
+AssertionError: AC-019 / REQ-015: AGENTS.md guidance for the five install operations:
+    - settings: no single bullet in '## Using the Settings Feature' names set_settings_registry() together with the replace-plus-WARNING semantics and reset_settings_registry() as the test seam ('Using the Settings Feature' has 12 bullet(s); none of them carries all three clauses)
+    - eventbus: no single bullet in '## Using the Event Bus Feature' names set_event_bus() together with the replace-plus-WARNING semantics and reset_event_bus() as the test seam ('Using the Event Bus Feature' has 6 bullet(s); none of them carries all three clauses)
+    - permissions: AGENTS.md has no '## Using the Permissions Feature' section, so it cannot name set_permission_service()
+    - search: no single bullet in '## Using the Search Feature' names set_search_service() together with the replace-plus-WARNING semantics and reset_search_service() as the test seam ('Using the Search Feature' has 8 bullet(s); none of them carries all three clauses)
+    - sessionmanagement: AGENTS.md has no '## Using the Session Management Feature' section, so it cannot name set_session_service()
+assert ['settings: n...on_service()'] == []
+```
+
+**Why this is a valid RED.** All five findings are assertion failures on unimplemented guidance: `grep -n
+"set_settings_registry\|set_event_bus\|set_search_service\|set_permission_service\|set_session_service"
+AGENTS.md` → **0 matches**, and `AGENTS.md`'s eight `Using the …` sections (Logging 767, Event Bus 792,
+Settings 814, User Management 841, Authentication 865, Mail Service 900, File Management 936, Search 972)
+contain **no** Permissions or Session Management section — exactly the D13 premise Q-30 resolved. The test
+reads a text file; there is no model instance, fixture or strategy to be invalid, and collection is clean.
+
+### Anti-vacuity probes (scratch `_scratch_t012_probe.py`, deleted before the commit)
+
+Out-of-band, as T-010/T-011 did — `_guidance_findings` was driven over synthetic `AGENTS.md` bodies to prove
+the witness is satisfiable and fails for the right reason:
+
+| Probe | Outcome |
+|---|---|
+| compliant synthetic `AGENTS.md` (five sections, one bullet each with all three clauses) | **PASS** — the witness is satisfiable |
+| compliant, but the bullet wrapped over three physical lines | **PASS** — the bullet parser joins continuations |
+| reset clause written generically as `reset_*()` | **PASS** — AC-019's own spelling is accepted |
+| install bullet present but no `WARNING` | **FAIL** (all five features) |
+| install bullet present, `WARNING` present, no reset seam | **FAIL** (eventbus) |
+| install bullet present, `WARNING` present, no replace/non-empty wording | **FAIL** (settings) |
+| the permissions clause parked in the **search** section instead of its own | **FAIL** (permissions) — section scoping is real, a bullet elsewhere does not satisfy "its feature's section" |
+| real `AGENTS.md` on this branch (the RED) | **FAIL** — the five findings above |
+
+### Gates run
+
+- `uv run ruff check tests/contract/singleton_install/test_guidance_contract.py` → **All checks passed!**
+  (after one fix inside the step: `RUF002` on an en dash in the module docstring — a trivial, self-introduced
+  violation, fixed and re-checked in the same execution). `uv run ruff format <same path>` → **1 file left
+  unchanged**. No repo-wide sweep (that is the Phase 5 gate).
+- `uv run complexipy tests/contract/singleton_install/test_guidance_contract.py --max-complexity-allowed 15`
+  → **All functions are within the allowed complexity** (max 13, `_bullets`; `_guidance_findings` 7) — the
+  CI `complexity` job P-56 lesson applied at derivation time, not at S5.2.
+- `uv run python scripts/check_traceability.py` → **PASS (822 matrix rows, 136 spec IDs, 817 test functions)**
+  — 817 = 816 without this file (measured by moving it aside) + the one derived function. The REQ-015 / AC-019
+  rows already exist from P.4 and cite this node ID, so referential integrity is now backed by a real function.
+- AC-017 architecture scan (`uv run pytest tests/unit/architecture/test_singleton_slots.py -q`) →
+  **1 failed, 2 passed**, still exactly **12 foreign singleton-slot write(s)** — the new test file plants no
+  private-slot write (it spells only public `set_*` / `reset_*` names).
+- No-regression, targeted: `uv run pytest tests/contract/singleton_install/ --deselect <new node>` →
+  **8 failed** (the pre-existing T-008/T-009/T-010 nodes, identical to their recorded counts); with the new
+  node → **9 failed**. The new node is the only state change in the package.
+- T-001's `red_command` re-run after the `main` merge → **10 failed**, unchanged (the merge rewrote
+  `src/backend/settings/registry.py`; T-001's recorded RED is unaffected).
+- `uv run mypy src/` not run — no `src/` file was touched by this step.
+- `mkdocs build --strict` not run — `AGENTS.md` is not part of the site (the site builds `userdocs/`), per
+  T-012's `design_constraints`; recorded rather than assumed.
+
+### Findings (for the Problem Log / after-workflow-optimization; no PROBLEMS.md entry written by this step)
+
+- **F-69 — the DAG's T-012 `completion_gates[0]` is unsatisfiable as written.** It says "RED observed … before
+  any implementation: **none of the five install operations exists yet**". For a *guidance* contract test the
+  RED is not "the operation does not exist" but "`AGENTS.md` does not name it" — the operations do not exist
+  either, but that fact is not what this witness reads. The gate is met for the right reason (measured above);
+  the wording conflates T-012's RED with T-001…T-005's. Same class as **P-55** (a DAG field that does not
+  match the witness's own scope).
+- **F-70 — `.github/task-runner/tasks.json` is a per-change file committed on `main`, so it conflicts on every
+  merge.** Two changes' DAGs collided (12 tasks vs 7) and the resolution required knowing that the file is the
+  *active build environment*, not a record. `docs/tasks/<name>.tasks.json` is the per-change record; the
+  task-runner copy is scratch. Worth a chore TODO: either gitignore the task-runner copy or document the
+  "take ours" rule in the git skill.
+- **F-71 — `docs/workflow/PROBLEMS.md` merge conflicts lose the trailing `- **Date:**` line.** Git's shared
+  trailing context made one Date line serve both sides' last entry, so a naive union silently drops a field.
+  Recipe: after unioning, check every entry still has its Date line (done here for P-62).
+
+### Not done in this step (deliberate)
+
+No `AGENTS.md` edit (T-012's Phase 4 implementation, including the two new sections and the D13 spec-amendment
+changelog line); no other task's tests derived; no full suite; no `tasks.json` status change (that is S4.4); no
+push; no PROBLEMS.md entry; **no Phase 3 RED gate declared**.
+
+### Hand-off for S3.2 (Phase 3 ruff + RED gate)
+
+T-012's derived node: `tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer`
+→ **1 failed (1 node)**, ruff clean on the path. The T-011 hand-off table's last row ("T-012 BLOCKED-USER — not
+derived") is superseded by this section: all 12 DAG tasks are now derived. S3.2 owns the Phase 3 gate over the
+whole set, the traceability rows for REQ-015 / AC-019 (`docs/verification/traceability.md`, the row citing
+`test_ac_019_agents_md_names_installer`), and — because this branch now contains `main` up to `ff48e90` —
+re-running every task's `red_command` against the merged state (T-001 spot-checked: unchanged at 10 failed).
