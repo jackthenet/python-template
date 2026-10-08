@@ -70,27 +70,25 @@ def isolated_event_bus() -> Iterator[None]:
     sees a fresh, handler-free bus: the scratch instance has no subscribers of
     its own, and callers that reset the slot first get a brand-new one.
 
-    The scratch install and the restore go through the feature's public install
-    operation (``set_event_bus``) — never a write to the private slot (settings
-    REQ-012 / AC-017); ``set_event_bus`` is lifecycle-neutral (EDGE-011), so the
+    The scratch install, the read and the restore all go through the feature's public API
+    (``get_event_bus`` / ``set_event_bus``) — never an import of, or an attribute reference to,
+    the private slot (settings REQ-012 / AC-017 for writes, REQ-013 / AC-018 for any reference).
+    ``get_event_bus()`` never returns ``None`` (it lazily creates, REQ-007), so the saved
+    instance is always a live bus and the restore is a single ``set_event_bus(saved)`` — the slot
+    is never left empty either way. ``set_event_bus`` is lifecycle-neutral (EDGE-011), so the
     parking semantics above are unchanged.
     """
-    from backend.eventbus import EventBus, get_event_bus, reset_event_bus, set_event_bus
-    from backend.eventbus import eventbus as _eventbus_module
+    from backend.eventbus import EventBus, get_event_bus, set_event_bus
 
-    saved = _eventbus_module._default_bus[0]
-    set_event_bus(EventBus())
+    saved = get_event_bus()
+    set_event_bus(EventBus())  # the scratch is never read back: the exit re-reads the slot
     try:
         yield
     finally:
-        scratch = _eventbus_module._default_bus[0]
-        if scratch is not None and scratch is not saved:
-            scratch.shutdown()
-        if saved is not None:
-            set_event_bus(saved)
-        else:
-            # REQ-004: the install operation never accepts None, so an empty restore
-            # goes through the feature's reset (idempotent here: the scratch bus was
-            # just shut down), and get_event_bus() then keeps the slot non-empty.
-            reset_event_bus()
-            get_event_bus()
+        # Whatever the block left installed (its own reset/install may have replaced the scratch)
+        # is shut down; ``get_event_bus()`` builds one if the block left the slot empty, so the
+        # shutdown branch is reached in that case too and the end state is the same.
+        installed = get_event_bus()
+        if installed is not saved:
+            installed.shutdown()
+        set_event_bus(saved)

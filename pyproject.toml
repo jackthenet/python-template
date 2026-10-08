@@ -192,6 +192,7 @@ select = [
     "SIM",
     "C4",
     "DTZ", # flake8-datetimez: naive datetime objects are a bug
+    "TID251", # flake8-tidy-imports: banned-api only (TID252/TID253 are out of scope)
 ]
 fixable = [
     "I",  # isort
@@ -211,6 +212,18 @@ ignore = [
 exclude = [
     "data/", "__pycache__", ".venv", "venv", "build", "dist",
 ]
+
+# REQ-013 / ADR-084: the lint half of the two guards against a foreign write to a feature's
+# private singleton slot. The keys MUST be fully qualified module paths — a bare-name key such as
+# `_registry` flags nothing (measured at P.5). Each `msg` names the feature's public install /
+# get / reset trio, which is what the TID251 report tells the author to call instead (AC-018).
+# The owning module's own slot statements are not reported: TID251 sees cross-module references.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"backend.settings.registry._registry".msg = "use backend.settings.set_settings_registry() / get_settings_registry() / reset_settings_registry()"
+"backend.eventbus.eventbus._default_bus".msg = "use backend.eventbus.set_event_bus() / get_event_bus() / reset_event_bus()"
+"backend.permissions.service._permission_service".msg = "use backend.permissions.set_permission_service() / get_permission_service() / reset_permission_service()"
+"backend.search.service._singleton".msg = "use backend.search.set_search_service() / get_search_service() / reset_search_service()"
+"backend.sessionmanagement.service._session_service".msg = "use backend.sessionmanagement.set_session_service() / get_session_service() / reset_session_service()"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

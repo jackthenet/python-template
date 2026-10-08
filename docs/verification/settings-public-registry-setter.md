@@ -6021,3 +6021,361 @@ Net effect: **−36 lines of duplicated subprocess code across 4 files**, and th
 - **No test weakened, narrowed, skipped or deleted; no assertion removed; no parametrised case dropped** — the four tests' node counts, subprocess shape and assertions are byte-identical to the S4.2 state.
 - **Open for S4.4**: the `allowed_files` amendment (F-84 + F-85a) in both DAG copies; T-007 `status: PENDING → VERIFIED`; the commit.
 - **Next: S4.4 (T-007) commit + VERIFIED + allowed_files amendment (F-84, F-85a).**
+
+## Phase 4 — T-008 RED (S4.1) — 2026-10-08
+
+**Step:** S4.1 (T-008) Pick task + confirm RED · **Objective:** confirm T-008 is ready, run its **verbatim** `red_command` in both orders, classify every non-passing node, capture the whole-repo ruff baseline S4.2 must not regress, and record RED. **No file was edited** except this record: `git status --porcelain` is empty before the runs and after them, `uv.lock` untouched (no `uv run` re-lock occurred, so no `git checkout -- uv.lock` was needed — PROBLEMS.md P-42). **No test edited, weakened, skipped or deleted; `pyproject.toml` untouched** (T-008 owns it, but it is S4.2's file, not this step's). No full suite, no coverage (Phase 5 gates). All pytest runs were **sequential** (the `tests/unit/test_settings_test_isolation.py` concurrency caveat).
+
+### Task readiness
+
+| Check | Result |
+|---|---|
+| branch | `crosscut/settings-public-registry-setter` (`git branch --show-current`), working tree clean at entry |
+| T-008 in `.github/task-runner/tasks.json` | `status: PENDING` — first entry; the DAG was read directly (task object dumped from the JSON), and its `tests_to_create` / `red_command` / `green_command` / `allowed_files` match the launch prompt exactly |
+| `dependencies` | `T-007` → **`VERIFIED`** → **T-008 is ready**. (DAG status snapshot at this moment: T-001…T-007 `VERIFIED`, T-008 `PENDING`, T-009 `VERIFIED`, T-010 `PENDING`, T-011 `VERIFIED`, T-012 `PENDING` — T-008 is the only dependency-locked PENDING task whose deps are all merged, so it is the correct pick) |
+| the three `tests_to_create` nodes exist | all three present in `tests/contract/singleton_install/test_lint_contract.py` — `test_ac_018_ruff_bans_private_slot_import:116`, `test_edge_009_public_api_not_banned:158`, `test_nfr_004_ruff_and_mypy_clean:184`; the package marker `tests/contract/singleton_install/__init__.py` exists (derived at S3.1) |
+| T-007's precondition for T-008 ("every private-slot import in the repository is migrated, so enabling TID251 cannot break the lint gate") | **holds** — a repo-wide grep for imports of the five owning modules (`from backend.<owner> import …` / `import backend.<owner>`) returns **only public names** (`SettingsRegistry`, `EventBus`, `set_permission_service`, …) and docstring text; no foreign module imports any of the five private slots, and no dotted write (`<module>._registry`-style) exists outside the owner modules |
+
+### The verbatim `red_command` — both orders
+
+```text
+uv run pytest tests/contract/singleton_install/test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import tests/contract/singleton_install/test_lint_contract.py::test_edge_009_public_api_not_banned tests/contract/singleton_install/test_lint_contract.py::test_nfr_004_ruff_and_mypy_clean -v
+```
+
+| Order | Result |
+|---|---|
+| default (`pytest-randomly`, `Using --randomly-seed=3216070721`) | **3 failed in 0.47 s** (an earlier identical run of the same command: 3 failed in 0.48 s) |
+| same command + `-p no:randomly` | **3 failed in 0.54 s** |
+
+`collected 3 items` in both runs — all three nodes exist and all three FAIL. Byte-for-byte the same three assertion messages in both orders: the RED is order-independent, not a `pytest-randomly` artefact.
+
+### Per-node classification
+
+| Node | Result | Classification | Evidence / root cause |
+|---|---|---|---|
+| `test_ac_018_ruff_bans_private_slot_import` | **FAILED** at `test_lint_contract.py:134` | **(i) genuine configuration gap** | `AssertionError: AC-018: importing backend.settings.registry._registry must be reported in both reference forms (the ImportFrom and the module-alias write), got 0: []` / `assert 0 == 2` — ruff run with the repository configuration returns **zero findings at all** for the five planted files (`[]`, not "wrong count"), i.e. the ban is inert: `TID251` is not in `[tool.ruff.lint].select` and no `banned-api` table exists. It fails on the **first** slot, so the `select`-contains-`TID251` assert and the repo/owner-module asserts in the same node were never reached |
+| `test_edge_009_public_api_not_banned` | **FAILED** at `test_lint_contract.py:178` | **(i) genuine configuration gap — via the node's own anti-vacuity guard** | `AssertionError: EDGE-009 anti-vacuity: the same ruff run must report TID251 for a private-slot import — while the ban is inert, 'the public API is not banned' proves nothing` / `assert []` `+ where [] = _tid251([], 'control_foreign_settings.py')`. The five "public API is not banned" asserts **passed**, but only vacuously (the whole run returned `[]`); the control file is what turns the vacuity into a failure. This is the test behaving exactly as designed — **not** a test-side defect |
+| `test_nfr_004_ruff_and_mypy_clean` | **FAILED** at `test_lint_contract.py:191` | **(i) genuine configuration gap** | `AssertionError: NFR-004 / REQ-013: [tool.ruff.lint.flake8-tidy-imports.banned-api] must configure these fully-qualified keys: ['backend.settings.registry._registry', 'backend.eventbus.eventbus._default_bus', 'backend.permissions.service._permission_service', 'backend.search.service._singleton', 'backend.sessionmanagement.service._session_service'] (a bare-name key flags nothing — measured)` — all five keys missing. The repo-sweep and `mypy src/` asserts in the same node were never reached, but both are independently GREEN today (baseline below), so nothing here belongs to another task |
+
+**No node classified (ii) test-side defect and none classified (iii) another task's pending witness.** All three failures have the single root cause T-008 exists to remove: the ruff configuration does not yet ban the five private slots (`TID251` unselected + no `banned-api` table). Unlike T-007's RED, no node is GREEN-by-design here — the set is 3/3 RED.
+
+### Measured probes behind the classification (read-only, nothing written inside the repository)
+
+| Probe | Command | Result | What it proves |
+|---|---|---|---|
+| the table is inert without `select` (spec §11 fact, re-measured on this branch) | `uv run ruff check . --no-cache --select TID251` | **All checks passed!** (exit 0) | With `TID251` selected but no `banned-api` table, ruff reports nothing — so S4.2 needs **both** halves; adding only the table would leave the witnesses RED |
+| `_REFERENCE_FORMS = 2` is achievable | `printf 'import backend.settings.registry as _mod\nfrom backend.settings.registry import _registry\n\n_ = _registry\n_mod._registry[0] = None\n' \| uv run ruff check --no-cache --output-format=json --select TID251 --config 'lint.flake8-tidy-imports.banned-api."backend.settings.registry._registry".msg="use set_settings_registry()"' -` | **2 TID251 findings** — row 2 col 39 (the `ImportFrom`) and row 5 col 1 (the module-alias subscript write), message `` `backend.settings.registry._registry` is banned: use set_settings_registry() `` | The test's expectation of **two** hits per planted file (both AC-018 reference forms) is real on this toolchain (`ruff 0.16.10`), not an over-specified assertion — **no test-side defect to decide on**. Source was piped over stdin (`-`) and the config was inline, so no fixture was written anywhere (the design constraint forbids planted files inside the repo) |
+| the message contract | (same probe) | ruff's message already embeds the banned path; the `.msg` text is appended after `is banned: ` | AC-018's `f"{module}.{slot}" in f["message"] and install in f["message"]` requires the `.msg` to **name the install operation** (e.g. `use set_settings_registry()`); the banned path comes for free |
+| EDGE-009's public imports resolve | `grep` of the five package `__init__.py` files | `set_settings_registry`, `set_event_bus`, `set_permission_service`, `set_search_service`, `set_session_service` all imported **and** in `__all__` | `_public_source`'s `from backend.<pkg> import <install>` and `from backend.<owner module> import <public symbol>` are real public API — EDGE-009 will not fail on an unresolvable import once the ban is live |
+| owner-module paths the test lints | `src/backend/settings/registry.py`, `src/backend/eventbus/eventbus.py`, `src/backend/permissions/service.py`, `src/backend/search/service.py`, `src/backend/sessionmanagement/service.py` | all five exist | `_ruff_findings(*owner_modules)` cannot hit ruff exit code 2 ("path not found"), which the helper's `returncode in (0, 1)` assert would turn into a false failure |
+
+### The whole-repo quality baseline S4.2 must not regress
+
+T-008's `green_command` carries the **repo-wide** sweep (it changes the lint configuration), so the pre-existing state **is** in scope for this task — recorded here as the baseline:
+
+| Gate | Command | Result at S4.1 |
+|---|---|---|
+| ruff (repo-wide) | `uv run ruff check .` | **`All checks passed!`** (exit 0) — zero findings, so **every** finding after S4.2 is this task's doing |
+| ruff format (repo-wide) | `uv run ruff format --check .` | **`358 files already formatted`** (exit 0) |
+| mypy (in `green_command` and asserted inside `test_nfr_004`) | `uv run mypy src/` | **`Success: no issues found in 84 source files`** (exit 0) |
+| deptry (in `green_command`, `pyproject.toml` is touched) | `uv run deptry .` | **`Success! No dependency issues found.`** (exit 0, scanning 90 files) |
+
+### Current ruff configuration (the state S4.2 edits)
+
+`pyproject.toml` — `[tool.ruff]` at line 166, `[tool.ruff.lint.flake8-quotes]` at 174, `[tool.ruff.lint]` at 180, `select = [` at 182.
+
+- `[tool.ruff.lint].select` (read with `tomllib`, 12 entries, **no `TID251`, no `TID` family at all**):
+  `I, E, W, B, F, UP, RUF, PL, Q, SIM, C4, DTZ`
+- `[tool.ruff.lint]` keys present: `exclude`, `fixable`, `flake8-quotes`, `ignore`, `select` — **there is no `flake8-tidy-imports` section and no `banned-api` table anywhere** (`tomllib` → `has_flake8_tidy_imports: false`, `banned-api: null`). The section has to be created, not extended.
+- `[tool.ruff.lint].ignore`: `PLR0913`, `E501`, `PLC0415` · `[tool.ruff]` top-level keys: `extend-exclude`, `indent-width`, `line-length`, `lint`, `target-version`.
+
+### State for the next step
+
+- **RED observed and recorded**: 3 failed / 0 passed in **both** orders, identical messages; root cause is the missing ruff configuration, exactly T-008's scope.
+- **The exact config delta the three witnesses require** (from the assertions, not the prose):
+  1. add **`"TID251"`** to `[tool.ruff.lint].select` — that rule only, not the `TID` family (design constraint: `TID252`/`TID253` findings are out of scope);
+  2. create **`[tool.ruff.lint.flake8-tidy-imports.banned-api]`** with the five **fully qualified** keys `backend.settings.registry._registry`, `backend.eventbus.eventbus._default_bus`, `backend.permissions.service._permission_service`, `backend.search.service._singleton`, `backend.sessionmanagement.service._session_service` (a bare-name key flags nothing — measured);
+  3. each key as a **table** (`entry = { msg = "…" }`) with a non-empty `msg` that **names that feature's public install operation** — `test_nfr_004` asserts `isinstance(entry, dict) and entry.get("msg")`, and `test_ac_018` asserts the install name appears in the emitted message;
+  4. nothing else in `pyproject.toml` (no other rule, no dependency table) — `allowed_files.source_files` is the ruff configuration only.
+- **Expected GREEN shape**: `test_ac_018` → 2 TID251 hits per planted file, `select` contains `TID251`, repo sweep and the five owner modules report none; `test_edge_009` → five public files clean **and** the control reported; `test_nfr_004` → five keys present with `.msg`, repo sweep clean, `mypy src/` clean. Plus the repo-wide `ruff check .` / `ruff format --check .` / `mypy src/` / `deptry .` gates, all GREEN at baseline today.
+- **No test-side defect to decide on** — `_REFERENCE_FORMS = 2` is confirmed achievable on `ruff 0.16.10`, and no repo file imports a banned slot, so enabling the guard should not force a single `noqa` (EDGE-008 is the scan test's rule, not ruff's).
+- **Next: S4.2 (T-008) implement + confirm GREEN.**
+
+---
+
+## Phase 4 — T-008 config delta landed, GREEN blocked by F-86 (S4.2) — 2026-10-08
+
+**Step:** S4.2 (T-008) Implement + confirm GREEN · **Objective:** make T-008's `green_command` GREEN by adding the `TID251` banned-api guard. Branch verified with `git branch --show-current` (`crosscut/settings-public-registry-setter`). **Nothing committed** (S4.4 commits and flips the DAG status). `git status --porcelain` at the end of the step: `pyproject.toml` + this record — **no `src/` file, no test file, no `uv.lock`** (no `uv run` re-lock occurred, so no `git checkout -- uv.lock` was needed — PROBLEMS.md P-42). All pytest runs **sequential** (the `tests/unit/test_settings_test_isolation.py` concurrency caveat). No `noqa`, no `per-file-ignores`, no `exclude` was added — the two findings ruff reports are reported here as **F-86**, not silenced.
+
+**Result: the config delta is complete and correct — every guard assert in the three witnesses now passes — but `green_command` is NOT fully GREEN.** Two pre-existing foreign **reads** of the eventbus slot in `tests/eventbus_test_helpers.py` (a file outside T-008's `allowed_files`) are reported by `TID251`, so the two witnesses' *repository-sweep* assert fails. This needs an orchestrator decision (F-86) before T-008 can go GREEN.
+
+### The exact `pyproject.toml` diff (`git diff --numstat` → `13 0 pyproject.toml`)
+
+```diff
+@@ [tool.ruff.lint] select (after "DTZ") @@
+     "DTZ", # flake8-datetimez: naive datetime objects are a bug
++    "TID251", # flake8-tidy-imports: banned-api only (TID252/TID253 are out of scope)
+ ]
+@@ after [tool.ruff.lint] exclude (new lines 216-226) @@
+ ]
+ 
++# REQ-013 / ADR-084: the lint half of the two guards against a foreign write to a feature's
++# private singleton slot. The keys MUST be fully qualified module paths — a bare-name key such as
++# `_registry` flags nothing (measured at P.5). Each `msg` names the feature's public install /
++# get / reset trio, which is what the TID251 report tells the author to call instead (AC-018).
++# The owning module's own slot statements are not reported: TID251 sees cross-module references.
++[tool.ruff.lint.flake8-tidy-imports.banned-api]
++"backend.settings.registry._registry".msg = "use backend.settings.set_settings_registry() / get_settings_registry() / reset_settings_registry()"
++"backend.eventbus.eventbus._default_bus".msg = "use backend.eventbus.set_event_bus() / get_event_bus() / reset_event_bus()"
++"backend.permissions.service._permission_service".msg = "use backend.permissions.set_permission_service() / get_permission_service() / reset_permission_service()"
++"backend.search.service._singleton".msg = "use backend.search.set_search_service() / get_search_service() / reset_search_service()"
++"backend.sessionmanagement.service._session_service".msg = "use backend.sessionmanagement.set_session_service() / get_session_service() / reset_session_service()"
++
+ [tool.pytest.ini_options]
+```
+
+The five entries use the **`"<fully.qualified.path>".msg = "…"` form and the exact `msg` strings of the spec's normative §3.4 block** (`docs/specs/settings-public-registry-setter.md:152-156`) — `tomllib` reads each as `{"msg": …}`, which is what `test_nfr_004`'s `isinstance(entry, dict) and entry.get("msg")` assert requires. Nothing else in `pyproject.toml` changed: no other rule in `select`/`fixable`/`ignore`/`exclude`, no `per-file-ignores`, no dependency table touched (deptry clean, below).
+
+### The verbatim `green_command` — both orders
+
+```text
+uv run pytest tests/contract/singleton_install/test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import tests/contract/singleton_install/test_lint_contract.py::test_edge_009_public_api_not_banned tests/contract/singleton_install/test_lint_contract.py::test_nfr_004_ruff_and_mypy_clean -v
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src/
+uv run deptry .
+```
+
+| Order | Result |
+|---|---|
+| default (`pytest-randomly`, `Using --randomly-seed=2919859313`) | **2 failed, 1 passed in 0.63 s** (S4.1 RED: 3 failed / 0 passed) |
+| same command + `-p no:randomly` | **2 failed, 1 passed in 0.71 s** — identical pair, identical assert |
+
+`collected 3 items` in both runs; the same two nodes fail in both orders, at the same line, with the same payload — the residual failure is deterministic, not a `pytest-randomly` artefact.
+
+### Per-node state (which assert each node now reaches)
+
+| Node | Result | Asserts that now PASS | The only failing assert |
+|---|---|---|---|
+| `test_ac_018_ruff_bans_private_slot_import` | **FAILED** at `test_lint_contract.py:149` | 2 `TID251` hits per planted file (**both reference forms**), each message naming the banned path **and** the feature's install operation; `"TID251" in [tool.ruff.lint].select`; the five owner modules' own slot statements not reported | `AC-018: the repository itself must report no TID251 violation` — `assert […] == []`, left holds **2** findings, both `tests/eventbus_test_helpers.py` rows 81 and 86 (**F-86**) |
+| `test_edge_009_public_api_not_banned` | **PASSED** | all five public-API files unflagged **and** the anti-vacuity control reported — EDGE-009 is now a real result, not a vacuous one | — (was RED at S4.1 via its own anti-vacuity guard) |
+| `test_nfr_004_ruff_and_mypy_clean` | **FAILED** at `test_lint_contract.py:199` | the five fully-qualified keys present; every entry a table with a non-empty `msg`; `mypy src/` exit 0 | `NFR-004: ruff check . must report no TID251 violation in the repository` — same 2 findings (**F-86**) |
+
+### The guard has teeth — direct probe (fixture in `$TMP`, never inside the repository)
+
+```text
+printf 'import backend.settings.registry as _mod\nfrom backend.settings.registry import _registry\n\n_ = _registry\n_mod._registry[0] = None\n' > $TMP/probe_foreign.py
+uv run ruff check --no-cache --config pyproject.toml --output-format=concise $TMP/probe_foreign.py
+```
+
+→ **2 `TID251` findings** — `probe_foreign.py:2:39` (the `ImportFrom`) and `probe_foreign.py:5:1` (the module-alias subscript write), message:
+
+```text
+`backend.settings.registry._registry` is banned: use backend.settings.set_settings_registry() / get_settings_registry() / reset_settings_registry()
+```
+
+The companion public-API probe (`from backend.settings import set_settings_registry` + `from backend.settings.registry import SettingsRegistry`) → **All checks passed!** — EDGE-009's width measured directly, on top of the witness's own anti-vacuity control.
+
+### Finding F-86 — `TID251` also flags the two foreign **reads** in `tests/eventbus_test_helpers.py` (outside T-008's `allowed_files`)
+
+```text
+uv run ruff check . --no-cache --output-format=concise
+tests\eventbus_test_helpers.py:81:13: TID251 `backend.eventbus.eventbus._default_bus` is banned: use backend.eventbus.set_event_bus() / get_event_bus() / reset_event_bus()
+tests\eventbus_test_helpers.py:86:19: TID251 `backend.eventbus.eventbus._default_bus` is banned: use backend.eventbus.set_event_bus() / get_event_bus() / reset_event_bus()
+Found 2 errors.
+```
+
+Both are **reads**, not writes — `isolated_event_bus()` parks the live bus:
+
+```python
+81:    saved = _eventbus_module._default_bus[0]
+86:        scratch = _eventbus_module._default_bus[0]
+```
+
+(the module alias imported at `:79`, `from backend.eventbus import eventbus as _eventbus_module`; T-007 migrated the two **writes** at the old `:77`/`:84` to `set_event_bus()` / `reset_event_bus()` and deliberately left these two reads — **F-34**: "A foreign **read** of a slot is not a violation — the guard targets writes and imports (EDGE-008) — so `eventbus_test_helpers.py`'s park/restore reads stay legal".)
+
+**Root cause of the conflict — the two guards do not have the same width.** The scan test (REQ-012/AC-017, F-34) targets *writes*; ruff's `TID251` bans the **reference** — an import *or* an attribute read — and has no read/write distinction and no import-only mode (measured: the two reads are reported). So AC-018's "**the repository itself reports no `TID251` violation**" and NFR-004's "`uv run ruff check .` reports no `TID251` violation in the repository" cannot hold while those two reads exist, whatever `pyproject.toml` says — short of exempting the file, which would be a hole in the very guard REQ-013 exists to install.
+
+**The spec's own pre-flight measurement of this is a false negative** (§10, `docs/specs/settings-public-registry-setter.md:327`): "Adding `TID251` to the `select` list introduces **no** pre-existing violation: `uv run ruff check --isolated --select TID src tests` reports none repo-wide (measured)". That probe ran with **no `banned-api` table**, and the spec/ADR's own measured fact is that without the table the rule is **inert** (ADR-084:34, spec §3.4 note) — so it could not have reported anything. Measured now, with the table live: **2 pre-existing findings**.
+
+**Proof that the config delta itself introduces nothing else** (read-only CLI probe, no file written):
+
+```text
+uv run ruff check . --no-cache --per-file-ignores "tests/eventbus_test_helpers.py:TID251"   →  All checks passed!
+```
+
+With that one file set aside, the whole repository is `TID251`-clean — so the five entries and the `select` addition need **zero** `noqa` anywhere else, and F-86 is exactly a 2-line, single-file problem.
+
+**Options for the orchestrator (T-008 cannot pick one — the file is not in its `allowed_files`):**
+
+| Option | Delta | Assessment |
+|---|---|---|
+| **A (recommended)** — migrate the two reads to the public getter, as an F-85a-style authorized correction to T-007's file (`tests/eventbus_test_helpers.py:81,86` → `get_event_bus()`), with the `allowed_files` amendment written into both DAG copies at S4.4 | 2 lines in one test helper | Keeps the guard whole and AC-018/NFR-004 literally true. **Caveat the orchestrator must weigh:** `get_event_bus()` **lazily creates** (no `required=False` form exists — `src/backend/eventbus/eventbus.py:249`), so `saved`/`scratch` can never be `None` and the helper's `is not None` branches become dead: an empty slot at entry would gain a bus instance at entry instead of at exit. That is a **D11** ("same save/restore semantics") judgement for the T-007 owner, not for T-008 — it needs the eventbus suite re-run, not just this file |
+| **B** — `lint.per-file-ignores = {"tests/eventbus_test_helpers.py" = ["TID251"]}` | 1 line in `pyproject.toml` | Rejected as an agent decision: it re-opens exactly the hole ADR-084/Q-16 closed, makes `test_ac_018`'s and `test_nfr_004`'s repo-sweep assert pass vacuously for that file, and contradicts T-008's design constraint "no `noqa` and no exemption". Would need a spec amendment to AC-018/NFR-004 |
+| **C** — `# noqa: TID251` on the two lines | 2 lines, test file | Rejected by this step's instruction (do not silence a finding) and by the same reasoning as B |
+| **D** — Spec Amendment to AC-018 / EDGE-008 recording that `TID251` flags foreign **reads** too, and stating which side wins | spec PR | The honest record of the divergence; needed in some form whichever of A/B is chosen, because F-34's "reads stay legal" is now measurably false for the lint guard (it stays true for the scan guard) |
+
+### Whole-repo quality baseline — unchanged except the two F-86 findings
+
+| Gate | Command | S4.1 baseline | After the config delta |
+|---|---|---|---|
+| ruff (repo-wide) | `uv run ruff check .` | **All checks passed!** (0 findings) | **Found 2 errors** — both `TID251`, both `tests/eventbus_test_helpers.py` (**F-86**); with that file set aside: **All checks passed!** |
+| ruff format (repo-wide) | `uv run ruff format --check .` | 358 files already formatted | **358 files already formatted** — unchanged |
+| mypy | `uv run mypy src/` | Success (84 files) | **Success: no issues found in 84 source files** |
+| complexipy | `uv run complexipy src tests --max-complexity-allowed 15` | clean | **All functions are within the allowed complexity.** |
+| traceability | `uv run python scripts/check_traceability.py` | PASS | **Traceability: PASS (822 matrix rows, 136 spec IDs, 817 test functions)** |
+| deptry | `uv run deptry .` | clean | **Success! No dependency issues found.** (90 files) |
+
+### Blast radius (targeted, not the full suite)
+
+```text
+uv run pytest tests/contract/singleton_install tests/acceptance/singleton_install tests/unit/singleton_install tests/property/singleton_install tests/unit/architecture -q
+```
+
+→ **4 failed, 31 passed in 10.31 s** — the failures are exactly: `test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` (**T-010**, pending), `test_guidance_contract.py::test_ac_019_agents_md_names_installer` (**T-012**, pending), and `test_lint_contract.py::test_ac_018…` / `::test_nfr_004…` (**T-008**, both at the repository-sweep assert only). `test_edge_009` moved RED → GREEN; **no new failure anywhere else** in the five directories.
+
+### State for the next step
+
+- **The ruff guard is installed and works**: `TID251` selected, five fully-qualified entries with the spec §3.4 `msg`s, teeth proven in both AC-018 reference forms, EDGE-009 + its anti-vacuity control GREEN, the five owner modules unflagged, and the rest of the repository clean with zero `noqa`.
+- **GREEN is one authorized 2-line decision away (F-86)** — the blocker is not the configuration and not a test-side defect in T-008's files.
+- **Files changed (uncommitted)**: `pyproject.toml` (+13 / −0) + this record. `src/`, all tests, `uv.lock` untouched.
+- **Open for S4.4**: the F-86 decision (and, if Option A, the `allowed_files` amendment for `tests/eventbus_test_helpers.py` alongside the pending F-84/F-85a ones), plus the F-34 wording correction in the spec/verification record.
+- **Next: S4.3 (T-008) refactor** — only once F-86 is resolved and the `green_command` is fully GREEN.
+
+## Phase 4 — T-008 F-86 correction (S4.2 re-entry) — 2026-10-08
+
+**Orchestrator decision F-86a: Option A** — migrate the two foreign **reads** in `tests/eventbus_test_helpers.py` to the feature's public API. This is an authorized correction outside T-008's `allowed_files` (S4.4 amends the DAG's `allowed_files` for T-008 with this reason, alongside the pending F-84/F-85a amendments). No `noqa`, no `per-file-ignores`, no `exclude`, no change to the `banned-api` table, no test weakened — Options B/C were rejected for re-opening the hole ADR-084/REQ-013 exists to close.
+
+### The diff (`git diff --numstat` → `17 18 tests/eventbus_test_helpers.py`)
+
+```diff
+-    from backend.eventbus import EventBus, get_event_bus, reset_event_bus, set_event_bus
+-    from backend.eventbus import eventbus as _eventbus_module
++    from backend.eventbus import EventBus, get_event_bus, set_event_bus
+ 
+-    saved = _eventbus_module._default_bus[0]
+-    set_event_bus(EventBus())
++    saved = get_event_bus()
++    scratch = EventBus()
++    set_event_bus(scratch)
+     try:
+         yield
+     finally:
+-        scratch = _eventbus_module._default_bus[0]
+-        if scratch is not None and scratch is not saved:
+-            scratch.shutdown()
+-        if saved is not None:
+-            set_event_bus(saved)
+-        else:
+-            # REQ-004: the install operation never accepts None, so an empty restore
+-            # goes through the feature's reset (idempotent here: the scratch bus was
+-            # just shut down), and get_event_bus() then keeps the slot non-empty.
+-            reset_event_bus()
+-            get_event_bus()
++        # Whatever the block left installed (its own reset/install may have replaced the scratch)
++        # is shut down; ``get_event_bus()`` builds one if the block left the slot empty, so the
++        # shutdown branch is reached in that case too and the end state is the same.
++        installed = get_event_bus()
++        if installed is not saved:
++            installed.shutdown()
++        set_event_bus(saved)
+```
+
+The module-alias import (`from backend.eventbus import eventbus as _eventbus_module`) is **deleted** — it is exactly the reference form AC-018 bans, and it was the only reason the two reads could exist. `reset_event_bus` drops out of the import list with the branch that used it (ruff `F401` would otherwise fire). The docstring's last paragraph now states the public-API rule for both guards.
+
+### D11 — the slot-empty case: old vs new, and why the suite cannot tell them apart
+
+`get_event_bus()` is the only public eventbus read and it **lazily creates** (no `required=False` form exists — `src/backend/eventbus/eventbus.py:249`), so both reads are always non-`None` and the `is not None` branches become dead. The two cases those branches covered:
+
+| Case | Old code (private-slot read) | New code (public read) | End state as observed by the suite |
+|---|---|---|---|
+| **slot empty at entry** (`saved` was `None`) | scratch installed; on exit scratch shut down → `reset_event_bus()` (slot → `None`, idempotent) → `get_event_bus()` builds a fresh default and installs it | `get_event_bus()` at entry builds a fresh default `B0` and installs it, so `saved = B0`; scratch installed; on exit scratch shut down → `set_event_bus(B0)` | **identical**: the slot is non-empty and holds a subscriber-free default `EventBus`; only the *moment* that instance was constructed differs (exit vs entry). Neither instance is ever published to, so no dispatch, no worker, no subscriber is observable either way |
+| **block left the slot empty** (`reset_event_bus()` / `EVENTBUS_SLOT.clear()` as the last act inside the block — `test_ac_013`…`test_ac_016`, `test_edge_006`/`test_edge_007`, the sessionmanagement and contract witnesses) | `scratch` read as `None` → shutdown skipped → `set_event_bus(saved)` | `get_event_bus()` builds a throwaway, installs it, it is shut down (never started — `EventBus()` does not start its worker; `publish()` does, event-bus.md EDGE-001), then `set_event_bus(saved)` | **identical**: the slot ends holding `saved`, the suite's live bus, with its subscribers intact |
+
+The helper's documented **parking semantics** are unchanged in both: scratch installed → block runs → scratch (or whatever the block installed) shut down → parked instance restored → **the slot is never left empty**, and the suite state after the block is the state before it (same live instance, same subscribers). The one behavioural difference is a log record, not a state: in the *slot-empty-at-entry* case the restore now emits the replace `WARNING` (previous = scratch, non-`None`) where the old `reset_event_bus()` path emitted only `DEBUG`s. That case is **unreachable in the current suite** — every `reset_event_bus()` / `EVENTBUS_SLOT.clear()` call site sits *inside* an `isolated_event_bus()` block, and the helper always restores a non-`None` `saved` — and no witness counts warnings across the helper's exit: the warning-counting tests (`test_ac_014_replace_logs_one_warning`, `test_ac_003`, `test_inv_002`, `test_edge_007`) clear the capture after the scratch install and assert only on their own installs, which run inside the block.
+
+### Commands + counts (run sequentially in this worktree — concurrent sessions make `tests/unit/test_settings_test_isolation.py` flaky)
+
+| Check | Command | Result |
+|---|---|---|
+| ruff, changed path | `uv run ruff check tests/eventbus_test_helpers.py` | **All checks passed!** |
+| ruff format, changed path | `uv run ruff format --check tests/eventbus_test_helpers.py` | **1 file already formatted** |
+| **ruff repo-wide sweep** | `uv run ruff check .` | **All checks passed!** (0 findings — F-86 gone, the config delta untouched) |
+| ruff format repo-wide | `uv run ruff format --check .` | **358 files already formatted** (baseline unchanged) |
+| **T-008 `green_command`** (verbatim from `.github/task-runner/tasks.json`) | `uv run pytest tests/contract/singleton_install/test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import tests/contract/singleton_install/test_lint_contract.py::test_edge_009_public_api_not_banned tests/contract/singleton_install/test_lint_contract.py::test_nfr_004_ruff_and_mypy_clean -v` | **3 passed** (default `pytest-randomly` order, seed 3666295121) |
+| same set, fixed order | `… -v -p no:randomly` | **3 passed** |
+| remaining `green_command` nodes | `uv run ruff check .` · `uv run ruff format --check .` · `uv run mypy src/` · `uv run deptry .` | All checks passed! · 358 files already formatted · Success: no issues found in 84 source files · Success! No dependency issues found. |
+| **guard teeth** (direct probe, fixture in `$TEMP`, never inside the repository) | `python -m ruff check --output-format=json --config pyproject.toml <planted>` | planted file: **2 × `TID251`** — row 2 (`from backend.eventbus.eventbus import _default_bus`) and row 5 (`_mod._default_bus[0] = None`), i.e. **both AC-018 reference forms**; public-API probe (`set_event_bus` / `get_event_bus` / `reset_event_bus`): **0 × `TID251`** (EDGE-009) |
+| anti-vacuity | `test_edge_009_public_api_not_banned` | **PASSED** — its `control_foreign_settings.py` still reports `TID251` in the same ruff run, so "the public API is not banned" is not vacuous |
+| **eventbus suites** | `uv run pytest tests/acceptance/eventbus tests/contract/eventbus tests/unit/eventbus tests/property/eventbus tests/integration/eventbus -q` | **37 passed** (`tests/integration/eventbus` exists and uses the helper, so it is in scope) — and **37 passed** again with `-p no:randomly` |
+| other helper consumers | `uv run pytest tests/acceptance/sessionmanagement tests/property/sessionmanagement tests/acceptance/logging_coverage -q` | **78 passed** — no regression where `isolated_event_bus()` is used outside the eventbus feature |
+| **blast radius** | `uv run pytest tests/contract/singleton_install tests/acceptance/singleton_install tests/unit/singleton_install tests/property/singleton_install tests/unit/architecture -q` | **2 failed, 33 passed** — the failures are exactly `tests/acceptance/singleton_install/test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` (**T-010**, pending) and `tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer` (**T-012**, pending). T-008's two former failures (`test_ac_018…`, `test_nfr_004…`) are GREEN; **no other failure** in the five directories |
+| quality gates | `uv run mypy src/` · `uv run complexipy src tests --max-complexity-allowed 15` · `uv run python scripts/check_traceability.py` · `uv run deptry .` | Success (84 files) · All functions are within the allowed complexity · **Traceability: PASS (822 matrix rows, 136 spec IDs, 817 test functions)** · Success! No dependency issues found. (90 files) |
+
+### For the Phase 6 review — the two guards differ in reach, and the spec §10 pre-flight was an inert-probe false negative
+
+- **Scan guard (REQ-012 / AC-017, `tests/unit/architecture/test_singleton_slots.py`) bans *writes*** to a foreign slot (F-34: "a foreign **read** of a slot is not a violation"). That statement stays true for the scan guard.
+- **Lint guard (REQ-013 / AC-018, ruff `TID251` + `banned-api`) bans the *reference*** — an import **or** an attribute read — with no read/write distinction and no import-only mode. The two guards are therefore **not co-extensive**: F-34's "reads stay legal" is measurably false for the lint half. This correction removes the only two foreign reads in the repository, so both guards hold with no exemption; a future foreign *read* is a lint failure, not a scan-test failure.
+- **Spec §10 (`docs/specs/settings-public-registry-setter.md:327`) pre-flight is a false negative**: "Adding `TID251` to the `select` list introduces **no** pre-existing violation: `uv run ruff check --isolated --select TID src tests` reports none repo-wide (measured)". That probe ran `--isolated`, i.e. with **no `banned-api` table** — and by the spec's / ADR-084's own measured fact the rule is **inert** without the table, so it could not report anything. Measured with the table live: **2 pre-existing findings**. Phase 6 / amendment item: a pre-flight probe for a lint rule must run with the repository configuration (`--config pyproject.toml`), as `test_ac_018` does.
+
+### State for the next step
+
+- **T-008 GREEN is now observed**: the verbatim `green_command` passes in both orders, and the repo-wide `ruff check .` sweep is back to **0 findings** with the guard fully armed (teeth in both AC-018 reference forms, EDGE-009 + its anti-vacuity control GREEN, the five owner modules unflagged, zero `noqa` anywhere).
+- **Files changed (uncommitted)**: `pyproject.toml` (+13 / −0, unchanged from the previous S4.2 execution), `tests/eventbus_test_helpers.py` (+17 / −18), this record. `src/`, all other tests, `uv.lock` untouched (no re-lock occurred).
+- **Open for S4.4**: flip T-008 to `VERIFIED`; amend its `allowed_files` to add `tests/eventbus_test_helpers.py` (reason: F-86a — the two foreign slot reads the new `TID251` guard reports); keep the pending F-84/F-85a amendments; record the F-34 wording correction (reads are legal for the scan guard, banned by the lint guard).
+- **Next: S4.3 (T-008) refactor.**
+
+## Phase 4 — T-008 refactor (S4.3) — 2026-10-08
+
+**Step:** S4.3 (T-008) Refactor — keep GREEN (the implement skill numbers this section S4.4; same step) · **Objective:** decide whether any behaviour-preserving structural improvement is warranted in T-008's changed paths, apply it if so, or take the no-op fast path. Branch verified with `git branch --show-current` (`crosscut/settings-public-registry-setter`). **Nothing committed** (S4.4 commits and flips T-008 to `VERIFIED`). No `src/` file, no `uv.lock` (`git status --porcelain` after the step lists `pyproject.toml`, `tests/eventbus_test_helpers.py`, `docs/workflow/PROBLEMS.md` + this record; no `uv run` re-lock occurred, so no `git checkout -- uv.lock` was needed — PROBLEMS.md P-42). **No full suite, no whole-repo ruff sweep, no coverage** (Phase 5 gates — the repo-wide `ruff check .` / `ruff format --check .` / `mypy` / `deptry` / `complexipy` results from S4.2 stand). All pytest runs were **sequential** (the `tests/unit/test_settings_test_isolation.py` concurrency caveat).
+
+T-008's changed paths are two files: `pyproject.toml` (+13 / −0, the `TID251` select entry + the `[tool.ruff.lint.flake8-tidy-imports.banned-api]` table) and `tests/eventbus_test_helpers.py` (the F-86a migration of the two foreign slot **reads**). `tests/contract/singleton_install/test_lint_contract.py` is **not** a refactor target — it is the AC-018 / EDGE-009 / NFR-004 contract witness, it passes, and it was untouched by this step (`git status`: absent).
+
+### Candidate 1 — the `pyproject.toml` config block: **NO-OP (zero file changes)**
+
+The implementation-side delta is 13 lines of declarative TOML: one `select` entry and a five-key `banned-api` table with one `.msg` each. There is no code to restructure — no duplication, no branch, no naming or boundary question. Checked against the file's own conventions rather than assumed:
+
+- **Pattern:** the table follows the sibling per-rule tables already in the file (`[tool.ruff.lint.flake8-tidy-imports.banned-api]` sits beside `[tool.ruff.lint.flake8-quotes]`, same `[tool.ruff.lint.<plugin>]` form, same `#`-comment-above-the-section style used by `[tool.ty.analysis]` and `[tool.ruff]`).
+- **Duplication:** the five keys restate the spec §3.4 owner table, which also appears in T-007's scanner and in `test_lint_contract.py::_OWNERS`. That is **not** collapsible duplication: TOML is static, and the three spellings are the two independent guards of ADR-084 (a lint config ruff reads, a scan test that reads source, a contract test that reads the config back). `test_nfr_004_ruff_and_mypy_clean` already asserts the table contains exactly the five fully-qualified keys and that every entry carries a `.msg`, so drift between the table and `_OWNERS` **fails a test** — the redundancy is guarded, not a hazard.
+- **The 5-line comment:** kept. It records the two measured facts a future editor would otherwise re-derive at runtime (a bare-name key flags nothing; the owning module's own slot statements are not reported), plus the AC-018 `msg` contract. Shortening it would delete the only in-place explanation of why the keys are fully qualified.
+
+### Candidate 2 — the single-use `scratch` local in `isolated_event_bus`: **APPLIED (1 line)**
+
+The F-86a rewrite left `scratch = EventBus()` / `set_event_bus(scratch)` while the `finally` deliberately re-reads the slot (`installed = get_event_bus()`) instead of using `scratch` — the block's own reset/install may have replaced it. The binding was therefore written once and never read, and its name implied a later comparison that does not exist. Collapsed to one line with an inline note:
+
+```diff
+     saved = get_event_bus()
+-    scratch = EventBus()
+-    set_event_bus(scratch)
++    set_event_bus(EventBus())  # the scratch is never read back: the exit re-reads the slot
+     try:
+```
+
+**Behaviour-preserving by construction:** the operations and their order are identical (construct the scratch, then install it); only the unused local name disappears. No test, assertion, count, or docstring claim changed — the docstring's "a scratch instance is installed in the slot" and the `finally` comment's "its own reset/install may have replaced the scratch" remain true. `git diff --numstat` for the file moves from `17 18` (S4.2) to **`16 18`**.
+
+### Candidate 3 — the throwaway bus on the empty-slot exit path: **REJECTED (no public non-creating read exists)**
+
+`finally: installed = get_event_bus()` builds and installs a throwaway instance when the block left the slot empty, purely to shut it down. It is not removable through the public API: `get_event_bus()` lazily creates and has no `required=False` form (`src/backend/eventbus/eventbus.py:249`, D11), so the only way to avoid the throwaway is a direct read of `backend.eventbus.eventbus._default_bus` — exactly the reference form AC-018 / REQ-013 now bans, and the F-86a decision (Option A) exists to close. The throwaway is never published to, so its worker never starts (event-bus.md EDGE-001) and the end state is unchanged; the cost is already documented in the `finally` comment.
+
+### Candidate 4 — unifying `isolated_event_bus` with the settings save/scratch/restore helpers: **NO-OP (already rejected at T-007 S4.3, unchanged)**
+
+The two helpers still share only a shape; they are two features' install operations with different semantics (settings REQ-026 vs event-bus REQ-008, parking + shutdown vs definition/value preservation). T-008 changed nothing that weakens that rejection, so it stands as recorded.
+
+### Gates (re-run after the edit)
+
+| Gate | Command | Result |
+|---|---|---|
+| **T-008 `green_command` nodes** (the whole file, default `pytest-randomly`) | `uv run pytest tests/contract/singleton_install/test_lint_contract.py -q` | **3 passed in 0.90 s** |
+| same, fixed order | `… -q -p no:randomly` | **3 passed in 0.98 s** |
+| ruff (changed paths) | `uv run ruff check tests/eventbus_test_helpers.py pyproject.toml` | **All checks passed!** |
+| ruff format (changed path) | `uv run ruff format --check tests/eventbus_test_helpers.py` | **1 file already formatted** |
+| the helper's direct consumers (eventbus feature) | `uv run pytest tests/acceptance/eventbus tests/contract/eventbus tests/unit/eventbus tests/property/eventbus tests/integration/eventbus -q` | **37 passed in 5.13 s** — identical to the S4.2 record |
+| the helper's other consumers | `uv run pytest tests/acceptance/sessionmanagement tests/property/sessionmanagement tests/acceptance/logging_coverage -q` | **78 passed in 12.49 s** — identical to the S4.2 record |
+
+### State for the next step
+
+- **Refactor decision: applied (one 1-line simplification), config side a no-op.** GREEN is kept: the three contract nodes pass in both orders, and the two consumer sets reproduce the S4.2 counts exactly (37 and 78 passed).
+- **Files changed by this step (1)**: `tests/eventbus_test_helpers.py` (`16 18` vs S4.2's `17 18`). `pyproject.toml` is byte-identical to the S4.2 state; the contract witness, the scanner and all other tests are untouched.
+- **No test weakened, narrowed, skipped or deleted; no assertion removed; no `noqa` / `per-file-ignores` / `exclude` added; the `banned-api` table is unchanged.**
+- **Open for S4.4**: flip T-008 to `VERIFIED` in `.github/task-runner/tasks.json` + `docs/tasks/settings-public-registry-setter.tasks.json`; amend its `allowed_files` to add `tests/eventbus_test_helpers.py` (F-86a); keep the pending F-84/F-85a amendments; record the F-34 wording correction; the commit.
+- **Next: S4.4 (T-008) commit + `VERIFIED` + `allowed_files` amendment.**
