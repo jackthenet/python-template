@@ -4347,3 +4347,12 @@ GREEN. `uv run ruff check .` and the full `--cov` suite were **not** run (Phase 
   only modified paths. `Temp/f72_probe.py` deleted.
 - **Next: S4.3 (T-002 refactor)** — the implementation is already the minimum shape; a no-op fast-path is
   plausible if nothing structural is found.
+
+### Phase 4 — refactor no-op records (S4.3, T-001 and T-002)
+
+Both refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
+
+| Task | Verdict | What was inspected / rejected | GREEN re-confirmed |
+|---|---|---|---|
+| T-001 | no structural changes needed | The three `with _registry_lock:` blocks (1–3 lines each) were **not** extracted into a helper — it would hide the lock scope that the F-57 RLock rationale and NFR-003 ("WARNING after release") depend on. Naming matches the sibling accessors and the `eventbus` singleton pattern; boundaries stay inside `backend/settings/`; lock class untouched (F-57 deferred to review). | 10 passed (`green_command`, all 10 T-001 node IDs); `mypy src/` clean |
+| T-002 | no structural changes needed | A shared `_swap_slot()` for the two read/swap sites was **rejected** (two call sites, different semantics: lazy create must not warn per REQ-007, install must per REQ-002 — an unrequested abstraction). The one duplication S4.2 introduced was already extracted (`_resolve_max_queue_size()`, both call sites use it). `has()` + `get_value()` in that helper is not a defect: `get_value()` raises on an unregistered key. F-74/F-75/F-57 left as scoped/open. | 6 passed (`green_command`, all 6 T-002 node IDs); 28 passed over `tests/acceptance/eventbus tests/unit/eventbus`; `mypy src/` clean |
