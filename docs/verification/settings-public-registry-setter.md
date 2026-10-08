@@ -4348,15 +4348,16 @@ GREEN. `uv run ruff check .` and the full `--cov` suite were **not** run (Phase 
 - **Next: S4.3 (T-002 refactor)** — the implementation is already the minimum shape; a no-op fast-path is
   plausible if nothing structural is found.
 
-### Phase 4 — refactor no-op records (S4.3, T-001..T-003)
+### Phase 4 — refactor no-op records (S4.3, T-001..T-004)
 
-All three refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
+All four refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
 
 | Task | Verdict | What was inspected / rejected | GREEN re-confirmed |
 |---|---|---|---|
 | T-001 | no structural changes needed | The three `with _registry_lock:` blocks (1–3 lines each) were **not** extracted into a helper — it would hide the lock scope that the F-57 RLock rationale and NFR-003 ("WARNING after release") depend on. Naming matches the sibling accessors and the `eventbus` singleton pattern; boundaries stay inside `backend/settings/`; lock class untouched (F-57 deferred to review). | 10 passed (`green_command`, all 10 T-001 node IDs); `mypy src/` clean |
 | T-002 | no structural changes needed | A shared `_swap_slot()` for the two read/swap sites was **rejected** (two call sites, different semantics: lazy create must not warn per REQ-007, install must per REQ-002 — an unrequested abstraction). The one duplication S4.2 introduced was already extracted (`_resolve_max_queue_size()`, both call sites use it). `has()` + `get_value()` in that helper is not a defect: `get_value()` raises on an unregistered key. F-74/F-75/F-57 left as scoped/open. | 6 passed (`green_command`, all 6 T-002 node IDs); 28 passed over `tests/acceptance/eventbus tests/unit/eventbus`; `mypy src/` clean |
 | T-003 | no structural changes needed (zero file changes) | Inspected `src/backend/permissions/service.py` + `__init__.py` only. **Rejected:** (a) a shared slot-swap helper for the three `with _permission_service_lock:` blocks (1–3 lines each, three different semantics — lazy create writes without a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69 leaf-lock rule and NFR-003 ("WARNING only after release") are stated in terms of; (b) extracting the `PermissionService(...)` construction out of `get_permission_service()` — one call site, and it would move the constructor (the only place this module could reach another module's lock) out of sight of the lock; (c) shortening the 12-line comment at the lock — it is the measured evidence that the plain `Lock` (not `RLock`) is safe here; (d) any rename — `_permission_service_lock` follows its own slot name exactly as `_registry_lock` / `_default_bus_lock` do, and `previous` matches the `eventbus` installer. Verified no fourth writer of `_permission_service` exists in `src/` (all three slot writes are guarded), the `__init__.py` re-export is RUF022-sorted, and the shape constraints hold: plain `Lock`, direct slot write under it, concrete `slow_threshold_ms=5` (never `slow_threshold_setting`), `get_`/`reset_` untraced, catalog untouched. | 6 passed (`green_command`, all 6 T-003 node IDs, 1.24s); 73 passed / 1 failed over the five permissions test dirs — the failure is **F-76** (T-002's, not T-003's, unchanged from S4.2); `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
+| T-004 | no structural changes needed (zero file changes) | Inspected `src/backend/search/service.py` + `__init__.py` only — the 44 inserted lines are the settings/permissions trio pattern already in `HEAD`. **Rejected:** (a) a shared slot-swap helper for the three `with _singleton_lock:` blocks (1–3 lines each, three different semantics — lazy create writes **without** a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69/P-71 leaf-lock rule and NFR-003 ("WARNING only after the release") are stated in terms of, and a cross-module version would push slot mechanics into `shared/`, which the architecture rules keep deliberately small; (b) hoisting the `SearchService(...)` construction out of `get_search_service()`'s guarded section (one call site, and the constructor is the only place this module could reach another module's lock — the S4.1 probe's `--naive` control deadlocks, so it must stay visible under the lock, not behind a factory); (c) shortening the 12-line comment at `_singleton_lock` — it is the measured leaf verdict plus the self-deadlock rule for the plain `Lock` (no `RLock` upgrade); (d) extracting the WARNING text to a constant or reusing `reset_search_service()`/`get_search_service()` inside the installer — one call site each, and either call under the non-reentrant lock self-deadlocks (F-57 / P-69); (e) any rename — `set_search_service`, `_logger = get_logger("search")` and `previous` match `set_settings_registry` / `set_permission_service` exactly. Re-verified the shape constraints are intact: the **existing** `_singleton_lock` guards all three slot operations (no second lock), the guarded sections stay leaves, the replace WARNING is emitted after the release, the lazy create is a direct slot write with no WARNING, `@logged(slow_threshold_ms=5)` is a concrete threshold, EDGE-022 (the replaced service keeps its sources) is untouched, and the `__init__.py` re-export is RUF022-sorted. | 7 passed (`green_command`, all 7 T-004 node IDs, 1.19s — re-run even though the step changed zero source files, per P-70); 1 passed (`tests/acceptance/permissions/test_composition_wiring.py`, the P-71 canary); 93 passed over the five search test dirs; `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
 
 ---
 
@@ -4746,3 +4747,171 @@ Not run here (Phase 5): the full suite with `--cov`, `ruff check .`, `ruff forma
 
 - **Next: S4.1 (T-004)** — the search feature's `set_search_registry()` + module lock, same trio pattern.
 
+
+---
+
+## Phase 4 — T-004 RED (S4.1)
+
+**Date:** 2026-10-08 · **Step:** S4.1 (T-004) · **Task:** T-004 `search` — `set_search_service()` guarded by the module's **existing** `_singleton_lock`; re-export it · **Worktree:** `python-template_kopie-worktrees/crosscut/settings-public-registry-setter` (branch `crosscut/settings-public-registry-setter`, `HEAD` = `03b0df1`, T-001/T-002/T-003 `VERIFIED` + the F-76 fix `762b85a`).
+
+No implementation, no commit, no full-suite run in this step. The only file written is this record.
+
+### RED gate — the DAG's `red_command`, verbatim
+
+```text
+uv run pytest tests/acceptance/search/test_singleton_install.py::test_ac_038_set_search_service_installs_default tests/acceptance/search/test_singleton_install.py::test_ac_039_replace_logs_one_warning tests/acceptance/search/test_singleton_install.py::test_ac_040_concurrent_install_read_reset tests/acceptance/search/test_singleton_install.py::test_ac_041_install_then_reset_then_default tests/unit/search/test_search_edges.py::test_edge_022_install_over_nonempty_default tests/unit/search/test_search_edges.py::test_edge_023_concurrent_install_and_lazy_create -v
+```
+
+**Result: `6 failed in 0.69s`** — 0 passed, **0 errors, 0 skipped, 0 collection/import/setup failures**. Identical node set and count to the Phase 3 S3.2 gate (6 failed).
+
+| Node | Failure reason |
+|---|---|
+| `test_ac_038_set_search_service_installs_default` | `AttributeError: module 'backend.search' has no attribute 'set_search_service'` (`singleton_install_test_helpers.py:112`, `SEARCH_SLOT.install`) |
+| `test_ac_039_replace_logs_one_warning` | same `AttributeError` (first `SEARCH_SLOT.install`) |
+| `test_ac_040_concurrent_install_read_reset` | `AssertionError: install/read threads raised: [AttributeError("module 'backend.search' has no attribute 'set_search_service'")]` — the thread collector; the lazy-read half of the test is GREEN (F-16) |
+| `test_ac_041_install_then_reset_then_default` | same `AttributeError` |
+| `test_edge_022_install_over_nonempty_default` | same `AttributeError` |
+| `test_edge_023_concurrent_install_and_lazy_create` | same `AttributeError` |
+
+**RED validity:** every failure is an `AttributeError` raised inside the test body by the slot helper resolving `set_search_service` by attribute at call time — exactly one `AssertionError` wrapping it in the thread witness. No `ValidationError`/`ValueError` from test-data construction, no import or collection error, no fixture error. The missing name is the only cause: `backend.search` exports `get_search_service` / `reset_search_service` but no install operation.
+
+### Lock-shape measurement (P-69 rule 2 — measurement only, no code change)
+
+Static reading of `src/backend/search/service.py`:
+
+- `_singleton_lock` (`:547`) is a **plain `threading.Lock()`** — non-reentrant. It is taken by `get_search_service()` (`:558`, lazy create written **directly** to `_singleton[0]` inside the lock) and `reset_search_service()` (`:571`).
+- The guarded section of the lazy create is `SearchService(event_bus=…, settings_registry=…, permission_service=…)` and **nothing else**: `SearchService.__init__` (`:331-344`) only stores its arguments, builds an instance `RLock`/dict and a `ThreadPoolExecutor`. It resolves **no** other module's singleton — the settings read is at `:455` (`_registry()` → `get_settings_registry(required=False)`) on the **query** path, and the event bus is only touched in `_publish` (`:493-497`) through an injected publisher. `@logged_class` skips `__init__`, so no traced-record emission happens under the lock either.
+- Reverse direction: nothing under the settings `_registry_lock`, the eventbus `_default_bus_lock` or the permissions module lock reaches `get_search_service()` — the only in-`src` caller is `src/main.py:212`, which resolves its three arguments **before** the call.
+
+**Probe (throwaway `Temp/lockprobe-t004/probe_search_lock.py`, run in the worktree, deleted afterwards).** Two threads, both slots forced empty, both constructors widened (`time.sleep(1.0)` before the real `__init__`) so the rendezvous is deterministic; thread A `get_search_service()` (holds search `_singleton_lock`), thread B `get_settings_registry()` (holds settings `_registry_lock` and, **inside it**, calls `get_search_service()` — the reverse edge, so a cross-module ABBA is reachable if the search guarded section reaches out); `join(15)`, deadlock = a thread still alive **and** both slots empty.
+
+```text
+uv run python …/probe_search_lock.py --naive      # control: the guarded section resolves the settings singleton under the search lock
+MODE=--naive deadlocked=True search_slot_empty=True settings_slot_empty=True both_slots_empty=True
+→ DEADLOCK (the probe has teeth)
+
+uv run python …/probe_search_lock.py --real       # the code as it stands: SearchService() built under the lock, nothing else
+MODE=--real deadlocked=False search_slot_empty=False settings_slot_empty=False
+→ no deadlock, both singletons built
+
+uv run python …/probe_search_lock.py --loginlock  # the naive installer shape: a WARNING emitted INSIDE the search lock
+MODE=--loginlock deadlocked=False search_slot_empty=False settings_slot_empty=False
+→ no deadlock, both singletons built
+```
+
+The control deadlocks first, so the two PASSes mean something. `--loginlock` additionally measures that a log emission under the search lock reaches neither the settings `_registry_lock` nor the logging `_setup_lock`: `@logged(slow_threshold_ms=5)` resolves its threshold at decoration time (a concrete value never calls `get_settings()`, `_decorator.py:64-66`), and `get_logger().warning()` never enters `backend.settings`.
+
+**Lock-order verdict for S4.2 (T-004):**
+
+1. **Search's existing `_singleton_lock` is a leaf** with respect to the other singleton-owning modules — the lazy create reaches no other module's singleton lock, and no other module's guarded section reaches search. Extending it to the install operation creates **no cycle**; no new lock, no `RLock` upgrade (ADR-006/ADR-084, REQ-006).
+2. **Required shape:** `set_search_service()` takes `_singleton_lock`, reads the old slot and writes the new one inside it, **releases, then** logs the single replace WARNING (the DAG's "one WARNING after the lock"). Lock-safe either way per the probe, but emitting inside the lock would add work to the guarded section — P-71 rule (1) — and would nest the logging pipeline under a slot lock for no benefit.
+3. **Self-deadlock hazard:** `_singleton_lock` is a plain `Lock`, so `set_search_service()` MUST NOT call `get_search_service()` or `reset_search_service()` while holding it (same-thread re-entry hangs — the P-69/F-57 shape). The replace check reads `_singleton[0]` directly, like `get_search_service()` already does.
+4. **P-71 canary:** T-004's `green_command` does not import `src/main.py`, so S4.2/S4.3 must also run `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -q` (the only witness that imports the composition root) plus the search regressions `tests/contract/search/test_search_contracts.py` and `tests/acceptance/search/test_feature_sources.py` (F-15: the DAG names `test_search_contract.py`, which does not exist).
+
+**Next: S4.2 (T-004)** — `green_command`: `uv run pytest tests/acceptance/search/test_singleton_install.py::test_ac_038_set_search_service_installs_default tests/acceptance/search/test_singleton_install.py::test_ac_039_replace_logs_one_warning tests/acceptance/search/test_singleton_install.py::test_ac_040_concurrent_install_read_reset tests/acceptance/search/test_singleton_install.py::test_ac_041_install_then_reset_then_default tests/unit/search/test_search_edges.py::test_edge_022_install_over_nonempty_default tests/unit/search/test_search_edges.py::test_edge_023_concurrent_install_and_lazy_create tests/acceptance/search/test_search.py::test_ac_030_traced_no_query_in_logs -v`
+
+
+### Phase 4 — T-004 GREEN (S4.2) — 2026-10-08
+
+**Objective (T-004, verbatim DAG steps obeyed):** add `set_search_service()` guarded by the module's **existing** `_singleton_lock` (no second lock), keep the lazy create a direct slot write under it, and re-export the new function.
+
+#### GREEN gate — `green_command` verbatim
+
+`uv run pytest tests/acceptance/search/test_singleton_install.py::test_ac_038_set_search_service_installs_default tests/acceptance/search/test_singleton_install.py::test_ac_039_replace_logs_one_warning tests/acceptance/search/test_singleton_install.py::test_ac_040_concurrent_install_read_reset tests/acceptance/search/test_singleton_install.py::test_ac_041_install_then_reset_then_default tests/unit/search/test_search_edges.py::test_edge_022_install_over_nonempty_default tests/unit/search/test_search_edges.py::test_edge_023_concurrent_install_and_lazy_create tests/acceptance/search/test_search.py::test_ac_030_traced_no_query_in_logs -v`
+→ **7 collected, 7 passed, 0 failed** (1.18s). RED → GREEN for all six install nodes: the five
+`AttributeError: module 'backend.search' has no attribute 'set_search_service'` and the one `AssertionError`
+thread-collector wrapping of the same error are gone; the tracing regression witness `test_ac_030` stays GREEN.
+Determinism re-check: the same seven nodes with `-p no:randomly` → **7 passed in 1.26s**.
+
+#### Diff summary (no commit; working tree only)
+
+```text
+ src/backend/search/__init__.py |  4 +++-
+ src/backend/search/service.py  | 43 ++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 44 insertions(+), 3 deletions(-)
+```
+
+What the implementation is (`src/backend/search/service.py`):
+
+- **No new lock.** The module's existing `_singleton_lock` now guards all three slot operations — `get_search_service()`
+  (lazy create), the new `set_search_service()` and `reset_search_service()` — as one mutually exclusive set
+  (REQ-006, ADR-084). The comment at the lock records the measured leaf verdict and the self-deadlock rule.
+- The lazy create stays a **direct write to the module's own slot** under the lock and never calls the installer
+  (REQ-007), so a first read emits no WARNING and no second traced entry/exit pair.
+- `set_search_service(service: SearchService) -> None`, decorated `@logged(slow_threshold_ms=5)` (**concrete**
+  threshold only — `slow_threshold_setting` would read settings inside/around the guarded section): read-and-swap
+  under the lock, then **exactly one** `_logger.warning("search: shared default search service replaced")`
+  **after** the release, and only when the slot was non-empty (REQ-002, NFR-003). `_logger = get_logger("search")`
+  is the module's first logger (new import `get_logger` from `backend.logging`).
+- No event (REQ-009), no `isinstance` and no new exception (REQ-005), no lifecycle call and **no
+  register/unregister on either instance** (REQ-003, EDGE-022 — `test_edge_022` asserts the replaced service keeps
+  its source and the replacement has none), parameter never `None` (REQ-004).
+- `src/backend/search/__init__.py`: `set_search_service` added to the `from backend.search.service import (...)`
+  block, to `__all__` (RUF022 order: after `reset_search_service`) and to the module docstring's singleton line.
+- Untouched, as required: `tests/search_test_helpers.py` (read-only), every other test file, `src/main.py`,
+  `src/backend/settings/`, `src/backend/eventbus/`, `src/backend/permissions/`, `src/backend/sessionmanagement/`,
+  `pyproject.toml`, `AGENTS.md`. **No test was changed by this step.**
+
+#### Leaf-lock note (the S4.1 probe verdict carried into code)
+
+Search is the one singleton-owning module that already had a module lock, so T-004 **extends its scope** instead of
+adding one — a second lock would be a deadlock risk (ADR-084). `_singleton_lock` stays a **plain `threading.Lock`**
+(not an `RLock`) because the guarded sections are **leaves**: `SearchService.__init__` only stores its arguments
+(the settings read is on the query path, `_registry()`; the bus is only touched through an injected publisher), and
+no other module's guarded section reaches `get_search_service()`. The S4.1 probe measured the naive shape
+(resolving the settings singleton while holding `_singleton_lock`) **deadlocking** while the real shape passes, so
+the guarded section was **not** widened (P-71 rule 1): the replace WARNING is emitted **after** the release, and
+`set_search_service()` calls neither `get_search_service()` nor `reset_search_service()` while holding the
+non-reentrant lock (the F-57 / P-69 self-deadlock shape). GREEN confirms the shape: `test_ac_040` (8 concurrent
+lazy reads → exactly **1** constructed service; 18 install/read/reset threads → no error, slot never torn) and
+`test_edge_023` (install and lazy create serialised — the slot ends with the installed instance, the widened
+constructor's instance never lands beside it).
+
+#### Gates (per-step scope)
+
+1. `green_command` verbatim → **7 passed** (above).
+2. **P-71 canary** `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -q` → **1 passed** (the
+   only witness that imports the composition root; F-76's fix `762b85a` holds).
+3. Search regression `uv run pytest tests/acceptance/search tests/unit/search tests/contract/search
+   tests/property/search tests/integration/search -q` → **93 passed in 14.33s**, no failures — no source
+   registration changed (`test_feature_sources.py` and the contract file are GREEN).
+   **F-15 correction re-confirmed:** the DAG's `completion_gates` name `tests/contract/search/test_search_contract.py`,
+   which **does not exist**; the real file is `tests/contract/search/test_search_contracts.py` (covered by the
+   directory run above). No file was created.
+4. `uv run ruff check src/backend/search/service.py src/backend/search/__init__.py` → **All checks passed!**;
+   `uv run ruff format <same paths>` → **2 files left unchanged**; `ruff format --check <same paths>` → **2 files
+   already formatted**. No whole-repo sweep (Phase 5 gate).
+5. `uv run mypy src/` → **Success: no issues found in 84 source files**.
+6. `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within the allowed complexity**.
+7. `uv run python scripts/check_traceability.py` → **PASS (822 matrix rows, 136 spec IDs, 817 test functions)**.
+8. `uv run python scripts/verify_spec.py docs/specs/search.md` → **exit 0** (Traceability: PASS; AC-038..AC-041,
+   EDGE-022/EDGE-023 all have executable tests).
+9. Not run here (Phase 5): the full suite with `--cov`, `ruff check .`, `ruff format --check .`.
+
+#### Informational cross-feature state (measured, with the change stashed for comparison)
+
+- `uv run pytest tests/unit/architecture -q` → **1 failed, 2 passed** — **identical with T-004's two files stashed**,
+  so it is not this task's: `test_ac_017_no_cross_package_slot_write` lists 12 foreign writes to `_registry` /
+  `_default_bus` (`src/main.py:68`, `tests/settings_test_helpers.py:132/160/180`, `tests/eventbus_test_helpers.py:77/84`,
+  and six embedded-write sites). **No `_singleton` violation is reported** — the search module writes only its own
+  slot. The migration is owned by **T-006** (`src/main.py`) and **T-007** (the 11 test-side writes + this scan test),
+  both still `PENDING`.
+- `uv run pytest tests/acceptance/singleton_install tests/contract/singleton_install tests/unit/singleton_install -q`
+  → **22 failed, 7 passed** — **identical with the change stashed**. The search half of the parametrized
+  five-slot witnesses now passes: `test_ac_002_install_all_five_features` fails at
+  `AttributeError: module 'backend.sessionmanagement' has no attribute 'set_session_service'` (was
+  `backend.search … set_search_service`) — i.e. the blocker moved to **T-005**.
+- `tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations` is still RED for
+  **all five** names — the `logging-coverage.md` §3.1 inventory rows are a docs task, not T-004. The **code** half of
+  AC-015 was verified directly for search: `set_search_service.__logged__ is True`,
+  `__logged_slow_threshold_ms == 5.0`, signature `(service: SearchService) -> None`, and
+  `"set_search_service" in backend.search.__all__` → **True**.
+- No new finding. F-15 (the non-existent `test_search_contract.py`) is re-confirmed above; nothing in this step
+  required a test change, so `tests/acceptance/search/test_singleton_install.py` and
+  `tests/unit/search/test_search_edges.py` are byte-identical to their S3.2 state.
+
+#### State for the next step
+
+- **GREEN observed for T-004** (7/7), all per-step gates clean, nothing committed.
+- **Next: S4.3 (T-004 refactor)** — the implementation follows the settings/eventbus/permissions trio pattern
+  already in `HEAD` and adds 24 lines of logic; a **no-op verdict** is expected and must be recorded per P-70.

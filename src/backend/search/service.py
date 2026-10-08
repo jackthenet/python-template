@@ -6,7 +6,8 @@ REQ-010, REQ-012). ``InMemorySource``: the public in-memory source for
 tests/DI (REQ-017). Module singleton (REQ-017). The service is traced with
 ``@logged_class`` (``include_args=False`` so query text and result content
 never appear in log records, REQ-015/NFR-002); the module functions are traced
-with ``@logged``.
+with ``@logged``. The singleton trio (``get_search_service`` / ``set_search_service``
+/ ``reset_search_service``, REQ-017, REQ-024) shares one module lock.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from backend.logging import logged, logged_class
+from backend.logging import get_logger, logged, logged_class
 from backend.search.errors import MalformedQueryError, SourceQueryFailedError, UnknownSourceError
 from backend.search.events import EventPublisher, SourceQueryFailed, SourceRegistered, SourceUnregistered
 from backend.search.models import (
@@ -44,6 +45,8 @@ from backend.shared import Principal, requires_permission
 if TYPE_CHECKING:
     from backend.settings import SettingsRegistry
     from backend.shared import PermissionChecker
+
+_logger = get_logger("search")
 
 # The system principal (``Principal()`` = ``user_id=None``): the default
 # trailing parameter of the enforced ``search`` method (ADR-071 pattern).
@@ -544,6 +547,18 @@ class InMemorySource:
 # --- Module singleton (REQ-017) ----------------------------------------------
 
 _singleton: list[SearchService | None] = [None]
+
+# REQ-024 / ADR-083: the module's ONE existing lock now guards all three slot
+# operations — install, lazy create and reset — as one mutually exclusive set,
+# and is held only for the slot read/swap (NFR-003). A plain ``Lock``, not an
+# ``RLock``, because the guarded sections are leaves: ``SearchService.__init__``
+# only stores its arguments and resolves no other module's singleton (the
+# settings read is on the query path, ``_registry()``), and no other module's
+# guarded section reaches ``get_search_service()`` — measured with a two-thread
+# probe in docs/verification/settings-public-registry-setter.md (§ "Phase 4 —
+# T-004 RED"). ``set_search_service()`` therefore never calls ``get_*``/``reset_*``
+# while holding it (same-thread re-entry on a plain ``Lock`` would hang) and
+# emits its WARNING only after the release.
 _singleton_lock = threading.Lock()
 
 
@@ -557,12 +572,36 @@ def get_search_service(
     creates it; later calls return it."""
     with _singleton_lock:
         if _singleton[0] is None:
+            # REQ-007: the owner's lazy create writes its own slot directly and
+            # never calls set_search_service() — it is not an install, so it must
+            # not emit the replace WARNING.
             _singleton[0] = SearchService(
                 event_bus=event_bus, settings_registry=settings_registry, permission_service=permission_service
             )
         service = _singleton[0]
     assert service is not None, "singleton not initialized"  # nosec B101
     return service
+
+
+@logged(slow_threshold_ms=5)
+def set_search_service(service: SearchService) -> None:
+    """Install ``service`` as the shared default ``SearchService`` (REQ-024).
+
+    Replaces a non-empty default unconditionally and is never retroactive: a
+    service obtained earlier keeps that instance and every source registered on
+    it (EDGE-022), and an install registers or unregisters nothing on either
+    instance. The parameter is never ``None`` — clearing the slot stays the job
+    of ``reset_search_service()`` — and it is checked by the annotation and
+    ``mypy`` only, with no runtime type check and no new exception (REQ-004,
+    REQ-005). It publishes no event (REQ-009).
+    """
+    with _singleton_lock:
+        previous = _singleton[0]
+        _singleton[0] = service
+    if previous is not None:
+        # REQ-002: exactly one WARNING naming the feature's shared default (never
+        # the instance), emitted after the lock is released (NFR-003).
+        _logger.warning("search: shared default search service replaced")
 
 
 @logged(slow_threshold_ms=5)

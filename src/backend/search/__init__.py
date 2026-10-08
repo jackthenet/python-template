@@ -12,7 +12,7 @@ Public API:
 - Actions: ``register_actions`` (feature-owned catalog action declaration,
   additive ``search.search``).
 - Service: ``SearchService``, ``InMemorySource`` plus the module singleton
-  ``get_search_service()`` / ``reset_search_service()``.
+  ``get_search_service()`` / ``set_search_service()`` / ``reset_search_service()``.
 """
 
 from backend.search.errors import (
@@ -50,6 +50,7 @@ from backend.search.service import (
     SearchService,
     get_search_service,
     reset_search_service,
+    set_search_service,
 )
 
 __all__ = [
@@ -81,4 +82,5 @@ __all__ = [
     "register_actions",
     "register_settings",
     "reset_search_service",
+    "set_search_service",
 ]
