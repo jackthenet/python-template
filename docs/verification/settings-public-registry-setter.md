@@ -4348,9 +4348,9 @@ GREEN. `uv run ruff check .` and the full `--cov` suite were **not** run (Phase 
 - **Next: S4.3 (T-002 refactor)** — the implementation is already the minimum shape; a no-op fast-path is
   plausible if nothing structural is found.
 
-### Phase 4 — refactor no-op records (S4.3, T-001..T-004)
+### Phase 4 — refactor no-op records (S4.3, T-001..T-005)
 
-All four refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
+All five refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
 
 | Task | Verdict | What was inspected / rejected | GREEN re-confirmed |
 |---|---|---|---|
@@ -4358,6 +4358,7 @@ All four refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path
 | T-002 | no structural changes needed | A shared `_swap_slot()` for the two read/swap sites was **rejected** (two call sites, different semantics: lazy create must not warn per REQ-007, install must per REQ-002 — an unrequested abstraction). The one duplication S4.2 introduced was already extracted (`_resolve_max_queue_size()`, both call sites use it). `has()` + `get_value()` in that helper is not a defect: `get_value()` raises on an unregistered key. F-74/F-75/F-57 left as scoped/open. | 6 passed (`green_command`, all 6 T-002 node IDs); 28 passed over `tests/acceptance/eventbus tests/unit/eventbus`; `mypy src/` clean |
 | T-003 | no structural changes needed (zero file changes) | Inspected `src/backend/permissions/service.py` + `__init__.py` only. **Rejected:** (a) a shared slot-swap helper for the three `with _permission_service_lock:` blocks (1–3 lines each, three different semantics — lazy create writes without a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69 leaf-lock rule and NFR-003 ("WARNING only after release") are stated in terms of; (b) extracting the `PermissionService(...)` construction out of `get_permission_service()` — one call site, and it would move the constructor (the only place this module could reach another module's lock) out of sight of the lock; (c) shortening the 12-line comment at the lock — it is the measured evidence that the plain `Lock` (not `RLock`) is safe here; (d) any rename — `_permission_service_lock` follows its own slot name exactly as `_registry_lock` / `_default_bus_lock` do, and `previous` matches the `eventbus` installer. Verified no fourth writer of `_permission_service` exists in `src/` (all three slot writes are guarded), the `__init__.py` re-export is RUF022-sorted, and the shape constraints hold: plain `Lock`, direct slot write under it, concrete `slow_threshold_ms=5` (never `slow_threshold_setting`), `get_`/`reset_` untraced, catalog untouched. | 6 passed (`green_command`, all 6 T-003 node IDs, 1.24s); 73 passed / 1 failed over the five permissions test dirs — the failure is **F-76** (T-002's, not T-003's, unchanged from S4.2); `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
 | T-004 | no structural changes needed (zero file changes) | Inspected `src/backend/search/service.py` + `__init__.py` only — the 44 inserted lines are the settings/permissions trio pattern already in `HEAD`. **Rejected:** (a) a shared slot-swap helper for the three `with _singleton_lock:` blocks (1–3 lines each, three different semantics — lazy create writes **without** a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69/P-71 leaf-lock rule and NFR-003 ("WARNING only after the release") are stated in terms of, and a cross-module version would push slot mechanics into `shared/`, which the architecture rules keep deliberately small; (b) hoisting the `SearchService(...)` construction out of `get_search_service()`'s guarded section (one call site, and the constructor is the only place this module could reach another module's lock — the S4.1 probe's `--naive` control deadlocks, so it must stay visible under the lock, not behind a factory); (c) shortening the 12-line comment at `_singleton_lock` — it is the measured leaf verdict plus the self-deadlock rule for the plain `Lock` (no `RLock` upgrade); (d) extracting the WARNING text to a constant or reusing `reset_search_service()`/`get_search_service()` inside the installer — one call site each, and either call under the non-reentrant lock self-deadlocks (F-57 / P-69); (e) any rename — `set_search_service`, `_logger = get_logger("search")` and `previous` match `set_settings_registry` / `set_permission_service` exactly. Re-verified the shape constraints are intact: the **existing** `_singleton_lock` guards all three slot operations (no second lock), the guarded sections stay leaves, the replace WARNING is emitted after the release, the lazy create is a direct slot write with no WARNING, `@logged(slow_threshold_ms=5)` is a concrete threshold, EDGE-022 (the replaced service keeps its sources) is untouched, and the `__init__.py` re-export is RUF022-sorted. | 7 passed (`green_command`, all 7 T-004 node IDs, 1.19s — re-run even though the step changed zero source files, per P-70); 1 passed (`tests/acceptance/permissions/test_composition_wiring.py`, the P-71 canary); 93 passed over the five search test dirs; `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
+| T-005 | no structural changes needed (zero file changes) | Inspected `src/backend/sessionmanagement/service.py` + `__init__.py` only — the 77 inserted lines are the settings/eventbus/permissions/search trio pattern already in `HEAD`, plus this feature's two shape deviations. **Rejected:** (a) a shared slot-swap helper for the three `with _session_service_lock:` blocks (1–3 lines each, three different semantics — lazy create writes **without** a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69/P-71 leaf-lock rule and NFR-003 ("WARNING only after the release") are stated in terms of, and a cross-module version would push slot mechanics into `shared/`, which the architecture rules keep deliberately small; (b) collapsing the double-checked `get_session_service()` into one guarded check — the hit path must return on a plain reference read, **before** the lock and before any cross-module read (P-71 rule 1, the F-76 lesson); (c) deleting the `if event_bus is not None: get_event_bus()` warm-up or making it unconditional — it is the measured ABBA fix (this module is **not** a leaf: `SessionService.__init__` reads the shared bus whenever one is injected), and an unconditional warm-up would create the shared bus on a bare `get_session_service(repository=…)` call, behavior no spec ID authorises; (d) hoisting the `SessionService(...)` construction out of the guarded section or behind a factory — one call site, and the constructor is the only place this module can reach another module's lock, so it must stay visible under the lock, not hidden; (e) reusing `get_session_service()`/`reset_session_service()` inside the installer, or extracting the WARNING text to a constant — either call under the non-reentrant `Lock` self-deadlocks (F-57 / P-69); (f) shortening the 14-line comment at `_session_service_lock` — it is the measured deadlock evidence plus the no-self-call rule that make the plain `Lock` (no `RLock` upgrade) auditable; (g) any rename — `_session_service_lock` follows its own slot name exactly as `_registry_lock` / `_default_bus_lock` / `_singleton_lock` do, and `_logger = get_logger("sessionmanagement")` / `previous` match the sibling installers. Re-verified the shape constraints are intact: one new lock guards all three slot operations (no second lock, no `RLock`), the three `_session_service[0] =` writes in `src/` are all inside it (`src/main.py:202` `_session_service` is a composition-root local name, not the slot — no fourth writer), the `ValueError` for a missing repository stays with **no lazy create** (EDGE-003 / AC-042), the replace WARNING is emitted after the release, `@logged(slow_threshold_ms=5)` is a concrete threshold (never `slow_threshold_setting`), no event is published (REQ-009), and the `__init__.py` re-export is RUF022-sorted (`reset_session_service` before `set_session_service`). | 7 passed (`green_command`, all 7 T-005 node IDs, 0.66s — re-run even though the step changed zero source files, per P-70); 1 passed (`tests/acceptance/permissions/test_composition_wiring.py`, the P-71 canary); 75 passed over the five session-management test dirs (unchanged from S4.2); `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files); `complexipy src tests --max-complexity-allowed 15` clean |
 
 ---
 
@@ -4915,3 +4916,203 @@ constructor's instance never lands beside it).
 - **GREEN observed for T-004** (7/7), all per-step gates clean, nothing committed.
 - **Next: S4.3 (T-004 refactor)** — the implementation follows the settings/eventbus/permissions trio pattern
   already in `HEAD` and adds 24 lines of logic; a **no-op verdict** is expected and must be recorded per P-70.
+
+
+### Phase 4 — T-005 RED (S4.1)
+
+**Date:** 2026-10-08 · **Step:** S4.1 (T-005) · **Task:** T-005 `session-management` — `src/backend/sessionmanagement/service.py` + the `backend.sessionmanagement` public surface: "Add `set_session_service()` and a module lock guarding install and reset; re-export it (no lazy create exists)" · **Worktree:** `python-template_kopie-worktrees/crosscut/settings-public-registry-setter` (branch `crosscut/settings-public-registry-setter`, `HEAD` = `013b639`, T-001..T-004 `VERIFIED` + the F-76 fix `762b85a`).
+
+**Why T-005:** the only ready task left in the DAG (`T-006..T-010` all list `T-005` in `dependencies` or come after it in the phase order), so the ready set has one member.
+
+No implementation, no commit, no full-suite run in this step. The only file written is this record.
+
+#### RED gate — the DAG's `red_command`, verbatim
+
+```text
+uv run pytest tests/acceptance/sessionmanagement/test_singleton.py::test_ac_046_set_session_service_installs_default tests/acceptance/sessionmanagement/test_singleton.py::test_ac_047_replace_logs_one_warning tests/acceptance/sessionmanagement/test_singleton.py::test_ac_048_concurrent_install_read_reset tests/acceptance/sessionmanagement/test_singleton.py::test_ac_049_install_then_reset_then_default tests/unit/sessionmanagement/test_validation.py::test_edge_013_repository_rule_after_install_and_reset tests/unit/sessionmanagement/test_validation.py::test_edge_014_install_over_nonempty_default -v
+```
+
+**Result: `6 failed in 0.44s`** — `collected 6 items`, 0 passed, **0 errors, 0 skipped, 0 collection/import/setup failures**. Identical node set and count to the Phase 3 S3.2 gate (**6 failed**). Re-run with `--tb=line` → same 6 nodes, same reasons.
+
+| Node | Failure reason |
+|---|---|
+| `test_ac_046_set_session_service_installs_default` | `AttributeError: module 'backend.sessionmanagement' has no attribute 'set_session_service'. Did you mean: 'get_session_service'?` (`singleton_install_test_helpers.py:112`, `SESSIONMANAGEMENT_SLOT.install`) |
+| `test_ac_047_replace_logs_one_warning` | same `AttributeError` (first `SESSIONMANAGEMENT_SLOT.install`, before the WARNING-count assert) |
+| `test_ac_048_concurrent_install_read_reset` | `AssertionError: install/read/reset threads raised: [AttributeError("… no attribute 'set_session_service'") × 8]` (`test_singleton.py:138`, the thread collector) — the 8 barrier-released **reads** of the held default are GREEN (F-16 shape); only the install/read/reset interleaving half is RED |
+| `test_ac_049_install_then_reset_then_default` | same `AttributeError` (first `SESSIONMANAGEMENT_SLOT.install`) |
+| `test_edge_013_repository_rule_after_install_and_reset` | same `AttributeError` (`test_validation.py:83`) — the AC-042 `ValueError` half of the test is never reached |
+| `test_edge_014_install_over_nonempty_default` | same `AttributeError` (first `SESSIONMANAGEMENT_SLOT.install`) |
+
+**RED validity:** every failure is the `AttributeError` raised inside the test body by the slot helper resolving `set_session_service` by attribute at call time (the helper never imports it, so nothing fails at collection), plus exactly one `AssertionError` wrapping it in the concurrency witness. No `ValidationError`/`ValueError` from test-data construction, no import/collection/fixture error. The missing name is the only cause: `backend.sessionmanagement.__init__` exports `get_session_service` (`:32`) and `reset_session_service` (`:35`) but no install operation, and `service.py` has **no module lock at all** today (`_session_service: list[...] = [None]` at `:344`, an unguarded read/write at `:359`/`:364`, unguarded reset at `:371`).
+
+#### Lock-shape measurement (P-69 rule 2 — measurement only, no code change)
+
+Static reading of `src/backend/sessionmanagement/service.py`:
+
+- The create path of `get_session_service()` (`:348`) is `SessionService(repository, event_bus, settings_registry)` written to `_session_service[0]`. `SessionService.__init__` calls **`get_event_bus()` at `:90`** — but only inside `if event_bus is not None:` (`:88`) — and resolves **no** settings/permissions singleton (the settings read is deferred to `_registry()` on the method path, `:112-116`).
+- So a session slot lock taken **around the construction** is not a leaf: it reaches the eventbus module lock `_default_bus_lock` (`eventbus.py:245`).
+- Reverse direction: `get_session_service` / `reset_session_service` are referenced in `src/` only by `service.py` itself and the package re-export (`__init__.py:21`) — **no** other module's guarded section (settings `_registry_lock`, eventbus `_default_bus_lock`, permissions, search `_singleton_lock`) reaches the session slot today. The event bus dispatches handlers **outside** its locks (`_dispatch` copies the registry under `self._lock`, then calls handlers unlocked; `shutdown()` runs outside `_default_bus_lock`), so a session-calling handler does not hold a bus lock either.
+
+**Probe (throwaway `Temp/t005_lock_probe.py`, run in the worktree with `uv run python -u Temp/t005_lock_probe.py <mode>`, deleted afterwards).** One mode per process (a deadlocked thread keeps the real bus lock forever).
+
+```text
+q1    SessionService.__init__ cross-module singleton reads
+      event_bus=None -> {'get_event_bus': 0, 'get_settings_registry': 0, 'get_permission_service': 0}
+      event_bus=set  -> {'get_event_bus': 1, 'get_settings_registry': 0, 'get_permission_service': 0}
+
+edges  deterministic lock-edge measurement (the real _default_bus_lock wrapped in a
+       recording lock; the simulated session lock held around the getter)
+      EDGES[naive] (held -> acquired): [('session', 'bus')]        ← the guarded section is NOT a leaf
+      EDGES[fixed] (held -> acquired): none — the section is a leaf
+
+naive  live ABBA (creator holds the session slot lock across the construction; reverse thread
+       holds _default_bus_lock, then wants the session slot):
+      naive shape: DEADLOCK (blocked: creator at eventbus.py:266 `with _default_bus_lock:`,
+      reverse at the session lock) — reproduced on every run, so the probe has teeth
+
+q4     get_event_bus() on a FILLED slot while _default_bus_lock is held elsewhere:
+      returns without the bus lock: True      (F-76's early reference read — the reason the
+                                               fixed shape is a leaf)
+```
+
+The `fixed` **live** ABBA run could not be scored in this environment: the racing creator thread sat in a first-time `zipimport._path_stat` and in a last-resort stderr write for the slow-call WARNING, neither of them a lock wait (`faulthandler` dumps), so it reported "still blocked" without holding any lock. The deterministic `edges` measurement is the decisive evidence instead, and the naive control deadlocks first, so the leaf verdict for the fixed shape means something. Probe hygiene notes: the traced records and the first-time lazy imports are not part of the measurement.
+
+**Lock-order verdict for S4.2 (T-005):**
+
+1. **The new `_session_service_lock` must be a leaf.** The create path reaches `get_event_bus()` from inside `SessionService.__init__`, so taking the lock before the construction creates a `session → bus` edge (measured) and deadlocks against any thread that holds the bus lock and reads the session slot (live DEADLOCK, the P-69 rule 2 shape).
+2. **Required shape:** on a **hit** (slot non-empty) return before the lock and before any cross-module read (P-71 — no work on the hit path, the F-76 lesson); on the **create** path, when `event_bus is not None`, resolve `get_event_bus()` **before** taking `_session_service_lock`, so the constructor's own `get_event_bus()` is the lock-free filled-slot read measured in `q4`; then take the lock, re-read the slot, keep the `ValueError` for a missing `repository` (EDGE-003/AC-042 unchanged, no lazy-create default), construct, write, release. Exactly one instance is constructed per race, so the AC-048 "whole service" property holds.
+3. **Self-deadlock hazard (F-57):** the lock is a plain non-reentrant `Lock`, so `set_session_service()` and `reset_session_service()` MUST NOT call `get_session_service()` while holding it, and MUST read `_session_service[0]` directly; the single replace WARNING (REQ-002 / AC-047) is emitted **after** the release (NFR-003).
+4. **No WARNING-count hazard:** a thread that waits more than 5 ms on the slot lock escalates `get_session_service`'s exit record to WARNING, but `non_tracing_warnings` filters the `>>` / `<<` / `!!` prefixes, so AC-047 / EDGE-014's "exactly one WARNING" is unaffected.
+5. **P-71 canary:** T-005's `green_command` does not import `src/main.py`; S4.2/S4.3 must still run `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -q` (the only witness that imports the composition root) plus the session-management regression directories.
+6. **F-15 (gate paths — recorded, nothing created):** every path T-005's gates name exists — `tests/acceptance/sessionmanagement/test_singleton.py`, `tests/acceptance/sessionmanagement/test_observability.py`, `tests/unit/sessionmanagement/test_validation.py` (+ `conftest.py`), `tests/sessionmanagement_test_helpers.py`, `scripts/check_traceability.py`, `scripts/verify_spec.py`. Its `inputs` name `docs/decisions/ADR-083` / `ADR-084` without the file suffix; the real files are `ADR-083-public-install-operation-feature-singletons.md` and `ADR-084-two-guards-singleton-slot-tid251-scan-test.md` — an abbreviation in the DAG, not a missing file.
+
+**Next: S4.2 (T-005)** — `green_command`: `uv run pytest tests/acceptance/sessionmanagement/test_singleton.py::test_ac_046_set_session_service_installs_default tests/acceptance/sessionmanagement/test_singleton.py::test_ac_047_replace_logs_one_warning tests/acceptance/sessionmanagement/test_singleton.py::test_ac_048_concurrent_install_read_reset tests/acceptance/sessionmanagement/test_singleton.py::test_ac_049_install_then_reset_then_default tests/unit/sessionmanagement/test_validation.py::test_edge_013_repository_rule_after_install_and_reset tests/unit/sessionmanagement/test_validation.py::test_edge_014_install_over_nonempty_default tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+
+### Phase 4 — T-005 GREEN (S4.2) — 2026-10-08
+
+**Objective (T-005, verbatim DAG steps obeyed):** add `set_session_service()` plus a new module lock `_session_service_lock` guarding install, the lazy create and reset, keep the AC-042 / EDGE-003 `ValueError` rule (no lazy create exists), and re-export the new function.
+
+#### GREEN gate — `green_command` verbatim
+
+`uv run pytest tests/acceptance/sessionmanagement/test_singleton.py::test_ac_046_set_session_service_installs_default tests/acceptance/sessionmanagement/test_singleton.py::test_ac_047_replace_logs_one_warning tests/acceptance/sessionmanagement/test_singleton.py::test_ac_048_concurrent_install_read_reset tests/acceptance/sessionmanagement/test_singleton.py::test_ac_049_install_then_reset_then_default tests/unit/sessionmanagement/test_validation.py::test_edge_013_repository_rule_after_install_and_reset tests/unit/sessionmanagement/test_validation.py::test_edge_014_install_over_nonempty_default tests/acceptance/sessionmanagement/test_observability.py::test_ac_045_traced_methods_no_tokens_in_logs -v`
+→ **7 collected, 7 passed, 0 failed** (0.68s). RED → GREEN for all six install nodes: the five
+`AttributeError: module 'backend.sessionmanagement' has no attribute 'set_session_service'` and the one
+`AssertionError` thread-collector wrapping 8 of them are gone; the feature's tracing regression witness
+`test_ac_045` stays GREEN. Determinism re-check (the concurrency witness): the same seven nodes with
+`-p no:randomly` → **7 passed**; `tests/acceptance/sessionmanagement/test_singleton.py` +
+`tests/unit/sessionmanagement/test_validation.py` (13 nodes) at `--randomly-seed=1/2/3` → **13 passed** each run.
+
+#### Diff summary (no commit; working tree only)
+
+```text
+ src/backend/sessionmanagement/__init__.py | 13 ++++++++++--
+ src/backend/sessionmanagement/service.py  | 77 +++++++++++++++++++++++++++++++++++++++++++++-----
+ 2 files changed, 84 insertions(+), 6 deletions(-)
+```
+
+What the implementation is (`src/backend/sessionmanagement/service.py`):
+
+- **New `_session_service_lock = threading.Lock()`** beside `_session_service`, taken by all three slot operations —
+  `get_session_service()` (the create path), the new `set_session_service()` and `reset_session_service()` — as one
+  mutually exclusive set (REQ-006, ADR-084). The comment at the lock records the measured non-leaf verdict and the
+  self-deadlock rule.
+- `get_session_service()`: **hit path first** — a filled slot is returned on a plain reference read, before the lock
+  and before any cross-module read (P-71 rule 1, the F-76 lesson); then the create path takes the lock, re-reads the
+  slot, keeps the `ValueError` for a missing `repository` (**EDGE-003 / AC-042 unchanged — no lazy create was
+  added**), constructs, writes its own slot directly and never calls the installer (REQ-007), releases.
+- `set_session_service(service: SessionService) -> None`, decorated `@logged(slow_threshold_ms=5)` (**concrete**
+  threshold only — `slow_threshold_setting` would read settings under the lock): read-and-swap under the lock, then
+  **exactly one** `_logger.warning("session-management: shared default session service replaced")` **after** the
+  release, and only when the slot was non-empty (REQ-002, NFR-003, AC-047, EDGE-014). New module logger
+  `_logger = get_logger("sessionmanagement")` (new import from `backend.logging`).
+- No event (REQ-009), no `isinstance` and no new exception (REQ-004, REQ-005), no lifecycle call on either instance
+  (REQ-003 — `test_edge_014` asserts the replaced service still lists its store), parameter never `None`.
+- After an install, `get_session_service()` returns the installed instance with **no** `repository` argument
+  (EDGE-013, AC-046); after `reset_session_service()` the `ValueError` rule still stands (AC-049, EDGE-013).
+- `src/backend/sessionmanagement/__init__.py`: `set_session_service` added to the
+  `from backend.sessionmanagement.service import (...)` block, to `__all__` (RUF022 order: after
+  `reset_session_service`) and to the module docstring's singleton line.
+- Untouched, as required: `tests/acceptance/sessionmanagement/test_singleton.py`,
+  `tests/unit/sessionmanagement/test_validation.py`, `tests/unit/sessionmanagement/conftest.py`,
+  `tests/sessionmanagement_test_helpers.py`, `tests/singleton_install_test_helpers.py`, `src/main.py`, every other
+  feature, `pyproject.toml`, `AGENTS.md`. **No test was changed by this step.**
+
+#### Non-leaf lock shape as shipped (the S4.1 verdict carried into code)
+
+This module is **not a leaf**: `SessionService.__init__` calls `get_event_bus()` whenever an `event_bus` is injected,
+so a session slot lock held across the construction would acquire `_default_bus_lock` under it — the S4.1 probe
+measured the naive shape deadlocking (ABBA) and the fixed shape emitting no edge. Shipped shape:
+
+1. hit path returns before the lock and before any cross-module read;
+2. on the create path, **when `event_bus is not None`, `get_event_bus()` is resolved before the lock is taken**
+   (warm the bus slot, so the constructor's own read is the lock-free filled-slot early return);
+3. the replace WARNING is emitted after the release;
+4. `set_session_service()` / `reset_session_service()` read `_session_service[0]` directly and never call
+   `get_session_service()` while holding the non-reentrant lock (F-57 shape).
+
+Shipped-shape confirmation (throwaway `Temp/t005_shape_check.py`, run with `uv run python -u`, deleted afterwards —
+both module locks wrapped in a recording proxy, both slots emptied, an injected bus with `subscribe`):
+
+```text
+create path edges (held -> acquired): []          ← no session -> bus edge out of the guarded section
+bus slot warmed by the create path: True          ← the warm-before-lock call is what makes it so
+hit path edges: []
+```
+
+#### Gates (per-step scope)
+
+1. `green_command` verbatim → **7 passed** (above).
+2. **P-71 canary** `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -q` → **1 passed** (F-76's
+   fix `762b85a` still holds; the session hit path adds no work on the composition-root read path).
+3. Session regression `uv run pytest tests/acceptance/sessionmanagement tests/unit/sessionmanagement
+   tests/contract/sessionmanagement tests/property/sessionmanagement tests/integration/sessionmanagement -q`
+   → **75 passed in 47.63s**, no failures (all five directories exist and were run).
+4. `uv run ruff check src/backend/sessionmanagement/service.py src/backend/sessionmanagement/__init__.py` →
+   **All checks passed!**; `uv run ruff format <same paths>` → **2 files left unchanged**;
+   `ruff format --check <same paths>` → **2 files already formatted**. No whole-repo sweep (Phase 5 gate).
+5. `uv run mypy src/` → **Success: no issues found in 84 source files**.
+6. `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within the allowed complexity**
+   (`get_session_service` 5, `set_session_service` 1, `reset_session_service` 0).
+7. `uv run python scripts/check_traceability.py` → **PASS (822 matrix rows, 136 spec IDs, 817 test functions)**.
+8. `uv run python scripts/verify_spec.py docs/specs/session-management.md` → **exit 0** (Traceability: PASS;
+   AC-046..AC-049, EDGE-013/EDGE-014 all have executable tests).
+9. Not run here (Phase 5): the full suite with `--cov`, `ruff check .`, `ruff format --check .`.
+
+#### Informational cross-feature state (measured, with the change stashed for comparison)
+
+- `uv run pytest tests/acceptance/singleton_install tests/contract/singleton_install tests/unit/singleton_install -q`
+  → **7 failed, 22 passed** with T-005 applied, versus **22 failed, 7 passed** with T-005's two files stashed:
+  T-005 turns **15** nodes GREEN and introduces **zero** new failures (`comm` diff of the two FAILED lists — every
+  remaining failure is present in both runs). The five-slot parametrized witnesses (`test_ac_002_install_all_five_features`,
+  `test_ac_005`, `test_ac_010`, `test_ac_012`, `test_edge_001..003`, the NFR-002 latency contract, ...) are GREEN now.
+- The 7 remaining failures are each owned by a still-`PENDING` task, verified against the DAG's ID lists:
+  `test_ac_018_ruff_bans_private_slot_import`, `test_edge_009_public_api_not_banned`,
+  `test_nfr_004_ruff_and_mypy_clean` → **T-008**; `test_ac_019_agents_md_names_installer` → **T-012**;
+  `test_ac_013_install_publishes_no_event`, `test_edge_005_install_in_subprocess` → **T-009**;
+  `test_ac_011_lazy_path_emits_one_traced_pair` (permissions emits 0 traced pair) → **T-010**. No orphan witness.
+- `uv run pytest tests/unit/architecture -q` → **1 failed, 2 passed** — identical to the T-004 record:
+  `test_ac_017_no_cross_package_slot_write` lists the 12 foreign writes to `_registry` / `_default_bus`
+  (`src/main.py:68`, `tests/settings_test_helpers.py`, `tests/eventbus_test_helpers.py`, the embedded-write sites)
+  and **no `_session_service` violation** — this module writes only its own slot. Owned by **T-006** / **T-007**.
+- `tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations` is still RED for
+  **all five** names (the `logging-coverage.md` §3.1 inventory rows are a docs task). The **code** half of AC-015 was
+  verified directly for session-management: `set_session_service.__logged__ is True`, signature
+  `(service: 'SessionService') -> 'None'`, `"set_session_service" in backend.sessionmanagement.__all__` → **True**,
+  and `get_session_service` / `reset_session_service` stay traced.
+
+#### New finding
+
+- **F-77 (record accuracy, no code defect):** the T-004 GREEN record cites
+  `set_search_service.__logged_slow_threshold_ms == 5.0` as its AC-015 code-half evidence. That attribute does not
+  exist on a `@logged` function — the decorator sets only `__logged__ = True`
+  (`src/backend/logging/_decorator.py:211`); `__logged_slow_threshold_ms` is a `@logged_class` attribute on the
+  class. The concrete `slow_threshold_ms=5` is therefore checkable only at the decorator call site (or through a
+  slow-call record), and **T-011**'s tracing witnesses must not assert that attribute on the five module functions.
+  Verified for this task's function: `set_session_service.__logged__ is True`. The T-004 paragraph is left as
+  written (a historical gate record).
+
+#### State for the next step
+
+- **GREEN observed for T-005** (7/7), all per-step gates clean, nothing committed.
+- **Next: S4.3 (T-005 refactor)** — the implementation follows the settings/eventbus/permissions/search trio pattern
+  already in `HEAD` and adds ~30 lines of logic; a **no-op verdict** is expected and must be recorded per P-70.
