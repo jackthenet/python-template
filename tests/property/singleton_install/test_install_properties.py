@@ -24,6 +24,7 @@ from eventbus_test_helpers import isolated_event_bus
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from singleton_install_test_helpers import (
+    EVENTBUS_SLOT,
     SLOTS,
     EventWatcher,
     SingletonSlot,
@@ -75,18 +76,6 @@ def _run_sequence(slot: SingletonSlot, sequence: list[bool], watch: Callable[[An
     return installed
 
 
-def _watcher_over(watcher: EventWatcher) -> Callable[[Any], None]:
-    """``watcher.watch`` without duplicate subscriptions (a duplicate handler would double-deliver)."""
-    watched: set[int] = set()
-
-    def watch(instance: Any) -> None:
-        if id(instance) not in watched:
-            watched.add(id(instance))
-            watcher.watch(instance)
-
-    return watch
-
-
 def _count_installs_on_nonempty_slot(
     slot: SingletonSlot, sequence: list[bool], log_records: list[Any]
 ) -> tuple[int, list[Any]]:
@@ -132,13 +121,19 @@ def test_inv_002_warning_count_matches_nonempty_installs(log_records: list[Any])
 
 def _assert_no_install_events(slot: SingletonSlot, sequence: list[bool]) -> None:
     """INV-003, first half: no bus — the shared default or an installed instance — receives an event caused by an install."""
-    watcher = EventWatcher()
-    watch = _watcher_over(watcher)
+    watcher = EventWatcher()  # subscribes at most once per bus instance, so re-watching one cannot double-deliver
+    # The previous slot's witness drained (shut down) the shared bus it watched, and only
+    # the event bus feature's own reset empties that slot — so the shared default would be
+    # read back as a dead bus, and a publish on a shut-down bus is a silent no-op
+    # (event-bus.md REQ-005, change EDGE-007): the anti-vacuity sentinel would never
+    # arrive and "no event" would stop being evidence. Clearing first makes the watched
+    # shared default a live instance for every slot.
+    EVENTBUS_SLOT.clear()
     slot.clear()
-    watch(get_event_bus())  # the shared default an install would publish on
-    installed = _run_sequence(slot, sequence, watch)
+    watcher.watch(get_event_bus())  # the shared default an install would publish on
+    installed = _run_sequence(slot, sequence, watcher.watch)
     current = get_event_bus()
-    watch(current)
+    watcher.watch(current)
     current.publish(object())  # anti-vacuity: this one demonstrably arrives
     watcher.drain()  # shutdown drains the queue (event-bus.md AC-008): nothing is still in flight
     try:
@@ -153,23 +148,34 @@ def _assert_no_install_events(slot: SingletonSlot, sequence: list[bool]) -> None
 
 
 def _assert_holder_keeps_instance(slot: SingletonSlot, sequence: list[bool]) -> None:
-    """INV-003, second half: an object constructed with an injected instance keeps that exact instance."""
+    """INV-003, second half: an object constructed with an injected instance keeps that exact instance.
+
+    The probe is the identity form of the stamp (``SingletonSlot.stamp_identity``):
+    INV-003's claim is "keeps that exact instance", and its domain contains
+    ``reset_*()``, which shuts the instance down by spec (``event-bus.md`` REQ-005,
+    change EDGE-007) — a liveness probe would then be false for a reason the invariant
+    does not name. The behavioral claim stays witnessed by AC-005 and EDGE-001, whose
+    sequences never reset the held instance away.
+    """
     slot.clear()
-    held, probe = slot.stamp()
+    held, probe = slot.stamp_identity()
+    other, _ = slot.stamp_identity()  # anti-vacuity: the probe must not match every instance
     try:
+        assert not probe(other), f"{slot.name()}: the identity probe matches another instance — this witness is vacuous"
         slot.install(held)
         holder = _Holder(held)
         installed = _run_sequence(slot, sequence, lambda _instance: None)
         try:
             assert probe(holder.instance), (
-                f"{slot.name()}: the sequence {sequence!r} changed how the instance a caller holds behaves — "
+                f"{slot.name()}: the sequence {sequence!r} changed which instance the caller holds — "
                 "an install rebound the caller's object, not just the slot"
             )
         finally:
             for instance in installed:
                 slot.dispose(instance)
     finally:
-        slot.dispose(held)
+        for instance in (held, other):
+            slot.dispose(instance)
         slot.clear()
 
 
@@ -181,8 +187,10 @@ def test_inv_003_no_events_and_no_rebinding() -> None:
     def inner(sequence: list[bool]) -> None:
         for slot in SLOTS:
             # The two halves run apart from each other: the first drains (shuts down) every
-            # bus it touched, and a stamp on a bus publishes — so one pass would feed the
-            # stamp's own marker event into the event collector.
+            # bus it touched, and a behavioral stamp on a bus publishes — so one pass would
+            # feed the stamp's own marker event into the event collector. (The second half's
+            # stamp is identity-based and publishes nothing; the separation is kept so the
+            # two halves stay independent witnesses.)
             _assert_no_install_events(slot, sequence)
             _assert_holder_keeps_instance(slot, sequence)
 

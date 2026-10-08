@@ -127,14 +127,24 @@ def test_edge_004_required_false_after_install_and_reset() -> None:
 
 _CHILD = """
 import json
-
-from loguru import logger
+import logging
 
 import backend.settings as settings_api
 
 _levels: list[str] = []
-logger.remove()
-logger.add(lambda message: _levels.append(message.record["level"].name), level="DEBUG")
+
+
+class _Capture(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        _levels.append(record.levelname)
+
+
+# ADR-082: the pipeline is stdlib handlers, and one dedicated non-propagating logger
+# (``backend.logging``) owns the managed sinks. A stdlib capture handler on that
+# logger IS this child process's own sink — the EDGE-005 clause under test.
+_pipeline = logging.getLogger("backend.logging")
+_pipeline.addHandler(_Capture(level=logging.DEBUG))
+_pipeline.setLevel(logging.DEBUG)
 
 settings_api.reset_settings_registry()
 first = settings_api.get_settings_registry()

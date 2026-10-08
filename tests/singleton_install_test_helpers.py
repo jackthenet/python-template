@@ -25,7 +25,9 @@ Two things live here because more than one test category needs them:
   witnesses (change AC-005, AC-013, INV-002, INV-003) need on top of the trio:
   a way to mark one instance so a later read can tell it from every other
   instance of the same class, and a collector that sees every event published on
-  every bus a witness touches.
+  every bus a witness touches. ``SingletonSlot.stamp_identity`` is the identity
+  form of the same marking, for the witness whose claim is literally "that exact
+  instance" (INV-003) rather than "still behaves as constructed" (AC-005).
 
 The trio is resolved by attribute name at call time, never imported: a feature
 whose install operation does not exist yet then fails **inside** the test with
@@ -85,6 +87,11 @@ _TRACING_PREFIXES = (">>", "<<", "!!")
 Probe = Callable[[Any], bool]
 
 
+def _recognizes(instance: Any) -> Probe:
+    """A probe that is true for ``instance`` and for no other object (``stamp_identity``)."""
+    return lambda candidate: candidate is instance
+
+
 def _keep(instance: Any) -> None:
     """Dispose of nothing: a feature whose instance needs no teardown."""
 
@@ -142,8 +149,29 @@ class SingletonSlot(NamedTuple):
         still gets the instance it was given" (change AC-005, INV-003) from "the
         install swapped it out". The marker is written and read through the
         instance's own public API only.
+
+        The probe therefore also answers a **liveness** question — the bus probe
+        publishes and waits for a dispatch — so it is only usable by a witness whose
+        instance is never reset away. A ``reset_*()`` shuts its instance down by spec
+        (``event-bus.md`` REQ-005, change EDGE-007), and after that the probe is false
+        for a reason the witness does not claim. Use ``stamp_identity`` for a witness
+        that quantifies over sequences containing resets.
         """
         return self.stamper()
+
+    def stamp_identity(self) -> tuple[Any, Probe]:
+        """Build a fresh instance and a probe recognizing exactly it, by identity.
+
+        INV-003's wording is "keeps **that exact instance**", which is an identity
+        question, not a liveness one: the invariant quantifies over install sequences
+        that include ``reset_*()``, and a reset legitimately shuts the instance down
+        (``event-bus.md`` REQ-005, change EDGE-007 — witnessed by ``test_edge_007``),
+        after which the behavioral ``stamp()`` probe can never return True. The
+        behavioral claim AC-005/EDGE-001 make ("still behaves as it was constructed")
+        keeps ``stamp()``; their sequences never reset the held instance away.
+        """
+        instance = self.new()
+        return instance, _recognizes(instance)
 
     def name(self) -> str:
         """The feature's short name, for assertion messages."""
@@ -477,6 +505,12 @@ class EventWatcher:
     the witness creates, for ``object``: the bus matches handlers by ``isinstance``
     (event-bus.md AC-004), so an ``object`` subscription receives every event type.
 
+    One subscription **per bus instance**: a witness re-reads the shared default after
+    every reset, and only the event bus feature's reset recreates it, so the same live
+    bus reaches ``watch`` repeatedly. A second identical subscription would deliver the
+    witness's own sentinel twice, and an exact-list assertion would then read as an
+    install having published an event.
+
     ``drain()`` shuts every watched bus down, and shutdown drains the queue
     (event-bus.md AC-008) — so "no event arrived" is a settled fact rather than a
     race against the worker.
@@ -485,11 +519,18 @@ class EventWatcher:
     def __init__(self) -> None:
         self.received: list[object] = []
         self._buses: list[Any] = []
+        self._watched: set[int] = set()
 
     def watch(self, instance: Any) -> None:
-        """Subscribe the collector to ``instance`` if it is a bus (has ``subscribe``)."""
+        """Subscribe the collector to ``instance`` once, if it is a bus (has ``subscribe``).
+
+        Keyed on ``id`` — two distinct buses must both be watched — and safe because
+        ``_buses`` keeps every watched instance alive, so an id can never be recycled
+        by a garbage-collected bus.
+        """
         subscribe = getattr(instance, "subscribe", None)
-        if callable(subscribe):
+        if callable(subscribe) and id(instance) not in self._watched:
+            self._watched.add(id(instance))
             subscribe(object, self.received.append)
             self._buses.append(instance)
 

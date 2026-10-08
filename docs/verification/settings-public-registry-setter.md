@@ -5478,3 +5478,214 @@ No whole-repo ruff sweep and no full `--cov` suite were run (both are Phase 5 ga
 - **Phase 5 must re-check** the `structlog-logging.md` v2 numbers against the final source state (18/11/11/2, total 42) — if any later task adds another one-off statement to those four files, the count table and the spec move together.
 - **Phase 5 will likely hit F-82** (the `test_concurrency.py` settings-slot leak breaking two `logging_coverage` witnesses under an unlucky random order). Assign it to T-009/T-010 (they own that file) or fix it as an explicit Phase 5 step; the fix is the same autouse fixture now in `test_install.py`.
 - **Next: S4.3 (T-011 refactor).**
+
+---
+
+### Phase 4 — T-009 RED (S4.1) — 2026-10-08
+
+**Date:** 2026-10-08 · **Step:** S4.1 (T-009) · **Task:** T-009 `cross-cutting witness set — all five features` — "Prove the five install operations behave identically: parametrized install/replace/WARNING/not-retroactive/no-event, the public API contract, the unchanged permission catalog, and the NFRs" (REQ-001..005/009/014/016, AC-002..008/013/020, INV-002/003, EDGE-001..007, NFR-001/002) · **Worktree:** `python-template_kopie-worktrees/crosscut/settings-public-registry-setter` (branch `crosscut/settings-public-registry-setter`, `HEAD` = `b052a53`, T-001..T-006 + T-011 `VERIFIED`, working tree clean).
+
+#### The DAG's `red_command`, verbatim
+
+T-009's `red_command` and `green_command` are the **same 20-node list** (the DAG says so explicitly: RED was observed for the whole set at S3.2, and the subset T-001..T-005 satisfied is expected already GREEN at S4.1 re-entry).
+
+```text
+uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_002_install_all_five_features tests/acceptance/singleton_install/test_install.py::test_ac_003_replace_logs_one_warning tests/acceptance/singleton_install/test_install.py::test_ac_004_empty_slot_no_warning tests/acceptance/singleton_install/test_install.py::test_ac_005_install_not_retroactive tests/acceptance/singleton_install/test_install.py::test_ac_006_replaced_bus_keeps_lifecycle tests/acceptance/singleton_install/test_install.py::test_ac_013_install_publishes_no_event tests/contract/singleton_install/test_api_contract.py::test_ac_007_signature_takes_concrete_instance tests/contract/singleton_install/test_api_contract.py::test_ac_008_no_runtime_type_check_no_new_error tests/contract/singleton_install/test_api_contract.py::test_ac_020_permission_catalog_unchanged tests/contract/singleton_install/test_api_contract.py::test_nfr_001_public_api_additive tests/contract/singleton_install/test_performance_contract.py::test_nfr_002_install_latency tests/unit/singleton_install/test_edges.py::test_edge_001_install_over_nonempty tests/unit/singleton_install/test_edges.py::test_edge_002_same_instance_twice tests/unit/singleton_install/test_edges.py::test_edge_003_session_service_repository_rule tests/unit/singleton_install/test_edges.py::test_edge_004_required_false_after_install_and_reset tests/unit/singleton_install/test_edges.py::test_edge_005_install_in_subprocess tests/unit/singleton_install/test_edges.py::test_edge_006_live_bus_not_shut_down tests/unit/singleton_install/test_edges.py::test_edge_007_reset_event_bus_still_shuts_down tests/property/singleton_install/test_install_properties.py::test_inv_002_warning_count_matches_nonempty_installs tests/property/singleton_install/test_install_properties.py::test_inv_003_no_events_and_no_rebinding -v
+```
+
+#### Counts — both orders (collected 20, no collection/import/setup error)
+
+| Run | Order | Result |
+|---|---|---|
+| 1 | `pytest-randomly` (`--randomly-seed=540840457` on the repeat run) | **3 failed, 17 passed** in 8.86s / 8.30s |
+| 2 | `-p no:randomly` (deterministic) | **3 failed, 17 passed** in 8.70s |
+
+The failure set is **identical in both orders** (`test_ac_013_install_publishes_no_event`, `test_edge_005_install_in_subprocess`, `test_inv_003_no_events_and_no_rebinding`), so the F-81/F-82 class (order-dependent cross-test leakage) is **ruled out** for T-009: these three are deterministic, not scheduling artefacts.
+
+#### Per-node classification
+
+| Node | Result | Spec ID | Owner of the satisfied half |
+|---|---|---|---|
+| `test_install.py::test_ac_002_install_all_five_features` | **PASSED** | AC-002 / REQ-001 | T-001..T-005 (the five `set_*` + re-exports) |
+| `test_install.py::test_ac_003_replace_logs_one_warning` | **PASSED** | AC-003 / REQ-002 | T-001..T-005 (the replace WARNING) |
+| `test_install.py::test_ac_004_empty_slot_no_warning` | **PASSED** | AC-004 / REQ-002 | T-001..T-005 |
+| `test_install.py::test_ac_005_install_not_retroactive` | **PASSED** | AC-005 / REQ-003 | T-001..T-005 |
+| `test_install.py::test_ac_006_replaced_bus_keeps_lifecycle` | **PASSED** | AC-006 / REQ-003 | T-002 (`set_event_bus` does not touch the replaced bus) |
+| `test_install.py::test_ac_013_install_publishes_no_event` | **FAILED** | AC-013 / REQ-009 | **T-009's remaining work** (witness-side, see below) |
+| `test_api_contract.py::test_ac_007_signature_takes_concrete_instance` | **PASSED** | AC-007 / REQ-004 | T-001..T-005 (concrete-typed signatures) |
+| `test_api_contract.py::test_ac_008_no_runtime_type_check_no_new_error` | **PASSED** | AC-008 / REQ-004 | T-001..T-005 (no runtime type check, no new error class) |
+| `test_api_contract.py::test_ac_020_permission_catalog_unchanged` | **PASSED** | AC-020 / REQ-016 | T-003 (catalog still the static 60-key mapping; no install action appears) |
+| `test_api_contract.py::test_nfr_001_public_api_additive` | **PASSED** | NFR-001 | T-001..T-005 (public surface is a superset) |
+| `test_performance_contract.py::test_nfr_002_install_latency` | **PASSED** | NFR-002 | T-001..T-005 (median < 1 ms on both paths, pipeline at DEBUG) |
+| `test_edges.py::test_edge_001_install_over_nonempty` | **PASSED** | EDGE-001 | T-001..T-005 |
+| `test_edges.py::test_edge_002_same_instance_twice` | **PASSED** | EDGE-002 | T-001..T-005 |
+| `test_edges.py::test_edge_003_session_service_repository_rule` | **PASSED** | EDGE-003 | T-005 (no lazy create; the repository rule holds) |
+| `test_edges.py::test_edge_004_required_false_after_install_and_reset` | **PASSED** | EDGE-004 | T-001 |
+| `test_edges.py::test_edge_005_install_in_subprocess` | **FAILED** | EDGE-005 | **T-009's remaining work** (witness-side, see below) |
+| `test_edges.py::test_edge_006_live_bus_not_shut_down` | **PASSED** | EDGE-006 | T-002 |
+| `test_edges.py::test_edge_007_reset_event_bus_still_shuts_down` | **PASSED** | EDGE-007 | T-002 |
+| `test_install_properties.py::test_inv_002_warning_count_matches_nonempty_installs` | **PASSED** | INV-002 | T-001..T-005 |
+| `test_install_properties.py::test_inv_003_no_events_and_no_rebinding` | **FAILED** | INV-003 | **T-009's remaining work** (witness-side, see below) |
+
+**RED gate for T-009: 3 of 20 nodes still RED.** All three are `AssertionError`s on real behaviour — no `ImportError`, no collection/setup error, no invalid test data — so all three are a legal RED.
+
+#### The three still-RED nodes — read-only diagnosis (no file was edited)
+
+**1. `test_ac_013_install_publishes_no_event` (AC-013 / REQ-009) — (ii) test-side, not a src defect.**
+
+```
+AssertionError: an install published an event: [<object object at 0x…4FC0>, <object object at 0x…4FC0>, <object object at 0x…4FC0>]
+assert [<object obje…>] == [<object obje…>]   Left contains 2 more items
+```
+
+All three received items are **the same object** — the witness's own anti-vacuity `sentinel`. No install-caused event object ever appears, so REQ-009 ("an install publishes nothing") is not violated. The cause is **duplicate subscriptions of the same collector to the same bus**: `EventWatcher.watch()` calls `subscribe(object, self.received.append)` unconditionally, and AC-013 calls `watcher.watch(get_event_bus())` once before the `SLOTS` loop **and once per iteration**. Only the `EVENTBUS_SLOT` iterations' `clear()` (`reset_event_bus()`) recreates the shared bus, so with `SLOTS = (settings, eventbus, permissions, search, sessionmanagement)` the final shared bus is subscribed **3 times** (permissions, search, session-management iterations) → the single sentinel is delivered 3 times, and the assertion is exact-list equality (`received == [sentinel]`).
+
+Measured control (throwaway script outside the repo, `tests` on the path): one `EventBus` with three `subscribe(object, got.append)` calls and **one** `publish` → `3` deliveries. The property witness already guards exactly this with `_watcher_over` (dedupe by `id(instance)`); the acceptance witness lacks the dedupe. **Fix belongs in the test** (`test_install.py::test_ac_013…` / the shared helper), never in `src/` — the DAG constraint "if a witness fails, the fix goes into the owning feature module … not into the test" does not apply here because the failure is the collector counting its own event three times, not a divergence between two features.
+
+**2. `test_edge_005_install_in_subprocess` (EDGE-005) — (ii) test-side: the child's sink is the removed loguru backend.**
+
+```
+AssertionError: EDGE-005: the child's sink logged 0 WARNING records
+assert 0 == 1
+```
+
+The child script (`_CHILD` in `tests/unit/singleton_install/test_edges.py`) captures records with `from loguru import logger; logger.remove(); logger.add(callable, level="DEBUG")`. The logging backend has been **stdlib + structlog since ADR-082** (`src/backend/logging/_pipeline.py`), and loguru is the *removed* backend — `tests/contract/logging/test_dependency_contract.py` `_REMOVED_BACKEND = "loguru"` (structlog-logging AC-018 / NFR-004), and `pyproject.toml` declares no loguru (`uv pip show loguru` → `Required-by:` empty: a leftover in the venv, which is why the child still imports). `deptry` does not catch it because it scans `src`, not `tests/` (that file's own comment says so).
+
+Measured control (throwaway child script, same reset/get/set sequence, `PYTHONPATH=<worktree>/src`): with a **stdlib** `logging.Handler` capture instead of the loguru sink, the child prints `{"read_is_installed": true, "read_is_not_previous_default": true, "warnings": 1}` — i.e. EDGE-005's three clauses all hold in a fresh interpreter, and the install's WARNING **is** emitted in that process. **Fix belongs in the test** (swap the child's sink to the stdlib pipeline the backend actually uses); no `src/` change is warranted.
+
+**3. `test_inv_003_no_events_and_no_rebinding` (INV-003) — (ii) test-side: the eventbus probe is invalid after a `reset_*()` that the spec itself requires.**
+
+```
+AssertionError: eventbus: the sequence [False] changed how the instance a caller holds behaves — an install rebound the caller's object, not just the slot
+Failing test case: inner(sequence=[False])
+```
+
+The failing half is `_assert_holder_keeps_instance`, whose `_run_sequence` treats `False` as `reset_*()`. For the eventbus tuple the sequence `[False]` runs `reset_event_bus()` while the holder's bus **is** the shared default, and `reset_event_bus()` shuts the instance it drops down — spec'd by **EDGE-007** ("`reset_event_bus()` still shuts the instance down (event-bus REQ-005)"), witnessed GREEN by `test_edge_007_reset_event_bus_still_shuts_down` in this very set. `_stamp_eventbus`'s probe marks a bus by *publish + dispatch*, so on a bus the reset has already shut down the probe can never return `True`.
+
+Measured control: install a stamped bus → `reset_event_bus()` → publish the marker → `wait_for(...) is False` (the worker is stopped). INV-003's clause is "every object that was constructed with an injected instance **keeps that exact instance**" — identity/own behaviour of the held object — while the shutdown is caused by the **reset**, which the spec explicitly permits; the witness conflates the two. **Fix belongs in the test** (a marker that survives shutdown, or keep the holder half's sequence install-only for the bus tuple — the first half already runs the event clause separately). No uniformity defect exists in the five modules: the other four slots' probes (settings value, permissions role, search source, session store) survive a reset, and their sequences pass.
+
+#### Open-finding cross-check (no collateral found)
+
+| Finding | Verdict for these three nodes |
+|---|---|
+| **F-73** (reset ordering delta, review) | Not involved — none of the three turns on the WARNING-vs-release ordering inside an installer. |
+| **F-74** (test helper bypasses the bus lock) | Not involved — `widened_lazy_create_window` / `concurrent_reads` are not used by AC-013, EDGE-005 or INV-003. |
+| **F-77** (`@logged` function has no `__logged_slow_threshold_ms`) | Not involved — no node in this set reads that attribute (same conclusion as the T-011 S4.1 note). |
+| **F-79** (stale DAG line refs) | Not involved in the failures; T-009's `tests_to_create` node IDs all resolve (collected 20, no collection error). |
+| **F-82** (`test_concurrency.py` leaks the settings singleton) | Not involved — that file is not in this node set, and `test_install.py`'s autouse `_settings_singleton_restored` fixture (F-81's fix) restores the settings slot around every witness in the file. Still open, still assigned to T-010; **do not** fix it under T-009. |
+
+#### State for the next step
+
+- **T-009 RED: 3 failed / 17 passed** on the verbatim `red_command`, identical under `pytest-randomly` and `-p no:randomly`. 17 nodes are already GREEN from T-001..T-006/T-011 and stay as witnesses (they must not be weakened).
+- **S4.2 (T-009) scope is test-only**: the three fixes are in `tests/acceptance/singleton_install/test_install.py`, `tests/unit/singleton_install/test_edges.py`, `tests/property/singleton_install/test_install_properties.py` and/or `tests/singleton_install_test_helpers.py` — all five paths are already in T-009's `allowed_files.test_files`. **No `src/` change is warranted by any of the three** (the diagnosis measured the production behaviour as spec-conformant in each case).
+- Nothing committed at this step; only this verification record changed (`git status --short` before the append: clean).
+- **Next: S4.2 (T-009).**
+
+---
+
+### Phase 4 — T-009 GREEN (S4.2) — 2026-10-08
+
+**Step:** S4.2 (T-009) · **Objective:** turn the three RED witnesses of T-009's cross-feature set GREEN without weakening any of them. All work is test-side, exactly as the S4.1 diagnosis concluded — **no `src/` file was touched** (`git diff --stat`: `tests/property/singleton_install/test_install_properties.py`, `tests/singleton_install_test_helpers.py`, `tests/unit/singleton_install/test_edges.py` + this record). `tests/acceptance/singleton_install/test_install.py` needed **no** change: its AC-013 witness is fixed by the shared-helper guard (one guard in the shared function instead of one per caller).
+
+#### Gate ◆ GREEN — `green_command` verbatim (the 20 nodes)
+
+| Run | Result |
+|---|---|
+| verbatim (`pytest-randomly`, `--randomly-seed=716655549`) | **20 passed in 5.88 s** |
+| verbatim + `-p no:randomly` | **20 passed in 6.32 s** |
+| verbatim, three further random seeds (state-dependence probe, see F-83) | **20 passed** (6.72 s / 6.22 s / 6.27 s) |
+
+The 17 nodes already GREEN at S4.1 are all still GREEN, and none of the three fixes removed or relaxed an assertion (claim analysis below).
+
+#### The three fixes
+
+**1. AC-013 `test_ac_013_install_publishes_no_event` — `EventWatcher.watch` now subscribes at most once per bus instance (`tests/singleton_install_test_helpers.py`).**
+
+Root cause, not symptom: `watch()` subscribed `object → received.append` unconditionally, and the witness hands the *same live bus* to `watch` repeatedly (it watches the shared default before the loop and again after every `slot.clear()`, and only the eventbus slot's `clear()` recreates it). The final shared bus therefore carried 3 identical subscriptions and the witness's own anti-vacuity sentinel was delivered 3 times against an exact-list equality — the witness's own instrumentation read as an install-published event. The guard is keyed on `id` and is safe because `_buses` retains every watched instance, so an id can never be recycled by a collected bus.
+
+Claim preserved: the acceptance witness is **unchanged**, so its assertion stays in its strongest form — `watcher.received == [sentinel]`: nothing but the sentinel arrived (no install-caused event, AC-013 / REQ-009) **and** the sentinel itself arrived (the anti-vacuity proof that the collector really receives). The sentinel was not deleted, the parametrized loop was not narrowed, and the property witness's `_watcher_over` dedupe is untouched (it becomes redundant, not wrong — an S4.3 candidate).
+
+**2. EDGE-005 `test_edge_005_install_in_subprocess` — the child's sink is now a stdlib capture handler (`tests/unit/singleton_install/test_edges.py`, `_CHILD`).**
+
+The child installed the **removed** loguru backend (`logger.remove()` / `logger.add(...)`); the pipeline has been stdlib + structlog since ADR-082 and loguru is the removed backend (`tests/contract/logging/test_dependency_contract.py`, `_REMOVED_BACKEND = "loguru"`) and is not a declared dependency — so the child captured nothing. The replacement is a stdlib `logging.Handler` on the pipeline's own logger (`backend.logging`; ADR-082 D1: one dedicated non-propagating logger owns the managed sinks) at `DEBUG`, mirroring the old sink's level. The private `_pipeline` module is **not** imported (AGENTS.md logging rule) — the logger name is the only coupling.
+
+Claim preserved: subprocess isolation kept (`subprocess.run` + `PYTHONPATH=<worktree>/src` + `cwd=tmp_path`), and all three EDGE-005 clauses are still measured in the fresh interpreter — `read_is_installed`, `read_is_not_previous_default`, and `warnings == 1` counted from the records that reach **that process's own sink**. Measured: the child now prints `{"read_is_installed": true, "read_is_not_previous_default": true, "warnings": 1}`.
+
+**3. INV-003 `test_inv_003_no_events_and_no_rebinding` — the holder half stamps by identity (new `SingletonSlot.stamp_identity` in the helper, used by the property test).**
+
+`_stamp_eventbus`'s probe marks a bus by *publish + wait-for-dispatch*, so it is a **liveness** probe: on a bus that a `reset_event_bus()` in the sequence has already shut down — spec-required by EDGE-007 / event-bus REQ-005, witnessed GREEN by `test_edge_007_reset_event_bus_still_shuts_down` in this same set — it can never return `True`. INV-003's wording is "keeps **that exact instance**", an identity question, and its domain (`_SEQUENCE`) contains resets. The helper therefore gains `stamp_identity()` (a fresh instance plus a probe true for that object and no other); the behavioral `stamp()` is **kept and still used** by AC-005 and EDGE-001, whose claim is "still behaves as it was constructed" and whose sequences never reset the held instance away — nothing those two witnesses prove got weaker.
+
+Claim preserved: the eventbus tuple stays in the property, the `False` (reset) steps stay in the sequence, and the second half still applies the full install/reset sequence — only the probe question changed, from "does it still dispatch" to "is it the same object", which is the invariant's own wording. An anti-vacuity clause was **added** (`assert not probe(other)` against a second stamped instance), mirroring AC-005's guard, so a probe that matched every instance fails the witness. The assertion message was reworded to what is now proven ("changed which instance the caller holds").
+
+#### New finding F-83 — INV-003's first half read back a shut-down shared bus (test-side, latent, fixed here)
+
+With the holder half fixed, the *first* half of the same property failed: `settings: the sequence [False] published -1 event(s) beyond the witness's own: []` — `received` empty, i.e. the anti-vacuity sentinel never arrived. Measured by probing the watcher's own state:
+
+```text
+DBG permissions current 2064833159488 shutdown False  buses [2064833159488]  → after-drain [<object …>]
+DBG search      current 2064833159488 shutdown True   buses [2064833159488]  → after-drain []
+```
+
+`_assert_no_install_events` ends with `watcher.drain()`, which **shuts down** every bus it watched — including the shared default. Only the eventbus feature's own reset empties that slot, so the next slot's iteration reads the *same, now dead* bus back from `get_event_bus()` and publishes its sentinel into it, where `publish()` is a silent no-op (event-bus REQ-005). "No event arrived" then stops being evidence. A latent order/state flake in the witness — it stayed hidden at S3.2 because the second-half failure was reported first — not a production defect: the five modules behave identically, the witness's own drain poisoned the next iteration. Fix: `_assert_no_install_events` clears the eventbus slot first (`EVENTBUS_SLOT.clear()`), so the shared default it watches — and the bus the sentinel is published on — is a live instance for every slot. The witness runs inside `isolated_event_bus()`, so the suite's real bus and the logging feature's `SettingChanged` subscription stay parked and untouched (the hazard that file's docstring warns about).
+
+#### Gate — the four `singleton_install` directories
+
+`uv run pytest tests/acceptance/singleton_install tests/unit/singleton_install tests/property/singleton_install tests/contract/singleton_install -q` → **5 failed, 27 passed**, identical under `pytest-randomly` and `-p no:randomly`. Every failure is another task's pending witness; none is T-009's. Baseline control (this step's test changes stashed): **8 failed / 24 passed** — the same five, plus exactly the three T-009 nodes this step fixed, so no new failure was introduced:
+
+| Failure | Owner (task DAG) | Why it is still RED |
+|---|---|---|
+| `test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import` | **T-008** (PENDING) | the five TID251 entries and the `TID251` enable are not added yet |
+| `test_lint_contract.py::test_edge_009_public_api_not_banned` | **T-008** | same |
+| `test_lint_contract.py::test_nfr_004_ruff_and_mypy_clean` | **T-008** | same |
+| `test_guidance_contract.py::test_ac_019_agents_md_names_installer` | **T-012** (PENDING) | the five AGENTS.md "Using …" bullets do not exist yet |
+| `test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` | **T-010** (PENDING) | `permissions: the lazy read emitted 0 entry / 0 exit record(s) of its own` — pre-existing (fails identically with this step's changes stashed) |
+
+`tests/acceptance/singleton_install/test_concurrency.py` (T-010's file, F-82's home) reports **3 passed** in this set — F-82's casualties are no longer observable here. Left untouched per instruction (still T-010's file and T-010's to verify); F-82 stays open.
+
+#### Quality gates
+
+| Gate | Command | Result |
+|---|---|---|
+| ruff (changed paths) | `uv run ruff check tests/singleton_install_test_helpers.py tests/acceptance/singleton_install/test_install.py tests/unit/singleton_install/test_edges.py tests/property/singleton_install/test_install_properties.py` | **All checks passed!** (before and after formatting) |
+| ruff format (changed paths) | `uv run ruff format <the same four paths>` | **1 file reformatted, 3 left unchanged** (the added anti-vacuity assert line); `ruff check` re-run clean afterwards; `green_command` re-run after the format → **20 passed** |
+| mypy (gate) | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| complexipy (gate) | `uv run complexipy src tests --max-complexity-allowed 15` | **All functions are within the allowed complexity** |
+| traceability (CI) | `uv run python scripts/check_traceability.py` | **PASS** (822 matrix rows, 136 spec IDs, 817 test functions) |
+
+No whole-repo ruff sweep and no full `--cov` suite at this step (both are Phase 5 gates).
+
+#### State for the next step
+
+- **T-009 GREEN: 20/20** on the verbatim `green_command`, both orders, plus three extra random seeds. **Nothing committed** at this step.
+- **S4.3 (T-009 refactor) candidates** (same files, behavior-preserving only): the property witness's `_watcher_over` wrapper is now redundant with the helper's per-bus guard; `_assert_no_install_events` and `_assert_holder_keeps_instance` both open with a slot clear plus a stamp and could share that preamble.
+- **F-83** is a witness-state finding for the Problem Log: a shared helper's `drain()` that shuts down a *singleton-owned* instance poisons the next parametrized iteration. Convention for future cross-feature bus witnesses: clear the bus slot (or build a bus of the witness's own) before publishing an anti-vacuity event.
+- **Next: S4.3 (T-009 refactor).**
+
+### Phase 4 — T-009 refactor (S4.3) — 2026-10-08
+
+**Step:** S4.3 (T-009) · **Objective:** improve the structure of the test code T-009 touched, changing no specified behaviour. Of the two candidates the S4.2 record named, **one was applied, one was rejected**. One file changed — `tests/property/singleton_install/test_install_properties.py` (**−18 / +4 lines**, net −14). **No `src/` file touched** (`git status`: the same three test files as S4.2 + this record), `uv.lock` untouched, **nothing committed**.
+
+#### Candidate 1 — applied: the property witness's `_watcher_over` dedupe wrapper is deleted
+
+`EventWatcher.watch` now subscribes at most once per bus instance (the S4.2 root-cause fix), so the witness-local `id`-keyed wrapper was the same guard written a second time one layer up. Deleting it removes the duplication **and** makes INV-003's first half exercise the shared guard itself: a regression in `EventWatcher.watch`'s dedupe is now visible to this witness, where before the private copy masked it.
+
+- Diff: the whole `_watcher_over` factory removed (13 lines incl. its blank separators); its four uses rewritten — `watcher.watch(get_event_bus())`, `_run_sequence(slot, sequence, watcher.watch)`, `watcher.watch(current)`, and the dedupe note folded into the `EventWatcher()` construction line as a comment.
+- **No claim lost.** No assertion, no parametrized case, no anti-vacuity clause was touched: the witness still asserts `len(watcher.received) == 1` — nothing-but-the-sentinel **and** the sentinel arrived — and `_run_sequence` keeps its `watch` parameter so the holder half still passes its no-op lambda (the two halves stay independent witnesses). INV-003's `assert not probe(other)` is untouched.
+
+#### Candidate 2 — rejected: no shared preamble for `_assert_no_install_events` / `_assert_holder_keeps_instance`
+
+The two openings share exactly **one** line (`slot.clear()`); everything else is half-specific. The first clears `EVENTBUS_SLOT` first for the F-83 reason (a drained shared bus makes "no event arrived" non-evidence) and stamps nothing at all; the second builds two identity stamps, one of them the anti-vacuity `other`. Extracting a "preamble" helper would wrap a single call, bury the F-83 comment that only the first half needs, and couple two witnesses the file deliberately keeps apart (the first drains every bus it touched; a behavioral stamp publishes into the collector). Cost > benefit — not a refactor, so no change was made.
+
+#### Gate ◆ GREEN kept (re-run after the last edit)
+
+| Gate | Command | Result |
+|---|---|---|
+| `green_command` verbatim (the 20 nodes, `pytest-randomly` order) | from `.github/task-runner/tasks.json` (T-009) | **20 passed in 5.95 s** |
+| `green_command` verbatim + `-p no:randomly` | same + `-p no:randomly` | **20 passed in 6.56 s** |
+| the four `singleton_install` directories | `uv run pytest tests/acceptance/singleton_install tests/unit/singleton_install tests/property/singleton_install tests/contract/singleton_install -q` | **5 failed, 27 passed in 9.09 s** — byte-for-byte the S4.2 failure set: `test_lint_contract.py::test_ac_018…` / `::test_edge_009…` / `::test_nfr_004…` (**T-008**), `test_guidance_contract.py::test_ac_019_agents_md_names_installer` (**T-012**), `test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` (**T-010**). **No new failure**, and 27 passed is unchanged |
+| ruff (changed paths) | `uv run ruff check tests/property/singleton_install/test_install_properties.py tests/singleton_install_test_helpers.py tests/unit/singleton_install/test_edges.py tests/acceptance/singleton_install/test_install.py` | **All checks passed!** |
+| ruff format (changed paths) | `uv run ruff format <the same four paths>` | **4 files left unchanged** |
+
+No full suite, no whole-repo ruff sweep, no coverage at this step (Phase 5 gates). No test was weakened, narrowed, deleted or converted to a weaker claim; `tests/acceptance/singleton_install/test_install.py` was not modified at all.
+
+- **Next: S4.4 (T-009 commit + VERIFIED)** — commit the three test files + this record, set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`, sync to `docs/tasks/settings-public-registry-setter.tasks.json`.
