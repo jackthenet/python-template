@@ -33,6 +33,7 @@ from logging_test_helpers import (
     records_since,
     run_python,
     session_log_path,
+    subprocess_setup_code,
     wait_for_record_since,
 )
 from settings_test_helpers import set_value_settled
@@ -59,18 +60,20 @@ def test_inv_001_concurrent_setup_owns_two_handlers(tmp_path: Path) -> None:
     @given(st.integers(min_value=1, max_value=16))
     def inner(n: int) -> None:
         log_file = tmp_path / f"inv_001_pipeline_{n}.log"
-        code = f"""
-import threading, tempfile
-from backend.settings import SettingsRegistry, YamlValueRepository
-from backend.settings import registry as _reg_mod
-from backend.logging import register_settings as logging_register, setup_logger
-reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-_reg_mod._registry[0] = reg
-logging_register(reg)
-reg.set_value('logging.log_file', {str(log_file)!r})
-reg.set_value('logging.log_level', 'INFO')
-reg.set_value('logging.log_max_bytes', {_ROTATION_BYTES})
-reg.set_value('logging.log_backup_count', {_ROTATION_BACKUPS})
+        code = (
+            subprocess_setup_code(
+                str(log_file),
+                {
+                    "logging.log_level": "INFO",
+                    "logging.log_max_bytes": _ROTATION_BYTES,
+                    "logging.log_backup_count": _ROTATION_BACKUPS,
+                },
+            )
+            + f"""
+import threading
+
+from backend.logging import setup_logger
+
 errors = []
 
 def worker():
@@ -90,6 +93,7 @@ print("PROPAGATE", _owners[0].propagate if _owners else None)
 print("MAXBYTES", _rotating[0].maxBytes if _rotating else 0)
 print("BACKUPS", _rotating[0].backupCount if _rotating else 0)
 """
+        )
         result = run_python(code)
         assert result.returncode == 0, f"INV-001: the subprocess failed:\n{result.stderr}"
         out = result.stdout

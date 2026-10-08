@@ -221,6 +221,7 @@ def test_edge_007_reset_event_bus_still_shuts_down(log_records: list[Any]) -> No
     """EDGE-007 (event-bus.md REQ-005): reset_event_bus() still shuts the instance down; the WARNING rule applies to install only."""
     with isolated_event_bus():
         EVENTBUS_SLOT.clear()
+        log_records.clear()  # only this test's installs may count (the helper's scratch install/restore warned)
         replaced = EVENTBUS_SLOT.new()
         EVENTBUS_SLOT.install(replaced)  # empty slot: no WARNING (AC-004)
         installed = EVENTBUS_SLOT.new()

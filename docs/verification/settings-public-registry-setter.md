@@ -5689,3 +5689,335 @@ The two openings share exactly **one** line (`slot.clear()`); everything else is
 No full suite, no whole-repo ruff sweep, no coverage at this step (Phase 5 gates). No test was weakened, narrowed, deleted or converted to a weaker claim; `tests/acceptance/singleton_install/test_install.py` was not modified at all.
 
 - **Next: S4.4 (T-009 commit + VERIFIED)** — commit the three test files + this record, set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`, sync to `docs/tasks/settings-public-registry-setter.tasks.json`.
+
+## Phase 4 — T-007 RED (S4.1) — 2026-10-08
+
+**Step:** S4.1 (T-007) Pick task + confirm RED · **Objective:** confirm T-007 is ready, run its **verbatim** `red_command` in both orders, classify every non-passing node, record RED. **No file was edited** except this record: `git status --porcelain` is empty before the run and after it, `uv.lock` untouched, no test weakened, skipped, deleted or edited, no `src/` file touched. No full suite, no whole-repo ruff sweep, no coverage (Phase 5 gates).
+
+### Task readiness
+
+| Check | Result |
+|---|---|
+| branch | `crosscut/settings-public-registry-setter` (verified with `git branch --show-current`) |
+| T-007 in `.github/task-runner/tasks.json` | `status: PENDING` — not yet started, so this is a first entry |
+| `dependencies` T-001 / T-002 / T-006 | `VERIFIED` / `VERIFIED` / `VERIFIED` → **T-007 is ready** |
+| the three `tests_to_create` nodes exist | all three present in `tests/unit/architecture/test_singleton_slots.py` (`test_ac_017_no_cross_package_slot_write:170`, `test_ac_017_scanner_reports_planted_violation:181`, `test_edge_008_owner_slot_write_allowed:235`); `tests/unit/architecture/__init__.py` exists — derived at S3.1 |
+| DAG read directly (not from the launch prompt) | `red_command` / `green_command` / `allowed_files` / `implementation_steps` re-read from `.github/task-runner/tasks.json`; the node list matches the prompt exactly (all three nodes in `test_singleton_slots.py`) |
+
+### The verbatim `red_command` — both orders
+
+```text
+uv run pytest tests/unit/architecture/test_singleton_slots.py::test_ac_017_no_cross_package_slot_write tests/unit/architecture/test_singleton_slots.py::test_ac_017_scanner_reports_planted_violation tests/unit/architecture/test_singleton_slots.py::test_edge_008_owner_slot_write_allowed -v
+```
+
+| Order | Result |
+|---|---|
+| default (`pytest-randomly`, `Using --randomly-seed=2708124179`) | **1 failed, 2 passed in 0.69 s** |
+| same command + `-p no:randomly` | **1 failed, 2 passed in 0.75 s** |
+
+Byte-for-byte the same failure in both orders — the RED is order-independent, not a `pytest-randomly` artefact.
+
+### Per-node classification
+
+| Node | Result | Classification | Evidence / root cause |
+|---|---|---|---|
+| `test_ac_017_no_cross_package_slot_write` | **FAILED** | **(i) genuine behaviour gap in the code under test** | `AssertionError: 11 foreign singleton-slot write(s)` at `tests/unit/architecture/test_singleton_slots.py:178` — the repository scan (`_repo_files()` over `src/` + `tests/`) still finds the 11 private-slot write sites T-007 exists to migrate. The node's anti-vacuity assert (`_owner_path(module) in files` for all five owner modules) passed first, so the scan scope is real, not vacuous |
+| `test_ac_017_scanner_reports_planted_violation` | PASSED | **GREEN by design — not a defect, not another task's witness** | The scanner itself was written at S3.1 (T-007 `implementation_steps` step 1: "Write the scanner first (RED)"), so the planted-fixture half (import form, attribute-write form, embedded-string form, all in `tmp_path`) and its negative control already pass. Recorded as GREEN by design at S3.2 (`T-007 | 3 | 1 failed, 2 passed`) — unchanged here |
+| `test_edge_008_owner_slot_write_allowed` | PASSED | **GREEN by design — EDGE-008 witness** | Same reason: the five owner modules' own slot statements are allowed by the scanner that S3.1 shipped. GREEN by design at S3.2, unchanged |
+
+**No node classified (ii) test-side defect and none classified (iii) another task's pending witness.** The single RED node fails on the production-of-test behaviour T-007 is scoped to fix, and its failure message is the task's own completion criterion.
+
+### The 11 violations the RED node reports (verbatim, `--tb` output)
+
+| # | Site as reported | Form | In T-007 `allowed_files.test_files`? | Class |
+|---|---|---|---|---|
+| 1 | `tests\acceptance\settings_coverage\test_wiring.py:18` | `embedded-write` of `_registry` | yes (`:18`) | (i) |
+| 2 | `tests\contract\logging\test_logging_contracts.py:43` | `embedded-write` of `_registry` | yes (listed at `:35` — line shifted, F-84) | (i) |
+| 3 | `tests\eventbus_test_helpers.py:77` | `write` of `_default_bus` | yes (`:77`) | (i) |
+| 4 | `tests\eventbus_test_helpers.py:84` | `write` of `_default_bus` | yes (`:84`) | (i) |
+| 5 | `tests\logging_test_helpers.py:254` | `embedded-write` of `_registry` | **NO — F-84** | (i) |
+| 6 | `tests\property\logging\test_logging_properties.py:43` | `embedded-write` of `_registry` | yes (listed at `:42` — shifted) | (i) |
+| 7 | `tests\property\logging\test_pipeline_invariants.py:68` | `embedded-write` of `_registry` | **NO — F-84** | (i) |
+| 8 | `tests\settings_test_helpers.py:132` | `write` of `_registry` | yes (`:132`) | (i) |
+| 9 | `tests\settings_test_helpers.py:160` | `write` of `_registry` | yes (`:160`) | (i) |
+| 10 | `tests\settings_test_helpers.py:180` | `write` of `_registry` | yes (`:180`) | (i) |
+| 11 | `tests\unit\logging\test_logging_edges.py:34` | `embedded-write` of `_registry` | yes (listed at `:32` — shifted) | (i) |
+
+The count moved **12 → 11** since S3.2 exactly as F-33 predicted: T-006 migrated the `src/main.py` private import/write, leaving the 11 test-side sites. Nothing else about the scan result changed in kind.
+
+### F-84 — the DAG's site list is stale against the rebased branch (decision needed before S4.2)
+
+This branch now contains the merged `crosscut/structlog-logging` change (`git merge-base --is-ancestor de31ea9 main` → true), and that change rewrote the logging test files. T-007's `allowed_files` / `implementation_steps` were written before the rebase:
+
+- **Two listed sites no longer exist.** `tests/acceptance/settings_coverage/test_setup_logger.py:31` and `:55` contain **no** slot write any more — the structlog change moved the subprocess registry preamble into `tests/logging_test_helpers.py::_SUBPROCESS_REGISTRY_PREAMBLE` (line 254). That file needs **no** migration; the DAG entry for it is dead.
+- **Two sites the DAG does not list now exist**: `tests/logging_test_helpers.py:254` (the moved embedded write) and `tests/property/logging/test_pipeline_invariants.py:68` (an embedded write in a property test the structlog change added).
+- **Line numbers shifted** for three listed sites: `test_logging_contracts.py` 35 → **43**, `test_logging_properties.py` 42 → **43**, `test_logging_edges.py` 32 → **34**. The total is still 11 — a coincidence of the swap, not evidence that the list is unchanged.
+- **Consequence.** `test_ac_017_no_cross_package_slot_write` cannot go GREEN while sites 5 and 7 remain, and both live **outside** T-007's `allowed_files.test_files`. S4.2 must not silently edit files outside its allowed list: the orchestrator has to extend T-007's `allowed_files.test_files` with `tests/logging_test_helpers.py` and `tests/property/logging/test_pipeline_invariants.py` (and strike the `test_setup_logger.py` entry) before S4.2 runs, and record the amendment here.
+- **Blast radius of site 5.** `_SUBPROCESS_REGISTRY_PREAMBLE` is the subprocess preamble for **five** test files — `tests/acceptance/logging/test_renderer.py`, `tests/acceptance/settings_coverage/test_setup_logger.py`, `tests/property/logging/test_logging_properties.py`, `tests/property/logging/test_pipeline_invariants.py`, `tests/unit/logging/test_pipeline_edges.py` — only one of which (`test_logging_properties.py`) is in T-007's `green_command`. S4.2 should add the other four to its verification run (baseline below).
+
+### Blast-radius baseline (read-only, the rest of the `green_command` set)
+
+```text
+uv run pytest tests/unit/test_settings_test_isolation.py tests/acceptance/settings_coverage/test_setup_logger.py tests/acceptance/settings_coverage/test_wiring.py tests/contract/logging/test_logging_contracts.py tests/property/logging/test_logging_properties.py tests/unit/logging/test_logging_edges.py -q
+```
+
+→ **16 passed in 16.35 s** — every pre-existing test file T-007 rewrites is GREEN **before** the migration, so any failure after S4.2 is this task's doing (the migration must be count- and assertion-neutral, D11).
+
+Extra baseline for the F-84 files and the other preamble consumers (not in `green_command`):
+
+```text
+uv run pytest tests/acceptance/logging/test_renderer.py tests/unit/logging/test_pipeline_edges.py tests/property/logging/test_pipeline_invariants.py -q
+```
+
+→ **12 passed in 5.63 s** — also GREEN before the migration.
+
+### State for the next step
+
+- **RED observed and recorded**: 1 failed / 2 passed, identical under `pytest-randomly` and `-p no:randomly`; the failure is the 11 remaining private-slot write sites, i.e. exactly T-007's scope.
+- **Sites S4.2 must migrate (11)**: `tests/settings_test_helpers.py:132,160,180` · `tests/eventbus_test_helpers.py:77,84` · `tests/acceptance/settings_coverage/test_wiring.py:18` · `tests/contract/logging/test_logging_contracts.py:43` · `tests/property/logging/test_logging_properties.py:43` · `tests/unit/logging/test_logging_edges.py:34` · **plus F-84's two**: `tests/logging_test_helpers.py:254` and `tests/property/logging/test_pipeline_invariants.py:68`.
+- **Decision S4.2 needs from the orchestrator**: authorize the two extra paths in `allowed_files.test_files` (F-84) and whether the `green_command` set is extended with the four other preamble consumers.
+- **Next: S4.2 (T-007) implement + confirm GREEN.**
+
+## Phase 4 — T-007 GREEN (S4.2) — 2026-10-08
+
+**Step:** S4.2 (T-007) Implement + confirm GREEN · **Objective:** migrate the 11 remaining test-side private-singleton-slot writes to the public install operations and land T-007's **verbatim** `green_command` GREEN. Branch verified with `git branch --show-current` (`crosscut/settings-public-registry-setter`). **Nothing committed** (S4.4 commits and flips the DAG status). `git status --porcelain` after the step: the eight migrated test files + this record — **no `src/` file, no `pyproject.toml`, no `uv.lock`** (no `uv run` re-lock occurred, so no `git checkout -- uv.lock` was needed).
+
+### F-84 authorization as applied
+
+| Authorized delta | Applied |
+|---|---|
+| **ADD** `tests/logging_test_helpers.py` (`_SUBPROCESS_REGISTRY_PREAMBLE`, embedded, shared by 5 test files) | migrated (site 10 below) |
+| **ADD** `tests/property/logging/test_pipeline_invariants.py` (embedded) | migrated (site 11 below) |
+| **STRIKE** `tests/acceptance/settings_coverage/test_setup_logger.py` (its two DAG-listed sites moved into the shared preamble; the file has zero slot writes) | **the file was not edited at all** — `git status` shows it unmodified; it gains only what the shared-preamble edit gives it |
+| Line numbers: trust the code, not the DAG (contracts 35→43, properties 42→43, edges 32→34) | all sites located by content (`grep` for the slot writes), not by DAG line numbers |
+
+**S4.4 must write this `allowed_files.test_files` amendment into the DAG** (add the two F-84 paths, strike the `test_setup_logger.py` entry, refresh the shifted line numbers) with the reason recorded here.
+
+### The 11 sites — before → after (8 files)
+
+| # | Site (old line → new line) | Old write | New call |
+|---|---|---|---|
+| 1 | `tests/settings_test_helpers.py:132 → :136` | `_registry_module._registry[0] = isolated` | `set_settings_registry(isolated)` — `reset_settings_registry()` still precedes it (`:130`) |
+| 2 | `tests/settings_test_helpers.py:160 → :164` | `_registry_module._registry[0] = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))` | `set_settings_registry(SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp())))` — reset at `:162` |
+| 3 | `tests/settings_test_helpers.py:180 → :185` | `_registry_module._registry[0] = saved` | `set_settings_registry(saved)` inside the unchanged `if saved is not None:` guard; reset at `:183` (REQ-004: the installer never takes `None`, an empty restore stays a reset) |
+| 4 | `tests/eventbus_test_helpers.py:77 → :82` | `_eventbus_module._default_bus[0] = EventBus()` | `set_event_bus(EventBus())` |
+| 5 | `tests/eventbus_test_helpers.py:84 → :90-96` | `_eventbus_module._default_bus[0] = saved` then `if _default_bus[0] is None: get_event_bus()` | `set_event_bus(saved)` when `saved is not None`, otherwise `reset_event_bus()` (idempotent — the scratch was shut down two lines earlier) **followed by `get_event_bus()`**, so the slot is still never left empty |
+| 6 | `tests/acceptance/settings_coverage/test_wiring.py:18 → :17` | embedded `_reg_mod._registry[0] = SettingsRegistry(...)` | embedded `set_settings_registry(SettingsRegistry(...))` — still one `python -c` subprocess, subprocess isolation unchanged |
+| 7 | `tests/contract/logging/test_logging_contracts.py:43 → :42` | embedded `_reg_mod._registry[0] = reg` | embedded `set_settings_registry(reg)` |
+| 8 | `tests/property/logging/test_logging_properties.py:43 → :42` | embedded `_reg_mod._registry[0] = reg` | embedded `set_settings_registry(reg)` |
+| 9 | `tests/unit/logging/test_logging_edges.py:34 → :33` | embedded `_reg_mod._registry[0] = reg` | embedded `set_settings_registry(reg)` |
+| 10 | `tests/logging_test_helpers.py:254 → :253` **(F-84)** | embedded `_registry_module._registry[0] = _registry` | embedded `set_settings_registry(_registry)`; the preamble's `import backend.settings.registry as _registry_module` line dropped (unused after the migration) |
+| 11 | `tests/property/logging/test_pipeline_invariants.py:68 → :67` **(F-84)** | embedded `_reg_mod._registry[0] = reg` | embedded `set_settings_registry(reg)` |
+
+In every embedded site the private `from backend.settings import registry as _reg_mod` line was folded into the existing `from backend.settings import SettingsRegistry, YamlValueRepository, set_settings_registry` line — the subprocess code no longer touches the private module at all.
+
+**D11 (identical save / scratch / restore semantics) — how it was kept:** no test was skipped, deleted, renamed, re-parametrised, or had an assertion or a fixture changed; the only non-write lines touched are the import lines the writes depended on, plus one docstring paragraph in `isolated_event_bus` naming the public operation. `isolated_event_bus`'s documented parking sequence is operation-for-operation unchanged (read the live instance → install a scratch bus → block runs → shut the scratch down → restore the parked instance → never leave the slot empty); the scratch read (`saved = _eventbus_module._default_bus[0]`, `scratch = _eventbus_module._default_bus[0]`) stays a **read** — EDGE-008 allows a foreign read, only the write is forbidden, and the scanner reports it as allowed.
+
+### INV-002 warning counts — verified, not assumed
+
+The three settings-helper installs each follow a `reset_settings_registry()` inside the same helper (`:130`→`:136`, `:162`→`:164`, `:183`→`:185`), so every one meets an **empty** slot and REQ-002 emits no replace WARNING. Measured on the exact-count witnesses (blast-radius run below): `tests/acceptance/settings/test_settings.py::test_ac_041_replace_logs_one_warning`, `tests/acceptance/singleton_install/test_install.py::test_ac_003_replace_logs_one_warning` and `::test_ac_004_empty_slot_no_warning`, `tests/property/singleton_install/test_install_properties.py::test_inv_002_warning_count_matches_nonempty_installs`, `tests/contract/singleton_install/test_performance_contract.py::test_nfr_002_install_latency` — all GREEN after the migration. The eventbus side is **not** unaffected: see finding **F-85**.
+
+### The verbatim `green_command` — both orders
+
+```text
+uv run pytest tests/unit/architecture/test_singleton_slots.py::test_ac_017_no_cross_package_slot_write tests/unit/architecture/test_singleton_slots.py::test_ac_017_scanner_reports_planted_violation tests/unit/architecture/test_singleton_slots.py::test_edge_008_owner_slot_write_allowed tests/unit/test_settings_test_isolation.py tests/acceptance/settings_coverage/test_setup_logger.py tests/acceptance/settings_coverage/test_wiring.py tests/contract/logging/test_logging_contracts.py tests/property/logging/test_logging_properties.py tests/unit/logging/test_logging_edges.py -v
+```
+
+| Order | Result |
+|---|---|
+| default (`pytest-randomly`, e.g. `Using --randomly-seed=2370016065`) | **19 passed in 12.32 s** (re-run after the import tidy: 19 passed in 12.57 s) |
+| same command + `-p no:randomly` | **19 passed in 12.46 s** (re-run: 19 passed in 12.60 s) |
+
+19 nodes = the 3 scanner nodes + `test_settings_test_isolation.py` (1) + `test_setup_logger.py` (3) + `test_wiring.py` (1) + `test_logging_contracts.py` (4) + `test_logging_properties.py` (3) + `test_logging_edges.py` (4) — the same 19 the S4.1 baseline counted (16 pre-existing + 3 scanner), so no node was lost.
+
+### Scanner: 0 foreign writes, and it still has teeth
+
+| Node | Result | Evidence |
+|---|---|---|
+| `test_ac_017_no_cross_package_slot_write` | **PASSED** | the repository-wide scan over `src/` + `tests/` reports **0** violations (S4.1: `AssertionError: 11 foreign singleton-slot write(s)`); its anti-vacuity assert — all five owner modules present in the scanned file list — still runs before the scan |
+| `test_ac_017_scanner_reports_planted_violation` | **PASSED** | the scanner still reports the planted **import** form, the **module-alias write** form and the **embedded-string** form (all in `tmp_path`), and all five slots are guarded — the 0-violation result is not a scanner that stopped seeing |
+| `test_edge_008_owner_slot_write_allowed` | **PASSED** | the five owner modules' own slot statements stay unreported, both in the `tmp_path` mirror and measured on the repository itself |
+
+The scanner was **not** touched: `tests/unit/architecture/test_singleton_slots.py` and `tests/unit/architecture/__init__.py` are absent from `git status --porcelain` — its rules, owner table and assertions are exactly as S3.1 shipped them.
+
+### Extra verification — the shared preamble's five consumers
+
+```text
+uv run pytest tests/acceptance/logging/test_renderer.py tests/unit/logging/test_pipeline_edges.py tests/property/logging/test_pipeline_invariants.py tests/acceptance/settings_coverage/test_setup_logger.py -q
+```
+
+→ **15 passed in 6.09 s** (S4.1 baseline for the first three files: 12 passed; + the 3 `test_setup_logger.py` nodes = 15 — identical). The fifth consumer, `tests/property/logging/test_logging_properties.py`, is inside `green_command` (3 nodes, GREEN). All five `_SUBPROCESS_REGISTRY_PREAMBLE` consumers are therefore verified.
+
+### Gates
+
+| Gate | Command | Result |
+|---|---|---|
+| ruff (changed paths) | `uv run ruff check tests/settings_test_helpers.py tests/eventbus_test_helpers.py tests/acceptance/settings_coverage/test_wiring.py tests/contract/logging/test_logging_contracts.py tests/property/logging/test_logging_properties.py tests/property/logging/test_pipeline_invariants.py tests/unit/logging/test_logging_edges.py tests/logging_test_helpers.py` | **All checks passed!** |
+| ruff format (changed paths) | `uv run ruff format <the same eight paths>` | **8 files left unchanged** |
+| mypy (gate) | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| complexipy (gate) | `uv run complexipy src tests --max-complexity-allowed 15` | **All functions are within the allowed complexity.** |
+| traceability (gate) | `uv run python scripts/check_traceability.py` | **Traceability: PASS (822 matrix rows, 136 spec IDs, 817 test functions)** |
+
+No full suite, no whole-repo ruff sweep, no coverage at this step (Phase 5 gates). `uv run ty check src/` is informational and was not run.
+
+### Blast radius (targeted, not the full suite)
+
+```text
+uv run pytest tests/acceptance/eventbus/test_eventbus.py tests/acceptance/singleton_install tests/property/singleton_install tests/contract/singleton_install tests/unit/singleton_install tests/acceptance/settings/test_settings.py tests/acceptance/search/test_singleton_install.py tests/acceptance/permissions/test_singleton_install.py tests/acceptance/sessionmanagement/test_singleton.py -q
+```
+
+| When | Result |
+|---|---|
+| baseline (before the migration) | **5 failed, 100 passed** — `test_lint_contract.py::test_ac_018…` / `::test_edge_009…` / `::test_nfr_004…` (**T-008**), `test_guidance_contract.py::test_ac_019_agents_md_names_installer` (**T-012**), `test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` (**T-010**) |
+| after the migration | **7 failed, 98 passed** — the same 5 pending witnesses **plus exactly two new failures**, both named in F-85 below |
+
+### Finding F-85 — the migration makes two existing witnesses count the helper's own replace WARNING (out of T-007's `allowed_files`)
+
+The two new failures are one root cause, and it is a **spec-sanctioned observable change**, not a defect in the migration: `isolated_event_bus()` now installs and restores through `set_event_bus()`, and REQ-002 / D2 / EDGE-001 ("a helper that installs twice") require **one WARNING per install over a non-empty slot**. The helper's own scratch install and restore therefore emit two `event bus: shared default bus replaced` records, and the `log_records` fixture's capture is already open when the `with isolated_event_bus():` line runs, so those two records land in witnesses that count WARNINGs exactly:
+
+| Node | Failure |
+|---|---|
+| `tests/acceptance/eventbus/test_eventbus.py::test_ac_014_replace_logs_one_warning` | `assert not non_tracing_warnings(log_records)` → `[event bus: shared default bus replaced]` (the helper's install, emitted before the witness's own `install(first)`) |
+| `tests/unit/singleton_install/test_edges.py::test_edge_007_reset_event_bus_still_shuts_down` | `assert len(non_tracing_warnings(log_records)) == 1` → `2 == 1` (the witness's own replace + the helper's) |
+
+Neither file is in T-007's `allowed_files.test_files`, so **S4.2 did not touch them** — the fix is a test-side adjustment the orchestrator has to authorize (F-85), one line per witness: `log_records.clear()` immediately after entering `isolated_event_bus()`, i.e. the convention the same suite already uses everywhere a helper-induced record would pollute an exact count — `tests/acceptance/singleton_install/test_install.py::test_ac_003` / `::test_ac_004` (`slot.clear(); log_records.clear()`), `tests/property/singleton_install/test_install_properties.py::_count_installs_on_nonempty_slot` (`log_records.clear()  # only this sequence's records may count`) and `tests/contract/singleton_install/test_performance_contract.py::_install_median` (`log_records.clear()`). The clear drops only records emitted **before** the witness's own Given step, so no assertion is weakened; the alternative — keeping the helper's install silent — is impossible without writing the private slot again, which is exactly what AC-017 forbids.
+
+**Recommendation:** extend T-007's `allowed_files.test_files` with those two files (a 2-line, count-neutral adjustment) at S4.4, or open it as its own ISSUE; either way the full suite (Phase 5) cannot go GREEN without it.
+
+### State for the next step
+
+- **GREEN observed and recorded**: T-007's verbatim `green_command` → **19 passed** under `pytest-randomly` **and** under `-p no:randomly`; the scanner reports **0** foreign writes with its anti-vacuity witnesses intact; the five preamble consumers are GREEN (15 passed).
+- **Files changed (uncommitted)**: `tests/settings_test_helpers.py`, `tests/eventbus_test_helpers.py`, `tests/acceptance/settings_coverage/test_wiring.py`, `tests/contract/logging/test_logging_contracts.py`, `tests/property/logging/test_logging_properties.py`, `tests/property/logging/test_pipeline_invariants.py`, `tests/unit/logging/test_logging_edges.py`, `tests/logging_test_helpers.py` + this record.
+- **Open for S4.4**: the F-84 `allowed_files` amendment (add 2, strike 1, refresh line numbers) and the F-85 decision.
+- **Next: S4.3 (T-007) refactor.**
+
+## Phase 4 — T-007 F-85 correction (S4.2 re-entry) — 2026-10-08
+
+Fresh S4.2 subagent, re-entered for one objective: close **F-85** (the two witnesses F-85 names count the helper's own REQ-002 replace WARNING) with the minimal count-neutral correction the S4.2 record proposes, authorized by the orchestrator (**F-85a**) — the two files are outside T-007's `allowed_files` and S4.4 writes that amendment (F-84 + F-85a) into both DAG copies. Nothing else changed: the helper, the AC-017 scanner, `src/`, `pyproject.toml` and `uv.lock` are untouched (`git status` shows no `uv.lock` change; it was never staged — PROBLEMS.md P-42).
+
+### The two one-line diffs
+
+`tests/acceptance/eventbus/test_eventbus.py::test_ac_014_replace_logs_one_warning`:
+
+```diff
+     with isolated_event_bus():
+         EVENTBUS_SLOT.clear()
++        log_records.clear()  # only this test's installs may count (the helper's scratch install/restore warned)
+         first = EVENTBUS_SLOT.new()
+         EVENTBUS_SLOT.install(first)  # unset slot: no WARNING
+```
+
+`tests/unit/singleton_install/test_edges.py::test_edge_007_reset_event_bus_still_shuts_down`:
+
+```diff
+     with isolated_event_bus():
+         EVENTBUS_SLOT.clear()
++        log_records.clear()  # only this test's installs may count (the helper's scratch install/restore warned)
+         replaced = EVENTBUS_SLOT.new()
+         EVENTBUS_SLOT.install(replaced)  # empty slot: no WARNING (AC-004)
+```
+
+One line each, inserted after the witness's own Given step (`EVENTBUS_SLOT.clear()`), i.e. the idiom already used by `tests/acceptance/singleton_install/test_install.py::test_ac_003_replace_logs_one_warning` / `::test_ac_004_empty_slot_no_warning` (`slot.clear(); log_records.clear()`), `tests/property/singleton_install/test_install_properties.py::_count_installs_on_nonempty_slot` (`log_records.clear()  # only this sequence's records may count`) and `tests/contract/singleton_install/test_performance_contract.py::_install_median` (`log_records.clear()`) — copied, not invented.
+
+### Why the capture-window reset is count-neutral (not a weakening)
+
+REQ-002's replace WARNING is logged by **every** install over a non-empty slot, including `isolated_event_bus()`'s own scratch install and its restore (`eventbus_test_helpers.py:82` and `:90`). The `log_records` fixture's capture is open before the test body runs, so those two records are in the window when the exact-count witnesses assert. They are **not the WARNING under test**: each witness is about the replace it performs itself, after its own Given step. Clearing the window at that boundary removes only records emitted before the witness's own installs, so the counted set is exactly the witness's own installs — the same set the witnesses counted before the migration, when the helper wrote the private slot silently (a write AC-017 now forbids, so the helper's WARNINGs are unavoidable and correct).
+
+The exact-count claims are unchanged, verbatim:
+
+- `tests/acceptance/eventbus/test_eventbus.py:252` — `assert not non_tracing_warnings(log_records), f"install into an unset slot warned: {log_records!r}"` (unset slot logs none)
+- `tests/acceptance/eventbus/test_eventbus.py:257` — `assert len(warnings) == 1, f"expected exactly one replace WARNING, got {warnings!r}"`
+- `tests/acceptance/eventbus/test_eventbus.py:258` — `assert "bus" in str(warnings[0]).lower(), f"the WARNING does not name the shared default: {warnings[0]!r}"` (message/level assertions intact)
+- `tests/unit/singleton_install/test_edges.py:229` — `assert len(non_tracing_warnings(log_records)) == 1, ("EDGE-007: installing over a held bus did not warn, so the reset contrast below is vacuous")` (the anti-vacuity guard, kept)
+- `tests/unit/singleton_install/test_edges.py:243` — `warnings = non_tracing_warnings(log_records)` then `assert not warnings, f"EDGE-007: reset_event_bus() logged a replace WARNING: {warnings!r}"` (the reset half of EDGE-007 still measured in a window opened by the witness's own `log_records.clear()` at `:238`)
+
+No assertion was relaxed, no count lowered, nothing deleted: both witnesses still demand **exactly one** WARNING for the replace they perform, with the same message keyword and level filtering (`non_tracing_warnings`).
+
+### Gates
+
+| Gate | Command | Result |
+|---|---|---|
+| F-85 witnesses | `uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_014_replace_logs_one_warning tests/unit/singleton_install/test_edges.py::test_edge_007_reset_event_bus_still_shuts_down -p no:randomly -q` | **2 passed** (both FAILED before this correction) |
+| T-007 `green_command` (verbatim, default `pytest-randomly` order) | `uv run pytest tests/unit/architecture/test_singleton_slots.py::test_ac_017_no_cross_package_slot_write … tests/unit/logging/test_logging_edges.py -v` (full command read from `.github/task-runner/tasks.json`) | **19 passed** |
+| T-007 `green_command` (fixed order) | same + `-p no:randomly` | **19 passed** |
+| AC-017 scanner | inside the `green_command` set: `test_ac_017_no_cross_package_slot_write` (**0** foreign writes) + `test_ac_017_scanner_reports_planted_violation` + `test_edge_008_owner_slot_write_allowed` | all **PASSED** — planted-violation and EDGE-008 witnesses intact |
+| Blast radius (the S4.1 baseline set, verbatim) | `uv run pytest tests/acceptance/eventbus/test_eventbus.py tests/acceptance/singleton_install tests/property/singleton_install tests/contract/singleton_install tests/unit/singleton_install tests/acceptance/settings/test_settings.py tests/acceptance/search/test_singleton_install.py tests/acceptance/permissions/test_singleton_install.py tests/acceptance/sessionmanagement/test_singleton.py -q` | **5 failed, 100 passed** — back to the S4.1 baseline (F-85 had made it 7 failed / 98 passed) |
+| ruff (changed paths) | `uv run ruff check tests/acceptance/eventbus/test_eventbus.py tests/unit/singleton_install/test_edges.py` | **All checks passed!** |
+| ruff format (changed paths) | `uv run ruff format tests/acceptance/eventbus/test_eventbus.py tests/unit/singleton_install/test_edges.py` | **2 files left unchanged** |
+
+The 5 blast-radius failures are exactly the pending witnesses of later tasks, no other failure:
+
+| Pending witness | Task |
+|---|---|
+| `tests/contract/singleton_install/test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import` | T-008 |
+| `tests/contract/singleton_install/test_lint_contract.py::test_edge_009_public_api_not_banned` | T-008 |
+| `tests/contract/singleton_install/test_lint_contract.py::test_nfr_004_ruff_and_mypy_clean` | T-008 |
+| `tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer` | T-012 |
+| `tests/acceptance/singleton_install/test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` | T-010 |
+
+Two run-hygiene notes (no code impact, recorded so a later step does not misread a red run):
+
+- The blast-radius path set is the one recorded at S4.1/S4.2 above. An abbreviated variant (`tests/acceptance/eventbus` as a directory, without the settings/search/permissions/sessionmanagement paths) collects only 48 tests and cannot reproduce the 105-test baseline; it was run too and shows the **same 5** failures (5 failed / 43 passed), i.e. no additional failure anywhere.
+- `tests/unit/test_settings_test_isolation.py::test_offending_tests_do_not_create_shared_settings_dir` is sensitive to **concurrent** pytest sessions in the same worktree: it deletes the repo-root `settings/` artifact, runs a subprocess, then asserts the directory was not recreated, while any other pytest session's session-scoped autouse `_logging_session_setup` fixture recreates it. Run under `-p no:randomly` it failed once with a `settings/values.yaml` created by a second pytest run executing in parallel in the same worktree; re-run alone it is GREEN (part of the 19 passed above). Sequential runs only.
+
+### State for the next step
+
+- **GREEN re-proved after the F-85 correction**: both F-85 witnesses pass with their exact-count assertions untouched; T-007 `green_command` **19 passed** in both orders; blast radius back to **5 failed / 100 passed** with exactly the T-008 ×3 / T-012 ×1 / T-010 ×1 pending witnesses.
+- **Files changed by this re-entry (uncommitted)**: `tests/acceptance/eventbus/test_eventbus.py`, `tests/unit/singleton_install/test_edges.py` (+1 line each) + this record. The eight T-007 migration files from the first S4.2 run are unchanged by it.
+- **Open for S4.4**: the `allowed_files` amendment (F-84 + **F-85a**: add `tests/acceptance/eventbus/test_eventbus.py` and `tests/unit/singleton_install/test_edges.py`) in `.github/task-runner/tasks.json` and `docs/tasks/settings-public-registry-setter.tasks.json`.
+- **Next: S4.3 (T-007) refactor.**
+
+## Phase 4 — T-007 refactor (S4.3) — 2026-10-08
+
+**Step:** S4.3 (T-007) Refactor — keep GREEN (the implement skill numbers this section S4.4; same step) · **Objective:** improve the structure of the code T-007 touched without changing any specified behaviour, then re-run the targeted gates. Branch verified with `git branch --show-current` (`crosscut/settings-public-registry-setter`). **Nothing committed** (S4.4 commits and flips T-007 to `VERIFIED`). No `src/` file, no `pyproject.toml`, no `uv.lock` (`git status --porcelain` after the step lists the ten test files + this record; no `uv run` re-lock occurred, so no `git checkout -- uv.lock` was needed — PROBLEMS.md P-42). No full suite, no whole-repo ruff sweep, no coverage (Phase 5 gates). All pytest runs were **sequential** (the `tests/unit/test_settings_test_isolation.py` concurrency caveat recorded at S4.2).
+
+### Candidate 1 — the duplicated subprocess registry-install preamble: **APPLIED (4 of the 5 sites)**
+
+The migration left **five** copies of the same "install an isolated registry + register the logging settings" preamble embedded in test code strings. The repository already has the helper that produces exactly that code — `tests/logging_test_helpers.py::subprocess_setup_code(log_file, values)` over `_SUBPROCESS_REGISTRY_PREAMBLE` — and three sibling test files already use it (`tests/acceptance/logging/test_renderer.py`, `tests/unit/logging/test_pipeline_edges.py`, `tests/acceptance/settings_coverage/test_setup_logger.py`). Reusing it (implement-skill ladder, rung 2: reuse the helper that is already here) rather than keeping five hand-inlined copies:
+
+| Site | Decision | Why |
+|---|---|---|
+| `tests/contract/logging/test_logging_contracts.py::test_nfr_001_setup_time_budget` | **reuses `subprocess_setup_code`** | the inlined block was byte-for-byte what the helper emits (only local names differed) |
+| `tests/property/logging/test_logging_properties.py::test_inv_001_concurrent_setup_logger_sinks` | **reuses it** | same |
+| `tests/property/logging/test_pipeline_invariants.py::test_inv_001_concurrent_setup_owns_two_handlers` | **reuses it** (`log_max_bytes` / `log_backup_count` passed through the `values` dict, as `test_setup_logger.py::test_ac_019` already does) | same |
+| `tests/unit/logging/test_logging_edges.py::test_edge_001_log_file_parent_created` | **reuses it** | same |
+| `tests/acceptance/settings_coverage/test_wiring.py::test_main_wires_all_features` | **left as-is — no-op** | a different harness on purpose: it runs `subprocess.run(..., cwd=_REPO_ROOT)` with `sys.path.insert(0, 'src')` and imports `main`, which registers every feature itself; the shared preamble would additionally import and call `backend.logging.register_settings` **before** `main` runs, i.e. a real behaviour delta in the AC-003 probe, for one line of saved duplication |
+
+Net effect: **−36 lines of duplicated subprocess code across 4 files**, and the embedded-write surface AC-017 guards drops from five inline copies to the **one** shared preamble — the duplication is exactly what made T-007 an 11-site migration instead of a 1-site one, so collapsing it is the structural fix, not cosmetics.
+
+**Behaviour-preserving — how it was verified, not assumed:** the generated subprocess code is the same operations in the same order (`SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))` → `set_settings_registry(...)` → the feature's `register_settings(...)` → the same `set_value` calls with the same values); only the local names change (`reg` → `_registry`, `logging_register` → `_register_logging_settings`) and the preamble's unused `from pathlib import Path` is added. No assertion, no count, no fixture, no parametrised case, no subprocess boundary changed — the four tests still run one fresh interpreter per sample/example and assert the identical `SETUP_MS` / `ERRORS 0` / `OWNERS 1` / `CONSOLE 1` / `FILE 1` / `FEATURE_HANDLERS 2` / `PROPAGATE False` / `MAXBYTES` / `BACKUPS` observations and the same `nested.parent.exists()` / `nested.exists()` claims. Node counts unchanged (19 in `green_command`, 15 in the preamble-consumer set).
+
+### Candidate 2 — the save / scratch / restore preamble across the migrated helper sites: **NO-OP (recorded, zero file changes)**
+
+`tests/settings_test_helpers.py` (`install_isolated_registry` / `isolated_registry` / `restore_singleton`) and `tests/eventbus_test_helpers.py::isolated_event_bus` now share the *shape* save → `reset` → `set_*` scratch → `finally` restore, but they are not the same operation and unifying them would be an abstraction nobody asked for:
+
+- They are **two different features' install operations** (settings REQ-026 vs event-bus REQ-008). A generic helper would have to be parameterised by getter/setter/reset/shutdown and would couple the settings and eventbus test helpers — the change deliberately keeps each feature's slot behind its own operation (REQ-012 / ADR-084).
+- Their semantics differ in ways D11 forbids collapsing: the settings trio preserves the `logging.*` definitions+values and never shuts anything down; `isolated_event_bus` **parks** the real bus, shuts the scratch down, restores the parked instance, and must never leave the slot empty (`reset_event_bus()` + `get_event_bus()` on the empty branch, REQ-004). A shared helper would carry that as flags.
+- The settings side already shares what *is* shared: `isolated_registry`'s `finally` delegates to `restore_singleton`, and the REQ-004 "empty restore stays a reset" rule lives in that one function.
+
+### Scanner: untouched, and no finding
+
+`tests/unit/architecture/test_singleton_slots.py` is absent from `git status --porcelain` — its rules, owner table and assertions are exactly as S3.1 shipped them. No structural improvement was available inside the "no rule / owner-table / assertion change" limit; the two heuristics it carries (the `ponytail:` no-import-binding-resolution note, and ADR-084's accepted string-literal cost) are already documented in place. Candidate 1 helps the guard from the other side: fewer embedded copies means fewer places a future write can hide.
+
+### Gates (re-run after the last edit)
+
+| Gate | Command | Result |
+|---|---|---|
+| T-007 `green_command` (verbatim from `.github/task-runner/tasks.json`, default `pytest-randomly`, `--randomly-seed=245967306`) | `uv run pytest tests/unit/architecture/test_singleton_slots.py::test_ac_017_no_cross_package_slot_write … tests/unit/logging/test_logging_edges.py -v` | **19 passed in 12.94 s** |
+| same, fixed order | same + `-p no:randomly` | **19 passed in 12.00 s** |
+| the shared preamble's five consumers (the four refactored files' neighbours) | `uv run pytest tests/acceptance/logging/test_renderer.py tests/unit/logging/test_pipeline_edges.py tests/property/logging/test_pipeline_invariants.py tests/acceptance/settings_coverage/test_setup_logger.py -q` | **15 passed in 5.99 s** — identical to the S4.2 record |
+| blast radius (the S4.2 records' verbatim 9-path set) | `uv run pytest tests/acceptance/eventbus/test_eventbus.py tests/acceptance/singleton_install tests/property/singleton_install tests/contract/singleton_install tests/unit/singleton_install tests/acceptance/settings/test_settings.py tests/acceptance/search/test_singleton_install.py tests/acceptance/permissions/test_singleton_install.py tests/acceptance/sessionmanagement/test_singleton.py -q` | **5 failed, 100 passed** — unchanged |
+| blast radius (the directory-form 9-path variant) | `uv run pytest tests/acceptance/eventbus tests/acceptance/singleton_install tests/unit/singleton_install tests/property/singleton_install tests/contract/singleton_install tests/acceptance/settings tests/contract/settings tests/unit/settings tests/acceptance/search -q` | **5 failed, 165 passed** — the **same 5** nodes, no new failure |
+| the 5 (all pending witnesses of later tasks) | `test_lint_contract.py::test_ac_018_ruff_bans_private_slot_import` / `::test_edge_009_public_api_not_banned` / `::test_nfr_004_ruff_and_mypy_clean` (**T-008**), `test_guidance_contract.py::test_ac_019_agents_md_names_installer` (**T-012**), `test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` (**T-010**) | exactly the S4.1/S4.2 baseline set |
+| ruff (changed paths) | `uv run ruff check tests/settings_test_helpers.py tests/eventbus_test_helpers.py tests/logging_test_helpers.py tests/acceptance/settings_coverage/test_wiring.py tests/acceptance/eventbus/test_eventbus.py tests/contract/logging/test_logging_contracts.py tests/property/logging/test_logging_properties.py tests/property/logging/test_pipeline_invariants.py tests/unit/logging/test_logging_edges.py tests/unit/singleton_install/test_edges.py` | **All checks passed!** |
+| ruff format (same ten paths) | `uv run ruff format …` | **10 files left unchanged** |
+| mypy (gate) | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| complexipy (gate) | `uv run complexipy src tests --max-complexity-allowed 15` | **All functions are within the allowed complexity.** |
+
+### State for the next step
+
+- **GREEN kept after the refactor**: `green_command` **19 passed** in both orders; blast radius unchanged in both path forms (5 failed / 100 passed and 5 failed / 165 passed, the same five pending witnesses); ruff / ruff format / mypy / complexipy clean.
+- **Files changed by this step (4, uncommitted)**: `tests/contract/logging/test_logging_contracts.py`, `tests/property/logging/test_logging_properties.py`, `tests/property/logging/test_pipeline_invariants.py`, `tests/unit/logging/test_logging_edges.py` — each now builds its subprocess code from `subprocess_setup_code`. The other six migrated files and the scanner are untouched by this step.
+- **No test weakened, narrowed, skipped or deleted; no assertion removed; no parametrised case dropped** — the four tests' node counts, subprocess shape and assertions are byte-identical to the S4.2 state.
+- **Open for S4.4**: the `allowed_files` amendment (F-84 + F-85a) in both DAG copies; T-007 `status: PENDING → VERIFIED`; the commit.
+- **Next: S4.4 (T-007) commit + VERIFIED + allowed_files amendment (F-84, F-85a).**

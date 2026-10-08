@@ -246,6 +246,7 @@ def test_ac_014_replace_logs_one_warning(log_records: list[Any]) -> None:
     """AC-014: replacing a held default logs exactly one WARNING naming it; installing into an unset slot logs none."""
     with isolated_event_bus():
         EVENTBUS_SLOT.clear()
+        log_records.clear()  # only this test's installs may count (the helper's scratch install/restore warned)
         first = EVENTBUS_SLOT.new()
         EVENTBUS_SLOT.install(first)  # unset slot: no WARNING
         assert not non_tracing_warnings(log_records), f"install into an unset slot warned: {log_records!r}"

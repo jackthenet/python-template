@@ -246,12 +246,11 @@ _SUBPROCESS_REGISTRY_PREAMBLE = """
 import tempfile
 from pathlib import Path
 
-import backend.settings.registry as _registry_module
 from backend.logging import register_settings as _register_logging_settings
-from backend.settings import SettingsRegistry, YamlValueRepository
+from backend.settings import SettingsRegistry, YamlValueRepository, set_settings_registry
 
 _registry = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-_registry_module._registry[0] = _registry
+set_settings_registry(_registry)
 _register_logging_settings(_registry)
 """
 

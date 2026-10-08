@@ -112,24 +112,28 @@ def install_isolated_registry() -> SettingsRegistry:
     """
     import tempfile
 
-    from backend.settings import YamlValueRepository
-    from backend.settings import registry as _registry_module
+    from backend.settings import (
+        YamlValueRepository,
+        get_settings_registry,
+        reset_settings_registry,
+        set_settings_registry,
+    )
 
     # The previous registry's logging.* definitions paired with their values.
-    previous = _registry_module.get_settings_registry(required=False)
+    previous = get_settings_registry(required=False)
     logging_settings: list[tuple[SettingDefinition, Any]] = []
     if previous is not None:
         for view in previous.views():
             if view.key.startswith("logging."):
                 logging_settings.append((previous.get_definition(view.key), previous.get_value(view.key)))
 
-    _registry_module.reset_settings_registry()
+    reset_settings_registry()
     isolated = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
     # set_value only accepts a registered key, so each definition precedes its value.
     for definition, value in logging_settings:
         isolated.register(definition)
         isolated.set_value(definition.key, value)
-    _registry_module._registry[0] = isolated
+    set_settings_registry(isolated)
     return isolated
 
 
@@ -151,13 +155,13 @@ def isolated_registry(install: bool = True) -> Iterator[None]:
         YamlValueRepository,
         get_settings_registry,
         reset_settings_registry,
+        set_settings_registry,
     )
-    from backend.settings import registry as _registry_module
 
     saved = get_settings_registry(required=False)
     reset_settings_registry()
     if install:
-        _registry_module._registry[0] = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
+        set_settings_registry(SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp())))
     try:
         yield
     finally:
@@ -171,13 +175,14 @@ def restore_singleton(saved: SettingsRegistry | None) -> None:
     is reset first, then the saved object is put back (or the slot stays
     reset if ``saved`` is None) — the suite state after the call is exactly
     the state before the save (no state leak). Uses the same mechanism as
-    ``install_isolated_registry()``.
+    ``install_isolated_registry()``: the public install operation, which never
+    accepts ``None`` (REQ-004), so an empty restore stays a plain reset.
     """
-    from backend.settings import registry as _registry_module
+    from backend.settings import reset_settings_registry, set_settings_registry
 
-    _registry_module.reset_settings_registry()
+    reset_settings_registry()
     if saved is not None:
-        _registry_module._registry[0] = saved
+        set_settings_registry(saved)
 
 
 class EventCollector:

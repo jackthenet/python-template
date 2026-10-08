@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from logging_test_helpers import run_python
+from logging_test_helpers import run_python, subprocess_setup_code
 
 from backend.logging import logged, logged_class
 
@@ -25,18 +25,14 @@ def test_edge_001_log_file_parent_created(tmp_path: Path) -> None:
     the in-process session setup already chose its log file.
     """
     nested = tmp_path / "a" / "b" / "c" / "app.log"
-    code = f"""
-import tempfile
-from backend.settings import SettingsRegistry, YamlValueRepository
-from backend.settings import registry as _reg_mod
-from backend.logging import register_settings as logging_register, setup_logger
-reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-_reg_mod._registry[0] = reg
-logging_register(reg)
-reg.set_value('logging.log_file', {str(nested)!r})
-reg.set_value('logging.log_level', 'INFO')
+    code = (
+        subprocess_setup_code(str(nested), {"logging.log_level": "INFO"})
+        + """
+from backend.logging import setup_logger
+
 setup_logger()
 """
+    )
     result = run_python(code)
     assert result.returncode == 0, result.stderr
     assert nested.parent.exists()

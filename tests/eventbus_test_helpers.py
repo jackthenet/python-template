@@ -69,18 +69,28 @@ def isolated_event_bus() -> Iterator[None]:
     before it (same live singleton instance, same subscribers). The block still
     sees a fresh, handler-free bus: the scratch instance has no subscribers of
     its own, and callers that reset the slot first get a brand-new one.
+
+    The scratch install and the restore go through the feature's public install
+    operation (``set_event_bus``) — never a write to the private slot (settings
+    REQ-012 / AC-017); ``set_event_bus`` is lifecycle-neutral (EDGE-011), so the
+    parking semantics above are unchanged.
     """
+    from backend.eventbus import EventBus, get_event_bus, reset_event_bus, set_event_bus
     from backend.eventbus import eventbus as _eventbus_module
-    from backend.eventbus.eventbus import EventBus
 
     saved = _eventbus_module._default_bus[0]
-    _eventbus_module._default_bus[0] = EventBus()
+    set_event_bus(EventBus())
     try:
         yield
     finally:
         scratch = _eventbus_module._default_bus[0]
         if scratch is not None and scratch is not saved:
             scratch.shutdown()
-        _eventbus_module._default_bus[0] = saved
-        if _eventbus_module._default_bus[0] is None:
-            _eventbus_module.get_event_bus()
+        if saved is not None:
+            set_event_bus(saved)
+        else:
+            # REQ-004: the install operation never accepts None, so an empty restore
+            # goes through the feature's reset (idempotent here: the scratch bus was
+            # just shut down), and get_event_bus() then keeps the slot non-empty.
+            reset_event_bus()
+            get_event_bus()
