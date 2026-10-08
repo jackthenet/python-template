@@ -6645,3 +6645,67 @@ Applied identically in `.github/task-runner/tasks.json` and `docs/tasks/settings
 - **Not touched by this step:** every `src/` and `tests/` file, `pyproject.toml`, `uv.lock`, `userdocs/`, T-010's tests and record (still WAITING on Q-31/F-87), and both DAG copies' `T-012.status` (`PENDING`).
 - **Next: S4.3 (T-012) refactor (keep GREEN)** — a markdown/specs-only change; the no-op fast path is the expected outcome (nothing structural to improve beyond the two sections' minimum). Then S4.4: flip T-012 to `VERIFIED`, record the Q-30 closure in its `design_constraints`, sync statuses back.
 
+## Phase 4 — T-012 refactor (S4.3) — 2026-10-09
+
+**Step:** S4.3 (T-012) Refactor — keep GREEN (the implement skill numbers this section S4.4; same step) · **Objective:** judge what S4.2 wrote in `AGENTS.md` against the house form of the existing `## Using the … Feature` sections, apply only structure/wording improvements that keep AC-019 satisfied and change no other section's meaning, or take the no-op fast path. Branch `crosscut/settings-public-registry-setter`, HEAD `1a2046f` (T-012 GREEN). **Not** a no-op: three house-form alignments were applied, all deletions or rewordings, `3 7 AGENTS.md` (1225 → 1221 lines). No full suite, no whole-repo ruff sweep, no status flip (S4.4). Runs sequential (the `tests/unit/test_settings_test_isolation.py` concurrency caveat). `uv.lock` untouched (no `uv run` re-lock occurred, so no `git restore uv.lock` was needed — P-74).
+
+The step's scope is the content S4.2 added: the five `Install the shared default.` bullets and the two new sections. Nothing else in `AGENTS.md` was read for editing purposes, and nothing else was changed — `git diff --numstat` shows `AGENTS.md` as the only file this step touched.
+
+### House-form baseline (measured, not assumed)
+
+The form the change had to match was taken from the file itself: 10 `## Using the …` sections, each an intro sentence (`New backend features that need X MUST use the shared … at `src/backend/<feature>/` (spec: `docs/specs/<spec>.md`) instead of …`), then one long line per `- ` bullet in the order entry point → core operations → feature-specific → events → errors → storage → testing/tracing, then one ```python block showing the **primary usage path only**. Measured facts used below: (a) **no** code block anywhere in `AGENTS.md` contained a `set_*` or `reset_*` singleton call before S4.2 — the only hits after S4.2 were the two new sections' added lines; (b) every `Errors.` bullet names the **base class** as the hierarchy in backticks (`` `SettingsError` ``, `` `UserManagerError` ``, `` `AuthenticationError` ``, `` `MailError` ``, `` `SearchError` ``, `` `FileManagementError` ``) and lists **only its subclasses**, never the base again.
+
+### Candidate 1 — the two new code blocks showing the install call: **APPLIED (4 lines deleted)**
+
+Both new sections ended with `set_permission_service(scratch_service)` / `set_session_service(scratch_service)` plus a `# wiring only: …` comment, and imported the install name for it. Three reasons to delete:
+
+- **House form:** the code block is the primary usage path; no other section in the file shows singleton wiring (measured above), and the three sections S4.2 extended kept their blocks untouched — so the two new blocks were the file's only deviation.
+- **Duplicated guidance:** the comment restates the install bullet six lines above in the same section (replace + non-empty + `WARNING`), which is the duplication the requirement does not ask for.
+- **Misleading example:** `scratch_service` is undefined in the snippet and the example reads as "install a scratch instance", the opposite of the composition-root wiring the sections themselves describe.
+
+The install operation stays named in the section (the bullet), which is exactly what REQ-015/AC-019 require. Import lines were reduced to what the remaining snippet uses (`from backend.permissions import get_permission_service`, `from backend.sessionmanagement import get_session_service`) — no unused import left in a copy-pasteable block.
+
+### Candidate 2 — the permissions `Errors.` bullet: **APPLIED (1 bullet reworded)**
+
+S4.2 wrote "Exceptions are the permission error hierarchy (from `backend.permissions`): `AuthorizationError`, `PermissionDeniedError`, …" — a prose hierarchy name where house form names the base class, and the base listed among its own subclasses. Now: "Exceptions are the `AuthorizationError` hierarchy (from `backend.permissions`): `PermissionDeniedError`, `RoleNotFoundError`, `RoleAlreadyExistsError`, `RoleInUseError`, `RoleProtectedError`, `UnknownPermissionError`." Verified before editing: `AuthorizationError` is the base of every listed class (`src/backend/permissions/errors.py:14-70`, all seven are direct subclasses) and all six listed names plus the base are exported from the package root (`src/backend/permissions/__init__.py` `__all__`), so "(from `backend.permissions`)" is accurate and no catchable name was lost — the base is now named as the hierarchy itself, as in the other six sections.
+
+### Candidate 3 — collapse the five near-identical install bullets into one shared section: **REJECTED (spec-forbidden)**
+
+The five bullets repeat the same clause shape, but REQ-015 fixes **one bullet inside that feature's own section**, and the AC-019 witness enforces exactly that: `_section()` takes the section body and `_bullets()` searches only within it, so a shared section would fail AC-019 for four of the five features. The repetition is required by the requirement, not accidental duplication — collapsing it would be a spec violation dressed as a cleanup.
+
+### Candidate 4 — shorten the repeated lazy-create parenthetical: **REJECTED**
+
+"(the lazy create inside `get_…()` writes the owner's own slot and is not an install, so it never warns)" appears in all five bullets. It carries the one non-obvious fact a caller wiring two instances needs — the `WARNING` comes from the install, never from a preceding `get_…()` — and it is verified against all five `get_*()` bodies (D7, recorded at S4.2). Trading that clarification for ~120 characters per bullet would leave a reader to guess whether get-then-install warns. Kept.
+
+### Candidates 5–9 — **NO-OP**
+
+- **Bullet placement** (install bullet last in all five sections): consistent across the five, and the witness ignores position. Moving it beside the entry-point bullet is churn with no readability gain.
+- **No `Tracing.` bullet in the two new sections** (authentication / mail / file-management have one): an **addition**, not required by AC-019; deletion-over-addition and the smallest-diff rule both say leave it.
+- **No `Errors.` bullet in the session-management section**: correct as written — `src/backend/sessionmanagement/` defines no error class at all (grep over `service.py`, `events.py`, `models.py`, `search_source.py`, `feature_*.py`), so there is nothing to name.
+- **Heading wording / section order / intro sentences**: the two headings are pinned by Q-30 and by the witness's `_FEATURES` table; the intros follow the file's intro-sentence form; the placement (permissions after user-management, session-management after authentication) is the dependency order recorded at S4.2.
+- **The three existing sections**: unchanged by this step — S4.2 appended exactly one bullet each (`48 0`, zero deletions) and reworded nothing; still true.
+
+### Content accuracy spot-check (no edit needed)
+
+The two new sections' claims were checked against the code rather than trusted: `PermissionService.__init__` / `has_permission` / `require_permission(user_id, permission, session_token=None)` and the administration set (`src/backend/permissions/service.py:133-317`); `get_session_service(repository=None, …)` and `list_sessions` / `revoke_session` / `logout_all_sessions` / `logout_other_sessions` / `revoke_all_sessions` / `cleanup_expired` (`src/backend/sessionmanagement/service.py:74-311`); the three `sessionmanagement.*` setting keys (`feature_settings.py:37-51`); the two spec paths exist (`docs/specs/user-roles-permissions.md`, `docs/specs/session-management.md`). All accurate — no factual correction was owed.
+
+### Gates (re-run after the edits)
+
+| Gate | Command | Result |
+|---|---|---|
+| T-012 `green_command` node | `uv run pytest tests/contract/singleton_install/test_guidance_contract.py -v` | **1 passed in 0.19 s** |
+| the guidance-contract file | `uv run pytest tests/contract/singleton_install/test_guidance_contract.py -v` | same node, **1 passed** |
+| the change's contract dir | `uv run pytest tests/contract/singleton_install -q` | **9 passed in 3.69 s** — identical to the S4.2 record |
+| same, fixed order | `uv run pytest tests/contract/singleton_install -q -p no:randomly` | **9 passed in 4.14 s** |
+| traceability (T-012 gate 5) | `uv run python scripts/check_traceability.py` | **PASS** (822 matrix rows, 136 spec IDs, 817 test functions) — unchanged |
+| ruff | `ruff: n/a` | no Python path changed; no repo-wide `ruff check .` / `ruff format` (P-6) |
+
+**F-88 counter-probe note:** removing the two code-block install lines changes the strict word-boundary counts recorded at S4.2 — `permissions` and `sessionmanagement` drop from `strict-install-in-section=3` to `1` (the bullet alone), with `satisfying-bullets=1` unchanged for all five sections. The witness is unaffected: it needs the install name in the section body, and the bullet supplies it.
+
+### State for the next step
+
+- **Refactor decision: applied (three house-form alignments, all deletions or rewordings).** GREEN kept on the targeted gates; `AGENTS.md` 1225 → 1221 lines.
+- **Files changed by this step (1):** `AGENTS.md` (`3 7`). No `src/`, no `tests/`, no spec, no DAG copy, no `pyproject.toml`, no `uv.lock`. The acceptance witness `test_guidance_contract.py` is byte-identical to its S4.1 state — nothing was weakened to stay GREEN.
+- **Open for S4.4 (recorded here, deliberately not touched by this step):** T-012's `design_constraints` in **both** DAG copies (`.github/task-runner/tasks.json`, `docs/tasks/settings-public-registry-setter.tasks.json`) still carry the stale "D13 DIVERGENCE (open decision … the user decision is pending; do not start this task before it is recorded)" wording. **Q-30 is ANSWERED** and T-012 has run, so S4.4 should record the closure together with the status flip — rewriting a DAG constraint is the status step's scope, not the refactor step's.
+- **Next: S4.4 (T-012) commit + `VERIFIED`** — flip T-012 in both DAG copies, sync statuses, close the D13-divergence constraint wording.
+

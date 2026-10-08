@@ -872,17 +872,15 @@ New backend features that need roles, grants or permission checks MUST use the s
 - **Core operations.** Checks: `has_permission(user_id, permission, session_token=None)` (fail-closed) and `require_permission(...)` (raises `PermissionDeniedError` and publishes `PermissionDenied`). Administration: `create_role` / `list_roles` / `delete_role`, `grant_permission` / `revoke_permission` / `get_role_permissions`, `assign_role` / `add_role` / `remove_role` / `set_roles`, `set_system_permissions` / `get_system_permissions`.
 - **Static catalog.** Permission names never appear at runtime: each feature exposes `register_actions(catalog)` and the composition root builds the `PermissionCatalog` from them at startup; an unknown name is an `UnknownPermissionError`, never an implicitly created grant.
 - **Settings.** `register_settings(registry)` registers `permissions.system_principal` (LIST, default the bootstrap system set); the table is the source of truth and a registry write updates it through the `SettingChanged` subscription.
-- **Errors.** Exceptions are the permission error hierarchy (from `backend.permissions`): `AuthorizationError`, `PermissionDeniedError`, `RoleNotFoundError`, `RoleAlreadyExistsError`, `RoleInUseError`, `RoleProtectedError`, `UnknownPermissionError`.
+- **Errors.** Exceptions are the `AuthorizationError` hierarchy (from `backend.permissions`): `PermissionDeniedError`, `RoleNotFoundError`, `RoleAlreadyExistsError`, `RoleInUseError`, `RoleProtectedError`, `UnknownPermissionError`.
 - **Storage.** Use `SqliteRoleRepository` / `SqliteGrantRepository` / `SqliteSystemPrincipalRepository` (default `sqlite:///./data/permissions.db`); the repository ABCs are the seam for the `Memory*` fakes in tests.
 - **Install the shared default.** `set_permission_service(service)` installs `service` as the shared default `PermissionService`. It replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does (the lazy create inside `get_permission_service()` writes the owner's own slot and is not an install, so it never warns); it is never retroactive — an object constructed earlier keeps the service it was given — and neither the installed nor the replaced instance is started or shut down. Clearing the slot stays the job of `reset_permission_service()`, which stays the test seam between tests.
 
 ```python
-from backend.permissions import get_permission_service, set_permission_service
+from backend.permissions import get_permission_service
 
 service = get_permission_service()  # the shared default (lazily constructed)
 service.require_permission(user_id, "filemanagement.upload", session_token=token)
-
-set_permission_service(scratch_service)  # wiring only: one WARNING when it replaces a non-empty default
 ```
 
 ---
@@ -934,12 +932,10 @@ New backend features that need to list or revoke the sessions a user is logged i
 
 ```python
 from backend.authentication import SqliteSessionRepository
-from backend.sessionmanagement import get_session_service, set_session_service
+from backend.sessionmanagement import get_session_service
 
 service = get_session_service(SqliteSessionRepository("sqlite:///./app.db"))  # first call passes the repository
 service.logout_other_sessions(token)
-
-set_session_service(scratch_service)  # wiring only: one WARNING when it replaces a non-empty default
 ```
 
 ---
