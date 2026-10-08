@@ -407,7 +407,7 @@
         "uv run pytest tests/ --cov --cov-report=xml keeps total coverage >= 92 (.github/workflows/quality.yml:59 + [tool.coverage.report] fail_under = 92 at pyproject.toml:110) — a Phase 5 gate, listed here so the task does not defer a coverage regression."
       ],
       "dependencies": [],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-002",
