@@ -6709,3 +6709,49 @@ The two new sections' claims were checked against the code rather than trusted: 
 - **Open for S4.4 (recorded here, deliberately not touched by this step):** T-012's `design_constraints` in **both** DAG copies (`.github/task-runner/tasks.json`, `docs/tasks/settings-public-registry-setter.tasks.json`) still carry the stale "D13 DIVERGENCE (open decision … the user decision is pending; do not start this task before it is recorded)" wording. **Q-30 is ANSWERED** and T-012 has run, so S4.4 should record the closure together with the status flip — rewriting a DAG constraint is the status step's scope, not the refactor step's.
 - **Next: S4.4 (T-012) commit + `VERIFIED`** — flip T-012 in both DAG copies, sync statuses, close the D13-divergence constraint wording.
 
+## T-012 — S4.4 status VERIFIED — 2026-10-09
+
+**Step:** S4.4 (T-012) Commit + update status · **Objective:** set T-012 `"status": "VERIFIED"` in the task DAG, sync the final status to the `docs/tasks/` copy, close the stale D13-divergence `design_constraints` wording, and make the step's commit. Branch `crosscut/settings-public-registry-setter`, HEAD `7213384` (T-012 refactor). No implementation, no test, no spec change; no full suite and no whole-repo ruff sweep (Phase 5 gates).
+
+### Status flip
+
+| Field | Before | After |
+|---|---|---|
+| T-012 `status` | `PENDING` | **`VERIFIED`** |
+
+Applied in `.github/task-runner/tasks.json`, then synced to `docs/tasks/settings-public-registry-setter.tasks.json` by copying the runner copy over the docs copy: the two files were **byte-identical before** the edit (`diff` → no output), so the copy *is* the sync, and `diff` **after** the edit again reports no difference — verified by diff, not by eye. Both re-parse as valid JSON, and `git diff --numstat` reports `2 2` in each copy: exactly the two changed lines (the `status` field and one `design_constraints` entry), nothing else.
+
+### Closing the stale design constraint (Q-30)
+
+T-012's second `design_constraints` entry still read *"D13 DIVERGENCE (**open decision**, raised at S2.2) … The user decision is pending; do not start this task before it is recorded"* — true when S2.2 wrote it, false since **Q-30** was answered (2026-10-07, `docs/questions/settings-public-registry-setter.md`: `Status: ANSWERED`, `Incorporated: yes`), and doubly false once S4.2 shipped the decision in `1a2046f` (the two new `AGENTS.md` sections + the D13 correction and the spec's `## Changelog` v2 entry). Rewritten in **both** DAG copies so the history stays legible while the wording is no longer stale: the entry now opens *"D13 DIVERGENCE (raised at S2.2 — **CLOSED: resolved 2026-10-07 by Q-30**)"*, keeps both original readings (a)/(b) and the measurement that made D13's premise false, and records the outcome — Q-30 chose **(a)**, two new sections `## Using the Permissions Feature` / `## Using the Session Management Feature`, **D13 amended in the spec's v2 Changelog**, shipped in commit `1a2046f`, *"no decision is open on this task"*.
+
+No other DAG field was touched: `implementation_steps`, `allowed_files` (including the **F-89** amendment written at S4.2), `completion_gates`, `dependencies`, `tests_to_create`, `red_command`, `green_command`, and the other eleven tasks are unchanged.
+
+### Gates (the cheap ones this step can check)
+
+| Gate | Command | Result |
+|---|---|---|
+| DAG well-formed / acyclic / in sync (runner copy) | `uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json` | **PASSED** — 12 tasks, acyclic, well-formed (exit 0) |
+| same (docs copy) | `uv run python scripts/validate_task_dag.py docs/tasks/settings-public-registry-setter.tasks.json` | **PASSED** — 12 tasks, acyclic, well-formed (exit 0) |
+| traceability (T-012 completion gate 5) | `uv run python scripts/check_traceability.py` | **PASS** — 822 matrix rows, 136 spec IDs, 817 test functions (unchanged from S4.3) |
+| T-012 `green_command` node | `uv run pytest tests/contract/singleton_install/test_guidance_contract.py -v` | **1 passed in 0.18 s** — `test_ac_019_agents_md_names_installer` PASSED |
+| the change's contract dir (witness set) | `uv run pytest tests/contract/singleton_install -q` | **9 passed in 3.91 s** — identical to the S4.2/S4.3 record |
+| ruff | `ruff: n/a` | no `.py` path touched by T-012; no repo-wide `ruff check .` / `ruff format` (P-6 — Phase 5 gate) |
+
+Full suite, mypy, coverage, deptry, mkdocs: **not run** (Phase 5). `uv.lock` untouched (`git status --porcelain` lists only the two DAG copies — no `uv run` re-lock occurred, so no `git restore uv.lock` was needed, P-74).
+
+### DAG state for the orchestrator
+
+| Status | Tasks |
+|---|---|
+| **`VERIFIED` (11)** | T-001, T-002, T-003, T-004, T-005, T-006, T-007, T-008, T-009, T-011, **T-012** |
+| **`PENDING` (1)** | **T-010** — blocked on the user's answer to **Q-31** (`Status: PENDING`, F-87: AC-011 requires a traced `get_permission_service()` that §13 / `logging-coverage.md` put out of scope) |
+
+T-010 is the DAG's only remaining task and its own `dependencies` (T-001..T-005, T-009) are all merged-in-branch and `VERIFIED`, so Phase 5 cannot close until Q-31 is answered and T-010 runs S4.2 → S4.4.
+
+### State after this step
+
+- **T-012 is `VERIFIED` in both DAG copies**, the D13 divergence wording is closed, and the step is committed as `chore(T-012): status VERIFIED + close the D13 divergence (Q-30)`.
+- **Files changed by this step (2):** `.github/task-runner/tasks.json` (`2 2`), `docs/tasks/settings-public-registry-setter.tasks.json` (`2 2`). No `src/`, no `tests/`, no spec, no `AGENTS.md`, no `pyproject.toml`, no `uv.lock`, no `docs/todo/` or `docs/questions/` (orchestrator-owned, `main`-only).
+- **Next: S4.1 (T-010)** once Q-31 is answered (T-010's RED is already recorded at `b3398e8`, so it re-enters at S4.2 with the answer); Phase 5 otherwise.
+

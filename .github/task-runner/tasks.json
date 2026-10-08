@@ -1313,7 +1313,7 @@
       "implementation_scope": "AGENTS.md only - one bullet per feature inside the five existing 'Using the ... Feature' sections, plus the contract test that pins the five bullets.",
       "design_constraints": [
         "Docs-only change to AGENTS.md: no behaviour, no source, no test-semantics change elsewhere.",
-        "D13 DIVERGENCE (open decision, raised at S2.2): D13/REQ-015 assume AGENTS.md already has a 'Using the …' section for each of the five features; measured on this branch it has eight sections and none for permissions or session-management. Two readings: (a) add the two missing sections (this task's plan — satisfies AC-019 as written, costs two short sections); (b) amend the spec to name the three existing sections plus a different home for the other two. The user decision is pending; do not start this task before it is recorded.",
+        "D13 DIVERGENCE (raised at S2.2 — CLOSED: resolved 2026-10-07 by Q-30): D13/REQ-015 assumed AGENTS.md already has a 'Using the …' section for each of the five features; measured on this branch it has eight sections and none for permissions or session-management. Two readings were on the table: (a) add the two missing sections (this task's plan — satisfies AC-019 as written, costs two short sections); (b) amend the spec to name the three existing sections plus a different home for the other two. Q-30 chose (a) — two new sections, 'Using the Permissions Feature' and 'Using the Session Management Feature' — and D13 was amended in the spec's v2 Changelog (docs/specs/settings-public-registry-setter.md). Shipped in commit 1a2046f; no decision is open on this task.",
         "The bullets must match the implemented semantics (WARNING on non-empty replace, not retroactive, reset_*() is the test seam) — no aspirational wording.",
         "mkdocs build --strict (quality.yml:109) builds userdocs/, not AGENTS.md — unaffected; recorded rather than assumed."
       ],
@@ -1333,7 +1333,7 @@
         "T-009",
         "T-008"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     }
   ]
 }
