@@ -475,3 +475,16 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Date:** 2026-10-07
 - **Status:** ANSWERED
 - **Incorporated:** yes — T-012 unblocked: `AGENTS.md` scope = 5 bullets + 2 new sections; `docs/specs/settings-public-registry-setter.md` D13 amended with a changelog line in the same PR
+
+## Q-31 — T-010 / F-87: AC-011 requires a traced `get_permission_service()` that §13 and `logging-coverage.md` put out of scope
+- **Step:** S4.1 Pick task + confirm RED (**T-010**) — Phase 4 (raised 2026-10-08, finding **F-87**)
+- **Why needed:** T-010's only RED witness is `tests/acceptance/singleton_install/test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` (REQ-007 / AC-011). It fails because `get_permission_service()` (`src/backend/permissions/service.py:524`) carries no `@logged`, while the other four `get_*()` do (`slow_threshold_ms=5.0`). But the change's own spec puts that getter's tracing **out of scope**: `docs/specs/settings-public-registry-setter.md:388` (§13 Out of Scope) and `docs/specs/logging-coverage.md:4` (v3) both exclude tracing `get_permission_service()` / `reset_permission_service()`. AC-011 (which names permissions among AC-009's four features) and §13 therefore contradict each other, and S4.2 cannot resolve it without changing a spec.
+- **Context:** the other five T-010 witnesses (AC-009, AC-010 + EDGE-010, NFR-003, AC-012, INV-001) are GREEN from T-001..T-005 and non-vacuous; no lock-scope or lazy-write defect was found — REQ-007's direct-write half is satisfied. RED is stable across 4 runs (3 with `pytest-randomly`, 1 with `-p no:randomly`), evidence: `docs/verification/settings-public-registry-setter.md` §"Phase 4 — T-010 RED (S4.1)", commit `b3398e8`.
+- **Question:** Which side wins — AC-011 (trace the permissions getter) or §13 / `logging-coverage.md` (leave it untraced and narrow AC-011)?
+- **Options:**
+  - **(Recommended) Trace the getter (Option A).** Add `@logged(slow_threshold_ms=5)` to `get_permission_service()` — one line, `src/backend/permissions/service.py` is already in T-010's `allowed_files`. No existing test breaks: the logging-coverage inventory witnesses assert "inventory row ⇒ traced", never the reverse. Requires a **`logging-coverage.md` §3.1 inventory row** for the getter, added as a Spec Amendment in this change's own PR (same merge gate as the change).
+  - **Narrow AC-011 to the three traced getters (Option B).** Amends `docs/specs/settings-public-registry-setter.md` AC-011 first, then narrows the witness. Narrowing the test **without** the amendment first is a prohibited acceptance-test weakening, so the amendment PR must land before the test changes. Leaves permissions' lazy read untraced, which is what §13 says today.
+- **Answer:** **PENDING**
+- **Date:** 2026-10-08
+- **Status:** PENDING
+- **Incorporated:** no
