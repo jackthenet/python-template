@@ -869,11 +869,14 @@
         "test_files": [
           "tests/settings_test_helpers.py (3 write sites: :132, :160, :180)",
           "tests/eventbus_test_helpers.py (2 write sites: :77, :84)",
-          "tests/acceptance/settings_coverage/test_setup_logger.py (2 embedded subprocess code strings: :31, :55)",
           "tests/acceptance/settings_coverage/test_wiring.py (1 embedded subprocess code string: :18)",
-          "tests/contract/logging/test_logging_contracts.py (1 embedded subprocess code string: :35)",
-          "tests/property/logging/test_logging_properties.py (1 write site: :42)",
-          "tests/unit/logging/test_logging_edges.py (1 write site: :32)",
+          "tests/contract/logging/test_logging_contracts.py (1 embedded subprocess code string: :43)",
+          "tests/property/logging/test_logging_properties.py (1 write site: :43)",
+          "tests/unit/logging/test_logging_edges.py (1 write site: :34)",
+          "tests/logging_test_helpers.py (_SUBPROCESS_REGISTRY_PREAMBLE embedded write — F-84)",
+          "tests/property/logging/test_pipeline_invariants.py (embedded write — F-84)",
+          "tests/acceptance/eventbus/test_eventbus.py (F-85a capture-window reset)",
+          "tests/unit/singleton_install/test_edges.py (F-85a capture-window reset)",
           "tests/unit/architecture/__init__.py (new package — every tests/ package carries __init__.py)",
           "tests/unit/architecture/test_singleton_slots.py",
           "tests/architecture_test_helpers.py (only if the scanner is split out of the test file; the single-file form is preferred)"
@@ -905,7 +908,7 @@
         "T-002",
         "T-006"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-008",
