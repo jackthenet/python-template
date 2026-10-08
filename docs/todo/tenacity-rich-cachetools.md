@@ -4,7 +4,8 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+  <!-- WAITING since 2026-10-05: P.2 returned BLOCKED-USER with 33 questions (Q-1 … Q-33) in docs/questions/tenacity-rich-cachetools.md, all still PENDING. Q-1/Q-3/Q-4 (adopt-or-decline per dependency) gate everything else. -->
 - **Disposition:** **KEPT** — user decision, 2026-10-04: the item stays in the backlog despite the 2/5 recommendation to decline. **P.2 Interrogate has not run and must run** before any drafting. Note: the same answer round also selected "drop all three"; the specific keep-selection is taken as the operative answer — correct it here if that was not the intent.
 - **Change type:** FEATURE  <!-- each dependency only delivers externally observable behavior once something consumes it; adding the packages alone is not a change the repo can accept (see Why) -->
 - **Created:** 2026-10-03
