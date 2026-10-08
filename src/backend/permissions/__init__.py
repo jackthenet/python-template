@@ -50,6 +50,7 @@ from backend.permissions.service import (
     PermissionService,
     get_permission_service,
     reset_permission_service,
+    set_permission_service,
 )
 
 __all__ = [
@@ -86,4 +87,5 @@ __all__ = [
     "get_permission_service",
     "register_settings",
     "reset_permission_service",
+    "set_permission_service",
 ]

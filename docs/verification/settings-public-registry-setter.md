@@ -4348,11 +4348,269 @@ GREEN. `uv run ruff check .` and the full `--cov` suite were **not** run (Phase 
 - **Next: S4.3 (T-002 refactor)** — the implementation is already the minimum shape; a no-op fast-path is
   plausible if nothing structural is found.
 
-### Phase 4 — refactor no-op records (S4.3, T-001 and T-002)
+### Phase 4 — refactor no-op records (S4.3, T-001..T-003)
 
-Both refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
+All three refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
 
 | Task | Verdict | What was inspected / rejected | GREEN re-confirmed |
 |---|---|---|---|
 | T-001 | no structural changes needed | The three `with _registry_lock:` blocks (1–3 lines each) were **not** extracted into a helper — it would hide the lock scope that the F-57 RLock rationale and NFR-003 ("WARNING after release") depend on. Naming matches the sibling accessors and the `eventbus` singleton pattern; boundaries stay inside `backend/settings/`; lock class untouched (F-57 deferred to review). | 10 passed (`green_command`, all 10 T-001 node IDs); `mypy src/` clean |
 | T-002 | no structural changes needed | A shared `_swap_slot()` for the two read/swap sites was **rejected** (two call sites, different semantics: lazy create must not warn per REQ-007, install must per REQ-002 — an unrequested abstraction). The one duplication S4.2 introduced was already extracted (`_resolve_max_queue_size()`, both call sites use it). `has()` + `get_value()` in that helper is not a defect: `get_value()` raises on an unregistered key. F-74/F-75/F-57 left as scoped/open. | 6 passed (`green_command`, all 6 T-002 node IDs); 28 passed over `tests/acceptance/eventbus tests/unit/eventbus`; `mypy src/` clean |
+| T-003 | no structural changes needed (zero file changes) | Inspected `src/backend/permissions/service.py` + `__init__.py` only. **Rejected:** (a) a shared slot-swap helper for the three `with _permission_service_lock:` blocks (1–3 lines each, three different semantics — lazy create writes without a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69 leaf-lock rule and NFR-003 ("WARNING only after release") are stated in terms of; (b) extracting the `PermissionService(...)` construction out of `get_permission_service()` — one call site, and it would move the constructor (the only place this module could reach another module's lock) out of sight of the lock; (c) shortening the 12-line comment at the lock — it is the measured evidence that the plain `Lock` (not `RLock`) is safe here; (d) any rename — `_permission_service_lock` follows its own slot name exactly as `_registry_lock` / `_default_bus_lock` do, and `previous` matches the `eventbus` installer. Verified no fourth writer of `_permission_service` exists in `src/` (all three slot writes are guarded), the `__init__.py` re-export is RUF022-sorted, and the shape constraints hold: plain `Lock`, direct slot write under it, concrete `slow_threshold_ms=5` (never `slow_threshold_setting`), `get_`/`reset_` untraced, catalog untouched. | 6 passed (`green_command`, all 6 T-003 node IDs, 1.24s); 73 passed / 1 failed over the five permissions test dirs — the failure is **F-76** (T-002's, not T-003's, unchanged from S4.2); `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
+
+---
+
+## Phase 4 — T-003 RED (S4.1) — 2026-10-08
+
+One fresh subagent, one atomic step: pick the next ready DAG task and reproduce its RED state before any
+implementation. **Picked task: T-003** (`permissions — src/backend/permissions/service.py + the backend.permissions
+public surface`, `"status": "PENDING"`, `dependencies: ["T-001", "T-002"]` — both `VERIFIED` at `92f4a1b`/`137d0fe`
+and `8b576df`/`145d12f`). Worktree `python-template_kopie-worktrees/crosscut/settings-public-registry-setter`,
+branch `crosscut/settings-public-registry-setter` (`pwd && git rev-parse --abbrev-ref HEAD` verified once, with an
+explicit `cd` — Problem Log **P-68**); working tree clean apart from this file. No implementation, no commit, no
+full-suite run in this step.
+
+### RED gate — `red_command` verbatim
+
+```text
+uv run pytest tests/acceptance/permissions/test_singleton_install.py::test_ac_041_set_permission_service_installs_default \
+  tests/acceptance/permissions/test_singleton_install.py::test_ac_042_replace_logs_one_warning \
+  tests/acceptance/permissions/test_singleton_install.py::test_ac_043_concurrent_install_read_reset \
+  tests/acceptance/permissions/test_singleton_install.py::test_ac_044_install_then_reset_then_default \
+  tests/unit/permissions/test_edge_cases.py::test_install_over_nonempty_default \
+  tests/unit/permissions/test_edge_cases.py::test_concurrent_lazy_create -v
+```
+
+Result: **`6 failed in 0.89s`** — 6 collected, 6 failed, 0 passed, 0 skipped, 0 errors. This **reproduces the
+Phase 3 gate exactly** (S3.2 recorded T-003's six nodes as `6 failed`), with the same two failure kinds.
+
+Per-node failure reason (each node re-run alone with `--tb=line -q` so the mapping is unambiguous — the batch run
+is order-shuffled by the installed random-order plugin):
+
+| Node | Failure | Location |
+|---|---|---|
+| `test_ac_041_set_permission_service_installs_default` | `AttributeError: module 'backend.permissions' has no attribute 'set_permission_service'. Did you mean: 'get_permission_service'?` | `tests/singleton_install_test_helpers.py:112` (`SingletonSlot.install`) |
+| `test_ac_042_replace_logs_one_warning` | same `AttributeError` (missing `set_permission_service`) | `tests/singleton_install_test_helpers.py:112` |
+| `test_ac_043_concurrent_install_read_reset` | `AssertionError: lazy create race built 8 services` | `tests/acceptance/permissions/test_singleton_install.py:95` |
+| `test_ac_044_install_then_reset_then_default` | same `AttributeError` (missing `set_permission_service`) | `tests/singleton_install_test_helpers.py:112` |
+| `test_install_over_nonempty_default` | same `AttributeError` (missing `set_permission_service`) | `tests/singleton_install_test_helpers.py:112` (called from `tests/unit/permissions/test_edge_cases.py:1140`) |
+| `test_concurrent_lazy_create` | `AssertionError: lazy create race built 2 services` | `tests/unit/permissions/test_edge_cases.py:1164` |
+
+**RED is valid.** Only `AttributeError` (the install operation does not exist yet — REQ-030/AC-041..AC-044,
+EDGE-027) and `AssertionError` (the unguarded lazy create builds one service per racing reader — AC-043,
+EDGE-028). No collection error, no import error, no fixture/setup error, no `ValidationError`/`ValueError` from
+test data: `PERMISSIONS_SLOT.new()` builds a real, valid `PermissionService` on in-memory repositories, and the
+trio is resolved by attribute name at call time, which keeps the missing behaviour inside the test body rather
+than at import. Nothing was implemented and no test file was touched.
+
+### Cross-module lock-cycle probe (P-69 rule 2 — measurement only, before the lock shape is chosen)
+
+P-69's durable rule: a step that adds a module-level lock to a module whose construction path reaches another
+module's singleton must probe the cross-module cycle **before** choosing the shape. Inspection of the T-003 lazy
+create (`src/backend/permissions/service.py`, `get_permission_service()`):
+
+```text
+get_permission_service()
+  ├─ SqliteRoleRepository / SqliteGrantRepository / SqliteSystemPrincipalRepository(DEFAULT_DATABASE_URL)
+  │      └─ create_engine + Path.mkdir only            (permissions/repositories.py — no singleton getter)
+  ├─ UserManager(SqliteUserRepository(DEFAULT_USER_DATABASE_URL))
+  │      └─ PasswordHasher() + StaticRoleStore()        (usermanagement — no singleton getter)
+  └─ PermissionService(...)                              (@logged_class: __init__ is a dunder → not traced)
+         ├─ PermissionCatalog()                         (in-memory dicts only)
+         └─ _subscribe_to_setting_changed()             → event_bus is None → returns BEFORE the
+                                                          `from backend.settings import SettingChanged` line
+```
+
+So the lazy create calls **no** other module's singleton getter, and the reverse edge is absent too: `grep -rn
+"get_permission_service" src/ scripts/` matches only `backend/permissions/__init__.py` (the re-export) — the
+composition root builds its own instance and injects it through `_LazyPermissionService` (`src/main.py:95-118`),
+and `SettingsRegistry.__init__` reaches `get_event_bus()`, never the permissions singleton.
+
+Measured with a throwaway probe (`Temp/t003_probe.py`, outside `src/` and `tests/`, deleted after the run —
+`git status --porcelain` afterwards shows only this file): all three slots reset to empty, the real
+`get_permission_service()` called under a **simulated** permissions slot lock held across the whole construction
+(exactly T-003's `implementation_steps` shape), two threads rendezvousing at a `threading.Barrier(2, timeout=10)`
+at the instant each holds its own lock and is about to take the other's, `join(timeout=15)`, daemon threads.
+
+```text
+uv run python Temp/t003_probe.py 1
+case 1 cold-start getter calls from the permissions lazy create: NONE
+case 1 settings slot filled after: False, eventbus slot filled: False
+
+uv run python Temp/t003_probe.py settings      # A: perm lock → lazy create | B: _registry_lock → getter
+[settings] simulated perm lock=True  A alive=False B alive=False perm slot filled=True elapsed=0.02s no deadlock
+[settings] simulated perm lock=False A alive=False B alive=False perm slot filled=True elapsed=0.01s no deadlock
+VERDICT: naive permissions lock is safe (leaf lock)          (control clean: True)   exit 0
+
+uv run python Temp/t003_probe.py eventbus      # A: perm lock → lazy create | B: _default_bus_lock → getter
+[eventbus] simulated perm lock=True  A alive=False B alive=False perm slot filled=True elapsed=0.02s no deadlock
+[eventbus] simulated perm lock=False A alive=False B alive=False perm slot filled=True elapsed=0.01s no deadlock
+VERDICT: naive permissions lock is safe (leaf lock)          (control clean: True)   exit 0
+```
+
+**Probe verdict: the naive shape does NOT deadlock.** Unlike settings (F-57, same-thread re-entry) and eventbus
+(F-72, cross-thread ABBA), the permissions slot lock is a **leaf**: the guarded construction reaches no other
+module's singleton lock, and no other module's guarded section reaches the permissions slot. Case 1 is the direct
+evidence — the cold-start lazy create fills only its own slot and calls neither getter.
+
+**Required lock order for T-003's implementation (normative for S4.2):**
+
+1. The existing global order **settings → eventbus** (F-72, P-69) is unchanged and must not be disturbed.
+2. `_permission_service_lock` is a **leaf lock**: while it is held, `src/backend/permissions/` must acquire **no**
+   other module's slot lock (`_registry_lock`, `_default_bus_lock`) and no other module's lock at all. It may be
+   taken by any thread at any point — there is no ordering constraint to satisfy, only this prohibition.
+3. Consequence: a **plain `threading.Lock`** is sufficient (ADR-083's shape stands here). An `RLock` is not
+   needed — no guarded permissions section re-enters another (`get_permission_service()` writes its own slot
+   directly per REQ-007 and never calls `set_permission_service()`; `reset_permission_service()` only clears).
+4. Watch the one way S4.2 could *create* the missing edge: `set_permission_service` must be decorated
+   `@logged(slow_threshold_ms=5)` and **must not** pass `slow_threshold_setting=` — the decorator resolves a
+   `slow_threshold_setting` through `backend.logging._settings.get_settings()` (`_decorator.py:65-70`), i.e. the
+   settings registry, which would take `_registry_lock` under the permissions lock and break rule 2. The same
+   holds for the replace WARNING: `_logger.warning` takes no module lock (`_setup_lock` is held only by
+   `setup_logger()` and the `SettingChanged` handler, `_pipeline.py:254,389`), so it is lock-safe either way;
+   NFR-003 still wants it emitted after the release.
+
+### Heads-up for S4.2 (T-003)
+
+- **No F-11 analog here.** `test_ac_043`'s `_run(action: Callable[..., Any], *args)` → `action(*args)` is already
+  the repaired shape in `HEAD` (`tests/acceptance/permissions/test_singleton_install.py:126-130`, fixed at S3.2),
+  so the install/read/reset half of AC-043 will not surface a `TypeError` once the lazy half goes GREEN.
+- `widened_lazy_create_window` holds the creating thread inside `PermissionService.__init__` with `time.sleep`
+  (no lock, `singleton_install_test_helpers.py:369-375`), so keeping the construction **inside** the module lock
+  is what turns `built 8 services` / `built 2 services` into `== 1`; hoisting the constructor out of the critical
+  section would fail AC-043/EDGE-028 exactly as it would have failed AC-015/EDGE-012.
+- `PermissionService.__init__` is a dunder, so `@logged_class` skips it (`_is_private_method`) — the lazy create
+  emits no tracing records, and `non_tracing_warnings` (AC-042) is unaffected by the new `@logged` on the installer.
+- REQ-016/AC-020: the 60-key catalog is built from the public non-underscore **methods of the service classes**; a
+  module-level function is not a catalog entry, so `tests/contract/permissions/test_permission_catalog_contract.py`
+  must stay green without touching `catalog.py` / `feature_actions.py`.
+
+### State for the next step
+
+- **RED observed for T-003** (6/6 failed, two failure kinds, no setup/collection errors) — the Phase 4 gate for
+  T-003 is open.
+- Nothing implemented, nothing committed; only this file changed. `Temp/t003_probe.py` deleted after the
+  measurement (`git status --porcelain` clean apart from this file).
+- **Next: S4.2 (T-003)**, `green_command` (identical to the `red_command`, targeted at the six node IDs):
+  `uv run pytest tests/acceptance/permissions/test_singleton_install.py::test_ac_041_set_permission_service_installs_default tests/acceptance/permissions/test_singleton_install.py::test_ac_042_replace_logs_one_warning tests/acceptance/permissions/test_singleton_install.py::test_ac_043_concurrent_install_read_reset tests/acceptance/permissions/test_singleton_install.py::test_ac_044_install_then_reset_then_default tests/unit/permissions/test_edge_cases.py::test_install_over_nonempty_default tests/unit/permissions/test_edge_cases.py::test_concurrent_lazy_create -v`
+  — it must keep the leaf-lock rule (probe verdict above) and may not trace `get_permission_service()` /
+  `reset_permission_service()` (spec §13 follow-up, out of scope).
+
+### Phase 4 — T-003 GREEN (S4.2) — 2026-10-08
+
+**Objective (T-003, verbatim DAG steps obeyed):** add `set_permission_service()` and a module lock guarding
+install, lazy create and reset, and re-export the new function.
+
+#### GREEN gate — `green_command` verbatim
+
+`uv run pytest tests/acceptance/permissions/test_singleton_install.py::test_ac_041_set_permission_service_installs_default tests/acceptance/permissions/test_singleton_install.py::test_ac_042_replace_logs_one_warning tests/acceptance/permissions/test_singleton_install.py::test_ac_043_concurrent_install_read_reset tests/acceptance/permissions/test_singleton_install.py::test_ac_044_install_then_reset_then_default tests/unit/permissions/test_edge_cases.py::test_install_over_nonempty_default tests/unit/permissions/test_edge_cases.py::test_concurrent_lazy_create -v`
+→ **6 collected, 6 passed, 0 failed** (1.21s). RED → GREEN for all six nodes: the four
+`AttributeError: module 'backend.permissions' has no attribute 'set_permission_service'` are gone, and both
+lazy-create races (`built 8 services` at `test_singleton_install.py:95`, `built 2 services` at
+`test_edge_cases.py:1164`) now report exactly **1** instance.
+Determinism re-check: the same six nodes with `-p no:randomly` → **6 passed in 1.35s**.
+
+#### Diff summary (no commit; working tree only)
+
+```text
+ src/backend/permissions/__init__.py |  2 ++
+ src/backend/permissions/service.py  | 70 +++++++++++++++++++++++++++++--------
+ 2 files changed, 58 insertions(+), 14 deletions(-)
+```
+
+What the implementation is (`src/backend/permissions/service.py`):
+
+- `_permission_service_lock = threading.Lock()` beside `_permission_service`, taken by **all three** slot
+  operations — `get_permission_service()` (lazy create), `reset_permission_service()` and the new installer
+  (REQ-006, ADR-083).
+- The lazy create stays a **direct write to the module's own slot** under the lock and never calls the installer
+  (REQ-007), so a first read emits no WARNING and no second traced entry/exit pair.
+- `set_permission_service(service: PermissionService) -> None`, decorated `@logged(slow_threshold_ms=5)`:
+  read-and-swap under the lock, then **exactly one** `_logger.warning("permissions: shared default permission
+  service replaced")` **after** the release, and only when the slot was non-empty (REQ-002, NFR-003). No event
+  (REQ-009), no `isinstance` and no new exception (REQ-005), no lifecycle call (REQ-003), parameter never
+  `None` (REQ-004).
+- `get_permission_service()` / `reset_permission_service()` stay **untraced** (spec §13 follow-up, out of scope).
+- `src/backend/permissions/__init__.py`: `set_permission_service` added to the `from backend.permissions.service
+  import (...)` block and to `__all__` (RUF022 order: after `reset_permission_service`).
+- Untouched, as required: `catalog.py`, `feature_actions.py`, `src/backend/settings/`, `src/backend/eventbus/`,
+  `src/main.py`, `pyproject.toml`, and every test file (no test was changed by this step).
+
+#### Lock-shape note (the P-69 rule-2 verdict carried into code)
+
+The permissions lazy create is a **leaf**, so the module lock is a **plain `threading.Lock`**, not an `RLock` —
+unlike settings (F-57). The comment at the lock records the measured reason: the default `PermissionService` is
+constructed with no `event_bus` and no `settings_registry` (so `_subscribe_to_setting_changed()` returns
+immediately and `_sync_settings_registry` is never reached from the constructor), and no `src/` module calls
+`get_permission_service()`. Therefore **nothing is acquired while the permissions lock is held** — in particular
+no settings read: the installer uses the **concrete** `slow_threshold_ms=5` and **not**
+`slow_threshold_setting=...`, because `_resolve_slow_threshold` would otherwise consult
+`backend.logging._settings.get_settings()` on every call (`_decorator.py:60-72`) and manufacture the missing
+settings ← permissions edge the S4.1 probe measured as absent. The probe (both directions against the real
+`_registry_lock` and `_default_bus_lock`) showed no deadlock, and GREEN confirms it: `test_ac_043` and
+`test_concurrent_lazy_create` pass with the construction **inside** the critical section.
+
+#### Targeted regression (no full suite — Phase 5 gate)
+
+`uv run pytest tests/acceptance/permissions tests/unit/permissions tests/contract/permissions
+tests/integration/permissions tests/property/permissions -q` → **1 failed, 73 passed in 8.73s**.
+The single failure is **not** this task's: `tests/acceptance/permissions/test_composition_wiring.py::
+test_ac_020_composition_root_validates_session_token` — see **F-76** below. Measured with this task's two files
+stashed: it fails identically (**1 failed**) without any T-003 change, and it **passes** when only
+`src/backend/eventbus/` is reverted to `92f4a1b` (i.e. to the pre-T-002 state) with T-003 present. It is GREEN
+on `main` and was recorded GREEN at S3.2, so it is a regression introduced by **T-002** (`8b576df`), not by T-003.
+
+#### Catalog witness (REQ-016 / AC-020 — the 60-key catalog unchanged)
+
+- `uv run pytest tests/acceptance/permissions/test_check_api.py::test_initial_catalog_exactly_60_keys -q`
+  → **passed** (AC-006 / REQ-005: exactly the 60 keys of the spec table, six features).
+- The change spec's own AC-020 witness
+  `tests/contract/singleton_install/test_api_contract.py::test_ac_020_permission_catalog_unchanged` is **still
+  RED by design**: its anti-vacuity loop asserts `hasattr(slot.module, slot.installer)` for **all five** slots and
+  fails at `search: set_search_service does not exist` (T-004) — it cannot go GREEN before T-004/T-005. Its
+  catalog clauses were therefore checked directly for the permissions half
+  (`uv run python` against the test module's own `_build_catalog()` / `_CATALOG_BASELINE()`):
+  `registered == baseline` → **True**, `catalog.has("set_permission_service")` → **False**,
+  `"set_permission_service" in {action names}` → **False**, and `set_permission_service in
+  backend.permissions.__all__` → **True**. `catalog.py` / `feature_actions.py` were not touched.
+- Note for S5.3: the DAG's `completion_gates` names `tests/contract/permissions/
+  test_permission_catalog_contract.py`, which **does not exist** in this repository; the real 60-key witnesses are
+  `tests/acceptance/permissions/test_check_api.py::test_initial_catalog_exactly_60_keys` and the change spec's
+  `test_ac_020_permission_catalog_unchanged`.
+
+#### Quality gates (per-step scope)
+
+- `uv run ruff check src/backend/permissions/service.py src/backend/permissions/__init__.py` → **All checks
+  passed!**; `uv run ruff format <same paths>` → **2 files left unchanged**; `ruff format --check <same paths>` →
+  **2 files already formatted**. No whole-repo sweep (Phase 5 gate).
+- `uv run mypy src/` → **Success: no issues found in 84 source files**.
+- `uv run complexipy src tests --max-complexity-allowed 15` → **All functions are within the allowed complexity**.
+- `uv run python scripts/check_traceability.py` → **PASS (822 matrix rows, 136 spec IDs, 817 test functions)**.
+- `uv run python scripts/verify_spec.py docs/specs/user-roles-permissions.md` → **exit 0** (Traceability: PASS).
+- Not run here (Phase 5): the full suite with `--cov`, `ruff check .`, `ruff format --check .`.
+
+#### Finding F-76 — T-002's F-75 is a real startup regression, not only a cost (open, not T-003's to fix)
+
+`get_event_bus()` now calls `_resolve_max_queue_size()` on **every** call, not only when it creates the bus
+(F-75). In the composition root the shared bus is created during `SettingsRegistry(...)` construction
+(`src/main.py:137`, where the settings slot is still empty, so the guarded read returns `None` and no settings
+method is called); by the time `src/main.py:160` calls `get_event_bus()` again the bus exists, so the read is now
+skipped **before** the bus is passed to the `PermissionService` — and it reaches the **enforced**
+`SettingsRegistry.has`, whose checker is `_LazyPermissionService` with `_service is None` (set only at
+`src/main.py:163`). Result: `AttributeError: 'NoneType' object has no attribute 'require_permission'` and
+`import main` fails in a fresh interpreter. Before T-002 the second call did no settings read at all, so the
+startup order worked.
+
+- Evidence: `test_ac_020_composition_root_validates_session_token` — GREEN on `main` and at S3.2, **FAILED** on
+  this branch; passes with `src/backend/eventbus/` reverted to `92f4a1b`; fails with T-003's files stashed.
+- Out of T-003's `allowed_files` (`src/backend/eventbus/`, `src/main.py`), so it is **not** fixed here.
+- Upgrade paths for whoever owns it: resolve the queue size only on the create path (which would put the settings
+  read back under `_default_bus_lock` and reopen F-72), cache the resolved value, or make the composition root
+  set the proxy's service before the `get_event_bus()` argument at `:160`. **Phase 5's full suite will catch it**;
+  flagged now so it is not mistaken for a T-003 failure.
+
+#### State for the next step
+
+- **GREEN observed for T-003** (6/6), all per-step gates clean, nothing committed.
+- **Next: S4.3 (T-003 refactor)** — the implementation follows the settings/eventbus trio pattern already in
+  `HEAD`; a no-op verdict is expected and must be recorded per P-70.

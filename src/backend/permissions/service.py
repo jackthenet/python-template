@@ -3,7 +3,8 @@
 ``PermissionService`` is the RBAC use-case service. This module provides the
 service's construction contract (constructor DI with the repository ABCs,
 the ``UserManager``, and the structural session-lookup seam — ADR-069) and
-the module singleton (``get_permission_service``) / reset
+the module singleton (``get_permission_service``) / install
+(``set_permission_service``, REQ-030) / reset
 (``reset_permission_service``) (D19).
 
 The check core (D1, T-004): ``has_permission`` / ``require_permission`` —
@@ -30,12 +31,13 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from backend.logging import get_logger, logged_class
+from backend.logging import get_logger, logged, logged_class
 from backend.permissions.catalog import PermissionCatalog
 from backend.permissions.errors import (
     PermissionDeniedError,
@@ -506,6 +508,18 @@ class PermissionService:
 
 _permission_service: list[PermissionService | None] = [None]
 
+# REQ-030 / ADR-083: one module-level lock guards all three slot operations —
+# install, lazy create and reset — as one mutually exclusive set, and is held
+# only for the slot read/swap (NFR-003). A plain Lock, not an RLock: this lazy
+# create is a leaf — the default PermissionService is constructed with no
+# ``event_bus`` and no ``settings_registry``, so its constructor reaches neither
+# ``get_settings_registry`` nor ``get_event_bus``, and no ``src/`` module calls
+# ``get_permission_service()``. Nothing here therefore acquires another
+# module's lock while this one is held, and the settings → eventbus acquisition
+# order of finding F-72 stays closed (measured with barrier probes in both
+# directions: no deadlock).
+_permission_service_lock = threading.Lock()
+
 
 def get_permission_service() -> PermissionService:
     """Return the shared PermissionService (module singleton, D19).
@@ -513,21 +527,49 @@ def get_permission_service() -> PermissionService:
     The first call lazily creates the singleton, wired to the shared SQLite
     repositories and the shared user manager at construction; subsequent
     calls return the existing instance.
-    """
-    service = _permission_service[0]
-    if service is None:
-        from backend.usermanagement import SqliteUserRepository
 
-        service = PermissionService(
-            SqliteRoleRepository(DEFAULT_DATABASE_URL),
-            SqliteGrantRepository(DEFAULT_DATABASE_URL),
-            SqliteSystemPrincipalRepository(DEFAULT_DATABASE_URL),
-            UserManager(SqliteUserRepository(DEFAULT_USER_DATABASE_URL)),
-        )
+    Not traced on purpose (spec §13 follow-up): the singleton's read and clear
+    paths are untraced today, and tracing them is not this change.
+    """
+    with _permission_service_lock:
+        service = _permission_service[0]
+        if service is None:
+            from backend.usermanagement import SqliteUserRepository
+
+            service = PermissionService(
+                SqliteRoleRepository(DEFAULT_DATABASE_URL),
+                SqliteGrantRepository(DEFAULT_DATABASE_URL),
+                SqliteSystemPrincipalRepository(DEFAULT_DATABASE_URL),
+                UserManager(SqliteUserRepository(DEFAULT_USER_DATABASE_URL)),
+            )
+            # REQ-007: the owner's lazy create writes its own slot directly and
+            # never calls set_permission_service() — it is not an install, so it
+            # must not emit the replace WARNING.
+            _permission_service[0] = service
+        return service
+
+
+@logged(slow_threshold_ms=5)
+def set_permission_service(service: PermissionService) -> None:
+    """Install ``service`` as the shared default PermissionService (singleton).
+
+    Replaces a non-empty default unconditionally and is never retroactive: an
+    object constructed earlier with a service keeps that service, and neither
+    the installed nor the replaced instance is started or shut down. The
+    parameter is never ``None`` — clearing the slot stays the job of
+    ``reset_permission_service()``. It is a wiring function, not a permission
+    catalog entry (REQ-016).
+    """
+    with _permission_service_lock:
+        previous = _permission_service[0]
         _permission_service[0] = service
-    return service
+    if previous is not None:
+        # REQ-002: exactly one WARNING naming the feature's shared default (never
+        # the instance), emitted after the lock is released (NFR-003).
+        _logger.warning("permissions: shared default permission service replaced")
 
 
 def reset_permission_service() -> None:
     """Reset the shared PermissionService (for test isolation, D19)."""
-    _permission_service[0] = None
+    with _permission_service_lock:
+        _permission_service[0] = None
