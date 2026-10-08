@@ -6467,3 +6467,78 @@ Measured consequences of each resolution (so the decision is informed, not guess
 - **Not touched by this step:** every `src/` and `tests/` file, `pyproject.toml`, `uv.lock` (`git status --porcelain` empty before and after the runs — no re-lock occurred, P-42), `.github/task-runner/tasks.json` and `docs/tasks/settings-public-registry-setter.tasks.json` (T-010 stays `PENDING`), `AGENTS.md`, T-012's witness (`test_ac_019_agents_md_names_installer` is RED and out of this step's gate — it was not part of the `red_command`).
 - **Next: S4.2 (T-010) implement + confirm GREEN — blocked on the F-87 user decision.**
 
+
+## Phase 4 — T-012 RED (S4.1) — 2026-10-08
+
+**Step:** S4.1 (T-012) Pick task + confirm RED · **Objective:** pick the ready DAG task, run its `red_command` verbatim, **observe RED**, record the evidence. **No implementation**: `AGENTS.md` untouched, no test touched, no `src/` touched, no task status flipped (T-012 stays `PENDING`); this record is the only file the step's commit touches. Branch verified with `git branch --show-current` → `crosscut/settings-public-registry-setter`, HEAD `b3398e8` (T-010 RED record). No full suite, no whole-repo ruff sweep, no coverage (Phase 5 gates). Runs sequential (the `tests/unit/test_settings_test_isolation.py` concurrency caveat).
+
+### Task pick — T-012, not T-010
+
+| Check | T-012 | T-010 |
+|---|---|---|
+| `status` | `PENDING` | `PENDING` |
+| `dependencies` | T-001, T-002, T-003, T-004, T-005, T-008, T-009 — **all `VERIFIED`** | T-001..T-005, T-009 — all `VERIFIED` |
+| Blocked by | **nothing** — the only blocker was the D13 decision, now **Q-30 ANSWERED** (2026-10-07) | **Q-31 / F-87 open** — AC-011 vs spec §13 for `get_permission_service()`; S4.2 may not pick either option without the user's decision |
+| Ready now? | **yes** | no (S4.2 cannot proceed) |
+
+T-010's RED is already observed and recorded (previous section), but its S4.2 is **BLOCKED-USER** on Q-31, so T-010 is in WAITING and cannot advance. T-012 is the only remaining task whose next step can run: its dependencies are all `VERIFIED`, and its `design_constraints` gate ("do not start this task before it is recorded") is satisfied — **Q-30 is ANSWERED and incorporated**. Picking it keeps the change moving instead of idling on the blocked node (AGENTS.md "Multi-change scheduling / never idle" applied inside the DAG).
+
+### RED gate — `red_command` verbatim
+
+```
+uv run pytest tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer -v
+```
+
+→ **1 collected, 1 failed in 0.29 s** (`pytest-randomly` active). Re-run with `-p no:randomly` → **1 failed in 0.36 s**, identical failure. **RED is observed.**
+
+### The failing assertion — verbatim
+
+```
+E  AssertionError: AC-019 / REQ-015: AGENTS.md guidance for the five install operations:
+E      - settings: no single bullet in '## Using the Settings Feature' names set_settings_registry() together with the replace-plus-WARNING semantics and reset_settings_registry() as the test seam ('Using the Settings Feature' has 12 bullet(s); none of them carries all three clauses)
+E      - eventbus: no single bullet in '## Using the Event Bus Feature' names set_event_bus() together with the replace-plus-WARNING semantics and reset_event_bus() as the test seam ('Using the Event Bus Feature' has 6 bullet(s); none of them carries all three clauses)
+E      - permissions: AGENTS.md has no '## Using the Permissions Feature' section, so it cannot name set_permission_service()
+E      - search: no single bullet in '## Using the Search Feature' names set_search_service() together with the replace-plus-WARNING semantics and reset_search_service() as the test seam ('Using the Search Feature' has 8 bullet(s); none of them carries all three clauses)
+E      - sessionmanagement: AGENTS.md has no '## Using the Session Management Feature' section, so it cannot name set_session_service()
+E  assert ['settings: n...on_service()'] == []
+tests\contract\singleton_install\test_guidance_contract.py:143: AssertionError
+```
+
+**Classification: valid RED.** The failure is an `AssertionError` raised inside the test body on the content of `AGENTS.md` — a **guidance/behavior gap**, not a broken fixture: no `ValidationError`, no setup/collection error, no missing-file error (the `AGENTS.md` existence assert and the two fixture-collision asserts at the top of the test all pass, so the file was found through the test's own `parents[3]` repo-root resolution and the five feature tuples are distinct).
+
+### Measured: what `AGENTS.md` contains today (AC-019 vs reality)
+
+`AGENTS.md` (1177 lines) has **nine** level-2 `## Using the …` headings — eight feature sections plus `## Using the Test Tooling (…)` — at lines 767 Logging, 792 Event Bus, 814 Settings, 841 User Management, 865 Authentication, 900 Mail Service, 936 File Management, 972 Search, 997 Test Tooling. **None** for permissions or session-management (the D13 premise Q-30 resolved).
+
+| Feature | Its section exists? | Genuine mention of `set_…()` anywhere in `AGENTS.md` | Bullets in section | Missing AC-019 clause(s) |
+|---|---|---|---|---|
+| settings | yes (`:814`) | **no — 0** | 12 | the bullet with the install op: **WARNING** ✗, **replace/non-empty** ✗ (reset clause ✓ only because `reset_settings_registry` is mentioned) |
+| eventbus | yes (`:792`) | **no — 0** | 6 | same: WARNING ✗, replace ✗ |
+| permissions | **no** | **no — 0** | — | whole section (and therefore all three clauses) |
+| search | yes (`:972`) | **no — 0** | 8 | same: WARNING ✗, replace ✗ |
+| sessionmanagement | **no** | **no — 0** | — | whole section (and therefore all three clauses) |
+
+Measured with a word-boundary probe (`(?<![A-Za-z0-9_])set_<slot>\b`) over the whole file: **zero of the five install operations is named in `AGENTS.md` today.** The three sections' `install in section` sub-check passes only because `reset_settings_registry` / `reset_event_bus` / `reset_search_service` contain `set_…` as a substring — see F-88. The three existing "Testing." / "Service entry point." bullets (lines 801, 829, 976) mention the reset seam but never the install operation, never `WARNING`, never the non-empty-replace semantics.
+
+### Witness non-vacuity
+
+The witness is not trivial: it reads the real `AGENTS.md` from the repo root resolved through the test file's own location (`parents[3]`, never CWD — P-57), slices each `## <heading>` body up to the next level-2 heading, splits it into top-level `- ` bullets (joining continuation lines), and requires **one single bullet** to carry all three REQ-015 clauses at once (install name **and** `WARNING` **and** a `non-empty`/`replace` marker **and** the feature's `reset_…()` or the generic `reset_*()`). A bullet in the wrong section does not count, and neither does the same information spread across several bullets — that is AC-019's "its feature's … section" and REQ-015's "one bullet", so the test cannot be satisfied by an unrelated edit elsewhere in the file. It pins no prose style: it does not care where in the section the bullet sits or how the rest of the section reads.
+
+### F-88 — the witness's install-name clause is a substring match (`reset_x` contains `set_x`) — recorded, **not** fixed here
+
+`_names_install_rule` and the `install not in section` pre-check use plain `in`, so `set_settings_registry` is "found" inside `reset_settings_registry()`. Consequences, measured: (a) the witness is **not** vacuous today — all five features still fail, because the WARNING + replace-marker conjunctions are unsatisfied and the two sections are absent; (b) after S4.2 it stays correct **as long as the bullet genuinely names the install operation**, which is what AC-019 requires and what the review will read. A stricter probe (word-boundary, as used in the measurement above) would additionally reject a bullet that mentions only the reset. Not changed in this step: editing the test is outside S4.1's scope, and narrowing/altering an acceptance witness is not this step's authority. Recorded so the Phase 6 review can judge the witness's strength knowingly.
+
+### Q-30 closes the `design_constraints` "D13 DIVERGENCE (open decision)"
+
+The DAG's T-012 `design_constraints` flag ("open decision, raised at S2.2 … do not start this task before it is recorded") is **closed, not open**: **Q-30 is ANSWERED** (2026-10-07, `docs/questions/settings-public-registry-setter.md`, Late questions) — `AGENTS.md` gains **two new sections**, `## Using the Permissions Feature` (naming `set_permission_service`) and `## Using the Session Management Feature` (naming `set_session_service`), each in the existing house form (heading + bullets + code block); AC-019 stays as written; REQ-015 keeps all five features; **D13's "no new section" clause is amended in this change's own PR** (a one-line D13 correction in `docs/specs/settings-public-registry-setter.md:47` plus a `## Changelog` entry).
+
+### F-89 — the D13 spec correction is not in any task's `allowed_files` (needs an explicit owner before the PR)
+
+Q-30's answer requires a spec-file edit (`docs/specs/settings-public-registry-setter.md` D13 + Changelog), but **no task in the DAG lists that file in `allowed_files`** (measured across all 12 tasks; `amended_specs` covers the five feature specs + logging-coverage + settings-coverage only), and Phase 4's rule "Do NOT modify the specification in this phase" bars S4.2 (T-012) from making it — its `source_files` is `AGENTS.md` only. The correction is therefore currently **unassigned**. It is not a blocker for RED/GREEN, but the change PR would otherwise ship an `AGENTS.md` that contradicts D13 as written. The orchestrator must assign it (a docs step, or an `allowed_files` amendment of the shape used for F-86a).
+
+### State for the next step
+
+- **RED observed for T-012** on the verbatim `red_command`: `test_ac_019_agents_md_names_installer` fails with five findings (three "no single bullet carries all three clauses", two "section absent"), stable across two runs in two orders. Valid RED — a guidance gap, not a fixture error.
+- **What S4.2 must write (AGENTS.md only, additive):** (1) one bullet in each of the three existing sections — `## Using the Settings Feature` (`:814`), `## Using the Event Bus Feature` (`:792`), `## Using the Search Feature` (`:972`) — each naming its install operation (`set_settings_registry` / `set_event_bus` / `set_search_service`), stating that installing over a **non-empty** default logs a **WARNING**, and that `reset_*()` stays the test seam; (2) the two new sections `## Using the Permissions Feature` and `## Using the Session Management Feature` in the house form, each carrying its own install bullet (`set_permission_service` / `set_session_service`); (3) no renumbering, no rewording of unrelated bullets, wording must match implemented semantics (replace is not retroactive; `reset_*()` is the test seam) — no aspirational prose. `mkdocs build --strict` builds `userdocs/`, not `AGENTS.md`, so the docs gate is unaffected.
+- **Not touched by this step:** `AGENTS.md`, every `tests/` and `src/` file, `pyproject.toml`, `uv.lock` (`git status --porcelain` empty before and after the runs — no re-lock churn occurred, so no `git restore uv.lock` was needed; P-74 watched), `docs/specs/` (the D13 correction is not Phase 4's, see F-89), `.github/task-runner/tasks.json` and `docs/tasks/settings-public-registry-setter.tasks.json` (T-012 stays `PENDING`), T-010's tests and record.
+- **Next: S4.2 (T-012) implement + confirm GREEN.** T-010 stays WAITING on Q-31/F-87.
