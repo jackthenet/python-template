@@ -19,8 +19,10 @@ the amended feature specs use their own numbering (PROBLEMS.md P-53).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
+import pytest
 from eventbus_test_helpers import UserCreated, isolated_event_bus, wait_for
 from logging_coverage_test_helpers import level_name, parse_elapsed_ms
 from settings_test_helpers import restore_singleton
@@ -35,11 +37,33 @@ from singleton_install_test_helpers import (
 )
 
 from backend.eventbus import EventBus, get_event_bus
+from backend.logging import setup_logger
 from backend.settings import get_settings_registry, reset_settings_registry
 
 # docs/specs/logging-coverage.md §3.1 note: each install operation is traced with
 # @logged(slow_threshold_ms=5), the same threshold as its sibling get_* / reset_*.
 _INSTALL_SLOW_THRESHOLD_MS = 5
+
+
+@pytest.fixture(autouse=True)
+def _settings_singleton_restored() -> Iterator[None]:
+    """Restore the settings singleton around every witness in this file.
+
+    Each witness clears the slots it touches, and the settings slot is read by the rest of the
+    suite through a guarded ``get_settings_registry(required=False)``: a slot left cleared makes a
+    later test's guarded read return ``None``, so the traced call it counts never happens (finding
+    F-81 — the ``logging_coverage`` AC-002/AC-005 witnesses depend on it). Same save/restore
+    mechanism as ``test_module_functions_traced``; the re-setup keeps the session's pipeline
+    (DEBUG, the session log file) installed for the tests that follow.
+
+    ``ponytail:`` only the settings slot leaks a *counted* call today; the other four slots are
+    restored by their own witnesses. If a later witness starts reading another slot through a
+    guarded read, widen this fixture to that slot too.
+    """
+    saved = get_settings_registry(required=False)
+    yield
+    restore_singleton(saved)
+    setup_logger()
 
 
 class _Holder:

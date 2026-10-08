@@ -1231,7 +1231,9 @@
           "tests/acceptance/singleton_install/test_install.py (this task adds the AC-014 test to the shared file)",
           "tests/singleton_install_test_helpers.py (read-only: the tuples name the installers whose tracing is checked)",
           "tests/acceptance/logging_coverage/test_inventory.py",
-          "tests/logging_coverage_test_helpers.py (shared inventory helper — PROBLEMS.md P-55)"
+          "tests/logging_coverage_test_helpers.py (shared inventory helper — PROBLEMS.md P-55)",
+          "tests/acceptance/logging_coverage/test_statements_via_feature.py (F-78 count-table refresh — the drift guard, not a weakening)",
+          "tests/acceptance/logging_coverage/test_services_traced.py (F-80: the AC-005 bare-call probe cannot call the five install operations, which take the object they install; their entry/exit pair is witnessed per function by AC-014)"
         ]
       },
       "implementation_scope": "tests/logging_coverage_test_helpers.py (add the five installers to INVENTORY_MODULE_FUNCTIONS) + tests/acceptance/logging_coverage/test_inventory.py. The @logged decorators themselves belong to T-001..T-005.",

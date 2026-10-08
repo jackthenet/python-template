@@ -4348,9 +4348,9 @@ GREEN. `uv run ruff check .` and the full `--cov` suite were **not** run (Phase 
 - **Next: S4.3 (T-002 refactor)** — the implementation is already the minimum shape; a no-op fast-path is
   plausible if nothing structural is found.
 
-### Phase 4 — refactor no-op records (S4.3, T-001..T-006)
+### Phase 4 — refactor no-op records (S4.3, T-001..T-006 + T-011)
 
-All six refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
+All seven refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
 
 | Task | Verdict | What was inspected / rejected | GREEN re-confirmed |
 |---|---|---|---|
@@ -4360,6 +4360,7 @@ All six refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"
 | T-004 | no structural changes needed (zero file changes) | Inspected `src/backend/search/service.py` + `__init__.py` only — the 44 inserted lines are the settings/permissions trio pattern already in `HEAD`. **Rejected:** (a) a shared slot-swap helper for the three `with _singleton_lock:` blocks (1–3 lines each, three different semantics — lazy create writes **without** a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69/P-71 leaf-lock rule and NFR-003 ("WARNING only after the release") are stated in terms of, and a cross-module version would push slot mechanics into `shared/`, which the architecture rules keep deliberately small; (b) hoisting the `SearchService(...)` construction out of `get_search_service()`'s guarded section (one call site, and the constructor is the only place this module could reach another module's lock — the S4.1 probe's `--naive` control deadlocks, so it must stay visible under the lock, not behind a factory); (c) shortening the 12-line comment at `_singleton_lock` — it is the measured leaf verdict plus the self-deadlock rule for the plain `Lock` (no `RLock` upgrade); (d) extracting the WARNING text to a constant or reusing `reset_search_service()`/`get_search_service()` inside the installer — one call site each, and either call under the non-reentrant lock self-deadlocks (F-57 / P-69); (e) any rename — `set_search_service`, `_logger = get_logger("search")` and `previous` match `set_settings_registry` / `set_permission_service` exactly. Re-verified the shape constraints are intact: the **existing** `_singleton_lock` guards all three slot operations (no second lock), the guarded sections stay leaves, the replace WARNING is emitted after the release, the lazy create is a direct slot write with no WARNING, `@logged(slow_threshold_ms=5)` is a concrete threshold, EDGE-022 (the replaced service keeps its sources) is untouched, and the `__init__.py` re-export is RUF022-sorted. | 7 passed (`green_command`, all 7 T-004 node IDs, 1.19s — re-run even though the step changed zero source files, per P-70); 1 passed (`tests/acceptance/permissions/test_composition_wiring.py`, the P-71 canary); 93 passed over the five search test dirs; `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
 | T-005 | no structural changes needed (zero file changes) | Inspected `src/backend/sessionmanagement/service.py` + `__init__.py` only — the 77 inserted lines are the settings/eventbus/permissions/search trio pattern already in `HEAD`, plus this feature's two shape deviations. **Rejected:** (a) a shared slot-swap helper for the three `with _session_service_lock:` blocks (1–3 lines each, three different semantics — lazy create writes **without** a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69/P-71 leaf-lock rule and NFR-003 ("WARNING only after the release") are stated in terms of, and a cross-module version would push slot mechanics into `shared/`, which the architecture rules keep deliberately small; (b) collapsing the double-checked `get_session_service()` into one guarded check — the hit path must return on a plain reference read, **before** the lock and before any cross-module read (P-71 rule 1, the F-76 lesson); (c) deleting the `if event_bus is not None: get_event_bus()` warm-up or making it unconditional — it is the measured ABBA fix (this module is **not** a leaf: `SessionService.__init__` reads the shared bus whenever one is injected), and an unconditional warm-up would create the shared bus on a bare `get_session_service(repository=…)` call, behavior no spec ID authorises; (d) hoisting the `SessionService(...)` construction out of the guarded section or behind a factory — one call site, and the constructor is the only place this module can reach another module's lock, so it must stay visible under the lock, not hidden; (e) reusing `get_session_service()`/`reset_session_service()` inside the installer, or extracting the WARNING text to a constant — either call under the non-reentrant `Lock` self-deadlocks (F-57 / P-69); (f) shortening the 14-line comment at `_session_service_lock` — it is the measured deadlock evidence plus the no-self-call rule that make the plain `Lock` (no `RLock` upgrade) auditable; (g) any rename — `_session_service_lock` follows its own slot name exactly as `_registry_lock` / `_default_bus_lock` / `_singleton_lock` do, and `_logger = get_logger("sessionmanagement")` / `previous` match the sibling installers. Re-verified the shape constraints are intact: one new lock guards all three slot operations (no second lock, no `RLock`), the three `_session_service[0] =` writes in `src/` are all inside it (`src/main.py:202` `_session_service` is a composition-root local name, not the slot — no fourth writer), the `ValueError` for a missing repository stays with **no lazy create** (EDGE-003 / AC-042), the replace WARNING is emitted after the release, `@logged(slow_threshold_ms=5)` is a concrete threshold (never `slow_threshold_setting`), no event is published (REQ-009), and the `__init__.py` re-export is RUF022-sorted (`reset_session_service` before `set_session_service`). | 7 passed (`green_command`, all 7 T-005 node IDs, 0.66s — re-run even though the step changed zero source files, per P-70); 1 passed (`tests/acceptance/permissions/test_composition_wiring.py`, the P-71 canary); 75 passed over the five session-management test dirs (unchanged from S4.2); `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files); `complexipy src tests --max-complexity-allowed 15` clean |
 | T-006 | no structural changes needed (zero file changes) | Inspected `src/main.py` only — the `+34/−16` diff is one deleted private-slot import, one collapsed install line, one 4-line getter-derived helper, and ten mechanical call-site substitutions on an already-clean file. **Rejected:** (a) collapsing the ten `_shared_settings_registry()` call sites into one module-level handle — REQ-011 requires the consumer sites to obtain the shared instance "through `get_settings_registry()` rather than the local handle", and the task's design constraint keeps the built instance passed **only** to the setter; a renamed handle (e.g. `_registry`) would slip past the AST witness, which matches the name `_settings_registry`, while violating the clause that witness enforces — test-gaming, not a refactor; (b) replacing the `assert registry is not None  # nosec B101` narrowing with a `raise` — a different exception type and message is new behavior no spec ID authorises, and the assert is the house precedent (`src/backend/search/service.py:582`); (c) a loop/table over the six `register_*_settings` calls — it would drop the two trailing comments that must survive (the REQ-019 alias note, "search feature") and obscure the registration order REQ-002/REQ-011 depend on; (d) moving the helper next to the install block, or collapsing the exploded `from backend.settings import (SettingsRegistry, get_settings_registry, set_settings_registry)` to one line (it fits the 120-char limit) — pure churn, and the exploded multi-name import is this file's existing convention (`backend.usermanagement`, `backend.search`); (e) moving the helper into `backend/shared/` — it is composition-root-specific (its docstring relies on *this* module's install-before-consumer ordering) and `shared/` stays deliberately small. Re-verified the shape constraints hold unchanged: the install keeps its module-import-time **position and order** (`:156`, D10) and precedes the six registrations (`:191-196`); no private-slot import (`_private_slot_imports() == []`) and no consumer site passed the handle (`_consumer_sites_passing_the_handle() == []`, both re-run directly with the witness's own helpers); no `_settings_registry` name remains in the file; no new module-level state beyond the getter-derived helper; the two trailing comments from the old `:177`/`:178` survive at `:195`/`:196`. | 4 passed (`green_command` verbatim, 4.23s — re-run although the step changed zero source files, per P-70); 49 passed over the S4.2 wider targeted set (`tests/acceptance/settings_coverage tests/integration/settings tests/acceptance/permissions tests/integration/singleton_install`) — unchanged from S4.2; `ruff check src/main.py` **All checks passed**, `ruff format --check src/main.py` **1 file already formatted**; `mypy src/` clean (84 files); `complexipy src tests --max-complexity-allowed 15` clean; `scripts/check_traceability.py` **PASS** (822 rows) |
+| T-011 | no structural changes needed (zero file changes) | Inspected the six test/helper paths T-011 owns (`tests/logging_coverage_test_helpers.py`, `tests/acceptance/logging_coverage/{test_inventory,test_statements_via_feature,test_services_traced}.py`, `tests/acceptance/singleton_install/test_install.py`, `tests/singleton_install_test_helpers.py` — the last unchanged by this task). **Rejected:** (a) making the two per-feature AC-009 witnesses read their per-file counts (18 / 11 / 11) from `_AC_009_STATEMENTS` instead of stating them — the table is defined below them (moving it is pure churn) and each witness states REQ-005's value **independently** on purpose: the drift guard already pins the table sum against the spec total (42), a shared source would let one wrong table make all three witnesses wrong the same way, and `_statement_violations` fails loudly with the found count if a file drifts; (b) importing `INVENTORY_INSTALL_OPERATIONS` into `test_inventory.py` in place of its local `_INSTALL_OPERATIONS` (the same five names in two files) — the inventory witness's expected set is the **spec-derived** expectation ("read from the §3.1 table, never the other way round"), the helper's set is the **probe-exclusion** set; merging them would let a helper error and a missing §3.1 row agree and pass, weakening AC-015 rather than deduplicating it; (c) deriving `INVENTORY_INSTALL_OPERATIONS` from `INVENTORY_MODULE_FUNCTIONS` (e.g. the `set_*` keys) — implicit and fragile, and the inventory dict is the explicit mirror of §3.1; (d) collapsing the docstring note and the inline comment in `test_module_functions_traced` (the exclusion explained at the requirement level and at the filter) — prose churn, no structure change; (e) moving the autouse `_settings_singleton_restored` fixture to `tests/conftest.py` — it is scoped to this file's witnesses (F-81) and a wider fixture would change teardown order for tests outside T-011's file scope; it already **reuses** `settings_test_helpers.restore_singleton` + `setup_logger()` instead of re-implementing save/restore; (f) extracting the duplicated `_INSTALL_SLOW_THRESHOLD_MS = 5` (`test_install.py` / `test_inventory.py`) into the helper — each witness pins the §3.1-note constant from the spec itself, one shared constant would couple two independent witnesses; (g) restructuring the AC-014 witness — `_witness_install_traced` / `_traced_records` already mirror the AC-011 witness per slot, nothing duplicated. Re-verified the shape constraints are intact: the F-78 count table is 18/11/11/2 with total 42 and its sum-vs-total drift guard still fires; the F-78a citations are namespaced (`structlog-logging AC-009 / REQ-005`, the `logging-coverage REQ-010 v2` parenthetical kept); the F-80 exclusion is mechanism-only — all five install operations stay in `INVENTORY_MODULE_FUNCTIONS` (13 rows, AC-015 witness intact) and are filtered only from the bare-call probe, their entry/exit pair still witnessed per function by AC-014; the F-81 autouse teardown is unchanged. | 22 passed (`green_command` verbatim, random order, 2.49s — re-run although the step changed zero files, per P-70); **22 passed with `-p no:randomly`** (2.57s) — the F-81/F-82 order-sensitivity did not return; `ruff check` **All checks passed** and `ruff format --check` **6 files already formatted** over the six T-011 test/helper paths; `mypy src/` clean (84 files); `complexipy src tests --max-complexity-allowed 15` clean |
 
 ---
 
@@ -5308,3 +5309,172 @@ No whole-repo ruff sweep and no full `--cov` suite here — both are Phase 5 gat
   line, one 4-line helper and ten mechanical call-site substitutions on an already-clean file — the
   likely outcome is "no structural changes needed" with the `green_command` re-run skipped.
 - **Next: S4.3 (T-006 refactor)** → S4.4 commit + `VERIFIED`.
+
+## Phase 4 — T-011 RED (S4.1) — 2026-10-08
+
+**Date:** 2026-10-08 · **Step:** S4.1 (T-011) · **Task:** T-011 `logging coverage` — "Prove each install operation is traced with `@logged(slow_threshold_ms=5)` and appears as a module-function row in the logging-coverage inventory" (REQ-010, AC-014/AC-015) · **Worktree:** `python-template_kopie-worktrees/crosscut/settings-public-registry-setter` (branch `crosscut/settings-public-registry-setter`, `HEAD` = `d432724`, T-001..T-006 `VERIFIED` + the F-76 fix `762b85a`).
+
+### RED gate — the DAG's `red_command`, verbatim
+
+```
+uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_014_install_is_traced tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations -v
+```
+
+→ **1 failed, 1 passed in 0.61s** (collected 2, no collection/import/setup error).
+
+| Node | Result | Reason |
+|---|---|---|
+| `test_ac_014_install_is_traced` | **PASSED** | Already GREEN: T-001..T-005 shipped the five `@logged(slow_threshold_ms=5)` decorators, so AC-014's witness (entry/exit pair, elapsed ms, DEBUG, `__logged__`, `slow_threshold_ms == 5`, no instance formatted in) needs nothing from this task. |
+| `test_inventory_covers_install_operations` | **FAILED** | `AssertionError: the executable inventory has no 'module function' row for ['set_event_bus', 'set_permission_service', 'set_search_service', 'set_session_service', 'set_settings_registry'], which docs/specs/logging-coverage.md §3.1 lists (AC-015)` — `INVENTORY_MODULE_FUNCTIONS` in `tests/logging_coverage_test_helpers.py` does not carry the five rows. The spec-side half of the same test (the §3.1 rows exist and are exactly the five) already passes. |
+
+**RED validity:** the only failure is an `AssertionError` on the inventory data — no `ImportError`, no collection/setup error, no invalid test data. T-011's remaining RED scope is therefore **AC-015 only** (the helper's module-function list + the `test_inventory.py` witness already written at S3.1); AC-014 is GREEN and stays as its witness.
+
+**F-77 consistency check (no code change):** the AC-014 witness asserts `getattr(installer, "__logged__", False) is True` and `getattr(installer, "slow_threshold_ms", None) == 5` — it does **not** assert `__logged_slow_threshold_ms`, the attribute F-77 records as absent on `@logged` module functions. Nothing in T-011's witnesses needs fixing for F-77.
+
+### F-78 evidence — the logging-coverage statement-count witnesses (T-011 is now the owner)
+
+```
+uv run pytest tests/acceptance/logging_coverage -q
+```
+
+→ **4 failed, 17 passed in 2.18s.** Failure set (identical to the F-78 entry in the T-006 record — re-measured here, unchanged):
+
+| Node | Class |
+|---|---|
+| `test_inventory.py::test_inventory_covers_install_operations` | **T-011's RED witness** (above) |
+| `test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger` | **F-78** |
+| `test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger` | **F-78** |
+| `test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger` | **F-78** |
+
+Measured per-file drift (the numbers are the test's own assertion output, not an estimate):
+
+| File | Table value | Measured on this branch | Delta |
+|---|---|---|---|
+| `src/backend/settings/registry.py` | 17 | **18** | +1 (`_logger.warning("settings: shared default registry replaced")`) |
+| `src/backend/settings/repository.py` | 11 | 11 | 0 |
+| `src/backend/eventbus/eventbus.py` | 10 | **11** | +1 (the replace WARNING is new; the `"created shared default instance"` debug only **moved** into the locked create path — `git diff main` shows one `-` and one `+` for it, so the net is +1) |
+| `src/backend/permissions/service.py` | 1 | **2** | +1 (the replace WARNING) |
+| `_AC_009_TOTAL_STATEMENTS` | 39 | **42** required by the table guard | +3 |
+
+`git diff main` over the five feature modules adds exactly five one-off statements — one `_logger.warning("<feature>: shared default … replaced")` per install operation (REQ-002) — plus the moved eventbus debug. `search/service.py` and `sessionmanagement/service.py` are **not** in AC-009's four-file table, so their +1 each is not witnessed there.
+
+**Regression, not pre-existing:** the orchestrator measured the same three `test_ac_009_*` nodes **GREEN on `main` (`1926bff`)**; they are RED only on this branch. Re-measured here as RED with the counts above.
+
+**Not a weakening.** `_statement_violations()` asserts two things per file: the pinned count, **and** that every one-off statement's receiver is `get_logger()` or a name bound to it (`_written_via_get_logger`), plus the feature-tree backend-import guard. Refreshing the count table changes only the drift-guard half; the "every statement goes through `get_logger()`" assertion stays exactly as strong. No test is deleted, converted to a weaker form, or marked skipped.
+
+### Finding F-78a — the pinned counts are cited to the wrong spec (record accuracy, found while assigning the owner)
+
+The test file's comments and assertion messages attribute the counts to "`REQ-005`" / "`AC-009` / `REQ-005` (logging-coverage REQ-010 v2)". Measured against the specs:
+
+- `docs/specs/logging-coverage.md` **REQ-005** is "Every public module-level function is traced with `@logged`" and **REQ-010 / AC-010** (v2) say only that the one-off statements are kept and written through the exported logger — **neither pins any count**.
+- The counts **are** pinned, but in `docs/specs/structlog-logging.md`: **REQ-005** names `src/backend/settings/registry.py` (17), `src/backend/settings/repository.py` (11), `src/backend/eventbus/eventbus.py` (10) and `src/backend/permissions/service.py` (1); **AC-009** states "each of the 39 one-off statements is written through `get_logger()`".
+
+So the citations are stale/mis-namespaced (the same class as F-15/F-79), and the F-78 refresh touches a table whose numbers a *different* change's spec pins. Reading `structlog-logging.md` REQ-005 literally — "every direct backend statement in … (17) … **is migrated** to it" — the counts describe the migration snapshot at that change, not a permanent ceiling on statements per file, so adding REQ-002's WARNING does not contradict it and the test's count table over-enforces beyond the requirement. Two legitimate resolutions, **neither is a test weakening**:
+
+1. **Refresh the table** (18 / 11 / 11 / 2, total 42) as the drift-guard update — what T-011's amended `allowed_files` now authorises; optionally correct the citations to `structlog-logging.md` REQ-005 / AC-009 in the same edit.
+2. If strict spec/test alignment is wanted, a **Spec Amendment PR to `structlog-logging.md`** (REQ-005 / AC-009 counts) per the Spec Amendment Workflow — the test is the contract, so the spec is amended, never the test relaxed.
+
+Recommendation: (1), with the citation fix, and record the `structlog-logging.md` reading in the GREEN record so the Phase 6 reviewer sees why the numbers moved.
+
+### DAG amendment (recorded)
+
+`tests/acceptance/logging_coverage/test_statements_via_feature.py (F-78 count-table refresh — the drift guard, not a weakening)` was added to **T-011's `allowed_files.test_files`** in **both** copies — `.github/task-runner/tasks.json` and `docs/tasks/settings-public-registry-setter.tasks.json` — so the F-78 owner assignment is machine-enforced and the two committed blobs stay identical (the T-011 objects compare equal; both files parse; `validate_task_dag.py` below).
+
+```
+uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json
+```
+
+→ **Task DAG validation PASSED: 12 tasks, acyclic, well-formed.**
+
+No other DAG field was changed by this step: T-011's `status` stays `PENDING` (S4.5 owns the flip), `tests_to_create`, `red_command`, `green_command`, `implementation_steps` and `source_files` are untouched.
+
+### Scheduling note (not a defect)
+
+T-011 lists `T-009` as a dependency and T-009 is still `"status": "PENDING"`, while T-001..T-006 are `VERIFIED`. T-009's witnesses (AC-002..AC-006, AC-013, the API/performance contracts, the unit edges and the INV-002/INV-003 properties) all exist on this branch from the Phase 3 commit `8595085` and the T-001..T-005 implementations, so the dependency is satisfied in substance; T-009's own S4.x steps and its `VERIFIED` flip have simply not run. Running T-009's `green_command` is **not** this step's work — recorded for the orchestrator's scheduling.
+
+### State for the next step
+
+- **RED observed for T-011** (1 failed / 1 passed on the `red_command`; the failing node is AC-015's inventory row), recorded here. Nothing committed.
+- **F-78 owner = T-011**, authorised by the amended `allowed_files.test_files` in both DAG copies.
+- **S4.2 (T-011) scope:** add the five install operations to `INVENTORY_MODULE_FUNCTIONS` in `tests/logging_coverage_test_helpers.py` (the AC-015 half), and refresh the F-78 count table in `tests/acceptance/logging_coverage/test_statements_via_feature.py` (18 / 11 / 11 / 2, `_AC_009_TOTAL_STATEMENTS = 42`) — a test-only change; the five `@logged` decorators already exist and must not be re-touched.
+- **`green_command` (verbatim):** `uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_014_install_is_traced tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations tests/acceptance/logging_coverage/ -v` — note it pulls in the whole `logging_coverage` directory, so the F-78 refresh must land in the same step for GREEN.
+- **Next: S4.2 (T-011).**
+
+---
+
+### Phase 4 — T-011 GREEN (S4.2) — 2026-10-08
+
+**Step:** S4.2 (T-011) · **Task:** T-011 `logging coverage` — "Prove each install operation is traced with `@logged(slow_threshold_ms=5)` and appears as a module-function row in the logging-coverage inventory" (REQ-010, AC-014/AC-015) · **Worktree:** `python-template_kopie-worktrees/crosscut/settings-public-registry-setter` (branch `crosscut/settings-public-registry-setter`, `HEAD` = `d432724`; **nothing committed by this step**).
+
+#### Gate ◆ GREEN
+
+`green_command` (verbatim):
+
+```
+uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_014_install_is_traced tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_install_operations tests/acceptance/logging_coverage/ -v
+```
+
+→ **22 passed / 0 failed** — the whole `tests/acceptance/logging_coverage/` directory (21 nodes) plus `test_ac_014_install_is_traced` (the inventory node is named twice and runs once). Verified twice: once under `pytest-randomly`'s random order and once with `-p no:randomly` (deterministic file order, which puts `test_ac_014_install_is_traced` first) — both **22 passed / 0 failed**. The second run was needed: the first GREEN observation was a lucky random order and the gate is order-sensitive until **F-81** was fixed (see Findings). Every node that was RED in S4.1 is now GREEN:
+
+| Node | S4.1 | S4.2 |
+|---|---|---|
+| `singleton_install/test_install.py::test_ac_014_install_is_traced` | passed (T-001..T-005 shipped the decorators) | **passed** |
+| `logging_coverage/test_inventory.py::test_inventory_covers_install_operations` | **failed** (no `module function` row for the five) | **passed** |
+| `logging_coverage/test_statements_via_feature.py::test_ac_009_settings_statements_go_through_get_logger` | **failed** (F-78) | **passed** |
+| `logging_coverage/test_statements_via_feature.py::test_ac_009_eventbus_statements_go_through_get_logger` | **failed** (F-78) | **passed** |
+| `logging_coverage/test_statements_via_feature.py::test_ac_009_statements_go_through_get_logger` | **failed** (F-78) | **passed** |
+
+AC-015 is witnessed as the spec states it: the expectation is **read from** `docs/specs/logging-coverage.md` §3.1 (`_spec_inventory_rows()`), and the executable inventory now carries a row for each of the five; each is asserted `__logged__ is True` with `slow_threshold_ms == 5`. AC-014's witness was already GREEN and is untouched.
+
+#### Diff summary (test-only; no `src/` file was touched)
+
+| File | Change |
+|---|---|
+| `tests/logging_coverage_test_helpers.py` | +5 imports (`set_event_bus`, `set_settings_registry`, `set_permission_service`, `set_search_service`, `set_session_service`); +5 rows in `INVENTORY_MODULE_FUNCTIONS`, in §3.1 table order; +`INVENTORY_INSTALL_OPERATIONS` (the five names, with the reason they cannot be bare-called — **F-80**). No existing row changed. |
+| `tests/acceptance/logging_coverage/test_statements_via_feature.py` | **F-78 count-table refresh:** `_AC_009_STATEMENTS` → `settings/registry.py 18`, `settings/repository.py 11`, `eventbus/eventbus.py 11`, `permissions/service.py 2`; `_AC_009_TOTAL_STATEMENTS = 42`. **F-78a citation fix:** every bare `REQ-005` / `AC-009` comment, docstring and assertion message is namespaced to `structlog-logging` (they are that spec's IDs, not `logging-coverage`'s). `_written_via_get_logger`, `_backend_imports`, `_dir_backend_imports` and every assertion **mechanism** are byte-for-byte unchanged — nothing was weakened. |
+| `tests/acceptance/singleton_install/test_install.py` | **F-81** (new, found by the `green_command`): an autouse `_settings_singleton_restored` fixture saves and restores the settings singleton around every witness in the file (the mechanism `test_module_functions_traced` already uses). Already in T-011's `allowed_files` ("this task adds the AC-014 test to the shared file") — no further amendment. No assertion changed. |
+| `tests/acceptance/logging_coverage/test_services_traced.py` | **F-80** (new, found by the `green_command`'s directory half): the AC-005 probe builds `probed` = the inventory minus `INVENTORY_INSTALL_OPERATIONS`, and both its call loop and its record loop iterate `probed`. Docstring records why that is an exception to the *mechanism*, not to AC-005. |
+| `docs/specs/structlog-logging.md` | **Spec Amendment v2** (see below). |
+| `.github/task-runner/tasks.json` + `docs/tasks/settings-public-registry-setter.tasks.json` | T-011 `allowed_files.test_files` += `test_services_traced.py` (F-80). The two T-011 objects compare equal; `validate_task_dag.py` → **PASSED: 12 tasks, acyclic, well-formed**. |
+
+`git diff --stat` for this step: `docs/specs/structlog-logging.md` 5 ±, `test_services_traced.py` +19/−4, `test_statements_via_feature.py` 52 ±, `tests/acceptance/singleton_install/test_install.py` +24, `tests/logging_coverage_test_helpers.py` +28/−1, the two DAG copies +4/−1 each — **7 files, +102/−34, no `src/` file**. `src/` is untouched, so `mypy`/`complexipy` over `src/` are unchanged by construction (both re-run anyway).
+
+#### Spec amendments riding this change's PR ◆ (flag for the Phase 6 reviewer)
+
+1. **`docs/specs/logging-coverage.md` v3 — already authorised and already on the branch.** §12 Impact Analysis row 6 of the approved change spec authorises it, and P.4 landed it: the five `module function` rows are in §3.1 and the `## Changelog` v3 entry is present. **This step changed nothing in that file** — verified by reading §3.1 (rows 63, 66–69) and the changelog. No new ID.
+2. **`docs/specs/structlog-logging.md` v2 — NEW, added by this step (F-78a).** REQ-005 pins the per-file one-off-statement counts and AC-009 states the total ("each of the 39 one-off statements"); this change legitimately adds one one-off `logger.warning` per install operation (change REQ-002), so the pinned numbers moved 17/11/10/1 → **18/11/11/2** and 39 → **42**. Per AGENTS.md ("Tests are the contract … the conflict MUST be flagged and resolved via the Spec Amendment Workflow — **never by weakening the test**") the **spec** was amended, not the test relaxed: a `## Changelog` v2 entry was added at the top, and **only the numbers** changed in REQ-005 and AC-009 — no ID added, removed or renumbered, the migration requirement itself unchanged. `search/service.py` and `sessionmanagement/service.py` also each gained one WARNING, but they are not among AC-009's four named files, so the total moves by +3, not +5. **This is a Spec Amendment riding this change's implementation PR** (the Workflow allows the amendment to be reviewed in the change PR; the reviewer must confirm the refreshed numbers). `verify_spec.py` passes on both specs and `check_traceability.py` still resolves every ID.
+
+#### Findings
+
+- **F-78 — closed.** The three `test_ac_009_*` statement-count witnesses are GREEN: the count table matches the post-change source (18/11/11/2, total 42) and the "every statement is written through `get_logger()`" plus the feature-tree backend-import guards still enforce the same strength as before.
+- **F-78a — closed.** The mis-namespaced citations are corrected in comment/docstring/assertion-message text only (no assertion changed), and the underlying conflict was resolved by the `structlog-logging.md` v2 amendment above rather than by relaxing the drift guard.
+- **F-80 (new, found by this step, test-infrastructure only).** Adding the five install operations to `INVENTORY_MODULE_FUNCTIONS` broke `test_services_traced.py::test_module_functions_traced` (AC-005's probe): it calls every inventory module function **bare** (`fn()`, with `hash_token` special-cased), so `set_event_bus` raised `TypeError: missing 1 required positional argument: 'bus'`, the probe loop aborted, and two further nodes (`test_service_registry_classes_traced`, `test_sink_failure_does_not_interrupt`) failed as a cascade. Measured: with the rows added and no probe fix, the directory run is **1 failed / 20 passed** and the `green_command` run **3 failed / 19 passed**; the baseline before this step is **4 failed / 18 passed** on the same command, so all three are this step's, not pre-existing. **Resolution:** the probe iterates the inventory minus `INVENTORY_INSTALL_OPERATIONS`. This is **not** a weakening of AC-005: the five install operations are still in the normative inventory, still asserted traced by `test_inventory_covers_all_public_classes` and `test_slow_threshold`, and their entry/exit pair (with elapsed ms, at DEBUG, no argument formatted in) is witnessed **per function and more strictly** by AC-014 (`test_ac_014_install_is_traced`), which installs a real instance of each feature's own type and restores the slot. Passing a dummy object through the five production singletons to keep the bare-call mechanism was rejected: it leaks foreign instances into five feature slots mid-suite and type-lies past the signatures. Because `test_services_traced.py` was not in T-011's `allowed_files`, the file was added there in **both** DAG copies (recorded above).
+- **F-81 (new, found by this step, test-infrastructure; fixed here).** `test_ac_014_install_is_traced` clears and installs all five slots and left the **settings singleton cleared**. `EventBus.__init__` resolves its queue size through the *guarded* read `get_settings_registry(required=False)` (`_resolve_max_queue_size`), so with the slot empty it never calls `SettingsRegistry.has` — and `test_service_registry_classes_traced` (AC-002) counts exactly that call (`_EXPECTED_HAS_RECORDS = 2`), while `test_sink_failure_does_not_interrupt` fails as a cascade. Measured with `-p no:randomly` (ac_014 first): **2 failed / 20 passed** with the inventory rows added, and **3 failed / 16 passed on the stashed baseline** — so the two nodes are **pre-existing** casualties of the AC-014 witness, hidden by `pytest-randomly`'s random order (which is why the first run of the `green_command` looked GREEN). **Fix (root cause, one place):** an autouse fixture in `test_install.py` snapshots the settings singleton and restores it after every witness in the file, then re-runs `setup_logger()` so the session's DEBUG pipeline survives — the same mechanism `test_module_functions_traced` already uses, and `test_install.py` is already in T-011's `allowed_files`. After the fix the `green_command` is 22/0 under **both** orders, and the whole `test_install.py` file no longer breaks `test_service_registry_classes_traced`.
+- **F-82 (new, found by this step, NOT fixed — out of T-011's scope; Phase 5 risk).** The same leak exists in `tests/acceptance/singleton_install/test_concurrency.py`: `uv run pytest tests/acceptance/singleton_install/test_concurrency.py tests/acceptance/logging_coverage/test_services_traced.py::test_service_registry_classes_traced -q -p no:randomly` → **1 failed** (the AC-002 node), and the combined deterministic run of the two directories still shows it. That file is **not** in T-011's `allowed_files` (it belongs to T-009 / T-010, both still open), so the fix is the same autouse fixture applied there — recommended for T-009's or T-010's remaining work, or as an explicit Phase 5 fix. Full-suite context in that ordering (baseline vs. after this step, `tests/acceptance/singleton_install` + `tests/acceptance/logging_coverage`, `-p no:randomly`): **8 failed → 4 failed**, and the 4 are a strict subset of the baseline's 8 (`test_ac_013_install_publishes_no_event`, `test_ac_011_lazy_path_emits_one_traced_pair` — T-009/T-010 — plus the two F-82 casualties). No new failure was introduced.
+
+#### Gate results (all in the change worktree)
+
+| # | Gate | Result |
+|---|---|---|
+| 1 | `green_command` (verbatim, above) | **22 passed / 0 failed** ◆ |
+| 2 | `uv run pytest tests/contract/logging tests/property/logging tests/unit/logging -q` | **44 passed / 0 failed** (16.47s) ◆ |
+| 3 | `uv run python scripts/check_traceability.py` | **PASS** (822 matrix rows, 136 spec IDs, 817 test functions) — the amended spec IDs still resolve ◆ |
+| 4 | `uv run python scripts/verify_spec.py docs/specs/logging-coverage.md` / `… structlog-logging.md` | **exit 0 / exit 0** (both `Traceability: PASS`) ◆ |
+| 5 | `uv run ruff check` + `uv run ruff format` on the five changed paths | **All checks passed!** / **5 files already formatted** ◆ |
+| 6 | `uv run mypy src/` | **Success: no issues found in 84 source files** ◆ |
+| 6 | `uv run complexipy src tests --max-complexity-allowed 15` | **All functions are within the allowed complexity** ◆ |
+| — | `uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json` | **PASSED: 12 tasks, acyclic, well-formed** |
+
+No whole-repo ruff sweep and no full `--cov` suite were run (both are Phase 5 gates).
+
+#### No-regression smoke (targeted, not the full suite)
+
+`uv run pytest tests/unit/logging_coverage tests/acceptance/singleton_install tests/contract/singleton_install tests/property/singleton_install -q` → **7 failed / 24 passed**, and the **identical** 7-node failure set with this step's changes stashed (`test_ac_011_lazy_path_emits_one_traced_pair`, `test_ac_013_install_publishes_no_event`, `test_inv_003_no_events_and_no_rebinding`, `test_ac_019_agents_md_names_installer`, `test_edge_009_public_api_not_banned`, `test_nfr_004_ruff_and_mypy_clean`, `test_ac_018_ruff_bans_private_slot_import`). They belong to **T-009** (whose `VERIFIED` flip has not run) and **T-010** (the `AGENTS.md` guidance task), not to T-011 — recorded for the orchestrator's scheduling, unchanged from the S4.1 note.
+
+#### State for the next step
+
+- **T-011 is GREEN and recorded.** Nothing committed (S4.4 owns the commit and the `VERIFIED` flip).
+- **S4.3 (T-011 refactor) scope:** the step's own diff is 5 test files + 1 spec + 2 DAG copies; the helper gained one constant and one 5-row table, the probe gained one comprehension, and `test_install.py` gained one autouse teardown fixture. Likely a **no-op fast-path** (no structural duplication introduced; the five rows follow the existing table pattern exactly and the fixture follows the `test_module_functions_traced` pattern).
+- **Phase 5 must re-check** the `structlog-logging.md` v2 numbers against the final source state (18/11/11/2, total 42) — if any later task adds another one-off statement to those four files, the count table and the spec move together.
+- **Phase 5 will likely hit F-82** (the `test_concurrency.py` settings-slot leak breaking two `logging_coverage` witnesses under an unlucky random order). Assign it to T-009/T-010 (they own that file) or fix it as an explicit Phase 5 step; the fix is the same autouse fixture now in `test_install.py`.
+- **Next: S4.3 (T-011 refactor).**

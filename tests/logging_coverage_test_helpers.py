@@ -35,12 +35,16 @@ from backend.authentication.service import AuthService
 from backend.authentication.tokens import hash_token, new_token
 from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
-from backend.eventbus.eventbus import EventBus, get_event_bus, reset_event_bus
+from backend.eventbus.eventbus import EventBus, get_event_bus, reset_event_bus, set_event_bus
 from backend.logging import get_settings, setup_logger
+from backend.permissions.service import set_permission_service
+from backend.search.service import set_search_service
+from backend.sessionmanagement.service import set_session_service
 from backend.settings.registry import (
     SettingsRegistry,
     get_settings_registry,
     reset_settings_registry,
+    set_settings_registry,
 )
 from backend.settings.repository import (
     MemoryTemplateRepository,
@@ -78,11 +82,33 @@ INVENTORY_MODULE_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "hash_token": hash_token,
     "get_event_bus": get_event_bus,
     "reset_event_bus": reset_event_bus,
+    "set_event_bus": set_event_bus,
     "get_settings_registry": get_settings_registry,
     "reset_settings_registry": reset_settings_registry,
+    "set_settings_registry": set_settings_registry,
+    "set_permission_service": set_permission_service,
+    "set_search_service": set_search_service,
+    "set_session_service": set_session_service,
     "get_settings": get_settings,
     "setup_logger": setup_logger,
 }
+
+# The five install operations of change ``settings-public-registry-setter`` (spec §3.1 rows added
+# by its v3 amendment). Each takes the object it installs, so the bare-call probe in
+# ``test_services_traced.test_module_functions_traced`` cannot call them. Their entry/exit pair is
+# witnessed per function by that change's AC-014 witness
+# (``tests/acceptance/singleton_install/test_install.py::test_ac_014_install_is_traced``), which
+# installs a real instance of each feature's own type and restores the slot afterwards — a stronger
+# witness than a bare call would be. The probe covers exactly the rest of the inventory.
+INVENTORY_INSTALL_OPERATIONS: frozenset[str] = frozenset(
+    {
+        "set_settings_registry",
+        "set_event_bus",
+        "set_permission_service",
+        "set_search_service",
+        "set_session_service",
+    }
+)
 
 
 # --- Log-record filtering helpers -----------------------------------------
