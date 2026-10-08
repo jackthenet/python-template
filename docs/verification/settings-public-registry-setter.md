@@ -6379,3 +6379,91 @@ The two helpers still share only a shape; they are two features' install operati
 - **No test weakened, narrowed, skipped or deleted; no assertion removed; no `noqa` / `per-file-ignores` / `exclude` added; the `banned-api` table is unchanged.**
 - **Open for S4.4**: flip T-008 to `VERIFIED` in `.github/task-runner/tasks.json` + `docs/tasks/settings-public-registry-setter.tasks.json`; amend its `allowed_files` to add `tests/eventbus_test_helpers.py` (F-86a); keep the pending F-84/F-85a amendments; record the F-34 wording correction; the commit.
 - **Next: S4.4 (T-008) commit + `VERIFIED` + `allowed_files` amendment.**
+
+## Phase 4 — T-010 RED (S4.1) — 2026-10-08
+
+**Step:** S4.1 (T-010) Pick task + confirm RED · **Objective:** pick the next ready DAG task, run its `red_command` verbatim, **observe RED**, record the evidence. **No implementation**: no `src/`, no `tests/`, no `pyproject.toml` change; no task status flipped (T-010 stays `PENDING` in `.github/task-runner/tasks.json`); this record is the only file the step's commit touches. Branch verified with `git branch --show-current` → `crosscut/settings-public-registry-setter`, HEAD `fe2d768` (T-008 `VERIFIED`). No full suite, no whole-repo ruff sweep, no coverage (Phase 5 gates). All pytest runs sequential (the `tests/unit/test_settings_test_isolation.py` concurrency caveat).
+
+### Task pick — T-010, not T-012
+
+| Check | T-010 | T-012 |
+|---|---|---|
+| `status` | `PENDING` | `PENDING` |
+| `dependencies` | T-001, T-002, T-003, T-004, T-005, T-009 — **all `VERIFIED`** | T-001..T-005, T-008, T-009 — **all `VERIFIED`** |
+| Ready? | **yes** | yes |
+
+Both remaining tasks are ready, so the pick is an ordering decision, not a dependency one. **T-010 is picked**: it is the lower-numbered remaining DAG node, it is the last task that can still touch `src/` (its `allowed_files.source_files` are the five owner modules, fix-only), and Phase 5 cannot start until its REQ-006/007/008 + INV-001 + EDGE-010 + NFR-003 witnesses are GREEN — its outcome can force a re-entry into T-001..T-005, so it belongs before a documentation task. T-012 (`AGENTS.md` bullets + `test_ac_019_agents_md_names_installer`) is dependency-satisfied and its witness is already RED and independent of T-010's, so it stays a legal alternative pick under the "easiest first" tie-break; nothing in T-010's evidence depends on it.
+
+### RED gate — `red_command` verbatim
+
+```
+uv run pytest tests/acceptance/singleton_install/test_concurrency.py::test_ac_009_concurrent_lazy_create tests/acceptance/singleton_install/test_concurrency.py::test_ac_010_concurrent_install_read_reset tests/acceptance/singleton_install/test_concurrency.py::test_nfr_003_slot_lock_is_short_lived tests/acceptance/singleton_install/test_install.py::test_ac_011_lazy_path_emits_one_traced_pair tests/acceptance/singleton_install/test_install.py::test_ac_012_install_then_reset_then_default tests/property/singleton_install/test_install_properties.py::test_inv_001_last_install_wins -v
+```
+
+→ **6 collected, 1 failed, 5 passed in 4.25 s** (`Using --randomly-seed=…`, `pytest-randomly 5.0.0` active). The single failure is `tests/acceptance/singleton_install/test_install.py::test_ac_011_lazy_path_emits_one_traced_pair`. **RED is observed** — one witness fails on specified behavior, not on data or fixtures.
+
+### Per-node classification
+
+| Node | Spec IDs witnessed | Result | Classification |
+|---|---|---|---|
+| `test_concurrency.py::test_ac_009_concurrent_lazy_create` | REQ-006, AC-009, ADR-084 | **PASSED** | already GREEN from T-001..T-005 (the per-module locks). Not vacuous: it asserts 8 barrier-released reads return **one** instance **and** `widened_lazy_create_window` recorded exactly **1** constructed default, and the session-management node asserts the `ValueError` carve-out (EDGE-003) |
+| `test_concurrency.py::test_ac_010_concurrent_install_read_reset` | REQ-006, AC-010, EDGE-010 | **PASSED** | GREEN from T-001..T-005: 8 installs + 8 reads + 2 resets under one barrier, no thread raised, no read returned an instance no constructor completed, and the EDGE-010 WARNING bound (`6 ≤ warnings ≤ 8`) held for all five slots |
+| `test_concurrency.py::test_nfr_003_slot_lock_is_short_lived` | NFR-003 | **PASSED** | GREEN: the install completed while a reset was parked inside `shutdown()`, **and** the witness's own `serialized=True` control pass reported `False`, so the pass is not vacuous |
+| `test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` | **REQ-007, AC-011** | **FAILED** | **valid RED** — a behavior assertion (`AssertionError` inside the test body, `test_install.py:244`), no `ValidationError`, no fixture/setup error, and the F-59 anti-vacuity guard (`hasattr(module, installer)`) now passes, so the "no install entry record" half is no longer vacuous |
+| `test_install.py::test_ac_012_install_then_reset_then_default` | REQ-008, AC-012 | **PASSED** | GREEN from T-001..T-005: install → read (installed instance) → reset → read (a fresh default of the same class, and it becomes the shared default), for all five slots incl. the repository-carrying session-management read |
+| `test_install_properties.py::test_inv_001_last_install_wins` | INV-001 (+ EDGE-010) | **PASSED** | GREEN from T-001..T-005: the Hypothesis sequence model (15 examples × 5 slots) matched the model's expected instance at every read, and the concurrent-install last-writer-wins half held |
+
+A partially-passing task is legal here and was predicted by the DAG itself (`T-010.design_constraints`: "RED is observed at S3.2; at S4.1 re-entry the lazy-create witnesses may already be GREEN from T-001..T-005"). T-001..T-005 each implemented its own feature's lock and install operation and each carried its own per-feature concurrency witness (`settings.md` AC-042, `event-bus.md` AC-015, `user-roles-permissions.md` AC-043, `search.md` AC-040, `session-management.md` AC-048), so the five shared-set nodes they already satisfy are GREEN at this re-entry. **AC-011 is T-010's own RED-to-GREEN witness.**
+
+### The failing witness — exact failure and root cause
+
+```
+E  AssertionError: permissions: the lazy read emitted 0 entry / 0 exit record(s) of its own
+E  assert (0, 0) == (1, 1)
+tests\acceptance\singleton_install\test_install.py:244: AssertionError
+```
+
+`test_ac_011` walks `SLOTS` in helper order — settings, eventbus, **permissions**, search, session-management (skipped) — so **settings and eventbus passed the AC-011 assertions inside this run** and the loop aborted at permissions; **search's half was never reached**. Measured traced state of the five getters (attribute probe, `__logged__`):
+
+| Getter | `@logged`? | `slow_threshold_ms` |
+|---|---|---|
+| `get_settings_registry` | yes | 5.0 |
+| `get_event_bus` | yes | 5.0 |
+| **`get_permission_service`** | **no** | — |
+| `get_search_service` | yes | 5.0 |
+| `get_session_service` | yes | 5.0 |
+
+Root cause: `src/backend/permissions/service.py:524` defines `get_permission_service()` **undecorated** — its own docstring says "Not traced on purpose (spec §13 follow-up)" — while its `set_permission_service()` (line 552) **is** `@logged(slow_threshold_ms=5)`. AC-011 requires "exactly one traced entry/exit pair … for that read" for each of the four features named in AC-009, permissions included. The lazy create itself is correct per REQ-007 (direct slot write under `_permission_service_lock`, never a call to the installer — the witness's installer-entry-count half is 0 and its anti-vacuity half passes).
+
+### Determinism / flakiness — 4 runs of the same set
+
+| Run | Order | Result |
+|---|---|---|
+| 1 | `pytest-randomly` (seed 1704799150 in the `-v` capture) | 1 failed (`test_ac_011…`), 5 passed |
+| 2 | `pytest-randomly` | 1 failed (`test_ac_011…`), 5 passed (3.78 s) |
+| 3 | `pytest-randomly` | 1 failed (`test_ac_011…`), 5 passed (3.83 s) |
+| 4 | `-p no:randomly` (declaration order) | 1 failed (`test_ac_011…`), 5 passed (4.00 s) |
+
+**No flakiness**: the same node fails in all four runs, the five passing nodes never flip, and no run reported a setup/collection error. The concurrency witnesses use barriers and `threading.Event`s only (no sleep-based ordering; the single sleep is inside `widened_lazy_create_window`, which deliberately holds a creating thread in its constructor so the AC-009 race is observable at all), and NFR-003's witness carries its own anti-vacuity control pass. The `test_ac_011` failure is deterministic and order-independent — it is a missing decorator, not a race.
+
+### F-87 — AC-011 and spec §13 contradict each other for permissions (**blocks S4.2, needs a user decision**)
+
+The RED is valid, but **S4.2 cannot resolve it inside the approved spec**:
+
+- **AC-011** (`docs/specs/settings-public-registry-setter.md:204`, approved) requires the traced entry/exit pair for the lazy read of **each of the four features named in AC-009** — settings, eventbus, **permissions**, search.
+- **§13 Out of Scope** (same spec, `:388`) says the opposite for exactly that feature: "Tracing `get_permission_service()` / `reset_permission_service()` (today untraced and absent from the §3.1 inventory) — A pre-existing logging-coverage gap; fixing it would add inventory rows this change's Q-15 answer does not cover. Recorded as a follow-up candidate." `docs/specs/logging-coverage.md:4` (v3 changelog) repeats it: "The permissions … singleton getters/resets remain absent from the inventory (a pre-existing gap: the permissions pair is untraced in code) … not fixed here."
+
+Measured consequences of each resolution (so the decision is informed, not guessed):
+
+- **Option A — trace `get_permission_service()` with `@logged(slow_threshold_ms=5)`** (matches D9 and the logging-coverage tracing policy; `src/backend/permissions/service.py` **is** in T-010's `allowed_files.source_files`, marked fix-only). No existing test breaks: the inventory witnesses check one direction only ("every inventory row is traced", `tests/acceptance/logging_coverage/test_inventory.py:74,100`), and no witness demands the reverse (the completeness witness `test_new_classes_traced.py` covers **classes**, not module functions). But it leaves a traced public module function **absent from the normative §3.1 inventory** — a `logging-coverage.md` REQ-001 gap this change's v3 amendment explicitly declined to close — so it needs a §3.1 inventory row, i.e. a **spec amendment PR** (logging-coverage.md), and it contradicts §13 as written.
+- **Option B — scope AC-011's traced-pair half to the three features whose getters are traced** (settings, eventbus, search) and keep permissions as the recorded follow-up. This needs a **Spec Amendment PR for AC-011** *before* the witness may be narrowed: editing `test_ac_011_lazy_path_emits_one_traced_pair` to skip permissions without an amended AC-011 is a prohibited acceptance-test weakening, and it would also make the permissions slot's REQ-007 half un-witnessed by AC-011 (its REQ-007 direct-write/no-setter-call half is currently the only half that passes for permissions).
+
+**Recommendation: Option A** — it satisfies the normative AC as written, is a 1-line decorator on a file already in the task's allowed source set, is consistent with the four sibling getters (all `@logged(slow_threshold_ms=5)`) and with D9/logging-coverage REQ-007, and the only cost is the §3.1 inventory row the amendment must add. **Neither option may be taken by S4.2 without the user's decision**, so the orchestrator must raise F-87 as a question (and, for either option, open the corresponding Spec Amendment PR per the Spec Amendment Workflow) before launching S4.2 (T-010).
+
+### State for the next step
+
+- **RED observed for T-010** on the verbatim `red_command`: 1 of 6 witnesses fails on behavior (`test_ac_011_lazy_path_emits_one_traced_pair`, `AssertionError (0, 0) != (1, 1)` for the permissions slot at `test_install.py:244`), stable across 4 runs in two orders. The other five witnesses are GREEN, brought in by T-001..T-005, and are non-vacuous (anti-vacuity controls and construction counters inside the witnesses).
+- **What S4.2 must change:** *not* a lock scope and *not* the lazy-path slot write — both are already correct and witnessed (AC-009/AC-010/AC-012/INV-001/NFR-003 GREEN; REQ-007's direct-write half of AC-011 GREEN). The only open behavior is the **missing `@logged` decorator on `get_permission_service()`** (`src/backend/permissions/service.py:524`), and that is gated by **F-87**. Once the user decides: Option A adds the decorator (+ the §3.1 inventory row) and then re-runs the `green_command`; Option B amends AC-011 first, then narrows the witness.
+- **Not touched by this step:** every `src/` and `tests/` file, `pyproject.toml`, `uv.lock` (`git status --porcelain` empty before and after the runs — no re-lock occurred, P-42), `.github/task-runner/tasks.json` and `docs/tasks/settings-public-registry-setter.tasks.json` (T-010 stays `PENDING`), `AGENTS.md`, T-012's witness (`test_ac_019_agents_md_names_installer` is RED and out of this step's gate — it was not part of the `red_command`).
+- **Next: S4.2 (T-010) implement + confirm GREEN — blocked on the F-87 user decision.**
+
