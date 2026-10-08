@@ -955,7 +955,8 @@
         ],
         "test_files": [
           "tests/contract/singleton_install/__init__.py (new package)",
-          "tests/contract/singleton_install/test_lint_contract.py"
+          "tests/contract/singleton_install/test_lint_contract.py",
+          "tests/eventbus_test_helpers.py (amended in — F-86a: TID251 bans references, not only writes, so the last foreign slot read in the repository had to migrate to get_event_bus()/set_event_bus() before `ruff check .` could be clean)"
         ]
       },
       "implementation_scope": "pyproject.toml (select + lint.flake8-tidy-imports.banned-api for the five fully qualified slot paths) + tests/contract/singleton_install/test_lint.py. No src/ or tests/ source change.",
@@ -978,7 +979,7 @@
       "dependencies": [
         "T-007"
       ],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-009",
