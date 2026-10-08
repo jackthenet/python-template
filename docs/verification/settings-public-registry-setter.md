@@ -3839,3 +3839,225 @@ last-install-wins and the EDGE-010 WARNING bound must survive. `src/backend/sear
 five `INVENTORY_MODULE_FUNCTIONS` rows in `tests/logging_coverage_test_helpers.py` **at implementation time**
 (F-64), and T-012 must add the two `Using the …` sections to `AGENTS.md` per Q-30 while amending D13's
 "no new section" clause in the same PR.
+
+---
+
+### Phase 4 — T-001 RED (S4.1)
+
+**Date:** 2026-10-08 (run at 2026-10-08T07:11Z, re-run 07:14Z and 07:16Z — counts identical on all three).
+**Worktree:** `crosscut/settings-public-registry-setter` (every command run there with an explicit `cd`, per P-68).
+**Task picked:** **T-001** — settings (`src/backend/settings/registry.py` + the `backend.settings` public
+surface): "Add `set_settings_registry()` and one module lock guarding install, lazy create (both required
+modes) and reset; re-export it".
+**Why T-001:** all 12 DAG tasks have `dependencies: []`, so all are ready; T-001 is the foundation task — it
+owns `tests/acceptance/singleton_install/__init__.py`, `tests/acceptance/singleton_install/test_install.py`
+and `tests/singleton_install_test_helpers.py` that T-009/T-010/T-011 extend, and it is the smallest
+owning-module change that gives every later task a thread-safe settings singleton to install into
+(easiest-first among the ready set).
+
+#### Command (the DAG's `red_command`, verbatim)
+
+```bash
+uv run pytest tests/acceptance/singleton_install/test_install.py::test_ac_001_install_then_get_returns_instance tests/acceptance/settings/test_settings.py::test_ac_040_set_settings_registry_installs_default tests/acceptance/settings/test_settings.py::test_ac_041_replace_logs_one_warning tests/acceptance/settings/test_settings.py::test_ac_042_concurrent_install_and_read tests/acceptance/settings/test_settings.py::test_ac_043_install_then_reset_then_default tests/property/settings/test_settings_properties.py::test_inv_011_last_install_wins tests/unit/settings/test_settings_edges.py::test_edge_030_install_over_nonempty_default tests/unit/settings/test_settings_edges.py::test_edge_031_install_then_reset_creates_default tests/unit/settings/test_settings_edges.py::test_edge_032_required_false_after_install tests/unit/settings/test_settings_edges.py::test_edge_033_concurrent_lazy_create -v
+```
+
+#### Counts
+
+| Measure | Result |
+|---|---|
+| Collected (`--collect-only -q` over the same 10 node IDs) | **10 tests collected**, 0 errors |
+| Run | **10 failed, 0 passed, 0 skipped, 0 errors** — `10 failed in 1.99s` |
+| Phase 3 baseline for T-001 | **10 failed** — **reproduced exactly** |
+| Phase 3 gate baseline (all 12 tasks) | 69 failed / 2 passed — consistent: T-001 contributes 10 of the 69, and neither of the 2 by-design passes is a T-001 node |
+| Re-runs | 3 runs (`-v`, `--tb=line`, `--junitxml`) — identical counts and identical failure modes |
+
+#### Per-node failure reasons (grouped)
+
+**Group A — `AttributeError` on the missing public install operation (8 nodes)**
+`AttributeError: module 'backend.settings' has no attribute 'set_settings_registry'. Did you mean: 'get_settings_registry'?`
+raised at `tests/singleton_install_test_helpers.py:112` (`SingletonSlot.install` →
+`getattr(self.module, self.installer)(instance)`) — i.e. inside the test body, at the first call of the
+operation the task has to add:
+
+- `tests/acceptance/singleton_install/test_install.py::test_ac_001_install_then_get_returns_instance` (AC-001)
+- `tests/acceptance/settings/test_settings.py::test_ac_040_set_settings_registry_installs_default` (`settings.md` v5 AC-040)
+- `tests/acceptance/settings/test_settings.py::test_ac_041_replace_logs_one_warning` (AC-041 — fails at `test_settings.py:649`, the first `SETTINGS_SLOT.install`, before the WARNING-count assert)
+- `tests/acceptance/settings/test_settings.py::test_ac_043_install_then_reset_then_default` (AC-043)
+- `tests/property/settings/test_settings_properties.py::test_inv_011_last_install_wins` (INV-011 — inside the Hypothesis body)
+- `tests/unit/settings/test_settings_edges.py::test_edge_030_install_over_nonempty_default` (EDGE-030)
+- `tests/unit/settings/test_settings_edges.py::test_edge_031_install_then_reset_creates_default` (EDGE-031)
+- `tests/unit/settings/test_settings_edges.py::test_edge_032_required_false_after_install` (EDGE-032)
+
+**Group B — `AssertionError` on the unguarded lazy create (2 nodes)** — the defect the module lock closes
+(REQ-006/REQ-007, `settings.md` v5 INV-011), observed as distinct instances created by racing readers under
+`widened_lazy_create_window`:
+
+- `tests/acceptance/settings/test_settings.py::test_ac_042_concurrent_install_and_read` (AC-042) —
+  `assert 8 == 1` at `test_settings.py:670`: 8 barrier-released `get_settings_registry()` calls ran **8**
+  `SettingsRegistry` constructors and the window recorded 8 instances (expected 1). The install/read
+  interleaving half of the test is not reached.
+- `tests/unit/settings/test_settings_edges.py::test_edge_033_concurrent_lazy_create` (EDGE-033) —
+  `assert 2 == 1` at `test_settings_edges.py:425`: the two-thread create race produced **2** instances
+  (expected 1), and `reads["first"] is reads["second"]` is never reached.
+
+#### RED validity check
+
+- Exception set at the failure points: **`AttributeError` (8) + `AssertionError` (2)** — nothing else.
+- **Zero** collection errors, **zero** import/collection/setup errors, **zero** `ValidationError` /
+  `ValueError` from test-data construction, no error raised in a fixture — every failure happens inside the
+  test body on the behavior under change. The test data are in-domain (`SETTINGS_SLOT.new()` builds a
+  `SettingsRegistry` with isolated repositories, which validates).
+- The two `AssertionError`s are **behavioral**, not invalid data: they are the observed race (8 and 2 distinct
+  instances) against the spec's required 1, and the witness is non-vacuous — `widened_lazy_create_window`
+  holds the creating thread inside the constructor, and the same helper is proven sensitive to the presence
+  of a lock by the F-56 probe (1 distinct read with search's `_singleton_lock` active, 8 with it neutered).
+- **RED is valid for all 10 nodes.** No test content was changed.
+
+#### Record-only divergence from the Phase 3 entries (no action needed)
+
+The Phase 3 per-ID entries for `settings.md` v5 AC-041 and AC-042 have the two reasons **transposed**:
+AC-041 was recorded as `assert 8 == 1 (test_settings.py:670)` and AC-042 as `AttributeError … inside the
+race`, whereas the committed tests fail as recorded in Group A/B above (AC-041 → `AttributeError` at
+`test_settings.py:649`; AC-042 → `assert 8 == 1` at `test_settings.py:670`). `git log` shows
+`tests/acceptance/settings/test_settings.py` unchanged since its S3.1 derivation commit `6a7b444`, so the
+tests did not move — the Phase 3 prose swapped the two rows. Both recorded modes are valid RED modes and the
+counts match, so nothing is re-derived; the correct per-node reasons are the ones above. The Phase 3 entries
+are left as written (historical gate record, convention B).
+
+#### No implementation made
+
+**S4.1 wrote no implementation and no test.** `git status --porcelain` is clean apart from this verification
+record; `src/backend/settings/registry.py` and `src/backend/settings/__init__.py` are untouched; no commit
+was made (S4.4 commits). The scratch `--junitxml` artifacts used to group the failure reasons were deleted
+in the same worktree.
+
+**State machine:** T-001 is at **RED_CONFIRMED**. Next: **S4.2 (T-001)** implement + targeted GREEN with the
+DAG's `green_command` (identical node list to `red_command`), ruff on the changed paths
+(`uv run ruff check src/backend/settings/registry.py src/backend/settings/__init__.py`), targeted tests only
+— the full suite stays a Phase 5 gate.
+
+**Carry into S4.2 (T-001):** one module-level `threading.Lock` guarding install, lazy create **in both
+`required` modes**, and reset mutually exclusively (REQ-006/REQ-007, ADR-084); the owner's own lazy path keeps
+its **direct** slot write under that lock and must never call `set_settings_registry()` (no replace WARNING
+from a lazy create); the WARNING is emitted **after** the lock is released and names the shared default, never
+the instance contents; the lock covers only the slot read/swap, never feature work (NFR-003) — T-010's
+`test_nfr_003_slot_lock_is_short_lived` and `test_ac_010_concurrent_install_read_reset` (INV-001
+last-install-wins, EDGE-010 WARNING bound) must survive this task's lock design. Group B is the evidence that
+the lazy legs must be inside the lock: with the lock in place AC-042's 8 and EDGE-033's 2 must both become 1.
+The F-56 probe result (search: 1 distinct read with `_singleton_lock`, 8 with it neutered) is the sensitivity
+proof that `widened_lazy_create_window` witnesses fail when a lock stops covering the lazy path — the same
+mechanism T-001 must not leave open. Do not touch `src/main.py` (T-006) or any test helper's private-slot
+writes (T-007).
+
+### Phase 4 — T-001 GREEN (S4.2)
+
+**Step:** S4.2 (T-001) implement + confirm GREEN. Change worktree
+`python-template_kopie-worktrees/crosscut/settings-public-registry-setter`, branch
+`crosscut/settings-public-registry-setter`. No commit (S4.4 owns it).
+
+#### RED re-observed before implementing
+
+The `green_command` node list (identical to `red_command`) was run first, before any edit:
+**10 collected / 10 failed / 0 passed** — the S4.1 baseline reproduced exactly (8 × `AttributeError` on the
+missing `backend.settings.set_settings_registry`, 2 × `AssertionError` on the race counts `8 == 1` and `2 == 1`).
+
+#### GREEN gate ◆ — 10 passed / 0 failed
+
+`green_command` after the implementation:
+
+```text
+collected 10 items
+tests/acceptance/singleton_install/test_install.py::test_ac_001_install_then_get_returns_instance   PASSED
+tests/acceptance/settings/test_settings.py::test_ac_040_set_settings_registry_installs_default       PASSED
+tests/acceptance/settings/test_settings.py::test_ac_041_replace_logs_one_warning                     PASSED
+tests/acceptance/settings/test_settings.py::test_ac_042_concurrent_install_and_read                  PASSED
+tests/acceptance/settings/test_settings.py::test_ac_043_install_then_reset_then_default              PASSED
+tests/property/settings/test_settings_properties.py::test_inv_011_last_install_wins                  PASSED
+tests/unit/settings/test_settings_edges.py::test_edge_030_install_over_nonempty_default               PASSED
+tests/unit/settings/test_settings_edges.py::test_edge_031_install_then_reset_creates_default          PASSED
+tests/unit/settings/test_settings_edges.py::test_edge_032_required_false_after_install                PASSED
+tests/unit/settings/test_settings_edges.py::test_edge_033_concurrent_lazy_create                      PASSED
+============================== 10 passed in 1.62s ==============================
+```
+
+Group B is closed as the RED record predicted: AC-042's 8 concurrent lazy reads and EDGE-033's 2 concurrent lazy
+creates now yield **exactly one** constructed instance (`widened_lazy_create_window.instances == 1`), and AC-041 /
+EDGE-030 see **exactly one** non-tracing WARNING naming the shared default on a replace and none on an empty-slot
+install. No test was weakened, edited or deleted; no test file was touched.
+
+Targeted regression over the owning feature's test directories (not the full suite — that stays a Phase 5 gate):
+
+```text
+uv run pytest tests/unit/settings tests/acceptance/settings tests/property/settings tests/contract/settings -q
+94 passed in 48.62s
+```
+
+#### Diff summary (only the task's `allowed_files.source_files`)
+
+| File | Change |
+|---|---|
+| `src/backend/settings/registry.py` | `+ _registry_lock` module-level lock beside `_registry` (REQ-006 / ADR-084); `get_settings_registry()` now takes it for **both** `required` modes and keeps its **direct** `_registry[0] = reg` write inside the lock — it never calls the public setter, so a lazy create emits no replace WARNING (REQ-007 / D7); new `set_settings_registry(registry: SettingsRegistry) -> None` decorated `@logged(slow_threshold_ms=5)` with the decorator's default `include_args`, swapping the slot under the lock and logging **one** WARNING (`"settings: shared default registry replaced"`) **after** the lock is released when the slot was non-empty — no event, no `isinstance`, no new exception, no `None` parameter (REQ-001..REQ-005, REQ-009, REQ-010); `reset_settings_registry()` takes the same lock (REQ-006). ADR-017's instance-level `RLock` on `SettingsRegistry` is untouched — the module lock covers only the slot read/swap (NFR-003). |
+| `src/backend/settings/__init__.py` | Re-export of `set_settings_registry` from `backend.settings.registry` + `__all__` entry (RUF022-sorted: after `reset_settings_registry`). Additive only — no existing symbol changed (NFR-001 / `settings.md` NFR-002). |
+
+`git diff --stat`: `src/backend/settings/__init__.py` +2, `src/backend/settings/registry.py` +41 / −7.
+`src/main.py` (T-006), every test file and every test helper (T-007) are untouched.
+
+#### Quality gates for this step
+
+| Gate | Command | Result |
+|---|---|---|
+| Ruff (changed paths) | `uv run ruff check src/backend/settings/registry.py src/backend/settings/__init__.py` | `All checks passed!` |
+| Ruff format (changed paths) | `uv run ruff format src/backend/settings/registry.py src/backend/settings/__init__.py` | `2 files left unchanged` (nothing reformatted, so the GREEN run stands) |
+| Types (repo-scoped gate) | `uv run mypy src/` | `Success: no issues found in 84 source files` |
+| Complexity | `uv run complexipy src tests --max-complexity-allowed 15` | `All functions are within the allowed complexity.` |
+| Traceability | `uv run python scripts/check_traceability.py` | `Traceability: PASS (822 matrix rows, 136 spec IDs, 817 test functions)`, exit 0 |
+| Spec validation | `uv run python scripts/verify_spec.py docs/specs/settings.md` | `Traceability: PASS`, exit 0 (every `settings.md` v5 ID incl. REQ-026 / AC-040..AC-043 / INV-011 / EDGE-030..EDGE-033 has its test) |
+
+Not run here by design: `uv run ruff check .` (whole-repo sweep) and `uv run pytest tests/ --cov` — both are
+Phase 5 gates.
+
+#### Finding F-57 — the module lock has to be reentrant (measured; ADR-083's rejection of an `RLock` is falsified for settings)
+
+ADR-083 lists an `RLock` among the rejected alternatives, reason *"re-entrancy buys nothing when no guarded
+section calls another"*. **That premise is false for the settings module**, and implementing the normative shape
+literally (`threading.Lock`, construction inside the lock — `docs/specs/settings-public-registry-setter.md` §3.2)
+introduces a **hang**:
+
+```text
+get_settings_registry()            [holds _registry_lock]
+  └─ SettingsRegistry()            registry.py:76 — the lazy create, inside the lock (required by EDGE-033 / AC-009)
+       └─ get_event_bus()          eventbus/eventbus.py:231
+            └─ EventBus.__init__   eventbus/eventbus.py:55
+                 └─ get_settings_registry(required=False)   ← same thread, plain Lock → blocked forever
+```
+
+Measured with a throwaway probe (both slots reset, one read, 5 s watchdog) against the literal plain-`Lock`
+implementation: `DEADLOCK: get_settings_registry() did not return with both slots empty`, with the stack above.
+Reachable whenever the settings slot and the event-bus slot are **both** empty and the first call is the settings
+lazy create — any cold start, or any test that resets the shared bus and then lazily creates the registry.
+
+Resolution implemented: `_registry_lock = threading.RLock()` — still **one module-level lock per owning module**
+guarding install, lazy create and reset as one mutually exclusive set (REQ-006 / ADR-084 in substance), and other
+threads are still excluded, so the create race stays closed (EDGE-033 and AC-042 witness exactly that). The
+reentrant nested read sees the slot still empty and creates nothing, so behavior is identical to the pre-change
+code, which held no lock at all. With the `RLock` the same probe prints
+`OK: <backend.settings.registry.SettingsRegistry …>` and all 10 targeted tests pass.
+
+No test asserts the lock class (`grep -rn "_registry_lock" tests/` → no match), and REQ-006's normative content is
+"one module-level lock guarding the three slot operations", which holds. **ADR-083 needs an amendment note**
+(its `RLock` rejection reason does not hold for an owner whose guarded lazy create constructs an object that reads
+the same slot back) — an orchestrator/human decision, not a spec edit from this step.
+
+**Carry to T-002..T-005 (outside T-001's allowed files, not fixed here):** the same measurement exposes a
+cross-module lock-ordering hazard once the event-bus module gains its own lock. After T-002, thread A
+(`get_event_bus()` → holds the event-bus lock → `EventBus.__init__` → `get_settings_registry(required=False)`) and
+thread B (`get_settings_registry()` → holds the settings lock → `SettingsRegistry()` → `get_event_bus()`) form an
+ABBA cycle; an `RLock` does not help across threads. T-002 should either resolve the settings read before taking
+the event-bus lock, or the settings lazy create should resolve `get_event_bus()` **before** taking
+`_registry_lock` (`SettingsRegistry(event_bus=bus)` with `bus` obtained outside the guarded section) — the second
+option also satisfies NFR-003's "no feature-level work under the lock" more strictly than the current shape.
+Problem Log candidate for the orchestrator.
+
+**State machine:** T-001 is at **GREEN**. Next: **S4.3 (T-001)** refactor (keep GREEN, ruff on the changed paths;
+the no-op fast-path is legitimate — the implementation is ~35 lines following the module's existing traced
+module-function pattern), then **S4.4** commit + `"status": "VERIFIED"`.

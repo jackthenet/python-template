@@ -29,6 +29,7 @@ from backend.settings.registry import (
     SettingsRegistry,
     get_settings_registry,
     reset_settings_registry,
+    set_settings_registry,
 )
 from backend.settings.repository import (
     MemoryTemplateRepository,
@@ -66,4 +67,5 @@ __all__ = [
     "get_settings_registry",
     "register_actions",
     "reset_settings_registry",
+    "set_settings_registry",
 ]
