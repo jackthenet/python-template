@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
 - **Change type:** CROSS-CUTTING  <!-- split out of `api-keys` at P.3 round 1, 2026-10-08; confirmed by P.2 -->
 - **Created:** 2026-10-08
 - **Question file:** `docs/questions/backend-api.md`
@@ -61,7 +61,7 @@ New: `src/backend/api/`. Wiring: `src/main.py`. Consumed unchanged: `authenticat
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-08 | split out of `api-keys` at P.3 round 1; CROSS-CUTTING; value triage recorded and the user decided **implement** |
-| P.2 Interrogate (<n> questions) | | |
+| P.2 Interrogate (28 questions) | 2026-10-08 | **BLOCKED-USER** — 28 questions in one batch (CROSS-CUTTING floor ≥ 20 met), 13 points closed from evidence, Impact Analysis over 11 components, overlap check + P.4 notes. Ordered most blocking first; rounds planned: 7 × ≤4. **Security-led questions (Q-01 raw password-reset token, Q-02 `verify_password` as a password oracle, Q-03 the 9 declared-but-unenforced actions, Q-04 Bearer→`Principal.user_id` or the SYSTEM grant set) each narrow settled decision 5 explicitly.** P.2 also corrects three brief premises: no TID251 config on `main` (that belongs to `public-api-import-boundary`), `docs/decisions/` tops out at **ADR-082** (ADR-081 reserved-but-absent), and `docs/workflow/PROBLEMS.md` on `main` ends at **P-62**. Spec-drift finding for P.4: `docs/specs/user-roles-permissions.md:369` says "53 enforced; 7 exempt; 60 declared" while an AST scan finds **52** `@requires_permission` methods and **9** unenforced declared actions. |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec / triage / baseline / scope | | |
 | P.5 Self-consistency (FEATURE/CROSS-CUTTING) | | |
