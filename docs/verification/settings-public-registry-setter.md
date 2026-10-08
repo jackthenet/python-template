@@ -4061,3 +4061,289 @@ Problem Log candidate for the orchestrator.
 **State machine:** T-001 is at **GREEN**. Next: **S4.3 (T-001)** refactor (keep GREEN, ruff on the changed paths;
 the no-op fast-path is legitimate — the implementation is ~35 lines following the module's existing traced
 module-function pattern), then **S4.4** commit + `"status": "VERIFIED"`.
+
+---
+
+## Phase 4 — T-002 RED (S4.1) — 2026-10-08
+
+One fresh subagent, one atomic step: pick the next ready DAG task and reproduce its RED state before any
+implementation. **Picked task: T-002** (`eventbus — src/backend/eventbus/eventbus.py + the backend.eventbus
+public surface`, `"status": "PENDING"`, `dependencies: ["T-001"]` — T-001 is `VERIFIED` at `92f4a1b` + `137d0fe`).
+Worktree `python-template_kopie-worktrees/crosscut/settings-public-registry-setter`, branch
+`crosscut/settings-public-registry-setter` (`git branch --show-current` verified once; working tree clean apart
+from this file). No implementation, no commit, no full-suite run in this step.
+
+### RED gate — `red_command` verbatim
+
+```text
+uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_013_set_event_bus_installs_default \
+  tests/acceptance/eventbus/test_eventbus.py::test_ac_014_replace_logs_one_warning \
+  tests/acceptance/eventbus/test_eventbus.py::test_ac_015_concurrent_install_read_reset \
+  tests/acceptance/eventbus/test_eventbus.py::test_ac_016_install_then_reset_then_default \
+  tests/unit/eventbus/test_eventbus_edges.py::test_edge_011_replaced_bus_not_shut_down \
+  tests/unit/eventbus/test_eventbus_edges.py::test_edge_012_concurrent_lazy_create -v
+```
+
+Result: **`6 failed in 0.76s`** — 6 collected, 6 failed, 0 passed, 0 skipped, 0 errors. This **reproduces the
+Phase 3 gate exactly** (S3.2 recorded T-002's six nodes as `6 failed in 0.67s`), and the per-node reasons are the
+same two kinds recorded there.
+
+Per-node failure reason (each node re-run alone with `--tb=line -q` so the mapping is unambiguous — the batch run
+is order-shuffled by the installed random-order plugin):
+
+| Node | Failure | Location |
+|---|---|---|
+| `test_ac_013_set_event_bus_installs_default` | `AttributeError: module 'backend.eventbus' has no attribute 'set_event_bus'. Did you mean: 'get_event_bus'?` | `tests/singleton_install_test_helpers.py:112` (`SingletonSlot.install`) |
+| `test_ac_014_replace_logs_one_warning` | same `AttributeError` (missing `set_event_bus`) | `tests/singleton_install_test_helpers.py:112` |
+| `test_ac_015_concurrent_install_read_reset` | `AssertionError: lazy create race built 8 buses` | `tests/acceptance/eventbus/test_eventbus.py:270` |
+| `test_ac_016_install_then_reset_then_default` | same `AttributeError` (missing `set_event_bus`) | `tests/singleton_install_test_helpers.py:112` |
+| `test_edge_011_replaced_bus_not_shut_down` | same `AttributeError` (missing `set_event_bus`) | `tests/singleton_install_test_helpers.py:112` |
+| `test_edge_012_concurrent_lazy_create` | `AssertionError: lazy create race built 2 buses` | `tests/unit/eventbus/test_eventbus_edges.py:186` |
+
+**RED is valid.** Only `AttributeError` (the install operation does not exist yet — REQ-002/AC-013..AC-016,
+EDGE-011) and `AssertionError` (the unguarded lazy create builds one bus per racing reader — AC-015/EDGE-012). No
+collection error, no import error, no fixture/setup error, no `ValidationError`/`ValueError` from test data: every
+witness constructs real, valid `EventBus()` instances, and the trio is resolved by attribute name at call time
+(`singleton_install_test_helpers.py` docstring), which is what keeps the missing behaviour inside the test instead
+of at import. Nothing was implemented, and no test file was touched.
+
+### Finding F-72 — the ABBA cycle F-57 predicted is real and measurable (measurement only)
+
+F-57's carry note to T-002..T-005 predicted that once `get_event_bus()` takes its own module lock, the two lazy
+creates form a cross-module **ABBA** cycle. Measured, before implementing anything, with a throwaway probe
+(`Temp/abba_probe.py`, outside `src/` and `tests/`, deleted after the run — `git status --porcelain` shows only
+this file): both slots reset to empty, `get_event_bus()` wrapped with a simulated module lock exactly as
+T-002's `implementation_steps` describe (`with _default_bus_lock:` around the lazy create), the two lazy creates
+on two threads rendezvousing at a `threading.Barrier(2, timeout=5)` at the instant each holds its own module lock
+and is about to take the other's, `join(timeout=15)`.
+
+```text
+uv run python Temp/abba_probe.py            # bus lock simulated
+bus lock simulated: True
+A (settings->eventbus) alive after 15 s join: True
+B (eventbus->settings) alive after 15 s join: True
+settings slot filled: False
+eventbus slot filled: False
+DEADLOCK: ABBA cycle confirmed. Blocked frames (worker threads; the MainThread frame omitted):
+  A-settings-first: Temp/abba_probe.py:43 -> wrapped_get_event_bus      # holds _registry_lock, wants the bus lock
+  B-eventbus-first: src/backend/settings/registry.py:408 -> get_settings_registry   # holds the bus lock, wants _registry_lock
+elapsed 30.02 s   (exit 1)
+```
+
+Control run — the same probe, same rendezvous point, **without** the simulated bus lock (i.e. the code as it
+stands after T-001):
+
+```text
+uv run python Temp/abba_probe.py --no-bus-lock
+A alive: False   B alive: False   settings slot filled: True   eventbus slot filled: True
+no deadlock: both lazy creates completed
+registry=SettingsRegistry bus=EventBus
+elapsed 0.00 s   (exit 0)
+```
+
+So the hazard is introduced **by T-002's lock**, not pre-existing: today the cycle has only three edges and no
+thread ever holds the event-bus slot while reaching for the settings lock.
+
+The cycle, in the code as it stands after T-001:
+
+```text
+thread A: get_settings_registry()          registry.py:408  [holds _registry_lock]
+            └─ SettingsRegistry()          registry.py:413 → :83
+                 └─ get_event_bus()        eventbus.py:229  → wants _default_bus_lock (T-002)
+thread B: get_event_bus()                  eventbus.py      [holds _default_bus_lock] (T-002)
+            └─ EventBus.__init__           eventbus.py:55
+                 └─ get_settings_registry(required=False)   registry.py:408 → wants _registry_lock
+```
+
+Consequences for **S4.2 (T-002)** — the shape matters, not the lock class:
+
+- An `RLock` on the event-bus side does **not** help: unlike F-57, this cycle is across two threads, and each
+  thread holds a *different* lock. T-001's `RLock` resolution is not transferable.
+- The construction must stay **inside** the bus lock — `EDGE-012`/`AC-015` assert
+  `len(window.instances) == 1` with the window widened inside `EventBus.__init__`
+  (`widened_lazy_create_window`), so moving `EventBus()` out of the critical section would build two buses and
+  fail the very test this task is gated on.
+- What closes the cycle is **never acquiring the settings lock while holding the bus lock**. The in-scope way
+  (`allowed_files.source_files` = `eventbus.py` + `__init__.py` only): resolve the settings read *before* taking
+  `_default_bus_lock` in `get_event_bus()` and pass the value in — `EventBus(max_queue_size=...)` — so
+  `EventBus.__init__`'s `get_settings_registry(required=False)` branch is not entered under the lock. That fixes
+  the ordering inside T-002's own files and needs no settings-side change.
+- F-57's alternative (settings lazy create resolves `get_event_bus()` before taking `_registry_lock`) is also
+  valid but lives in `src/backend/settings/registry.py`, which is **not** in T-002's `allowed_files` — if the
+  orchestrator prefers that shape it is a separate, explicitly scoped step, not a T-002 edit.
+- A concurrency witness for the cycle is not in T-002's test set (no DAG test covers cross-module cold start);
+  the probe is a measurement, not a regression test. If a permanent guard is wanted it belongs to a later task
+  with the test files that own it. Problem Log entry for the orchestrator (F-57 → F-72 chain).
+
+### Heads-up for S4.2 (T-002): F-11 will surface at GREEN
+
+Phase 3's **F-11** (`tests/acceptance/eventbus/test_eventbus.py::_concurrent_install_read_reset` passes
+`(EVENTBUS_SLOT.install, bus)` into `_run(action)`, which takes one argument → every install thread raises
+`TypeError` into `errors`) is invisible in this RED run because AC-015 fails earlier at the lazy-create assert.
+Once the lazy half goes GREEN,
+ AC-015 will fail on the `TypeError` instead — a broken witness, not a broken
+implementation. `tests/acceptance/eventbus/test_eventbus.py` **is** in T-002's `allowed_files.test_files`, and
+T-003's `_run(action, *args)` → `action(*args)` is the one-line shape; repairing it in S4.2 strengthens the
+assertion, it does not weaken it.
+
+### State for the next step
+
+- **RED observed for T-002** (6/6 failed, two failure kinds, no setup/collection errors) — the Phase 4 gate for
+  T-002 is open.
+- Nothing implemented, nothing committed; only this file changed. `Temp/abba_probe.py` deleted after the
+  measurement.
+- **Next: S4.2 (T-002)**, `green_command` (identical to the `red_command`, targeted at the six node IDs):
+  `uv run pytest tests/acceptance/eventbus/test_eventbus.py::test_ac_013_set_event_bus_installs_default tests/acceptance/eventbus/test_eventbus.py::test_ac_014_replace_logs_one_warning tests/acceptance/eventbus/test_eventbus.py::test_ac_015_concurrent_install_read_reset tests/acceptance/eventbus/test_eventbus.py::test_ac_016_install_then_reset_then_default tests/unit/eventbus/test_eventbus_edges.py::test_edge_011_replaced_bus_not_shut_down tests/unit/eventbus/test_eventbus_edges.py::test_edge_012_concurrent_lazy_create -v`
+  — it must resolve **F-72** (never acquire the settings lock while holding the bus lock, construction still
+  inside the bus lock) and the **F-11** witness repair.
+
+### Phase 4 — T-002 GREEN (S4.2) — 2026-10-08
+
+One fresh subagent, one atomic step: implement T-002 (`eventbus — src/backend/eventbus/eventbus.py + the
+`backend.eventbus` public surface`) inside the change worktree and confirm GREEN on the task's targeted
+`green_command`. No commit, no full-suite run, no refactor beyond the minimum, nothing written outside
+`allowed_files`.
+
+#### Diff (uncommitted, working tree)
+
+```text
+ src/backend/eventbus/__init__.py |  2 +-
+ src/backend/eventbus/eventbus.py | 73 +++++++++++++++++++++++-----  (73 insertions, 17 deletions)
+```
+
+No test file changed (see **F-11** below — the repair was already in `HEAD`). `tests/eventbus_test_helpers.py`
+stays untouched (its two private-slot writes are T-007's).
+
+What went in, mapped to `implementation_steps`:
+
+1. `_default_bus_lock = threading.Lock()` beside `_default_bus`, taken by `get_event_bus()`, `reset_event_bus()`
+   and the new `set_event_bus()` (REQ-006, ADR-084).
+2. `get_event_bus()`'s lazy create is still a **direct** write to `_default_bus[0]` under the lock and never
+   calls the public setter, so it emits no WARNING (REQ-007).
+3. `set_event_bus(bus: EventBus) -> None`, `@logged(slow_threshold_ms=5)`: read-and-swap under the lock, exactly
+   one WARNING (`"event bus: shared default bus replaced"` — names the shared default, never the instance)
+   emitted **after** release; no `start()` on the installed bus, no `shutdown()` on the replaced one
+   (REQ-002, REQ-003, REQ-010, EDGE-011, D14).
+4. `reset_event_bus()` keeps its shutdown semantics (event-bus.md REQ-005, EDGE-007): the lock covers only the
+   slot read + clear, `bus.shutdown()` runs **outside** it (NFR-003).
+5. `set_event_bus` re-exported from `src/backend/eventbus/__init__.py` and added to `__all__` (RUF022 order:
+   `EventBus, get_event_bus, register_settings, reset_event_bus, set_event_bus`).
+6. `tests/eventbus_test_helpers.py` not touched.
+
+#### F-72 — the ABBA cycle, closed inside T-002's own files
+
+Fix shape (exactly the one F-72's analysis pointed at, no settings-side change):
+
+```python
+def _resolve_max_queue_size() -> int:      # the only settings dependency of EventBus()
+    registry = get_settings_registry(required=False)
+    if registry is not None and registry.has("eventbus.max_queue_size"):
+        return registry.get_value("eventbus.max_queue_size")
+    return _DEFAULT_MAX_QUEUE_SIZE          # 1000, the D4 default
+
+@logged(slow_threshold_ms=5)
+def get_event_bus() -> EventBus:
+    max_queue_size = _resolve_max_queue_size()      # BEFORE the slot lock (F-72)
+    with _default_bus_lock:
+        bus = _default_bus[0]
+        if bus is None:
+            bus = EventBus(max_queue_size=max_queue_size)   # construction stays INSIDE the lock
+            _default_bus[0] = bus
+        return bus
+```
+
+`_resolve_max_queue_size()` is also what `EventBus.__init__` calls when `max_queue_size is None`, so the
+AC-017/AC-018 direct-instantiation behavior is unchanged and the read is not duplicated. Net effect: **no thread
+holds `_default_bus_lock` while reaching for `_registry_lock`** — the acquisition order is settings → bus
+everywhere, so the cycle F-72 measured has no fourth edge. `set_event_bus` and `reset_event_bus` never touch the
+settings module under the bus lock (`shutdown()` is outside it).
+
+**Probe evidence** (throwaway `Temp/f72_probe.py`, run in the worktree, deleted afterwards — `git status
+--porcelain` afterwards lists only the two source files and this record). Both slots forced empty, both
+constructors widened (`time.sleep(1.0)` before the real `__init__`) so the rendezvous is deterministic, two
+barrier-released threads: A `get_settings_registry()` (settings → bus), B `get_event_bus()` (bus → settings),
+`join(timeout=15)`.
+
+```text
+uv run python Temp/f72_probe.py                 # the implemented shape
+naive shape: False
+A-settings-first alive after 15.0 s join: False
+B-eventbus-first alive after 15.0 s join: False
+settings slot filled: True
+eventbus slot filled: True
+elapsed 1.00 s                                  → exit 0, "no deadlock: registry=SettingsRegistry bus=EventBus"
+
+uv run python Temp/f72_probe.py --naive         # control: the naive shape (EventBus() built INSIDE the lock,
+                                                # settings read therefore under it)
+naive shape: True
+A-settings-first alive after 15.0 s join: True
+B-eventbus-first alive after 15.0 s join: True
+settings slot filled: False
+eventbus slot filled: False
+elapsed 30.02 s                                 → "DEADLOCK: ABBA cycle confirmed"
+```
+
+So the naive shape reproduces F-72's measurement against the **real** modules (not a simulation), and the
+implemented shape does not deadlock. The probe is a measurement, not a regression test — no DAG test covers
+cross-module cold start (unchanged from F-72's note).
+
+**Lock class: plain `threading.Lock`, not an `RLock`.** F-57's re-entrancy rationale does not transfer to the
+event bus: no guarded section here calls another guarded section (`EventBus.__init__` receives a concrete value,
+so it never re-enters `get_settings_registry`; `set_event_bus` touches nothing; `reset_event_bus` shuts down
+outside the lock), and F-72's cycle is across **two threads holding two different locks**, which an `RLock`
+cannot help. ADR-083's "one plain `Lock` per module" therefore stands for this module.
+
+#### F-11 — already repaired at S3.2; nothing to do in S4.2
+
+The heads-up asked S4.2 to repair `_concurrent_install_read_reset`'s `_run`. **It is already repaired in
+`HEAD`**: commit `8595085` (S3.2) changed `def _run(action: Callable[[], None])` →
+`def _run(action: Callable[..., Any], *args: Any)` with `action(*args)` (`git show 8595085 --
+tests/acceptance/eventbus/test_eventbus.py`, and the S3.2 record's own §"F-11 — the broken `_run(action)`
+contract (fixed)"). `git diff` for this step shows **no test file changed**, and AC-015 passes on both halves —
+the lazy-create half and the install/read/reset half — so the witness is intact and strengthened, not weakened.
+
+#### Gates (all run in the change worktree, with an explicit `cd` — P-68)
+
+| # | Gate | Result |
+|---|---|---|
+| 1 | `green_command` (verbatim, the six node IDs) | **6 passed in 1.12 s** (re-run after formatting: 6 passed) — 6 collected, 0 failed, 0 skipped, 0 errors |
+| 2 | `uv run pytest tests/acceptance/eventbus tests/unit/eventbus tests/acceptance/settings tests/unit/settings -q` | **107 passed in 5.04 s**, no failures |
+| 3 | `uv run ruff check <4 changed paths>` / `uv run ruff format <4 changed paths>` | `All checks passed!` / `4 files left unchanged` |
+| 4 | `uv run mypy src/` | `Success: no issues found in 84 source files` |
+| 5 | `uv run complexipy src tests --max-complexity-allowed 15` | `All functions are within the allowed complexity.` |
+| 6 | `uv run python scripts/check_traceability.py` | `Traceability: PASS (822 matrix rows, 136 spec IDs, 817 test functions)` exit 0 |
+| 7 | `uv run python scripts/verify_spec.py docs/specs/event-bus.md` | `Traceability: PASS` exit 0 (AC-013..AC-016, EDGE-011/012 all "has executable test") |
+
+Extra smoke beyond the gate list (not a gate, cheap, because `reset_event_bus()`'s ordering changed): `uv run
+pytest tests/contract/eventbus tests/property/eventbus tests/integration/eventbus
+tests/unit/test_settings_coverage.py -q` → **39 passed in 3.91 s** — event-bus.md REQ-005/EDGE-007 (reset still
+shuts down) and AC-017/AC-018 (`EventBus()` reads `eventbus.max_queue_size` when constructed bare) both still
+GREEN. `uv run ruff check .` and the full `--cov` suite were **not** run (Phase 5 gates).
+
+#### Findings
+
+- **F-73 — `reset_event_bus()` now clears the slot *before* draining (deliberate, spec-required).** The old code
+  shut the bus down first and cleared afterwards; NFR-003 forbids holding the slot lock across `shutdown()`, so
+  the clear moved inside the lock and the drain outside. Observable delta: during a (blocking) drain a concurrent
+  `get_event_bus()` now lazily creates a fresh default instead of returning the draining instance. That is what
+  REQ-008/AC-016 and NFR-003 require, and the REQ-005/EDGE-007 witnesses stay GREEN (gate 2 + the 39-test smoke).
+- **F-74 — `tests/eventbus_test_helpers.py::isolated_event_bus` still writes `_default_bus[0]` directly, outside
+  the new lock** (park/restore at `:77,:84`). It is the only remaining writer that bypasses `_default_bus_lock`,
+  so until **T-007** migrates it to `set_event_bus()`/`reset_event_bus()` the guard is not total on the test side.
+  Out of T-002's allowed files (explicitly read-only here) — carry to T-007.
+- **F-75 — `get_event_bus()` now resolves `max_queue_size` on every call, even when the slot is already
+  filled.** Deliberate: it keeps the F-72 ordering rule unconditional (no path can reach settings under the bus
+  lock) and costs one `required=False` guarded read + one dict lookup. Measured call sites in `src/`: 6, all
+  wiring/startup-time (`_pipeline.py:394`, `sessionmanagement/service.py:90`, `settings/registry.py:83`,
+  `main.py:160,213`), none on a hot path — `publish()` never calls the getter. Ceiling noted; upgrade path is a
+  lock-free fast-path read if a hot caller ever appears.
+- **F-11 is stale as a to-do** (fixed at S3.2) — recorded so the orchestrator does not schedule a repair step.
+
+#### State for the next step
+
+- **GREEN for T-002**: 6/6 targeted tests pass; the touched feature dirs are clean; every task gate except the
+  Phase 5 coverage gate is green.
+- Nothing committed; `src/backend/eventbus/eventbus.py`, `src/backend/eventbus/__init__.py` and this file are the
+  only modified paths. `Temp/f72_probe.py` deleted.
+- **Next: S4.3 (T-002 refactor)** — the implementation is already the minimum shape; a no-op fast-path is
+  plausible if nothing structural is found.
