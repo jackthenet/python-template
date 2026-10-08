@@ -248,6 +248,15 @@ _default_bus_lock = threading.Lock()
 @logged(slow_threshold_ms=5)
 def get_event_bus() -> EventBus:
     """Return the shared default event bus (singleton)."""
+    # F-76: the settings value only matters when a bus is about to be constructed,
+    # so a resolved slot is returned on a plain reference read. Resolving it on
+    # every call reached the settings registry's enforced methods from the
+    # composition root while its permission service was still unset, so
+    # ``import main`` raised AttributeError (the settings read stays on the
+    # lazy-create path, exactly as before the module lock was added).
+    bus = _default_bus[0]
+    if bus is not None:
+        return bus
     # F-72: the settings read is resolved BEFORE the slot lock is taken. The
     # settings lazy create constructs a SettingsRegistry, which calls back into
     # this function, so a thread that reached settings while holding the bus lock

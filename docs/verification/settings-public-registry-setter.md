@@ -4614,3 +4614,135 @@ startup order worked.
 - **GREEN observed for T-003** (6/6), all per-step gates clean, nothing committed.
 - **Next: S4.3 (T-003 refactor)** — the implementation follows the settings/eventbus trio pattern already in
   `HEAD`; a no-op verdict is expected and must be recorded per P-70.
+
+### Phase 4 — F-76 fix (eventbus settings-read regression)
+
+**Step:** S4.2-fix (F-76) — a scoped fix inside T-002's `allowed_files.source_files`
+(`src/backend/eventbus/eventbus.py` only; `src/backend/eventbus/__init__.py` needed no change). No test, no
+`src/main.py`, no `src/backend/settings/`, no `pyproject.toml`, no `AGENTS.md` touched.
+
+#### RED before the fix (reproduced in the change worktree)
+
+```text
+uv run pytest tests/acceptance/permissions/test_composition_wiring.py -v
+FAILED tests/acceptance/permissions/test_composition_wiring.py::test_ac_020_composition_root_validates_session_token
+  File "src/backend/eventbus/eventbus.py", line 57, in _resolve_max_queue_size
+    if registry is not None and registry.has("eventbus.max_queue_size"):
+  File "src/backend/shared/principal.py", line 74, in wrapper
+    checker.require_permission(principal.user_id, permission_key, session_token=principal.session_token)
+  File "src/main.py", line 108, in require_permission
+    self._service.require_permission(...)
+AttributeError: 'NoneType' object has no attribute 'require_permission'
+1 failed in 1.12s
+```
+
+The subprocess that imports `main` dies at `src/main.py:160`: `get_event_bus()` resolved
+`eventbus.max_queue_size` on **every** call (F-75), and at that point the settings slot is already filled
+(`src/main.py:138`) while `_LazyPermissionService._service` is still `None` (set at `:163`), so the **enforced**
+`SettingsRegistry.has` (`@requires_permission("settings.has")`) reaches an unset checker. On `main` the bus is
+created earlier — inside `SettingsRegistry(...)` at `:137`, while the settings slot is still empty, so the guarded
+read returns `None` and no settings method is called — and the `:160` read hits the already-filled slot and reads
+nothing.
+
+#### GREEN after the fix
+
+```text
+uv run pytest tests/acceptance/permissions/test_composition_wiring.py -v
+tests/acceptance/permissions/test_composition_wiring.py::test_ac_020_composition_root_validates_session_token PASSED
+1 passed in 1.34s
+```
+
+#### Fix shape — double-checked lazy create (the settings read stays on the create path, still outside the lock)
+
+```python
+@logged(slow_threshold_ms=5)
+def get_event_bus() -> EventBus:
+    bus = _default_bus[0]                       # F-76: plain reference read, no settings read
+    if bus is not None:
+        return bus
+    max_queue_size = _resolve_max_queue_size()  # F-72: still BEFORE the slot lock
+    with _default_bus_lock:
+        bus = _default_bus[0]                   # re-check under the lock
+        if bus is None:
+            bus = EventBus(max_queue_size=max_queue_size)   # construction stays INSIDE the lock (AC-015/EDGE-012)
+            _default_bus[0] = bus
+            _logger.debug("event bus: created shared default instance")
+        return bus
+```
+
+9 added lines, one function, no other edit. This is **not** the first upgrade path F-76's entry warned about
+("resolve the queue size only on the create path … which would put the settings read back under
+`_default_bus_lock` and reopen F-72"): the create path resolves the value **before** the lock and passes it in, so
+the F-72 ordering rule is untouched. No cache is added (a cached value would freeze the live settings read the
+event-bus spec's AC-017/AC-018 require at construction).
+
+**Constraints checked:**
+1. **F-72 / P-69** — no thread acquires `_registry_lock` while holding `_default_bus_lock`: the only work under
+   the bus lock is the re-check and `EventBus(max_queue_size=…)`, which receives a concrete value and therefore
+   never enters `backend.settings`. Re-probed below.
+2. **T-002 gates** — its 6 `green_command` node IDs are GREEN (below); `EventBus()` construction stays inside the
+   lock, so `test_ac_015_concurrent_install_read_reset` and `test_edge_012_concurrent_lazy_create` still observe
+   exactly one instance with the window widened inside `EventBus.__init__`.
+3. **`reset_event_bus()`** — unchanged: clears under the lock, `shutdown()` outside it (NFR-003, F-73).
+4. **`set_event_bus()`** — unchanged, still lifecycle-neutral (EDGE-011).
+5. **event-bus.md NFR-004** — `get_event_bus` / `reset_event_bus` / `EventBus` observable behaviour matches `main`:
+   the unlocked fast-path read is exactly `main`'s shape, and the create path is the locked T-002 shape. A
+   concurrent `set_event_bus()` may now be observed one call later by a reader that was already inside
+   `get_event_bus()` — the spec's install is "not retroactive", and the AC-010 / AC-015 race witnesses (8 installers,
+   8 readers, 2 resets over one barrier) pass.
+
+#### F-72 re-probe (throwaway `Temp/f76_f72_probe.py`, run in the worktree, deleted afterwards)
+
+Both slots forced empty, both constructors widened (`time.sleep(1.0)` before the real `__init__`) so the rendezvous
+is deterministic, two barrier-released threads — A `get_settings_registry()` (settings → bus), B `get_event_bus()`
+(bus → settings) — `join(timeout=15)`, against the **real** modules.
+
+```text
+uv run python Temp/f76_f72_probe.py            # the implemented shape
+A settings-first alive after 15.0 s join: False
+B eventbus-first alive after 15.0 s join: False
+settings slot filled: True / eventbus slot filled: True
+elapsed 1.00 s                                 → exit 0, "no deadlock: registry=SettingsRegistry bus=EventBus"
+
+uv run python Temp/f76_f72_probe.py --naive    # control: EventBus() built INSIDE the lock (settings read under it)
+A settings-first alive after 15.0 s join: True
+B eventbus-first alive after 15.0 s join: True
+settings slot filled: False / eventbus slot filled: False
+elapsed 30.02 s                                → exit 1, "DEADLOCK: ABBA cycle confirmed"
+```
+
+The implemented shape does not deadlock; the control still reproduces the ABBA cycle, so the probe has teeth.
+Measurement only — no DAG test covers cross-module cold start (unchanged from F-72's note). `Temp/` removed
+afterwards; `git status --porcelain` lists only the source file and this record.
+
+#### Gates (all run in the change worktree)
+
+| Gate | Command | Result |
+|---|---|---|
+| F-76 reproduction | `uv run pytest tests/acceptance/permissions/test_composition_wiring.py -v` | **1 passed** (was 1 failed) |
+| T-002 `green_command` | the 6 node IDs in `.github/task-runner/tasks.json` → `T-002` | **6 passed** |
+| event-bus regression | `uv run pytest tests/acceptance/eventbus tests/unit/eventbus tests/contract/eventbus tests/property/eventbus tests/integration/eventbus -q` | **37 passed** |
+| permissions regression | `uv run pytest tests/acceptance/permissions -q` | **36 passed** |
+| lock-shape witnesses | `uv run pytest tests/acceptance/singleton_install/test_concurrency.py tests/contract/singleton_install tests/unit/singleton_install -q` | 14 failed / 5 passed — **identical set at `HEAD` with the fix stashed** (all RED for T-004..T-012: `set_search_registry`, `set_session_service`, the `TID251` ban, the `AGENTS.md` guidance, the whole-repo lint sweep). No new failure. |
+| settings regression | `uv run pytest tests/acceptance/settings -q` | passed (in the combined run above) |
+| ruff (changed paths) | `uv run ruff check src/backend/eventbus/eventbus.py src/backend/eventbus/__init__.py` | All checks passed! |
+| ruff format | `uv run ruff format --check <same paths>` | 2 files already formatted |
+| mypy | `uv run mypy src/` | Success: no issues found in 84 source files |
+| complexipy | `uv run complexipy src tests --max-complexity-allowed 15` | All functions are within the allowed complexity |
+| traceability | `uv run python scripts/check_traceability.py` | Traceability: PASS (822 rows, 136 spec IDs, 817 test functions) |
+
+Not run here (Phase 5): the full suite with `--cov`, `ruff check .`, `ruff format --check .`.
+
+#### Findings closed
+
+- **F-75 — closed.** The per-call settings read is gone: `get_event_bus()` performs a plain reference read on the
+  hit path, so the cost is back to `main`'s.
+- **F-76 — closed.** `test_ac_020_composition_root_validates_session_token` is GREEN again; `import main` works in
+  a fresh interpreter; the fix is inside T-002's own files, so no reclassification and no `src/main.py` change is
+  needed (the composition-root upgrade path F-76's entry listed is **not** taken).
+- **F-73 — unchanged as recorded** (`reset_event_bus()` still shuts the instance down outside the slot lock).
+
+#### State for the next step
+
+- **Next: S4.1 (T-004)** — the search feature's `set_search_registry()` + module lock, same trio pattern.
+
