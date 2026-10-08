@@ -6542,3 +6542,106 @@ Q-30's answer requires a spec-file edit (`docs/specs/settings-public-registry-se
 - **What S4.2 must write (AGENTS.md only, additive):** (1) one bullet in each of the three existing sections — `## Using the Settings Feature` (`:814`), `## Using the Event Bus Feature` (`:792`), `## Using the Search Feature` (`:972`) — each naming its install operation (`set_settings_registry` / `set_event_bus` / `set_search_service`), stating that installing over a **non-empty** default logs a **WARNING**, and that `reset_*()` stays the test seam; (2) the two new sections `## Using the Permissions Feature` and `## Using the Session Management Feature` in the house form, each carrying its own install bullet (`set_permission_service` / `set_session_service`); (3) no renumbering, no rewording of unrelated bullets, wording must match implemented semantics (replace is not retroactive; `reset_*()` is the test seam) — no aspirational prose. `mkdocs build --strict` builds `userdocs/`, not `AGENTS.md`, so the docs gate is unaffected.
 - **Not touched by this step:** `AGENTS.md`, every `tests/` and `src/` file, `pyproject.toml`, `uv.lock` (`git status --porcelain` empty before and after the runs — no re-lock churn occurred, so no `git restore uv.lock` was needed; P-74 watched), `docs/specs/` (the D13 correction is not Phase 4's, see F-89), `.github/task-runner/tasks.json` and `docs/tasks/settings-public-registry-setter.tasks.json` (T-012 stays `PENDING`), T-010's tests and record.
 - **Next: S4.2 (T-012) implement + confirm GREEN.** T-010 stays WAITING on Q-31/F-87.
+
+## Phase 4 — T-012 GREEN (S4.2) — 2026-10-08
+
+**Step:** S4.2 (T-012) Implement + confirm GREEN · **Objective:** write the `AGENTS.md` guidance REQ-015/AC-019 requires (five install bullets, two of them in two new sections) plus the Q-30 spec correction, run the `green_command`, confirm **GREEN**, pass the ruff gate, commit. Branch `crosscut/settings-public-registry-setter`, HEAD `faa49c5` (T-012 RED record). No full suite, no whole-repo ruff sweep, no refactor (S4.3), no status flip (S4.4): T-012 stays `PENDING` in both DAG copies. Runs sequential (the `tests/unit/test_settings_test_isolation.py` concurrency caveat).
+
+### What was written — `AGENTS.md`, additive only (`git diff --numstat` → `48 0 AGENTS.md`)
+
+Five bullets, one per feature, each **inside that feature's own `## Using the … Feature` section**, each carrying all three REQ-015 clauses in **one** bullet: the install operation, its replace-plus-one-`WARNING` semantics, and `reset_…()` as the test seam. House form preserved (one long line per `- ` bullet, code block at the end of a section, `---` between sections). File: 1177 → 1225 lines.
+
+| Feature | Section (line after the edit) | New bullet (line) | Install op named |
+|---|---|---|---|
+| settings | `## Using the Settings Feature` (`:815`) | `:831` | `set_settings_registry` |
+| eventbus | `## Using the Event Bus Feature` (`:792`) | `:802` | `set_event_bus` |
+| permissions | **new** `## Using the Permissions Feature` (`:867`) | `:877` | `set_permission_service` |
+| search | `## Using the Search Feature` (`:1019`) | `:1031` | `set_search_service` |
+| sessionmanagement | **new** `## Using the Session Management Feature` (`:925`) | `:933` | `set_session_service` |
+
+The three existing sections gained exactly one bullet each, appended after their last bullet (`Testing.` / `Testing.` / `Existing sources.`) and before the section's code block — no existing bullet reworded, no renumbering (`48 0`, zero deletions).
+
+**Wording is the implemented semantics, not aspirational.** Each bullet states: replaces a **non-empty** default unconditionally; logs **exactly one `WARNING`** when it does; the owner's **lazy create is not an install** and never warns (D7 — verified against the five `get_*()` bodies, each of which writes its own slot directly with that comment); never retroactive; and clearing stays `reset_…()`. Feature-specific truths taken from the code, not invented: eventbus — the install is lifecycle-neutral, only `reset_event_bus()` shuts the instance down (`src/backend/eventbus/eventbus.py:279`); search — a service obtained earlier keeps every source registered on it (EDGE-022, `src/backend/search/service.py:587`); permissions / session-management — neither the installed nor the replaced instance is started or shut down (`src/backend/permissions/service.py:553`, `src/backend/sessionmanagement/service.py:407`); settings — the parameter is never `None` (`src/backend/settings/registry.py:422`).
+
+### The two new sections (Q-30, house form)
+
+`## Using the Permissions Feature` (`:867`, 7 bullets + code block) placed **after** `## Using the User Management Feature` — permissions is built on `UserManager` and its roles, so the reader meets the user records before the roles granted over them. `## Using the Session Management Feature` (`:925`, 5 bullets + code block) placed **after** `## Using the Authentication Feature` — session-management reads authentication's `SessionRepository` and reacts to its `LoginSucceeded`. Both in the existing form: intro sentence naming the directory and its spec (`docs/specs/user-roles-permissions.md`, `docs/specs/session-management.md`), bullets (entry point, core operations, catalog/settings/registrations, errors, storage, install), then a ```python block. Content verified against the public API of each feature (`src/backend/permissions/__init__.py`, `src/backend/sessionmanagement/__init__.py`) — the code blocks import only real exports (`SqliteSessionRepository` from `backend.authentication`, where it actually lives) and use real action names (`filemanagement.upload`). No other section, bullet or heading was touched; the level-2 heading list is otherwise unchanged.
+
+### GREEN gate — `green_command` verbatim
+
+```
+uv run pytest tests/contract/singleton_install/test_guidance_contract.py::test_ac_019_agents_md_names_installer -v
+→ 1 passed in 0.18s            (pytest-randomly seed 2493271943)
+
+uv run pytest tests/contract/singleton_install/test_guidance_contract.py -v
+→ 1 passed in 0.18s            (the whole guidance-contract file — it has exactly one node)
+
+uv run pytest tests/contract/singleton_install/test_guidance_contract.py -v -p no:randomly
+→ 1 passed in 0.28s            (order-independent)
+
+uv run pytest tests/contract/singleton_install/ -q
+→ 9 passed in 4.21s            (all sibling contract nodes of this change: install/lint/settings/etc. — nothing broke)
+
+uv run python scripts/check_traceability.py
+→ Traceability: PASS (822 matrix rows, 136 spec IDs, 817 test functions)   (T-012 completion gate 5)
+```
+
+**GREEN is observed** — the five-finding `AssertionError` of S4.1 is gone.
+
+### The bullets genuinely satisfy the witness (F-88 counter-probe)
+
+Because the witness's install clause is a plain substring test (F-88), the same check was re-run with a **word-boundary** probe `(?<![A-Za-z0-9_])set_<slot>\b` over each section body, counting bullets that carry install **and** `WARNING` **and** (`non-empty`/`replace`) **and** the reset name:
+
+```text
+settings          bullets=13  strict-install-in-section=1  satisfying-bullets=1
+eventbus          bullets= 7  strict-install-in-section=1  satisfying-bullets=1
+permissions       bullets= 7  strict-install-in-section=3  satisfying-bullets=1
+search            bullets= 9  strict-install-in-section=1  satisfying-bullets=1
+sessionmanagement bullets=  5  strict-install-in-section=3  satisfying-bullets=1
+```
+
+Every section names its install operation outside any `reset_…` word (permissions/session-management score 3: the bullet, the code-block import, the code-block call), and **exactly one** bullet per section carries all three clauses — REQ-015's "one bullet", satisfied honestly rather than by keyword-stuffing.
+
+### The spec correction (Q-30, F-89) — `docs/specs/settings-public-registry-setter.md` (`2 1`)
+
+- **Changelog (top of the file, Spec Amendment Workflow format):** `- v2 (2026-10-08): D13 amended — two new AGENTS.md sections (Q-30). …` — the file's own version goes v1 → v2 (measured: it had `v1 (2026-10-06)` + the P.5 pass line, no earlier v2), and the entry states that no ID was added, removed or renumbered and that REQ-015 / AC-019 are unchanged.
+- **D13 (`:47`)** — the "no new section" clause is replaced by the Q-30 decision: one bullet per feature in that feature's section, for **three** features the existing section and for **two** a new `## Using the Permissions Feature` / `## Using the Session Management Feature` in the house form, no new pattern prose beyond those two sections' minimum, with the v2 amendment marker and the measured reason in the rationale cell.
+- **Not amended (checked, no contradiction):** REQ-015 (`:187`) and AC-019 (`:212`) already read "that feature's 'Using the …' section" / "its five 'Using the …' sections", which is literally true once the two sections exist; §12 Impact Analysis row 10 (`:374`) says "One bullet per feature in the five 'Using the …' sections" — also true now. No spec ID changed, so no task's `requirements` / `acceptance_criteria` reference was invalidated and no re-derivation is needed.
+- **Rule tension, recorded:** Phase 4's rule "Do NOT modify the specification in this phase" bars an S4.2 from editing a spec. The edit was made here on the **orchestrator's explicit assignment** (F-89 resolved by amending T-012's `allowed_files`, the F-86a shape) implementing the **binding Q-30 answer**, which itself specifies "a one-line D13 correction … plus a `## Changelog` entry, made in this change's own PR (Spec Amendment Workflow applied to the change's own spec, merge gate = the change PR)". The Phase 6 review therefore reviews the spec edit as part of this PR.
+
+### F-89 — `allowed_files` amendment recorded (both DAG copies, `2 1` each)
+
+`T-012.allowed_files.source_files` now lists, beside `AGENTS.md`:
+
+```text
+docs/specs/settings-public-registry-setter.md (amended in — F-89: Q-30's answer requires the D13 correction + a Changelog entry in this change's own PR, and no task in the DAG owned that file; same amendment shape as F-86a, assigned to T-012 by the orchestrator at S4.2)
+```
+
+Applied identically in `.github/task-runner/tasks.json` and `docs/tasks/settings-public-registry-setter.tasks.json` (both re-parsed as valid JSON; `T-012.status` still `PENDING` — flipping it is S4.4). **Open for S4.4:** T-012's `design_constraints` still carry the stale "D13 DIVERGENCE (open decision … The user decision is pending; do not start this task before it is recorded)" wording; Q-30 is ANSWERED and this step ran, so S4.4 should record the closure alongside the status flip (not touched here — the step's scope is the implementation, and rewriting a DAG constraint is the status step's).
+
+### F-88 — recorded for the Phase 6 review (test **not** edited)
+
+`_names_install_rule` and the `install not in section` pre-check use plain `in`, so `set_x` also matches inside `reset_x()`. This step did not touch the witness (out of `allowed_files` for an implementation step, and narrowing an acceptance witness is not this step's authority). The bullets were written so the witness is satisfied **honestly** — proven by the word-boundary counter-probe above, which passes independently of the substring weakness. Phase 6 review item: judge the witness's strength knowing a stricter probe would additionally reject a bullet that mentions only the reset.
+
+### Ruff gate
+
+`ruff: n/a` — this step changed **no** Python path: `AGENTS.md`, `docs/specs/settings-public-registry-setter.md`, `.github/task-runner/tasks.json`, `docs/tasks/settings-public-registry-setter.tasks.json`, `docs/verification/settings-public-registry-setter.md`. `uv run ruff check <changed-paths>` has nothing to check; no repo-wide `ruff check .` / `ruff format` was run (Phase 5 sweep, P-6). `mkdocs build --strict` is unaffected — the site builds `userdocs/`, not `AGENTS.md` (T-012 completion gate 3 recorded at S4.1, unchanged).
+
+### Files changed (`git diff --numstat`, all committed by this step)
+
+```text
+48  0  AGENTS.md
+ 2  1  docs/specs/settings-public-registry-setter.md
+ 2  1  .github/task-runner/tasks.json
+ 2  1  docs/tasks/settings-public-registry-setter.tasks.json
+```
+
+`uv.lock` untouched (`git status --porcelain` showed no `uv.lock` entry after the `uv run` invocations, so no `git restore uv.lock` was needed — P-74 watched). No `src/`, no `tests/`, no `pyproject.toml` change; the acceptance witness `test_guidance_contract.py` is byte-identical to its S4.1 state.
+
+### State for the next step
+
+- **GREEN observed for T-012** on the verbatim `green_command` (1 passed, also with `-p no:randomly`), the whole guidance-contract file green, the nine sibling `tests/contract/singleton_install/` nodes green, `check_traceability.py` PASS.
+- **AGENTS.md is additive-only** (`48 0`): five install bullets + two new house-form sections, nothing else — T-012 completion gate 3 satisfied.
+- **Not touched by this step:** every `src/` and `tests/` file, `pyproject.toml`, `uv.lock`, `userdocs/`, T-010's tests and record (still WAITING on Q-31/F-87), and both DAG copies' `T-012.status` (`PENDING`).
+- **Next: S4.3 (T-012) refactor (keep GREEN)** — a markdown/specs-only change; the no-op fast path is the expected outcome (nothing structural to improve beyond the two sections' minimum). Then S4.4: flip T-012 to `VERIFIED`, record the Q-30 closure in its `design_constraints`, sync statuses back.
+

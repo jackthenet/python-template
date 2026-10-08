@@ -1302,7 +1302,8 @@
       ],
       "allowed_files": {
         "source_files": [
-          "AGENTS.md"
+          "AGENTS.md",
+          "docs/specs/settings-public-registry-setter.md (amended in — F-89: Q-30's answer requires the D13 correction + a Changelog entry in this change's own PR, and no task in the DAG owned that file; same amendment shape as F-86a, assigned to T-012 by the orchestrator at S4.2)"
         ],
         "test_files": [
           "tests/contract/singleton_install/__init__.py (created by T-008 — this task only adds its file to the package)",
