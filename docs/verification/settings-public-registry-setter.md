@@ -4348,9 +4348,9 @@ GREEN. `uv run ruff check .` and the full `--cov` suite were **not** run (Phase 
 - **Next: S4.3 (T-002 refactor)** — the implementation is already the minimum shape; a no-op fast-path is
   plausible if nothing structural is found.
 
-### Phase 4 — refactor no-op records (S4.3, T-001..T-005)
+### Phase 4 — refactor no-op records (S4.3, T-001..T-006)
 
-All five refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
+All six refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path"); recorded here because a no-op with no record is unverifiable (Problem Log **P-70**).
 
 | Task | Verdict | What was inspected / rejected | GREEN re-confirmed |
 |---|---|---|---|
@@ -4359,6 +4359,7 @@ All five refactor steps took the **no-op fast-path** (AGENTS.md "No-op fast-path
 | T-003 | no structural changes needed (zero file changes) | Inspected `src/backend/permissions/service.py` + `__init__.py` only. **Rejected:** (a) a shared slot-swap helper for the three `with _permission_service_lock:` blocks (1–3 lines each, three different semantics — lazy create writes without a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69 leaf-lock rule and NFR-003 ("WARNING only after release") are stated in terms of; (b) extracting the `PermissionService(...)` construction out of `get_permission_service()` — one call site, and it would move the constructor (the only place this module could reach another module's lock) out of sight of the lock; (c) shortening the 12-line comment at the lock — it is the measured evidence that the plain `Lock` (not `RLock`) is safe here; (d) any rename — `_permission_service_lock` follows its own slot name exactly as `_registry_lock` / `_default_bus_lock` do, and `previous` matches the `eventbus` installer. Verified no fourth writer of `_permission_service` exists in `src/` (all three slot writes are guarded), the `__init__.py` re-export is RUF022-sorted, and the shape constraints hold: plain `Lock`, direct slot write under it, concrete `slow_threshold_ms=5` (never `slow_threshold_setting`), `get_`/`reset_` untraced, catalog untouched. | 6 passed (`green_command`, all 6 T-003 node IDs, 1.24s); 73 passed / 1 failed over the five permissions test dirs — the failure is **F-76** (T-002's, not T-003's, unchanged from S4.2); `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
 | T-004 | no structural changes needed (zero file changes) | Inspected `src/backend/search/service.py` + `__init__.py` only — the 44 inserted lines are the settings/permissions trio pattern already in `HEAD`. **Rejected:** (a) a shared slot-swap helper for the three `with _singleton_lock:` blocks (1–3 lines each, three different semantics — lazy create writes **without** a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69/P-71 leaf-lock rule and NFR-003 ("WARNING only after the release") are stated in terms of, and a cross-module version would push slot mechanics into `shared/`, which the architecture rules keep deliberately small; (b) hoisting the `SearchService(...)` construction out of `get_search_service()`'s guarded section (one call site, and the constructor is the only place this module could reach another module's lock — the S4.1 probe's `--naive` control deadlocks, so it must stay visible under the lock, not behind a factory); (c) shortening the 12-line comment at `_singleton_lock` — it is the measured leaf verdict plus the self-deadlock rule for the plain `Lock` (no `RLock` upgrade); (d) extracting the WARNING text to a constant or reusing `reset_search_service()`/`get_search_service()` inside the installer — one call site each, and either call under the non-reentrant lock self-deadlocks (F-57 / P-69); (e) any rename — `set_search_service`, `_logger = get_logger("search")` and `previous` match `set_settings_registry` / `set_permission_service` exactly. Re-verified the shape constraints are intact: the **existing** `_singleton_lock` guards all three slot operations (no second lock), the guarded sections stay leaves, the replace WARNING is emitted after the release, the lazy create is a direct slot write with no WARNING, `@logged(slow_threshold_ms=5)` is a concrete threshold, EDGE-022 (the replaced service keeps its sources) is untouched, and the `__init__.py` re-export is RUF022-sorted. | 7 passed (`green_command`, all 7 T-004 node IDs, 1.19s — re-run even though the step changed zero source files, per P-70); 1 passed (`tests/acceptance/permissions/test_composition_wiring.py`, the P-71 canary); 93 passed over the five search test dirs; `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files) |
 | T-005 | no structural changes needed (zero file changes) | Inspected `src/backend/sessionmanagement/service.py` + `__init__.py` only — the 77 inserted lines are the settings/eventbus/permissions/search trio pattern already in `HEAD`, plus this feature's two shape deviations. **Rejected:** (a) a shared slot-swap helper for the three `with _session_service_lock:` blocks (1–3 lines each, three different semantics — lazy create writes **without** a WARNING per REQ-007, install warns per REQ-002, reset writes `None`) — it would hide the critical section the P-69/P-71 leaf-lock rule and NFR-003 ("WARNING only after the release") are stated in terms of, and a cross-module version would push slot mechanics into `shared/`, which the architecture rules keep deliberately small; (b) collapsing the double-checked `get_session_service()` into one guarded check — the hit path must return on a plain reference read, **before** the lock and before any cross-module read (P-71 rule 1, the F-76 lesson); (c) deleting the `if event_bus is not None: get_event_bus()` warm-up or making it unconditional — it is the measured ABBA fix (this module is **not** a leaf: `SessionService.__init__` reads the shared bus whenever one is injected), and an unconditional warm-up would create the shared bus on a bare `get_session_service(repository=…)` call, behavior no spec ID authorises; (d) hoisting the `SessionService(...)` construction out of the guarded section or behind a factory — one call site, and the constructor is the only place this module can reach another module's lock, so it must stay visible under the lock, not hidden; (e) reusing `get_session_service()`/`reset_session_service()` inside the installer, or extracting the WARNING text to a constant — either call under the non-reentrant `Lock` self-deadlocks (F-57 / P-69); (f) shortening the 14-line comment at `_session_service_lock` — it is the measured deadlock evidence plus the no-self-call rule that make the plain `Lock` (no `RLock` upgrade) auditable; (g) any rename — `_session_service_lock` follows its own slot name exactly as `_registry_lock` / `_default_bus_lock` / `_singleton_lock` do, and `_logger = get_logger("sessionmanagement")` / `previous` match the sibling installers. Re-verified the shape constraints are intact: one new lock guards all three slot operations (no second lock, no `RLock`), the three `_session_service[0] =` writes in `src/` are all inside it (`src/main.py:202` `_session_service` is a composition-root local name, not the slot — no fourth writer), the `ValueError` for a missing repository stays with **no lazy create** (EDGE-003 / AC-042), the replace WARNING is emitted after the release, `@logged(slow_threshold_ms=5)` is a concrete threshold (never `slow_threshold_setting`), no event is published (REQ-009), and the `__init__.py` re-export is RUF022-sorted (`reset_session_service` before `set_session_service`). | 7 passed (`green_command`, all 7 T-005 node IDs, 0.66s — re-run even though the step changed zero source files, per P-70); 1 passed (`tests/acceptance/permissions/test_composition_wiring.py`, the P-71 canary); 75 passed over the five session-management test dirs (unchanged from S4.2); `ruff check`/`format --check` clean on both changed paths; `mypy src/` clean (84 files); `complexipy src tests --max-complexity-allowed 15` clean |
+| T-006 | no structural changes needed (zero file changes) | Inspected `src/main.py` only — the `+34/−16` diff is one deleted private-slot import, one collapsed install line, one 4-line getter-derived helper, and ten mechanical call-site substitutions on an already-clean file. **Rejected:** (a) collapsing the ten `_shared_settings_registry()` call sites into one module-level handle — REQ-011 requires the consumer sites to obtain the shared instance "through `get_settings_registry()` rather than the local handle", and the task's design constraint keeps the built instance passed **only** to the setter; a renamed handle (e.g. `_registry`) would slip past the AST witness, which matches the name `_settings_registry`, while violating the clause that witness enforces — test-gaming, not a refactor; (b) replacing the `assert registry is not None  # nosec B101` narrowing with a `raise` — a different exception type and message is new behavior no spec ID authorises, and the assert is the house precedent (`src/backend/search/service.py:582`); (c) a loop/table over the six `register_*_settings` calls — it would drop the two trailing comments that must survive (the REQ-019 alias note, "search feature") and obscure the registration order REQ-002/REQ-011 depend on; (d) moving the helper next to the install block, or collapsing the exploded `from backend.settings import (SettingsRegistry, get_settings_registry, set_settings_registry)` to one line (it fits the 120-char limit) — pure churn, and the exploded multi-name import is this file's existing convention (`backend.usermanagement`, `backend.search`); (e) moving the helper into `backend/shared/` — it is composition-root-specific (its docstring relies on *this* module's install-before-consumer ordering) and `shared/` stays deliberately small. Re-verified the shape constraints hold unchanged: the install keeps its module-import-time **position and order** (`:156`, D10) and precedes the six registrations (`:191-196`); no private-slot import (`_private_slot_imports() == []`) and no consumer site passed the handle (`_consumer_sites_passing_the_handle() == []`, both re-run directly with the witness's own helpers); no `_settings_registry` name remains in the file; no new module-level state beyond the getter-derived helper; the two trailing comments from the old `:177`/`:178` survive at `:195`/`:196`. | 4 passed (`green_command` verbatim, 4.23s — re-run although the step changed zero source files, per P-70); 49 passed over the S4.2 wider targeted set (`tests/acceptance/settings_coverage tests/integration/settings tests/acceptance/permissions tests/integration/singleton_install`) — unchanged from S4.2; `ruff check src/main.py` **All checks passed**, `ruff format --check src/main.py` **1 file already formatted**; `mypy src/` clean (84 files); `complexipy src tests --max-complexity-allowed 15` clean; `scripts/check_traceability.py` **PASS** (822 rows) |
 
 ---
 
@@ -5116,3 +5117,194 @@ hit path edges: []
 - **GREEN observed for T-005** (7/7), all per-step gates clean, nothing committed.
 - **Next: S4.3 (T-005 refactor)** — the implementation follows the settings/eventbus/permissions/search trio pattern
   already in `HEAD` and adds ~30 lines of logic; a **no-op verdict** is expected and must be recorded per P-70.
+
+### Phase 4 — T-006 RED (S4.1) — 2026-10-08
+
+**Task:** T-006 — composition root (`src/main.py`, write site 1 of the 12): "src/main.py installs
+through `set_settings_registry()` at its current position and reads the shared instance back through
+the getter". REQ-011 / REQ-012, AC-016 (citing `settings-coverage.md` REQ-002 unchanged).
+Dependency T-001 is `VERIFIED`, so T-006 is ready; it is the easiest remaining ready task (one file,
+mechanism-only change per D10).
+
+#### RED gate — the DAG's `red_command`, verbatim
+
+```
+uv run pytest tests/integration/singleton_install/test_composition_root.py::test_ac_016_main_installs_through_setter tests/integration/singleton_install/test_composition_root.py::test_installed_registry_serves_feature_registration -v
+```
+
+Result: **2 failed, 0 passed, 0 errors in 2.49s** — identical node count to the Phase 3 RED record
+(2 failed). Both witnesses run `import main` in a **fresh interpreter** with a scratch `cwd`
+(`tmp_path`), so the composition root's module-import-time wiring is observed with nothing left in
+the repository.
+
+#### Per-node failure reasons
+
+| Node | Failure | Cause |
+|---|---|---|
+| `test_ac_016_main_installs_through_setter` | `AssertionError` at `tests/integration/singleton_install/test_composition_root.py:194` — `assert result.stdout.strip().endswith("[True, True, True]")` with observed **`[False, False, True]`** | clause 1 `len(installs) == 1` → **False**: main never calls the public setter, it writes the private slot directly (`src/main.py:138`), so the spy records **0** installs; clause 2 `installs[0] is registry` → **False** (consequence of 0 installs); clause 3 → **True** (all six feature keys are reachable through `get_settings_registry()`, because the private-slot write happens to make the local instance the shared one) |
+| `test_installed_registry_serves_feature_registration` | `AssertionError` at `test_composition_root.py:209` — `assert ... endswith("[True, True, True, True]")` with observed **`[False, True, True, True]`** | only clause 1 `len(installs) == 1` → **False** (same root cause); clauses 2–4 → **True** (`len(registered) == 6`, all six registrations into the getter's instance, all six feature keys present) — i.e. REQ-011's *ordering* and *shared-instance* semantics already hold today; what is missing is exactly the **install through the public operation** |
+
+**RED validity (Phase 3 rule, AGENTS.md):** both failures are `AssertionError` on the subprocess
+stdout, not `AttributeError`/`ImportError`/collection/setup errors. The instrumented subprocess exits
+**0** in both cases (`main` imports cleanly and `set_settings_registry` exists since T-001 — the
+Phase 3 RED had surfaced as an `AttributeError` on the missing operation; that is gone now), the
+test data is in-domain (six real feature keys, no `ValidationError`), and the failing clause in both
+nodes is the behavior T-006 introduces. Valid RED.
+
+**Not reached by the first assertion (measured independently, read-only, for S4.2):** the two AST
+clauses of AC-016 in `test_ac_016_main_installs_through_setter` (`test_composition_root.py:195-199`)
+would also fail on the current code:
+
+- `_private_slot_imports()` → `['backend.settings.registry._registry']` (must become `[]`);
+- `_consumer_sites_passing_the_handle()` → **10** sites — call-node line numbers
+  `[153, 173, 174, 175, 176, 177, 178, 195, 202, 212]` (must become `[]`).
+
+#### `src/main.py` site inventory for S4.2 (read-only inspection; current state, `HEAD` = `98b9e71`)
+
+| Site | Line(s) | Current code | Required after T-006 |
+|---|---|---|---|
+| Private-slot import | **68** | `from backend.settings.registry import _registry as _settings_registry_singleton` | delete (the only private import in the file) |
+| Public import | **66** | `from backend.settings import SettingsRegistry` | add `set_settings_registry` to it (the witness patches `backend.settings.set_settings_registry` **before** `import main`, so a from-import still binds the spy) |
+| Construction + write | **137-138** | `_settings_registry = SettingsRegistry(permission_service=_permission_service_proxy)` / `_settings_registry_singleton[0] = _settings_registry` | one line at the same module-import-time position and order (D10): `set_settings_registry(SettingsRegistry(permission_service=_permission_service_proxy))` — no local handle passed on |
+| `PermissionService(...)` | call opens **153**, keyword at **161** | `settings_registry=_settings_registry` | getter-derived instance |
+| Six feature registrations | **173-178** | `register_logging_settings(_settings_registry)` … `register_search_settings(_settings_registry)` (line 177/178 carry trailing comments that must survive) | getter-derived instance |
+| `FileService(...)` | call opens **195**, keyword at **198** | `settings_registry=_settings_registry` | getter-derived instance |
+| `SessionService(...)` | call opens **202**, keyword at **204** | `settings_registry=_settings_registry` | getter-derived instance |
+| `get_search_service(...)` | call opens **212**, keyword at **214** | `settings_registry=_settings_registry` | getter-derived instance |
+
+Total consumer sites: **10** (6 `register_*_settings` + 4 `settings_registry=`) — matches the DAG and
+matches the AST witness's 10 hits.
+
+**AST witness constraint (name-sensitive, easy to trip):** `_consumer_sites_passing_the_handle()`
+flags a consumer site only when it passes a `Name` whose id is exactly **`_settings_registry`**. A
+getter-derived module handle bound to that same name would therefore still fail AC-016 — S4.2 must
+either call the narrowing helper at each of the 10 sites, or bind the handle under a different name.
+The DAG's `implementation_steps` prescribe the former (one module-level helper, called per site).
+
+**Type narrowing is required (confirmed):** `get_settings_registry(required: bool = True) ->
+SettingsRegistry | None` — actual location **`src/backend/settings/registry.py:401`** (the DAG cites
+`:361` — stale line reference, F-15 class; the symbol exists, no file is missing). The consumer
+signatures need a non-Optional, so the helper is needed: the house precedent is
+**`src/backend/search/service.py:582`** — `assert service is not None, "singleton not initialized"  #
+nosec B101` (the DAG cites `:564` — also a stale line reference, same class). The install at :137-138
+precedes every consumer site and nothing between them calls `reset_settings_registry()`, so the
+assert never fires at startup.
+
+#### Baseline of the wiring witnesses (must stay GREEN through T-006)
+
+`uv run pytest tests/acceptance/settings_coverage/test_wiring.py
+tests/acceptance/permissions/test_composition_wiring.py -q` → **2 passed in 2.03s** (pre-implementation
+baseline; both are in T-006's `green_command`, and per P-71 the permissions wiring witness is the
+canary for the lock order — P-69).
+
+#### State for the next step
+
+- **RED observed for T-006** (2 failed / 0 passed, both `AssertionError`, valid RED), recorded here
+  before any implementation. No source or test file touched; nothing committed.
+- **Next: S4.2 (T-006) — implement + confirm GREEN** with the DAG's `green_command` verbatim:
+  `uv run pytest tests/integration/singleton_install/test_composition_root.py::test_ac_016_main_installs_through_setter tests/integration/singleton_install/test_composition_root.py::test_installed_registry_serves_feature_registration -v tests/acceptance/settings_coverage/test_wiring.py tests/acceptance/permissions/test_composition_wiring.py -v`
+  (4 nodes expected GREEN). Allowed source file: `src/main.py` only.
+
+### Phase 4 — T-006 GREEN (S4.2) — 2026-10-08
+
+**Task:** T-006 — composition root (`src/main.py`, write site 1 of the 12). REQ-011 / REQ-012,
+AC-016 (citing `settings-coverage.md` REQ-002 unchanged). Implementation in the allowed source file
+only; **no test file was touched** (`tests/integration/singleton_install/test_composition_root.py`
+and the two wiring witnesses were run read-only, no assertion changed).
+
+#### The diff (`src/main.py`, +34 / −16, one file)
+
+| Site (pre-change line) | Change |
+|---|---|
+| **68** private-slot import | **deleted** — `from backend.settings.registry import _registry as _settings_registry_singleton` is gone; `src/main.py` now imports no private name and no private module |
+| **66** public import | `from backend.settings import SettingsRegistry` → `SettingsRegistry, get_settings_registry, set_settings_registry` (the from-import still binds the witness's spy, which is patched on `backend.settings` before `import main`) |
+| **137-138** construction + slot write | one line, **same module-import-time position and order** (D10): `set_settings_registry(SettingsRegistry(permission_service=_permission_service_proxy))` — the built instance is passed **only** to the setter, no local handle survives |
+| **153/161** `PermissionService(...)` | `settings_registry=_shared_settings_registry()` |
+| **173-178** six `register_*_settings(...)` | `_shared_settings_registry()` at each of the six calls; the trailing comments on the `permissions` and `search` lines survived verbatim |
+| **195/198** `FileService(...)` | `settings_registry=_shared_settings_registry()` |
+| **202/204** `SessionService(...)` | `settings_registry=_shared_settings_registry()` |
+| **212/214** `get_search_service(...)` | `settings_registry=_shared_settings_registry()` |
+| new, after the imports | one module-level narrowing helper `def _shared_settings_registry() -> SettingsRegistry:` — `registry = get_settings_registry()` / `assert registry is not None  # nosec B101` / `return registry` (precedent `src/backend/search/service.py:582`); called at all **10** consumer sites, so no getter-derived handle is ever bound under the name `_settings_registry` (the name-sensitive AST witness) |
+
+No new module-level state (the local `_settings_registry` handle was **removed**, not re-pointed), no
+new dependency, no wiring moved into a factory, registration order untouched.
+
+#### GREEN gate — the DAG's `green_command`, verbatim
+
+```
+uv run pytest tests/integration/singleton_install/test_composition_root.py::test_ac_016_main_installs_through_setter tests/integration/singleton_install/test_composition_root.py::test_installed_registry_serves_feature_registration -v tests/acceptance/settings_coverage/test_wiring.py tests/acceptance/permissions/test_composition_wiring.py -v
+```
+
+Result: **4 passed, 0 failed in 4.28s** (re-run after the ruff `--fix`: same 4 passed). The 2 T-006
+nodes flipped from the S4.1 RED (`[False, False, True]` and `[False, True, True, True]`) to the
+required `[True, True, True]` and `[True, True, True, True]`, and both wiring witnesses stayed GREEN.
+
+#### AC-016 clause-by-clause (all three clauses now observed)
+
+| Clause | S4.1 (RED) | S4.2 (GREEN) |
+|---|---|---|
+| 1 — `len(installs) == 1` (installed through the public setter) | `False` (0 installs) | **`True`** — exactly one call of `backend.settings.set_settings_registry` |
+| 2 — `installs[0] is registry` (the installed instance is the getter's instance) | `False` | **`True`** |
+| 3 — all six feature keys registered | `True` | **`True`** |
+| 4 (second witness) — `len(registered) == 6` and `all(r is registry …)` | `True` | **`True`** — the install precedes the six registrations and they register into the installed instance (settings-coverage REQ-002 now literally true) |
+| AC-016 clause 2 — `_private_slot_imports()` | `['backend.settings.registry._registry']` | **`[]`** |
+| AC-016 clause 3 — `_consumer_sites_passing_the_handle()` | **10** sites `[153, 173, 174, 175, 176, 177, 178, 195, 202, 212]` | **`[]`** |
+
+**AST re-check (run directly with the witness's own helpers, read-only):**
+`uv run python -c "import sys; sys.path.insert(0,'tests/integration/singleton_install'); import
+test_composition_root as t; print(t._private_slot_imports(), t._consumer_sites_passing_the_handle())"`
+→ **`[] []`**. Grep confirms it independently: no `_settings_registry_singleton`, no
+`backend.settings.registry` import, and every one of the 10 consumer sites now reads
+`_shared_settings_registry()`.
+
+#### Gate set (all run in the change worktree)
+
+| Gate | Command | Result |
+|---|---|---|
+| GREEN (targeted, verbatim) | the `green_command` above | **4 passed** |
+| Wider targeted regression | `uv run pytest tests/acceptance/settings_coverage tests/integration/settings tests/acceptance/permissions tests/integration/singleton_install -q` | **49 passed, 0 failed** (`tests/integration/settings_coverage` does not exist on this branch — the existing integration package is `tests/integration/settings`, so that path was substituted) |
+| Ruff (per-step, changed paths) | `uv run ruff check src/main.py` → 1 `I001` (the new multi-line `from backend.settings import (…)` block needed the two blank lines after the import block) → `ruff check --fix src/main.py` **1 fixed, 0 remaining** → `ruff format src/main.py` **1 file left unchanged** → `ruff check src/main.py` **All checks passed!** | **clean** |
+| mypy (gate) | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| complexipy (gate) | `uv run complexipy src tests --max-complexity-allowed 15` | **All functions are within the allowed complexity** (the new helper is complexity 1) |
+| traceability (gate) | `uv run python scripts/check_traceability.py` | **PASS** (822 matrix rows, 136 spec IDs, 817 test functions) |
+
+No whole-repo ruff sweep and no full `--cov` suite here — both are Phase 5 gates.
+
+#### Findings
+
+- **F-78 — regression in the `logging-coverage` one-off-statement-count witnesses, owned by no task in
+  this DAG.** `uv run pytest tests/acceptance/logging_coverage -q` → **4 failed, 17 passed**.
+  One of them (`test_inventory_covers_install_operations`) is T-011's RED witness — expected.
+  The other three are **not**: `test_ac_009_statements_go_through_get_logger`,
+  `test_ac_009_settings_statements_go_through_get_logger`,
+  `test_ac_009_eventbus_statements_go_through_get_logger` fail with
+  `src/backend/settings/registry.py keeps 17 one-off statements, found 18;
+  src/backend/eventbus/eventbus.py keeps 10 …, found 11;
+  src/backend/permissions/service.py keeps 1 …, found 2`.
+  **Measured as a regression, not pre-existing:** the same four nodes are **4 passed** in the primary
+  worktree on `main` (`1926bff`). Cause: every install operation added by T-001…T-005 contains one
+  `logger.warning(...)` one-off statement (REQ-002's replace WARNING), and
+  `tests/acceptance/logging_coverage/test_statements_via_feature.py` pins the per-file counts from
+  `logging-coverage.md` REQ-005 / AC-009 (`structlog-logging.md` AC-009). **No task in
+  `settings-public-registry-setter.tasks.json` lists that file in its `allowed_files`** (T-011 owns
+  `test_inventory.py` and `logging_coverage_test_helpers.py` only), so the count table has no owner
+  and the Phase 5 full-suite gate will fail on these three unless one is assigned. Not fixable inside
+  T-006: the file is outside its `allowed_files`. Logged for the orchestrator (Problem Log + a
+  scheduling decision).
+- **F-79 — the DAG's stale line references re-confirmed (same class as F-15).** T-006's
+  `implementation_steps[3]` cites `src/backend/settings/registry.py:361` for the `| None` return and
+  `src/backend/search/service.py:564` for the assert precedent; the real lines on this branch are
+  **401** and **582**. Recorded, the DAG text was not edited.
+- **Process note (not a code defect):** the Phase 4 todo for this change was marked `completed` after
+  S4.2 while S4.3 (refactor), S4.4/S4.5 (commit + `VERIFIED`) had not run and `T-006` is still
+  `"status": "PENDING"` in `.github/task-runner/tasks.json` — per the Todo Tracking Discipline the
+  Phase 4 gate is GREEN **plus** the task committed and `VERIFIED`.
+
+#### State for the next step
+
+- **GREEN observed for T-006** (4 passed, all three AC-016 clauses + both AST clauses), recorded here.
+  Nothing committed; `.github/task-runner/tasks.json` still `PENDING` (S4.5 owns the flip).
+- **S4.3 (T-006 refactor) no-op candidate:** the diff is one deleted import, one collapsed install
+  line, one 4-line helper and ten mechanical call-site substitutions on an already-clean file — the
+  likely outcome is "no structural changes needed" with the `green_command` re-run skipped.
+- **Next: S4.3 (T-006 refactor)** → S4.4 commit + `VERIFIED`.
