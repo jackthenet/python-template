@@ -10,8 +10,23 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 - **Question file:** `docs/questions/api-keys.md`
 - **Spec:** `docs/specs/api-keys.md`
 - **Worktree:** <created at P.4> `../python-template_kopie-worktrees/feature/api-keys`
-- **Depends on:** `docs/todo/structlog-logging.md` **must land first** (its Q-20, decided 2026-10-04: the loguru → structlog swap is accepted, so this change's new code uses the winning backend from day one). Otherwise none (may be depended on by `docs/todo/notifications.md`). ADR numbering is **by merge order**, not pre-reserved — `structlog-logging` Q-16 also wants the next free number after ADR-080.
+- **Depends on:** `docs/todo/structlog-logging.md` **must land first** (its Q-20, decided 2026-10-04: the loguru → structlog swap is accepted, so this change's new code uses the winning backend from day one). Otherwise: **`backend-api`** (decided 2026-10-08 at P.3 round 1 — this item keeps only the machine-credential half and may not start before `backend-api` is merged); `notifications` may still depend on this one. ADR numbering is **by merge order**, not pre-reserved — `structlog-logging` Q-16 also wants the next free number after ADR-080.
 - **Related specs:** `docs/specs/authentication.md` (opaque-token pattern, sessions), `docs/specs/session-management.md` (list/revoke analogue), `docs/specs/user-roles-permissions.md` (catalog, checker, `Principal`), `docs/specs/user-management.md`, `docs/specs/search.md` (pagination conventions to mirror)
+
+## Re-scope (2026-10-08, P.3 round 1)
+
+**Records correction:** the P.2 log's side finding ("`src/main.py:145-153` builds `PermissionService` with
+no `session_lookup` … dead wiring, latent defect") is **stale on current `main`** — `src/main.py:158` now
+passes `session_lookup=_session_repository  # validates a provided session token (REQ-017, AC-020)`, so
+session-token validation is live. It was fixed by later composition-root work; no ISSUE is owed.
+
+The first four P.2 answers changed what this item is. The user wants a real HTTP API for the backend
+(**FastAPI + uvicorn**), authenticated by the backend's **own session tokens**, exposing **all 61 enforced
+catalog actions**, and approved amending `docs/specs/authentication.md` and
+`docs/specs/session-management.md` (both currently exclude an HTTP layer). That boundary is its own
+change: **`backend-api`** (CROSS-CUTTING). This TODO keeps only the part the API does not provide — a
+**non-interactive machine credential** (show-once secret, hash at rest, expiry, revoke, usage audit) — and
+is parked behind it. Q-05…Q-31 stay PENDING; several are now answered by `backend-api` instead.
 
 ## Goal (one line)
 An **API an LLM can drive**: non-interactive **API-key authentication** with **create/revoke**, **permissions/scopes**, **expiration**, and an **audit trail of usage** — layered on the permission enforcement the backend already has.
