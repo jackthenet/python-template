@@ -416,3 +416,111 @@ uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src
 No docstring was written that contradicts the code, so no finding under the binding amendment. One observation for the record (not a finding, no action taken): `MailService._publish` does **not** catch a publisher exception, so a failing publisher propagates out of `send_email` — unlike user-management/authentication/file-management, whose `AGENTS.md` entries promise "a publisher failure never breaks the operation". The mail spec (REQ-012, D9) makes no such promise, and the new `EventPublisher.publish` docstring states the actual behavior ("does not catch a publisher exception, so a failing publisher surfaces to the caller"). If isolation is intended for mail, that is a separate ISSUE/FEATURE, not this change.
 
 **Next (S4.2, groups 4-5):** `sessionmanagement` (16 sites: 2 additions + 14 format) → `settings` (16 sites: 14 additions + 2 format, incl. 1 `D301` needing `--unsafe-fixes`).
+
+## Phase 4 — groups 4-5 (S4.2, 2026-10-09)
+
+Groups 4 (`sessionmanagement`) and 5 (`settings`) done, **two commits each** — additions half then format half (Q-11). `uv.lock` was rewritten by every `uv run` (F-9), `git restore`d before each commit, never staged.
+
+| Group | Commit | Sites | `ruff check src/backend/<group>` | `--select D` (google) after | Feature tests (`-q`) |
+|---|---|---|---|---|---|
+| 4 `sessionmanagement` additions | `e3f95c6` `docs(sessionmanagement): add missing docstrings (D102 x1, D107 x1)` | 2 additions | All checks passed! | 14 (format half pending) | — |
+| 4 `sessionmanagement` format | `df45d17` `docs(sessionmanagement): fix docstring formatting (D205, D209, D403)` | 14 format | All checks passed! | **0** | `tests/{acceptance,contract,integration,property,unit}/sessionmanagement` → **69 passed** |
+| 5 `settings` additions | `899c027` `docs(settings): add missing docstrings (D102 x10, D107 x4)` | 14 additions | All checks passed! | 2 (format half pending) | — |
+| 5 `settings` format | `2284b71` `docs(settings): fix docstring formatting (D205, D301)` | 2 format | All checks passed! | **0** | `tests/{acceptance,contract,integration,property,unit}/settings{,_coverage}` → **103 passed** |
+
+### Sites, as edited
+
+```text
+sessionmanagement  src/backend/sessionmanagement/events.py
+  55  D102 EventPublisher.publish          added (synchronous fire-and-forget; the bus only
+                                          enqueues; a publisher exception is NOT caught ⇒
+                                          propagates, REQ-018). The stub body `...` is kept
+                                          after the docstring — see INV-D below.
+sessionmanagement  src/backend/sessionmanagement/service.py
+  69  D107 SessionService.__init__        added (construction is the only wiring point: cap
+                                          eviction on the *shared* bus, user-lifecycle
+                                          revocation on the *injected* one and only if it has
+                                          `subscribe`; None permission_service = standalone,
+                                          AC-031; REQ-014/REQ-015/AC-038)
+```
+
+Format half, group 4 — 14 findings over 8 docstrings, **all hand-edited**: `--fix` and `--diff` offered **no** fix for the 6 `D209` and the 1 `D403` here. Probed on isolated single-code docstrings in `%TEMP%` (ruff 0.16.10): `D209 --fix`/`--diff` and `D403 --fix` produce **nothing** — neither code has a fixer in this version — so §"Mechanical vs manual split"'s "`D209` + `D403` have safe fixes (61 repo-wide)" does **not** hold; all 61 are hand-edits. Recorded here as finding **F-10** (the §Findings table stops at P.4); Phase 5/6 should re-measure the remaining groups' mechanical share.
+
+```text
+sessionmanagement  src/backend/sessionmanagement/search_source.py
+  95  D205+D209 _free_text_matches        summary line + blank line + closing """ own line
+  105 D205+D209 _eval_group               idem
+  115 D205+D209 _eval_condition           idem
+  143 D403      _apply_exact_operator     `boolean` → `Boolean` (first word capitalized)
+  153 D205+D209 _sort_key                 idem
+  163 D205+D209 _query                    idem
+  189 D205      build_session_source      blank line after the summary (closing """ already ok)
+sessionmanagement  src/backend/sessionmanagement/service.py
+  217 D205+D209 _order_with_current       summary line split; closing """ own line
+```
+
+```text
+settings  src/backend/settings/registry.py
+  59  D107 SettingsRegistry.__init__      added (seam defaults incl. the lazy eventbus import that
+                                          breaks the circular import; persisted values loaded once
+                                          and override defaults, REQ-009/REQ-011 of
+                                          settings-coverage; None permission_service = standalone,
+                                          AC-031)
+settings  src/backend/settings/repository.py
+  131 D107 YamlValueRepository.__init__   added (single values.yaml, dir created eagerly, lock is
+                                          per-instance not cross-process)
+  139 D102 .save                          added (temp file + os.replace ⇒ never a partial file)
+  147 D102 .load                          added (missing file is not an error; corrupted file →
+                                          ValueStorageError, EDGE-003)
+  202 D107 MemoryTemplateRepository.__init__ added (nothing loaded, nothing persisted)
+  206 D102 .save                          added (silent replace; the frozen instance itself is kept)
+  210 D102 .get                           added
+  214 D102 .delete                        added (unknown name = silent no-op)
+  218 D102 .list                          added (name-ordered, not insertion-ordered)
+  233 D107 YamlTemplateRepository.__init__ added (one file per template, dir created eagerly)
+  241 D102 .save                          added (.<name>.yaml.tmp sibling, atomic, REQ-022)
+  255 D102 .get                           added (name selects the file only; fields come from the
+                                          file; corrupted/incomplete → TemplateStorageError, AC-032)
+  272 D102 .delete                        added (absent file = silent no-op)
+  278 D102 .list                          added (one corrupted file fails the whole listing, AC-032)
+```
+
+Q-14 / INV-H additions in the touched files (not gate-detected — `D` under the google convention ignores private defs; found with a one-off `ast` walk): `registry.py` `_require_definition`, `_scope_keys`, `_publish_setting_changed`, `_persist_values`; `repository.py` `_path` ×2, `_parse` ×2. Every other private helper in the five touched files already had a docstring.
+
+Format half, group 5:
+
+```text
+settings  src/backend/settings/registry.py
+  1   D205 module docstring               summary line split from the description (hand-edited)
+settings  src/backend/settings/repository.py
+  49  D301 _str_representer              `r"""` prefix + `\\x85` → `\x85`, so the docstring VALUE is
+                                          byte-identical (verified: ast.get_docstring of the
+                                          function is equal before and after). `--unsafe-fixes`
+                                          was deliberately NOT used: it only adds the `r` prefix,
+                                          which would have doubled the backslash in the rendered
+                                          docstring (a needless content change).
+```
+
+### Gates & no-behavior-delta (INV-D)
+
+```text
+uv run ruff check src/backend/sessionmanagement src/backend/settings --select D \
+  --config 'lint.pydocstyle.convention = "google"'      → All checks passed!   (0)
+uv run ruff check .                                     → All checks passed!
+uv run ruff format --check src/backend/sessionmanagement src/backend/settings → 13 files already formatted
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src → 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0   (twice)
+git diff --stat 70f68b2..HEAD                           → 5 files, +150/−26, all inside docstrings
+```
+
+**Digest near-miss, caught and fixed inside this execution.** The group-4 additions commit first replaced the protocol stub body `def publish(...) -> None: ...` with the docstring alone; the digest then printed `0736d32b…` — the strip script replaces an emptied body with `Pass`, so dropping the `Expr(Ellipsis)` **is** an AST delta. Fixed by keeping `...` after the docstring (the pattern group 3 used for `mail/models.py:52`), digest back to `64fc1d6e…`, and the one-line fix folded into `e3f95c6` with `git commit --fixup` + `--autosquash` (the branch was never pushed, so no history was rewritten for anyone else). The digest is what caught it — INV-D earned its keep.
+
+### Q-26 check (docstring vs. code)
+
+No docstring contradicts the code; each of the following is stated **as the code is**, with no code change and no reclassification:
+
+- `sessionmanagement.events.EventPublisher.publish` — the feature does not catch a publisher exception, so a failing publisher propagates to the calling session method. The session-management spec (REQ-018) makes no isolation promise, so this is not a defect; it is the same observation already recorded for mail.
+- `settings.repository.YamlTemplateRepository.get` — the requested name only selects the file; the returned template's fields come from the file, so a file whose `name` field disagrees with its stem is returned unchanged (no cross-check exists).
+- `settings.repository.YamlTemplateRepository._path` — the repository neither validates nor escapes the name; the registry does (`is_template_name_valid`). Documented at the method.
+- Citation note (no edit): the pre-existing comments in `_persist_values` cite `REQ-009`/`EDGE-009`, which are **`settings-coverage.md`** IDs (`settings.md` REQ-009 is *resets*). The new docstrings cite the `settings-coverage` IDs where the behavior comes from that spec (REQ-009, REQ-010, REQ-011, EDGE-003, EDGE-009) and `settings.md` IDs where it comes from that one (REQ-022, AC-032); no existing citation was removed (INV-I).
+
+**Next (S4.2, group 6):** `permissions` (45 sites: 33 additions + 12 format, incl. 2 `D301`).
