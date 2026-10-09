@@ -129,14 +129,26 @@ class YamlValueRepository(ValueRepository):
     """
 
     def __init__(self, directory: str) -> None:
+        """Store all values in ``<directory>/values.yaml``, creating the directory eagerly.
+
+        The lock serialises reads and writes inside this instance only — it
+        is not a cross-process lock.
+        """
         self._directory = Path(directory)
         self._directory.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def _path(self) -> Path:
+        """The one file holding every value: ``<directory>/values.yaml``."""
         return self._directory / "values.yaml"
 
     def save(self, values: dict[str, Any]) -> None:
+        """Write the whole value set atomically: temp file in the same directory, then ``os.replace``.
+
+        A crash mid-write leaves the previous file intact, so the file is
+        never partial (REQ-010). The debug record carries the count only, never
+        the values.
+        """
         with self._lock:
             text = _dump_yaml(values)
             tmp = self._directory / ".values.yaml.tmp"
@@ -145,6 +157,11 @@ class YamlValueRepository(ValueRepository):
         _logger.debug(f"values saved to storage: count={len(values)}", count=len(values))
 
     def load(self) -> dict[str, Any] | None:
+        """The stored values, or ``None`` when no file exists yet.
+
+        A missing file is not an error; invalid YAML or a non-mapping document
+        raises ``ValueStorageError`` instead of a partial value set (EDGE-003).
+        """
         try:
             with self._lock:
                 path = self._path()
@@ -162,6 +179,10 @@ class YamlValueRepository(ValueRepository):
         return result
 
     def _parse(self, data: Any) -> dict[str, Any]:
+        """Coerce a loaded document to a ``str``-keyed mapping.
+
+        Anything that is not a mapping raises ``ValueStorageError``.
+        """
         if not isinstance(data, dict):
             raise ValueStorageError("values file is not a mapping")
         return {str(k): v for k, v in data.items()}
@@ -200,22 +221,31 @@ class MemoryTemplateRepository(TemplateRepository):
     """
 
     def __init__(self) -> None:
+        """An empty store: nothing is loaded, nothing is persisted."""
         self._store: dict[str, Template] = {}
         self._lock = threading.Lock()
 
     def save(self, template: Template) -> None:
+        """Store ``template`` under its name, replacing an existing one silently.
+
+        The instance itself is kept (not a copy); ``Template`` is frozen, so
+        callers cannot mutate what is stored.
+        """
         with self._lock:
             self._store[template.name] = template
 
     def get(self, name: str) -> Template | None:
+        """The stored template with this name, or ``None`` when there is none."""
         with self._lock:
             return self._store.get(name)
 
     def delete(self, name: str) -> None:
+        """Drop the named template; an unknown name is a silent no-op."""
         with self._lock:
             self._store.pop(name, None)
 
     def list(self) -> list[Template]:
+        """Every stored template, ordered by name (not by insertion order)."""
         with self._lock:
             return [self._store[n] for n in sorted(self._store)]
 
@@ -231,14 +261,30 @@ class YamlTemplateRepository(TemplateRepository):
     """
 
     def __init__(self, directory: Path | str) -> None:
+        """One ``<name>.yaml`` file per template under ``directory``, created eagerly.
+
+        The lock serialises file access inside this instance; it does not
+        protect the directory against another writer.
+        """
         self._directory = Path(directory)
         self._directory.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def _path(self, name: str) -> Path:
+        """The file for a name: ``<directory>/<name>.yaml``.
+
+        The repository does not validate the name — the registry does
+        (``is_template_name_valid``), and a name reaching this method
+        unvalidated would resolve outside the directory.
+        """
         return self._directory / f"{name}.yaml"
 
     def save(self, template: Template) -> None:
+        """Write the template's four fields to its own file, atomically via a ``.<name>.yaml.tmp`` sibling.
+
+        A crash leaves either the old file or the new one, never a partial
+        template (REQ-022).
+        """
         with self._lock:
             data = {
                 "name": template.name,
@@ -253,6 +299,13 @@ class YamlTemplateRepository(TemplateRepository):
         _logger.debug(f"template saved to storage: name={template.name}", name=template.name)
 
     def get(self, name: str) -> Template | None:
+        """Parse the file for ``name``, or ``None`` when the file is absent.
+
+        The requested name only selects the file: the returned template's
+        fields come from the file, so a file whose ``name`` field disagrees
+        with its stem is returned unchanged. A corrupted or incomplete file
+        raises ``TemplateStorageError`` (AC-032).
+        """
         try:
             with self._lock:
                 path = self._path(name)
@@ -270,12 +323,18 @@ class YamlTemplateRepository(TemplateRepository):
         return result
 
     def delete(self, name: str) -> None:
+        """Unlink the template file; an absent file is a silent no-op."""
         with self._lock:
             path = self._path(name)
             if path.exists():
                 path.unlink()
 
     def list(self) -> list[Template]:
+        """Parse every ``*.yaml`` file in the directory, file-name ordered.
+
+        One corrupted file fails the whole listing with
+        ``TemplateStorageError`` — there is no partial result (AC-032).
+        """
         templates: list[Template] = []
         try:
             with self._lock:
@@ -292,6 +351,12 @@ class YamlTemplateRepository(TemplateRepository):
         return templates
 
     def _parse(self, name: str, data: Any) -> Template:
+        """Build a ``Template`` from a loaded document.
+
+        ``name``, ``category`` and ``values`` are required and ``values`` must
+        be a mapping; ``group`` is optional. Every violation raises
+        ``TemplateStorageError`` naming the template.
+        """
         if not isinstance(data, dict):
             raise TemplateStorageError(f"template {name} is not a mapping")
         if "name" not in data or "category" not in data or "values" not in data:
