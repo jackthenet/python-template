@@ -610,3 +610,11 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 investigation cycle to pick a usable no-behavior-change proof; plus 1 in-step workaround for the `ruff format` issue below.
 - **Resolution:** the usable no-behavior-change proof is a pre/post **code** comparison over a **fixed** tree — S4.3 did 3 invocations (default, `--max-depth 2`, `--include-private --max-depth 3`) and required byte-identical output. Also recorded here: `ruff format` under PEP 758 (Python 3.14) rejects a parenthesized `except (A, B):` without `as`, which forced an AST-shape check instead of a try/except in `_dunder_all`.
 - **Date:** 2026-10-09
+
+## P-78 — REQ-017 field-cap marker ordering
+- **Problem:** the first implementation appended the `… +N fields` elision marker **after** the cap slice, so a 16-field class rendered 16 field lines and **no** marker — 3 of 7 T-004 witnesses stayed RED (AC-017 clause 3 / EDGE-011 pin 15 lines + 2 markers).
+- **Step / Phase:** S4.2 Implement + confirm GREEN (T-004) — Phase 4, change structure-map / CROSS-CUTTING
+- **Duration / iterations:** 1 extra iteration, resolved **within the same S4.2 execution** (truncate-then-append), no step relaunch.
+- **Resolution:** the cap slice is taken first, then the marker is appended to the truncated list. **Durable fix: when a spec pins both a cap and a marker, write the witness's exact expected line list first (AC-017 clause 3 / EDGE-011 pin 15 lines + 2 markers) and derive the slice order from it, not from the natural append order.**
+- **Also recorded (finding F-08, discovered at S4.3):** `_drop_long_defaults` dropping a *positional* default shifts the kept defaults onto earlier parameters — real, unwitnessed, deliberately **not** changed (changing it would alter AC-014 output and needs a Spec Amendment). A separate ISSUE TODO is being opened for it.
+- **Date:** 2026-10-09

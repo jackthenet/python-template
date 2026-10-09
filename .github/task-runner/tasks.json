@@ -376,7 +376,7 @@
         "uv run mypy scripts/ clean; uv run ruff check scripts/make_map.py tests/unit/test_make_map.py clean."
       ],
       "dependencies": ["T-003"],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-005",
