@@ -80,7 +80,7 @@ The review phase is decomposed into four atomic steps. Each has a **single objec
 - **Objective:** Bump the version per the change type and open a PR for the change branch to `main` (present for human merge, then STOP).
 - **Inputs:** the clean review report.
 - **Outputs:** a version bump (per the change type); a PR open for the change branch to `main`.
-- **Done-criteria:** the version is bumped per the change type (ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE); **Light-tier ISSUE only:** the full regression suite has been run and passes (the Phase 6 pre-merge gate — Phase 5 ran targeted + smoke) and the result is recorded in the review report; a PR is open for the change branch to `main` (presented for human review/merge, NOT merged — human governance).
+- **Done-criteria:** the version is bumped per the change type (ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE); when a bump is made, the `## [Unreleased]` entries have moved into a new `## [<new version>] - <YYYY-MM-DD>` section in the same commit as the bump; **Light-tier ISSUE only:** the full regression suite has been run and passes (the Phase 6 pre-merge gate — Phase 5 ran targeted + smoke) and the result is recorded in the review report; a PR is open for the change branch to `main` (presented for human review/merge, NOT merged — human governance).
 
 ## MUST
 
@@ -92,6 +92,7 @@ The review phase is decomposed into four atomic steps. Each has a **single objec
 - Check that dependencies follow the architecture rules.
 - Flag any orphaned tests (tests without spec reference).
 - Flag any missing traceability links.
+- Flag a change that ships without a `CHANGELOG.md` entry under `## [Unreleased]` (every change type owes one — AGENTS.md "Versioning").
 - CROSS-CUTTING: check that the traceability matrix rows of every affected feature are updated.
 - ISSUE: check that the fix is minimal and introduces no behavior beyond the affected spec IDs; check that the full regression suite has no new failures (**Light-tier ISSUE:** the full regression suite is the pre-merge gate here — run it in S6.4 before opening the PR and record the result in the review report).
 - REFACTOR: check that the full suite is GREEN with zero test changes and no observable behavior changed.

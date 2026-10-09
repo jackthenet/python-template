@@ -112,6 +112,7 @@ The verify phase is decomposed into four atomic steps. Each has a **single objec
 ### All types
 
 - Produce a verification report with pass/fail status per check.
+- Confirm the change's `CHANGELOG.md` entry exists under `## [Unreleased]` (every change type owes one, REFACTOR and DOCS/CHORE included) and record that in the report.
 - Commit verification artifacts: `docs(<name>): add verification report`.
 
 ## MUST-NOT

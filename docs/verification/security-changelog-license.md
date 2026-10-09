@@ -296,3 +296,114 @@ Change `security-changelog-license`, type **DOCS/CHORE**, worktree `../python-te
 10. Handoff `ruff` field: the result on the changed paths; `next`: Phase 5 (S5.1–S5.4 with the §8 check set).
 
 Forbidden in Phase 4: anything in §4, any version bump, any PR, any merge, any `docs/todo/` or `docs/questions/` write.
+
+## 11. Phase 4 — implementation (S4.x, DOCS/CHORE item 12)
+
+Executed §10 exactly. No file outside §2's list was written; nothing in §4 was touched.
+
+### 11.1 Files written
+
+| File | Action | Scope source |
+|---|---|---|
+| `LICENSE` | new — MIT text verbatim from §3.1, `Copyright (c) 2026 jackthenet` (the user's handle, single year, no range) | §3.1 |
+| `SECURITY.md` | new — the five sections of §3.2 | §3.2 |
+| `CHANGELOG.md` | new — Keep a Changelog header, `## [Unreleased]`, 14 release sections | §3.3 |
+| `pyproject.toml` | `license = "MIT"` + `authors = [{ name = "jackthenet" }]` added to `[project]`; nothing else | §3.4 |
+| `AGENTS.md` | Phase 6 changelog item inserted (old 10→11, 11→12), bump-item sentence, `## Versioning` **Changelog:** bullet | §3.5 |
+| `.agents/skills/implement/SKILL.md` | S4.5 done-criteria + Process §7 changelog clause | §3.6 |
+| `.agents/skills/verify/SKILL.md` | `### All types` — confirm the `## [Unreleased]` entry exists | §3.6 |
+| `.agents/skills/review/SKILL.md` | S6.4 done-criteria (move Unreleased → version section in the bump commit) + "flag a change that ships without a changelog entry" | §3.6 |
+| `README.md` | one badge line appended after the `pre-commit` badge | §3.7 |
+| `STRUCTURE.md` | regenerated (never hand-edited) | §3.8, F-1 |
+| `docs/verification/security-changelog-license.md` | this section | — |
+
+`.agents/skills/specify/SKILL.md` was **not** touched (decision: the rule lives at
+commit/verify/review time, not at planning/decomposition time).
+
+### 11.2 `SECURITY.md` — cited job names verified, not copied from the plan
+
+The posture paragraph cites what the workflows actually contain, verified in the worktree:
+the `security` job of `.github/workflows/quality.yml` runs `uv run pip-audit` and
+`uv run bandit -r src/`; the `dependency-review` job of the **same file** runs
+`actions/dependency-review-action@v5` on pull requests only. There is no
+`.github/workflows/security.yml` — an earlier draft of this record named one, and the file
+was checked before committing. Dependabot is weekly for the `uv` and `github-actions`
+ecosystems, with four `uv` groups (`runtime-core`, `lint-and-types`, `test-tooling`,
+`dev-utilities`) per `.github/dependabot.yml`. The anyio CVE fix is cited as PR #48
+(`docs/verification/anyio-cve-fix.md`). No email address is published; the supported-versions
+table reads "latest release (currently `1.1.0`)"; acknowledgement within 14 days, explicitly
+**no fix SLA**.
+
+**F-2 stands as a user action outside this PR:** GitHub private vulnerability reporting is a
+repository setting only the user can enable; nothing in this change enables it, and
+`SECURITY.md` states the dependency ("once it is enabled in the repository's Security tab")
+rather than promising the channel already works.
+
+### 11.3 `CHANGELOG.md` — backfill evidence, per release
+
+No git tags exist (`git tag --list` is empty), so each section is dated from its
+`Bump version:` commit. Every release's entries were derived from
+`git log --oneline <prev-marker>..<marker>` (merge commits read with `--first-parent`, and
+`git log c38e7b2^1..c38e7b2^2`-style second-parent walks to read what a delivery merge
+brought in), never invented. **The `see <range>` pointer was never needed — all 14 ranges
+were traceable.**
+
+| Section | Date | Marker | Range read |
+|---|---|---|---|
+| `1.1.0` | 2026-10-09 | `744eea1` | `137b7e9..744eea1` |
+| `1.0.0` | 2026-10-07 | `137b7e9` | `df81d8b..137b7e9` |
+| `0.6.1` | 2026-10-04 | `df81d8b` | `3c90e6f..df81d8b` |
+| `0.6.0` | 2026-10-02 | `3c90e6f` | `c6fd876..3c90e6f` |
+| `0.5.1` | 2026-10-02 | `c6fd876` | `6d6f120..c6fd876` |
+| `0.5.0` | 2026-09-24 | `6d6f120` | `78475af..6d6f120` |
+| `0.4.3` | 2026-09-21 | `78475af` | `1646862..78475af` |
+| `0.4.2` | 2026-09-21 | `1646862` | `8ae9978..1646862` |
+| `0.4.1` | 2026-09-20 | `8ae9978` | `7290f94..8ae9978` |
+| `0.4.0` | 2026-09-19 | `7290f94` | `8a2f931..7290f94` |
+| `0.3.1` | 2026-09-15 | `8a2f931` | `50344bc..8a2f931` |
+| `0.3.0` | 2026-09-14 | `50344bc` | `31d2a1a..50344bc` |
+| `0.2.0` | 2026-09-12 | `31d2a1a` | `e9fd8c1..31d2a1a` |
+| `0.1.0` | 2026-08-16 | `e9fd8c1` (the commit that set `0.1.0`; `bda69ed` is the empty initial commit) | `git ls-tree -r e9fd8c1` + `git show e9fd8c1:pyproject.toml` |
+
+Backfill rules applied:
+
+- **A PR is credited in exactly one section.** PR #75 (`feature/structure-map`) appears only
+  inside `1.1.0`; it is not repeated under `## [Unreleased]`. `## [Unreleased]` is seeded
+  with PR #76 (`chore/ruff-d-docstrings`, the ruff `D` docstring gate over `src/`).
+- A change whose **implementation** landed in one release but whose **delivery merge** landed
+  in the next is credited once, in the release holding the implementation, with the merge
+  named in the other section (e.g. the anyio fix under `0.4.2`, its merge PR #48 under
+  `0.4.3`; `structlog-logging` under `1.0.0`, its merge PR #74 under `1.1.0`).
+- The `0.1.0` entry was corrected against the tree at `e9fd8c1` (20 tracked files,
+  `src/core/logging/`, no `docs/specs/`, no alembic, no deptry) after an initial draft
+  described the later template shape — the draft was wrong and was replaced, not kept.
+
+### 11.4 Gates run in the change worktree
+
+| Gate | Command | Result |
+|---|---|---|
+| ruff (changed paths) | `uv run ruff check <changed paths>` | **no-op — no `.py` file is touched.** Passing `LICENSE` explicitly makes ruff parse it as Python and report 123 bogus syntax errors; that is an artifact of naming an extensionless file on the command line, not a lint failure. |
+| ruff (repo, recorded for information) | `uv run ruff check .` | `All checks passed!` exit 0 — the directory walk skips `LICENSE`, so the new root files cannot add lint errors. |
+| structure map check | `uv run python scripts/make_map.py --check` | exit **0** (after `uv run python scripts/make_map.py` regenerated it; the pre-regeneration `--check` exited 1, as predicted by F-1) |
+| guard test 1 | `uv run pytest tests/acceptance/test_structure_map.py -q` | **31 passed** — fully GREEN, including `test_ac_021_committed_map_matches_fresh_render`, which fails on `main` (F-6) |
+| guard test 2 | `uv run pytest tests/contract/logging/test_dependency_contract.py -q` | **2 passed** |
+| whitespace / newlines | `git diff --check` exit 0; 0 trailing-whitespace lines in `LICENSE`/`SECURITY.md`/`CHANGELOG.md`; every new file ends with `\n`; index EOL is `i/lf` for every touched tracked file | clean |
+| package metadata still builds | the `uv run …` calls above build the project (`Built python-template @ file:///…`) with `license`/`authors` present | exit 0 — the PEP 639 metadata keys do not break the default setuptools backend |
+
+**F-6 absorbed, not hidden:** the regeneration also picked up the pre-existing `docs/`
+file-count drift on `main` (the committed map said 220 files, 222 are tracked, because
+planning records are committed directly to `main` without regenerating the map). The
+`STRUCTURE.md` diff on this branch therefore contains both the three new root files **and**
+the `docs/` count fix, and it turns `test_ac_021_committed_map_matches_fresh_render` from
+RED on `main` into GREEN here. No test was edited or deleted.
+
+### 11.5 Phase 4 gate statement
+
+- The scoped non-behavior changes are made: 8 scoped files + `STRUCTURE.md` + this record.
+- No version bump, no tag, no release, no PR, no merge (DOCS/CHORE).
+- No `src/`, `tests/`, `scripts/`, `migrations/`, `docs/specs/`, `docs/decisions/`,
+  `docs/tasks/`, `docs/verification/traceability.md`, `mkdocs.yml`, `userdocs/`, `.github/`,
+  `.pre-commit-config.yaml`, `docs/todo/`, `docs/questions/` change; `pyproject.toml` gained
+  exactly the two planned keys.
+- No other worktree or branch was touched.
+- **next:** Phase 5 (S5.1–S5.4) with the §8 check set.
