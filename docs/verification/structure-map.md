@@ -2162,3 +2162,140 @@ at its own assertion or at an explicit `pytest.fail` guard. The single pass is
 0 skips, matching Phase 3's `d945952`), every failing node failing on behavior, non-vacuity confirmed,
 no implementation written. Files changed by this step: this record only.**
 
+## Phase 4 — S4.2 (T-002) Implement + confirm GREEN (2026-10-09)
+
+One file written: **`scripts/make_map.py` (new, 199 lines)** — the only file in
+`allowed_files.source_files`. No test file was touched (the two test files are unchanged: ruff
+reports them already formatted, and `git status` shows only the new module plus this record).
+
+### Module structure (entry points and the T-005 insertion point)
+
+| Unit | Role | Spec IDs |
+|---|---|---|
+| `_parse_args(argv)` | the six REQ-002 options and nothing else; `--max-depth < 1` → `parser.error` → argparse usage line on stderr + `SystemExit(2)` | REQ-002, EDGE-014, AC-002 |
+| `_git_paths(root)` | `git ls-files --cached --others --exclude-standard -z`; `None` when git is unavailable (`OSError`) or `--root` is not a repository (non-zero return) | REQ-003, EDGE-007 |
+| `_walk_paths(root)` | the non-git fallback over `rglob("*.py")`, skipping any path with a directory part in `_IGNORED_DIRS`; no `.gitignore` parsing | REQ-003, EDGE-007 |
+| `_file_set(root)` | the two above joined: filtered to `*.py`, kept only where the path exists on disk, sorted; the ignore-list note printed **once** to stderr on the fallback branch | REQ-003, AC-003, EDGE-007, EDGE-008 |
+| `_read_modules(paths, root)` | one read + one `ast.parse` per file; returns `(modules, report)` | REQ-001, REQ-006 |
+| `_render(modules)` | the REQ-008 chrome + the interim tree listing; the two section **bodies** are T-003/T-004 | REQ-008, AC-008 |
+| `main(argv)` | the exit-code dispatcher; `sys.exit(main())` under `__main__` | REQ-004 |
+| `Module` (frozen dataclass) | `path` (root-relative POSIX), `source`, `tree`, `line_count` — the state T-003/T-004 render from | REQ-001 |
+
+**Dispatcher = the REQ-004 precedence order, in place.** `main` runs: `_parse_args` (**2**, argparse
+exits before anything is read) → `_file_set` + `_read_modules` → `if failures: return 4` →
+`document = _render(...)` → `if args.check: return 0` → write → `return 0`. **T-005 inserts 3 then 1
+at the marked line inside the `args.check` branch** — the comment in the source names it
+(`# T-005 (REQ-005): compare document against the --out bytes here and return 3 then 1`), which is
+exactly between the 4 and the 0, so the order `2 → 4 → 3 → 1 → 0` is preserved by construction.
+`--check` is accepted by the CLI (AC-002 clause 1 lists it) but its comparison is **not** implemented
+here: it renders and returns 0 without writing, so every AC-005 / AC-004 / INV-004 / INV-005 node
+stays RED for T-005.
+
+### One read per file (REQ-001 / AC-001 clause 3)
+
+`_read_modules` is the module's **only** file-content read call site:
+`source = (root / path).read_text(encoding="utf-8")`; the line count (`len(source.splitlines())`)
+and the AST (`ast.parse(source, filename=path)`) are both computed from that same string. Verified
+from the outside by `test_ac_001_stdlib_only_and_single_read`, whose `_read_call_sites` walk over the
+module's own AST reports exactly one site (`read_text`) — the writing `out.write_text(...)` is not a
+read site and the module contains no `open(` / `read_bytes`. Stdlib-only: `argparse`, `ast`,
+`subprocess`, `sys`, `collections.abc`, `dataclasses`, `pathlib` — clause 2 (`_non_stdlib_imports`)
+reports none, and no logging framework appears anywhere (ADR-086).
+
+### File set and fallback (REQ-003, AC-003, EDGE-007, EDGE-008)
+
+`git ls-files --cached --others --exclude-standard -z` run with `cwd=root` (index **plus**
+untracked-but-not-ignored; `-z` keeps names byte-exact, decoded with `surrogateescape`), filtered to
+`*.py`, then `(root / name).is_file()` — which is what drops a tracked file deleted from the working
+tree (EDGE-008) and keeps a new untracked one (AC-003). `None` from `_git_paths` (git missing, or a
+non-repository `--root`) switches to `_walk_paths` + the built-in ignore list
+(`.git`, `.venv`, `__pycache__`, `.mypy_cache`, `.ruff_cache`, `.pytest_cache`, `data`, `dist`,
+`build`, `.idea`), never `.gitignore`, with the note printed once from the fallback branch only.
+
+### Hard-failure path (REQ-006, AC-006, EDGE-003/004/005) — observed directly
+
+The whole set is read before the report is printed, so **every** offender is named, sorted,
+`--root`-relative (POSIX form — the tests match `src/x.py` as a substring), one line each, naming the
+exception type; nothing goes to stdout; no output file is written and a pre-existing one is never
+touched (the write happens only after the 4 return). Direct run over a tree holding two syntax-error
+files, a non-UTF-8 file and a good file (non-git root here, hence the leading note):
+
+```text
+note: --root is not a git repository (or git is unavailable): using the built-in ignore list; .gitignore is not parsed
+src/a_bad.py: SyntaxError
+src/latin.py: UnicodeDecodeError
+src/z_bad.py: SyntaxError
+exit=4
+```
+
+`ls` of that root afterwards: `src` only — no output file. Usage errors, same direct check:
+`--max-depth 0` → the argparse usage block on stderr, `exit=2`, no file; `--feature-version 3.12` →
+`exit=2` (no grammar option exists, REQ-007 / AC-007 clause 2).
+
+### GREEN gate (`green_command`, the 15 T-002 nodes)
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py::test_ac_001_stdlib_only_and_single_read … tests/unit/test_make_map.py::test_edge_005_unopenable_file_is_hard_failure -v
+15 passed in 4.16s        (randomly seed 2971475432)
+uv run pytest <same 15 node ids> -q -p no:randomly
+15 passed in 5.58s
+```
+
+15/15 — the 14 nodes that were RED at S4.1 plus the already-green `test_nfr_003_deptry_clean`. The
+five unit nodes no longer stop at the `test_make_map.py:56` module-absent guard: `_run_generator`
+finds the module, runs it as a subprocess, and every clause assertion in their bodies executes —
+`test_ac_006`'s five clauses (exit 4 · both paths once, sorted, naming `SyntaxError` · empty stdout ·
+pre-existing bytes unchanged · no file at all), `test_ac_007`'s four (PEP 695 source exits 0 ·
+`--feature-version` exits 2 · `--help` exits 0 · no grammar word in `--help`), `test_edge_003/004`
+(exit 4 + the single sorted line naming `SyntaxError` / `UnicodeDecodeError`) and `test_edge_005`
+(the `msvcrt` sharing violation reported once with an OSError-family type). The direct run above is
+the same behavior observed outside pytest, so the pass is not a fixture artifact.
+
+**NFR-001 ran, it was not skipped** (the calibration guard is untouched): the full generate run over
+this repository — 343 files, a 351-line map — completed in **0.46 s** wall including the `uv`/interpreter
+startup, against the 2 s budget. `test_nfr_003_deptry_clean` and AC-001 clause 4 both hold.
+
+### Quality gates
+
+| Gate | Command | Result |
+|---|---|---|
+| mypy (the widened REQ-025 gate) | `uv run mypy scripts/` | `Success: no issues found in 4 source files` (exit 0) |
+| deptry (NFR-003) | `uv run deptry .` | `Success! No dependency issues found.` — 91 files scanned, **no `pyproject.toml` change** |
+| ruff check (changed paths) | `uv run ruff check scripts/make_map.py tests/acceptance/test_structure_map.py tests/unit/test_make_map.py` | `All checks passed!` |
+| ruff format (changed paths) | `uv run ruff format --diff <same paths>` | `3 files already formatted` |
+
+No repo-wide `ruff check .` / `ruff format .` was run (Phase 5 sweep, P-6). The full suite was not run
+(Phase 5 gate).
+
+### NFR-006 line count (record, not a gate)
+
+`scripts/make_map.py` = **199 lines** against the ≈250 target — under it, because T-002 implements
+only the harness; T-003 (tree) and T-004 (symbol inventory) add the bodies that fill the target.
+
+### Later-task nodes still RED (not implemented here)
+
+`uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py -q` →
+**33 failed, 22 passed**. Of the 22: 15 are T-002's, 2 are T-001's already-green AC-025 / NFR-004, and
+**5 pass incidentally** on the interim render — `test_ac_019_double_run_byte_identical_and_hook_clean`,
+`test_nfr_007_output_identical_across_platforms`, and the property nodes `test_inv_001_render_is_deterministic`,
+`test_inv_003_no_absolute_path_or_timestamp`, `test_inv_006_output_is_hook_clean` (verified: those three
+property nodes pass on their own, 3 passed in 10.20s). They witness properties the harness already
+satisfies (sorted-by-path determinism, relative POSIX paths, hook-clean bytes) — no test was weakened
+and no T-003/T-004/T-005 behavior was implemented. Everything that needs the tree body, the Packages
+body or the `--check` comparison is still RED: AC-004, AC-005, AC-009…AC-014, AC-016…AC-024, AC-026,
+AC-027, EDGE-001/002/009/010/011/012/013/015/016, INV-002/INV-004/INV-005, NFR-002, NFR-005.
+
+### Files changed (T-002, within `allowed_files`)
+
+| File | Change |
+|---|---|
+| `scripts/make_map.py` | new, 199 lines — the generator harness |
+| `docs/verification/structure-map.md` | this record |
+
+No change to `pyproject.toml`, `uv.lock`, any workflow or hook, `AGENTS.md`, `.agents/`, `docs/todo/`,
+`docs/questions/`, `docs/verification/traceability.md` or `tasks.json` (status flip is S4.4).
+
+**S4.2 (T-002) gate: PASSED — 15/15 T-002 nodes GREEN (also GREEN with `-p no:randomly`), clause-level
+evidence for the five unit nodes, mypy/deptry/ruff clean on the changed paths, NFR-001 run in 0.46 s,
+NFR-003 clean with no dependency change, later-task nodes untouched and still RED.**
+
