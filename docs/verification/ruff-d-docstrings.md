@@ -364,3 +364,55 @@ usermanagement
 Nothing edited: `git status --porcelain` showed only `M uv.lock` (finding F-9 — rewritten by every `uv run`), restored before this commit and never staged. `src/`, `pyproject.toml`, `mkdocs.yml`, `.pre-commit-config.yaml`, `AGENTS.md` untouched.
 
 **Next (S4.2, group 1):** `eventbus` docstrings — 3 sites in 1 file (`src/backend/eventbus/eventbus.py`: `D105`×2 `__enter__`/`__exit__` per Q-13, `D107`×1), no format half (0 format sites → the pair collapses to one commit).
+
+## Phase 4 — groups 1-3 (S4.2, 2026-10-09)
+
+Three commit-plan groups done, one commit each (groups 1 and 3 have no format half, group 2 has no `D1xx` half — the pair collapses per feature as §Commit plan says). Every `uv run` rewrote `uv.lock` (F-9); it was `git restore`d before each commit and never staged.
+
+| Group | Commit | Sites fixed | `ruff check src/backend/<group>` | `--select D` (google) after | Feature tests (`-q`) |
+|---|---|---|---|---|---|
+| 1 `eventbus` | `1560bfc` `docs(eventbus): add missing docstrings (D105 x2, D107 x1)` | 3 additions | All checks passed! | **0** | `tests/{acceptance,unit,contract,integration,property}/eventbus` → **31 passed** |
+| 2 `logging` | `a7894c8` `docs(logging): fix docstring formatting (D205, D209)` | 2 format | All checks passed! | **0** | `tests/acceptance/logging tests/acceptance/logging_coverage` → **33 passed**; AC-009 `test_traced_class_docstrings_mention_tracing` → **1 passed** (INV-A) |
+| 3 `mail` | `b96ad16` `docs(mail): add missing docstrings (D107 x5, D102 x1)` | 6 additions | All checks passed! | **0** | `tests/{acceptance,unit,contract,integration,property}/mail` → **40 passed** |
+
+### Sites, as edited
+
+```text
+eventbus  src/backend/eventbus/eventbus.py
+  47  D107 EventBus.__init__              added (queue bound; None → live eventbus.max_queue_size
+                                          setting else 1000, AC-017/AC-018; worker starts lazily)
+  168 D105 EventBus.__enter__             added (returns the bus; still no worker thread)   [Q-13]
+  171 D105 EventBus.__exit__              added (drains then stops; exception args ignored ⇒ never suppresses)  [Q-13]
+logging   src/backend/logging/_decorator.py
+  77  D205 + D209 _is_private_method      summary line split from the description; closing """ on its own line
+mail      src/backend/mail/errors.py
+  23  D107 MailConfigurationError.__init__   added
+  37  D107 MailTransportError.__init__       added
+  52  D107 MailTemplateError.__init__        added
+mail      src/backend/mail/models.py
+  52  D102 EventPublisher.publish          added (abstract one-liner → docstring + `...`)
+mail      src/backend/mail/service.py
+  42  D107 MailService.__init__           added (the three optional seams; AC-031 citation kept)
+mail      src/backend/mail/transport.py
+  44  D107 SmtpTransportImpl.__init__     added (no connection at construction; auth only when username non-empty)
+```
+
+Private helpers in all six touched files already carried docstrings (`_handler_name`, `_ensure_worker_unlocked`, `_worker_loop`, `_dispatch`, `_get_transport`, `_publish`) — INV-H needs no additions here. No filler docstring was written (INV-G): each states a fact the signature does not (resolution order, laziness, exception semantics, seam defaults). No `REQ-`/`AC-` citation was removed (INV-I); `AC-017/AC-018`, `AC-031`, `NFR-002` stay cited.
+
+### No-behavior-delta (INV-D)
+
+The throwaway script of §No-behavior-delta proof plan — byte-identical to the embedded block (verified by extracting the fenced block and comparing) — was re-used at `%LOCALAPPDATA%/Temp/s41_ast_digest.py`, never added to `scripts/` (Q-25):
+
+```text
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src
+→ 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0   (run 1)
+→ 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0   (run 2)
+```
+
+**MATCHES** the S4.1/P.4 baseline — the executable code in `src/` is unchanged. `git diff --stat 84b25bd..b96ad16` = 6 files, +41/−3, all inside docstrings (the 3 deletions are the reformatted `_is_private_method` summary line and the `EventPublisher.publish` one-liner). `ruff format src/backend/{eventbus,logging,mail}` → "files left unchanged" in all three groups.
+
+### Q-26 check (docstring vs. code)
+
+No docstring was written that contradicts the code, so no finding under the binding amendment. One observation for the record (not a finding, no action taken): `MailService._publish` does **not** catch a publisher exception, so a failing publisher propagates out of `send_email` — unlike user-management/authentication/file-management, whose `AGENTS.md` entries promise "a publisher failure never breaks the operation". The mail spec (REQ-012, D9) makes no such promise, and the new `EventPublisher.publish` docstring states the actual behavior ("does not catch a publisher exception, so a failing publisher surfaces to the caller"). If isolation is intended for mail, that is a separate ISSUE/FEATURE, not this change.
+
+**Next (S4.2, groups 4-5):** `sessionmanagement` (16 sites: 2 additions + 14 format) → `settings` (16 sites: 14 additions + 2 format, incl. 1 `D301` needing `--unsafe-fixes`).
