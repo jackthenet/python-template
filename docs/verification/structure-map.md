@@ -3640,5 +3640,159 @@ is not staged.
 atomic step: **S4.2 (T-006)** — implement the integration surface (skill file, `structure-map-check`
 hook, the four AGENTS.md places, the one specify/SKILL.md advisory sentence) and confirm GREEN.
 
+## Phase 4 — T-006 GREEN (S4.2)
+
+**Step:** S4.2 (T-006) Implement + confirm GREEN · **Change:** structure-map (CROSS-CUTTING) ·
+**Worktree:** `feature/structure-map` · **Inputs:** S4.1 (T-006) RED at `37f3a1e` (5 failed / 0
+passed) · **Date:** 2026-08-27.
+
+### What was created / changed, per REQ
+
+| REQ / AC | File | Change |
+|---|---|---|
+| REQ-022 / AC-022, REQ-027 / AC-027, EDGE-009 | `.agents/skills/code-structure-map/SKILL.md` (**new**) | `name` + `description` frontmatter; body 25 non-empty lines (< 60, REQ-022). States exactly the four rules: read `STRUCTURE.md` before walking the tree; regenerate when stale (`--check` exit 1 stale / 3 missing, generate with `uv run python scripts/make_map.py`); regenerate **in the same commit** as the `.py` change; on a merge conflict take **either side** and regenerate, never **hand-merge** the generated file. Also names the local hook as a commit guard (not CI, not a workflow gate) and documents the EDGE-009 untracked-file leak. |
+| REQ-023 / AC-023 | `.pre-commit-config.yaml` | Exactly one hook added inside the existing `- repo: local` block, after `deptry`, in deptry's shape: `id: structure-map-check`, `name: structure map is up to date`, `entry: uv run python scripts/make_map.py --check`, `language: system`, `pass_filenames: false`, `stages: [pre-commit]`, `files: \.py$`. Check-only: the entry carries `--check`, no `--out`, and never rewrites the map. |
+| REQ-023 / AC-023 (negative half) | `.github/workflows/` | **Not touched** (read-only witness scope, P-55). `grep -rln make_map .github/workflows` → **0 files** (3 workflow files walked). |
+| REQ-024 item 1 / AC-024 | `AGENTS.md` §Project Structure | Intro sentence + fenced layout block rewritten to the layout the generated map shows: flat `src/backend/<feature>/` (no `model/`, no `services/` anywhere), the only nested `src/` directory `src/backend/filemanagement/assets/`, **no `src/frontend/`**, `src/main.py`, `tests/<category>/<feature>/`, `scripts/`, `migrations/versions/`, `userdocs/`, `.agents/skills/`, `.github/`, `.vscode/`, `docs/`. Closing sentence points at the generated `STRUCTURE.md`. |
+| REQ-024 item 2 + REQ-027 / AC-027 | `AGENTS.md` §Tooling & Execution Environment | One pointer line: what the map is, the generate command, the `--check` command, the **same-commit** regeneration rule and the **take-either-side-and-regenerate** / never **hand-merge** conflict rule, and the `code-structure-map` skill. |
+| REQ-024 item 3 | `AGENTS.md` §Tooling, type-check line | `uv run mypy src/` → `uv run mypy src/` / `uv run mypy scripts/`. The other mypy mentions (`:56`, `:581`, `:587`) untouched. |
+| REQ-024 item 4 | `AGENTS.md` §Skill-to-Phase Mapping | Two rows added: `(ambient)` for `code-structure-map` (optional, before exploring) and `(ambient)` for `python-best-practices`. |
+| REQ-026 / AC-026 | `.agents/skills/specify/SKILL.md` §P.1 | Exactly **one** advisory line: “if `STRUCTURE.md` exists at the repository root, read it before walking the tree — it is the generated map of the repository (skill `code-structure-map`)”. No phase gate, todo status, handoff field or prohibition added anywhere. |
+
+AGENTS.md was edited in **exactly four places** (REQ-024 closed list) and nothing else; no reflow.
+No `.py` file, no `STRUCTURE.md`, no `scripts/`, no `mkdocs.yml`/`userdocs/`, no `docs/specs/`, no
+test file, no `.github/workflows/` file and no `.github/task-runner/tasks.json` was touched.
+
+### GREEN gate — T-006's five witnesses
+
+```
+uv run pytest <the five T-006 node IDs> -v  →  5 passed in 0.62s
+```
+
+| Node | Result |
+|---|---|
+| `test_ac_022_skill_exists_with_four_rules` | PASSED — skill exists, frontmatter + 25 body lines, all four rules, the pinned generate command, the never-hand-merge clause |
+| `test_ac_023_hook_is_check_only_and_no_ci_job` | PASSED — hook in the `repo: local` block with all five pinned fields, entry check-only, 0 workflows mention `make_map` |
+| `test_ac_024_agents_md_layout_matches_the_map` | PASSED — every block path resolves in the generated map's tree; no `model/`, `services/`, `src/frontend/`; Tooling names both commands; both `(ambient)` rows; `tests/architecture` still 0 citations |
+| `test_ac_026_map_hook_is_advisory` | PASSED — no map line outside the three allowed sections / none matches the machinery vocabulary; 0 map mentions in the other phase skills; P.1 carries exactly one advisory sentence |
+| `test_ac_027_freshness_policy_documented_twice` | PASSED — skill and the AGENTS.md pointer line both state the same-commit rule, the either-side rule and never hand-merge |
+
+The DAG's verbatim `green_command` (`uv run pytest tests/acceptance/test_structure_map.py -v`) now
+reports **28 passed, 3 failed** (was 23 passed / 8 failed at S4.1). The three remaining failures are
+**T-007's nodes, not T-006's**: `test_ac_021_committed_map_matches_fresh_render` (no committed
+`STRUCTURE.md` yet — T-007's artifact), `test_nfr_002_map_line_budget` (same cause) and
+`test_nfr_005_complexipy_threshold_holds` (the six over-complex Phase-3 test functions T-007
+restructures; no Python was changed here, so it fails exactly as it did before this step).
+
+### Regression (no test weakened, none edited)
+
+| Set | Result |
+|---|---|
+| T-005's 10 witnesses | **10 passed** in 27.84s |
+| T-004 `green_command` (`tests/unit/test_make_map.py`) | **18 passed** in 3.89s |
+| T-003's 13 witnesses | **13 passed** in 7.83s |
+| T-001 (2) + T-002 (15) witnesses | **17 passed** (2 in 1.17s + 15 in 5.21s) |
+| Full suite (`uv run pytest`) | **813 passed, 3 failed, 1 skipped** — the same 3 T-007 nodes; no new failure |
+
+### Config / wiring gates
+
+- `uv run pre-commit validate-config .pre-commit-config.yaml` → **exit 0** (clean).
+- Hook id `structure-map-check` present at `.pre-commit-config.yaml:33` with `entry` /
+  `language: system` / `pass_filenames: false` / `stages: [pre-commit]` / `files: \.py$`.
+- Wiring proof: `uv run pre-commit run structure-map-check --all-files` → the entry ran and exited
+  **3** (`STRUCTURE.md is missing — run uv run python scripts/make_map.py`), and **no** `STRUCTURE.md`
+  was written — the hook is check-only. Exit 3 is correct until T-007 commits the map; per the DAG's
+  gate interlock, T-006 and T-007 commit no `.py` file after the hook is added (none was).
+- `grep -rln make_map .github/workflows` → 0; `grep -rn 'tests/architecture' AGENTS.md .agents` → 0.
+- **ruff:** `n/a` — no Python path was changed (only markdown and one YAML file).
+- **mkdocs:** `n/a` — `mkdocs.yml` / `userdocs/` untouched; REQ-027's second site is the `AGENTS.md`
+  Tooling pointer line (spec §REQ-027), not the docs site.
+
+### Spec vs test
+
+No conflict. One wording point: REQ-026's “the hook … is **advisory**, never a gate” is witnessed by
+AC-026 as a *workflow-machinery* property (no phase gate / todo status / handoff field / prohibition
+names the map, and exactly one advisory sentence in specify P.1), not as a pre-commit `fail_fast` /
+`verbose` setting — the hook itself is a hard local commit guard, which is what REQ-023 pins. The
+witness was followed; the spec wording was not used to weaken it.
+
+**Working tree after S4.2 (uncommitted, for S4.3/S4.4):** `AGENTS.md`, `.pre-commit-config.yaml`,
+`.agents/skills/specify/SKILL.md`, `.agents/skills/code-structure-map/SKILL.md` (new), plus this
+evidence file. `uv.lock` was rewritten by the `uv run` calls and restored with `git restore uv.lock`;
+it is not staged.
+
+**S4.2 (T-006) gate: GREEN — 5/5 witnesses pass, recorded above.** Next atomic step: **S4.3 (T-006)**
+— refactor (keep GREEN; likely a no-op: markdown/YAML only).
+
+## Phase 4 — T-006 refactor (S4.3)
+
+**Objective:** judge whether the markdown/YAML T-006 wrote needs restructuring, without changing any
+witnessed behavior. T-006 wrote no code, so the expected outcome is a near no-op.
+
+### What was examined
+
+1. **Skill ↔ `AGENTS.md` pointer consistency (REQ-027 — the duplication is required by the spec, so
+   only contradiction was checked).** Both sites state the same generate command
+   (`uv run python scripts/make_map.py`), the same `--check` command, the same-commit regeneration
+   rule, and the take-either-side-and-regenerate / never-hand-merge conflict rule. The skill adds the
+   exit-code meaning (`1` stale, `3` missing) that the pointer line omits — an addition, not a
+   contradiction, and it matches REQ-004 and the S4.2 wiring proof (hook exit 3). **No change.**
+2. **Skill economy (37 lines; body 33 < the 60-line AC-022 ceiling).** It carries the four REQ-022
+   rules, the two commands, the EDGE-009 limitation note, and three generator bullets — none of which
+   restates the map itself (no tree, no module list, no render format copied out of the generator), so
+   there is nothing extra to drift out of sync. The generator bullets are kept deliberately: “`--check`
+   only compares and never rewrites anything” is the fact that makes the hook safe, “the local hook
+   runs `--check` on any staged `.py`” explains a blocked commit, and “the map is not part of the
+   workflow” is REQ-026's guard against an agent treating a stale map as a phase blocker. **No
+   deletion warranted.**
+3. **The pre-commit hook entry.** `files: \.py$` is the narrowest trigger that satisfies AC-023, which
+   pins that literal (`uv run pytest …::test_ac_023…` asserts the whole field set); a narrower pattern
+   would fail the witness. The entry sits inside the existing `repo: local` block (between `deptry` and
+   `mkdocs-build`), not a new block, and repeats the block's `language: system` /
+   `pass_filenames: false` / `stages: [pre-commit]` convention. **Unchanged.**
+4. **`AGENTS.md` minimality.** `git diff --stat AGENTS.md` → 40 changed lines in exactly the four
+   permitted places: the Tooling type-check line (`mypy scripts/` added), the new Tooling Structure Map
+   pointer line, the two `(ambient)` Skill-to-Phase rows, and the Project Structure section (intro
+   sentence + layout block + one closing pointer sentence). The layout-block rewrite is REQ-024's
+   required correction to the real layout, not reflow: no other line in the 1187-line file is touched,
+   no reformat. The new intro claim was checked against the tree — `src/backend/filemanagement/assets/`
+   is the only nested directory under `src/` (`git ls-files src` → no other depth-4 path), and no
+   `model/` / `services/` / `src/frontend/` directory exists.
+
+### What changed (one wording fix, no behavior delta)
+
+`.agents/skills/code-structure-map/SKILL.md`, intro paragraph only: “the directory tree with every
+tracked, non-ignored file, then a per-module section with line counts” → “the directory tree of the
+repository's Python files, then a per-module section with line counts and symbols”. The old wording was
+wrong twice and contradicted the skill's own EDGE-009 note: the generator's file set is
+`git ls-files --cached --others --exclude-standard` filtered to `*.py` (REQ-003), so it is **not**
+“every … file” and it **does** include untracked-but-not-ignored files — which the Known-limitation
+section already says. A doc whose whole purpose is to be trusted without a tree walk must not misstate
+what it contains. No rule, command, exit code or limitation line was touched.
+
+### Gates after the edit
+
+- **T-006's 5 witnesses** (AC-022 / AC-023 / **AC-024 map-consistency** / AC-026 / AC-027) → **5 passed**
+  in 0.83s. AC-024 re-run as required: the `AGENTS.md` layout block still matches the generated map's
+  tree.
+- **Regression:** T-005 → **10 passed** (27.83s); T-004 → **7 DAG nodes passed**, and its file
+  `tests/unit/test_make_map.py` → **18 passed** (the 18-node figure carried in the S4.2 handoff is the
+  whole unit file; the DAG's `tests_to_create` for T-004 lists 7 of them); T-003 → **13 passed**;
+  T-001 + T-002 → **17 passed**.
+- **`uv run pre-commit validate-config .pre-commit-config.yaml` → exit 0** (the config was not touched
+  this step; re-verified anyway).
+- **`uv run python scripts/make_map.py --check` → exit 3**, `STRUCTURE.md is missing — run uv run
+  python scripts/make_map.py` — the expected state: T-007 owns generating and committing the map. No new
+  staleness was introduced (no `.py` file exists or changed).
+- **`git diff --stat`** → the same file set as at S4.2's exit: `.agents/skills/specify/SKILL.md`,
+  `.pre-commit-config.yaml`, `AGENTS.md`, `docs/verification/structure-map.md`, plus the untracked
+  `.agents/skills/code-structure-map/`. No new path touched; no test file, workflow, `scripts/`,
+  `STRUCTURE.md`, `mkdocs.yml`, `userdocs/`, `docs/specs/` or `tasks.json` change.
+- **ruff:** `n/a` — no Python path was written or modified (markdown only).
+- `uv.lock` was rewritten by the `uv run` calls and restored with `git restore uv.lock`; not staged.
+
+**S4.3 (T-006) gate: GREEN maintained — one doc-wording fix, zero behavior change, recorded above.**
+Next atomic step: **S4.4 (T-006)** — commit + set `"status": "VERIFIED"`.
+
 
 
