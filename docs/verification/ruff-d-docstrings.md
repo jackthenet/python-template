@@ -524,3 +524,125 @@ No docstring contradicts the code; each of the following is stated **as the code
 - Citation note (no edit): the pre-existing comments in `_persist_values` cite `REQ-009`/`EDGE-009`, which are **`settings-coverage.md`** IDs (`settings.md` REQ-009 is *resets*). The new docstrings cite the `settings-coverage` IDs where the behavior comes from that spec (REQ-009, REQ-010, REQ-011, EDGE-003, EDGE-009) and `settings.md` IDs where it comes from that one (REQ-022, AC-032); no existing citation was removed (INV-I).
 
 **Next (S4.2, group 6):** `permissions` (45 sites: 33 additions + 12 format, incl. 2 `D301`).
+
+## Phase 4 — group 6 (S4.2, 2026-10-09)
+
+Group 6 (`permissions`, 6 files) done, **two commits** — additions half then format half (Q-11). `uv.lock` was rewritten by every `uv run` (F-9), `git restore`d before each commit, never staged.
+
+| Commit | Sites | `ruff check src/backend/permissions` | `--select D` (google) after | Feature tests (`-q`) |
+|---|---|---|---|---|
+| `9bd979a` `docs(permissions): add missing docstrings (D1xx x33)` | 33 gate sites + 2 private helpers | All checks passed! | 12 (format half pending) | — |
+| `5d5a18f` `docs(permissions): fix docstring formatting (D205, D209, D301)` | 12 format | All checks passed! | **0** | `tests/{acceptance,contract,integration,property,unit}/permissions` → **68 passed in 9.68s** |
+
+### Sites, as edited
+
+```text
+permissions  src/backend/permissions/catalog.py
+  30  D107 PermissionCatalog.__init__      added (both indexes empty, nothing seeded; an unregistered
+                                          catalog denies every check `unknown_permission`, REQ-004/REQ-005)
+permissions  src/backend/permissions/errors.py
+  27  D107 PermissionDeniedError.__init__  added (message built from the context; `user_id=None` worded
+                                          as the system principal, AC-026; never a session token, NFR-002)
+  41  D107 RoleNotFoundError.__init__      added (role name kept as an attribute, AC-026)
+  49  D107 RoleAlreadyExistsError.__init__ added (raised by the repositories on a duplicate insert;
+                                          `create_role` lets it propagate, REQ-006)
+  57  D107 RoleInUseError.__init__         added (deletion guard for a still-assigned role, REQ-007)
+  65  D107 RoleProtectedError.__init__     added (guard on the seeded `admin` / `user` roles, REQ-007)
+  73  D107 UnknownPermissionError.__init__ added (grant/revoke and system-set paths, REQ-008, EDGE-020)
+permissions  src/backend/permissions/events.py
+  56  D102 EventPublisher.publish          added (the bus only enqueues; the feature adds NO isolation —
+                                          a raising publisher propagates; REQ-020/AC-025 cover only the
+                                          `None` case). Stub body `...` kept after the docstring (INV-D).
+permissions  src/backend/permissions/models.py
+  81  D102 SessionLookup.get_by_token_hash added (lookup by the SHA-256 hash, never the raw token, D9;
+                                          revoked/expired still returned as a record → `invalid_session`,
+                                          REQ-017). Stub body `...` kept after the docstring (INV-D).
+permissions  src/backend/permissions/repositories.py   (23 gate sites + 2 private helpers)
+  38  Q-14  _utcnow                       added (single UTC timestamp source; listings order by name, never time)
+  70  Q-14  _SqliteRepository.__init__    added (`create_all` on every construction, idempotent; the migration
+                                          is what seeds the roles + bootstrap system set, REQ-022/AC-027)
+  143 D102 SqliteRoleRepository.add       added (PK violation translated to `RoleAlreadyExistsError`;
+                                          `created_at` stamped here, not by the caller)
+  152 D102 .get                           added (own session per call; missing role = `None`, not an error)
+  156 D102 .list_all                      added (ordered by role name, not creation time)
+  160 D102 .delete                        added (grant rows first; unknown role = silent no-op — the
+                                          service guards it, REQ-007)
+  183 D102 SqliteGrantRepository.grant    added (insert-only ⇒ a repeat grant keeps the original `granted_at`)
+  189 D102 .revoke                        added (absent grant = no-op, REQ-008)
+  196 D102 .get_role_permissions          added (no-grant and unknown-role are indistinguishable here;
+                                          the service checks existence separately)
+  201 D102 .list_all                      added (ordered by `(role, permission)`)
+  209 D102 SqliteSystemPrincipalRepository.set_permissions added (one session = all-or-nothing, REQ-018;
+                                          key validation happens in the service, EDGE-020)
+  219 D102 .get_permissions               added (full table read every call — live, never cached, REQ-018)
+  228 D107 MemoryRoleRepository.__init__  added (isolated instance, no roles)
+  231 D102 .add                           added (dict membership = the in-memory PK analogue, same error)
+  236 D102 .get                           added
+  239 D102 .list_all                      added (sorted by name, matching the SQLite ordering)
+  242 D102 .delete                        added (silent no-op via `pop` default)
+  249 D107 MemoryGrantRepository.__init__ added (keyed by the `(role, permission)` pair)
+  252 D102 .grant                         added (insert-only, idempotent, REQ-008)
+  257 D102 .revoke                        added
+  260 D102 .get_role_permissions          added (linear scan over the keys — fine at fixture sizes)
+  263 D102 .list_all                      added (sorted by the key tuple)
+  270 D107 MemorySystemPrincipalRepository.__init__ added (empty, NOT the bootstrap set — the migration
+                                          seeds that, REQ-022)
+  273 D102 .set_permissions               added (a replacement, not a merge)
+  279 D102 .get_permissions               added (snapshot copy)
+permissions  src/backend/permissions/service.py
+  131 D107 PermissionService.__init__     added (the only wiring point, REQ-023/D19; the optional
+                                          collaborators select modes: `session_lookup=None` + a token →
+                                          `storage_error` (EDGE-007) while a token-less check skips
+                                          validation either way (AC-021); `catalog=None` → every check
+                                          denies `unknown_permission` (REQ-004); `event_bus=None` → no
+                                          events and no `SettingChanged` subscription (AC-025);
+                                          `settings_registry=None` → the shared registry resolved
+                                          lazily (REQ-019); the subscription is taken in the constructor)
+```
+
+Gate-site count: **22 `D102` + 11 `D107` = 33**. The two private helpers (`_utcnow`, `_SqliteRepository.__init__`) are Q-14/INV-H additions found with the one-off `ast` walk, not gate-detected (the google convention ignores private defs). Every other def in the six touched files already had a docstring — the walk now reports none.
+
+Format half — 12 findings over 7 docstrings:
+
+```text
+permissions  src/backend/permissions/catalog.py
+  1   D301 module docstring              `r"""` prefix + `\\.[a-z0-9_-]` → `\.[a-z0-9_-]`, so the docstring
+                                         VALUE is byte-identical (verified: all 7 docstrings of the file
+                                         compare equal to `9bd979a` under `ast.get_docstring`)
+  41  D301 register_feature              idem (the second backslash occurrence)
+permissions  src/backend/permissions/models.py
+  34  D205+D209 RolePermission           summary line split; closing `"""` on its own line (hand-edited)
+permissions  src/backend/permissions/repositories.py
+  57  D205+D209 _make_engine             idem
+  71  D205+D209 _SqliteRepository        idem
+permissions  src/backend/permissions/service.py
+  280 D205+D209 get_role_permissions     idem
+  339 D205+D209 _validate_grant          idem
+```
+
+**F-10 re-confirmed on this group:** `--fix` / `--diff` offered nothing for the 5 `D205` + 5 `D209` (all hand-edited); the 2 `D301` were hand-edited with the `r"""` prefix instead of `--unsafe-fixes`, for the group-5 reason. No `D403` in this group. The two protocol-stub sites (`events.py:56`, `models.py:81`) kept their `...` body after the docstring — the group-4 INV-D lesson applied pre-emptively, and the digest was checked after the additions commit, not only at the end.
+
+### Gates & no-behavior-delta (INV-D)
+
+```text
+uv run ruff check src/backend/permissions                                  → All checks passed!
+uv run ruff check src/backend/permissions --select D (google)              → All checks passed!   (0)
+uv run ruff format src/backend/permissions                                 → 8 files left unchanged
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src                   → 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0
+                                                                             (after the additions commit AND after the format commit)
+uv run pytest tests/{acceptance,contract,integration,property,unit}/permissions -q → 68 passed in 9.68s
+git diff --stat 9bd979a~1..5d5a18f                                         → 6 files, +128/−19, all inside docstrings
+```
+
+Remaining `D` sites in `src/` after group 6: **240** (`D102` 97, `D205` 52, `D209` 45, `D107` 29, `D101` 14, `D403` 3).
+
+### Q-26 check (docstring vs. code)
+
+No docstring contradicts the code; each of the following is stated **as the code is**, with no code change and no reclassification:
+
+- `permissions.events.EventPublisher.publish` — the service calls `publish` with no `try`/`except`, so a raising publisher propagates to the calling permission operation. REQ-020 promises only that `None` means "no events, no errors", so this is not a defect — the same observation already recorded for mail and sessionmanagement.
+- `repositories.SqliteGrantRepository.get_role_permissions` and `MemoryGrantRepository.get_role_permissions` — an empty result cannot distinguish "role exists with no grants" from "role unknown"; the service does the existence check separately (`_role_known`, REQ-008). Documented at the methods.
+- `repositories.MemorySystemPrincipalRepository.__init__` — the in-memory store starts **empty**, it does not carry `BOOTSTRAP_SYSTEM_PERMISSIONS`; only the alembic migration seeds it (REQ-022/AC-027). Stated so a test reader does not assume the bootstrap set.
+- Citation check (INV-I / Q-16): every ID cited by the new docstrings is defined in `docs/specs/user-roles-permissions.md` (REQ-004/005/006/007/008/018/019/020/022/023, AC-021/025/026/027, EDGE-007/020); no pre-existing citation was removed or re-pointed.
+
+**Next (S4.2, group 7):** `authentication` (51 sites).
