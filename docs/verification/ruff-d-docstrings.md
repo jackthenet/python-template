@@ -995,3 +995,126 @@ Remaining `D` sites in `src/` after group 9: **70** (`D102` 33, `D205` 12, `D209
 - Citation check (INV-I / Q-16): every id cited by the added/edited docstrings is defined by **`docs/specs/search.md`** — verified against its tables (REQ-001/002/003/005/007/010/011/013/014/016/017/018/019, AC-024/AC-026, EDGE-001/EDGE-013/EDGE-021, NFR-002). All four touched files belong to the search feature, so there is no second ID space to disambiguate (unlike group 8's `search_source.py`).
 
 **Next (S4.2, group 10):** `usermanagement` (70 sites) — the last feature group before the config commit.
+
+## Phase 4 — group 10 (S4.2, 2026-10-09)
+
+`usermanagement` — 7 of the 10 modules carry `D` sites (`errors.py`, `events.py`, `models.py`, `repository.py`, `role_store.py`, `search_source.py`, `service.py`; `__init__.py`, `feature_actions.py`, `feature_settings.py` are already clean), **70** sites: **47** `D1xx` additions (`D102` 33, `D101` 7, `D107` 7) and **23** format sites (`D205` 12, `D209` 10, `D403` 1) — exactly the §Fresh measurement row. Two commits per Q-11: `1040a76` (additions) → `39e4904` (format).
+
+### Additions half — 47 gate sites + 15 Q-14 private helpers (`1040a76`)
+
+```text
+usermanagement  src/backend/usermanagement/errors.py
+  24/32/39/48 D107 UserAlreadyExistsError / UserNotFoundError / InvalidRoleError / LastAdminError .__init__
+      added (the colliding column only — the value never reaches the message, NFR-002; an explicit
+      message names the identifier the site looked up; `allowed` is the store's whole role set sorted
+      into the message; every guard site raises LastAdminError bare, REQ-008)
+usermanagement  src/backend/usermanagement/events.py
+  27/34/39/44/48/54/58 D101 UserCreated / UserUpdated / UserDeleted / UserPasswordChanged /
+      UserRoleChanged / UserActivated / UserDeactivated
+      added (which mutation publishes it + its AC id + what it never carries: no password, no hash;
+      role events carry whole lists, user-roles-permissions REQ-026/AC-037)
+  65 D102 EventPublisher.publish             added (nothing is caught: a raising publisher propagates
+      after the mutation is committed, EDGE-020; the `...` Protocol stub body is kept)
+  17 Q-14 _utcnow                            added (the single clock source for event timestamps)
+usermanagement  src/backend/usermanagement/models.py
+  39 D102 RoleListType.process_bind_param    added (a role list is written as a JSON array string;
+  44 D102 RoleListType.process_result_value  added  NULL for None; a materialized list is copied,
+                                              not re-decoded)
+  58/68/78 Q-14 _validate_password / _validate_display_name / _validate_profile_picture_url
+      added (the shared rules: 8..128 chars + one letter + one digit, NFR-001; blank/over-long
+      rejected; scheme check only, the URL is never fetched)
+  123/130/135/140/150 Q-14 UserCreate._check_username / _check_password / _check_display_name /
+      _check_roles / _check_profile_picture_url     added (rules + the AC id; role *existence* is the
+      service's role store, not the schema)
+  165 Q-14 NewPassword._check_password       added  182/187 Q-14 UserUpdate._check_display_name /
+      _check_profile_picture_url              added ("leave unchanged", not "clear", REQ-011)
+usermanagement  src/backend/usermanagement/repository.py
+  81/84/87/90/93/96 D102 UserRepository.get_by_id / get_by_username / get_by_email / update /
+      delete / list_all
+      added (the ABC contract a substitute repository must honour: tz-aware UTC, case-sensitive
+      usernames vs. case-insensitive emails, merge semantics, unknown-id delete is a no-op,
+      ordering unspecified; every `...` stub body is kept)
+  112 D107 SqliteUserRepository.__init__     added (parent directory created, EDGE-007; `:memory:`
+      gets a static pool so one instance sees one database, EDGE-008)
+  143/152/156/161/166/175/182/189 D102 add / get_by_id / get_by_username / get_by_email / update /
+      delete / list_all / count_active_by_role
+      added (one session per operation; the constraint maps to the colliding field, EDGE-015; the
+      inactive filter is SQL not Python; the count is what the last-admin guard counts, REQ-008)
+  132/138 Q-14 _map_integrity_error / _session  added (an unrecognized violation reports field=
+      "username"; `expire_on_commit=False` — the inline comment moved into the docstring)
+usermanagement  src/backend/usermanagement/role_store.py
+  36 D107 StaticRoleStore.__init__           added (the iterable is snapshotted to a tuple, so the
+      caller cannot change the accepted set afterwards)
+  39/42 D102 has_role / list_roles           added (exact, case-sensitive; the tuple itself is returned)
+usermanagement  src/backend/usermanagement/service.py
+  78 D107 UserManager.__init__               added (no eager work but the argon2id hasher; a None
+      role store becomes StaticRoleStore(("admin", "user")); a None checker is standalone mode,
+      user-roles-permissions AC-031)
+  100/104/111/118/140/165/174/182/192/196/204/213/226/237 D102 get_user / get_user_by_username /
+      list_users / create_user / update_user / delete_user / change_password / verify_password /
+      set_role / set_roles / add_role / remove_role / activate_user / deactivate_user
+      added (the idempotent no-ops that write and publish nothing; verify_password reads any argon2
+      failure as a wrong password; set_roles / add_role / remove_role are not in the 11-action
+      permission catalog; add_role skips the last-admin guard on purpose)
+  55 Q-14 _utcnow                            added
+```
+
+Gate-site count: **33 `D102` + 7 `D101` + 7 `D107` = 47** — matches §Fresh measurement.
+
+- **INV-H / Q-14.** An `ast` sweep over all ten modules reports **0** undocumented `def`/`class` after the additions — 15 private helpers beyond the 47 gate sites (`_utcnow` ×2, 11 model validators, `_map_integrity_error`, `_session`).
+- **Group-4 INV-D lesson applied.** The `...`-bodied sites are `EventPublisher.publish` (a `Protocol` stub) and the six `UserRepository` ABC stubs — every one keeps its `...` after the docstring, and the digest was checked **after the additions commit**, not only at the end.
+- **In-step fix (self-introduced).** The additions half first produced 4 new `D205`s of my own (three `errors.py` `__init__` docstrings, one `role_store.list_roles`); all were re-folded within the same execution, so `1040a76` introduces no new format site and the format half is exactly the pre-existing 23.
+
+### Format half — 23 sites over 13 docstrings, all hand-edited (`39e4904`)
+
+Line numbers are the pre-group (`46b3fe7`) site list — the same list §Fresh measurement counts.
+
+```text
+repository.py      76  UserRepository.add                D205+D209 → folded to one line (114 chars)
+repository.py     100  UserRepository.count_active_by_role D205+D209 → one line + REQ-026 qualified
+search_source.py  105  _free_text_matches                D205+D209 → one line (115 chars)
+search_source.py  115  _eval_group                       D205+D209 → one line (93 chars)
+search_source.py  125  _eval_condition                   D205+D209 → summary + body
+search_source.py  153  _apply_exact_operator             D403 → "Operators of boolean / datetime fields:
+                                                       exact comparison (search REQ-012)." — the spec's
+                                                       lowercase type names kept (group-9 pattern)
+search_source.py  163  _sort_key                         D205+D209 → one line (102 chars)
+search_source.py  173  _query                            D205+D209 → summary + body
+search_source.py  198  build_user_source                 D205      → summary line + the existing body
+service.py        251  UserManager._get_user_or_raise    D205+D209 → one line (91 chars)
+service.py        259  UserManager._apply_roles          D205+D209 → summary + body
+service.py        285  UserManager._assert_not_last_admin D205      → summary folded to one line
+service.py        309  UserManager._publish              D205+D209 → summary + body
+```
+
+13 docstrings → 12 `D205` + 10 `D209` + 1 `D403` = **23** sites. F-10 re-confirmed for this group: no `--fix` probe was attempted (groups 5-9 established these three codes offer no autofix in ruff 0.16.10). No `D301` in this feature.
+
+- **Q-16 qualification (same commit).** `usermanagement` cites **two** ID spaces, and the numbers collide: `docs/specs/user-management.md` (REQ-001..017, AC-001..038, EDGE-001..021, NFR-001..004) and `docs/specs/user-roles-permissions.md` (REQ-012/024/026, AC-031/034/036/037, EDGE-020/022). Every cross-space citation in a touched docstring is now qualified — `user-roles-permissions REQ-012` (delegation) vs. `REQ-012` (hard delete), `AC-031` (standalone mode) vs. `AC-031` (`UserUpdated` event), `AC-034`/`AC-036` (role assignment / last-admin guard) vs. `AC-034`/`AC-036` (role / deactivate events), `REQ-024`/`REQ-026` (undefined in `user-management.md`); and in `search_source.py` the `search` REQ-005/006/012/020 vs. `user-management` REQ-005/006/012 (password / role-set / delete). The `service.py` module docstring paragraph was re-wrapped to keep the qualified line under 120 chars.
+
+### Gates & no-behavior-delta (INV-D)
+
+```text
+uv run ruff check src/backend/usermanagement --select D (google) → All checks passed!   (0, was 70)
+uv run ruff check src --select D (google)                        → All checks passed!   (0 over ALL of src/ — the config-commit pre-condition)
+uv run ruff check src/backend/usermanagement                     → All checks passed!
+uv run ruff format src/backend/usermanagement                    → 10 files left unchanged
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src         → 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0
+                                                                      (after the additions commit AND after the format commit)
+uv run pytest tests/{acceptance,contract,integration,property,unit}/usermanagement -q → 78 passed in 17.30s
+git diff --stat 46b3fe7..1040a76                                 → 6 files, +218/−10 (additions)
+git diff --stat 46b3fe7..39e4904                                 → 7 files, +267/−52, all inside docstrings
+```
+
+- **Docstring-value check.** An `ast.get_docstring` comparison of every docstring in the seven files against the pre-group commit `46b3fe7` reports **62 `ADDED` + 15 `CHANGED` + 0 `REMOVED`**. 4 `CHANGED` pairs are whitespace-only (the folded one-liners); the other 11 differ only by the summary/body split, the D403 wording, and the Q-16 qualification. No docstring became signature-restating filler (INV-G) — each states a rule, a promise or an id the signature does not carry.
+- **INV-I (citations kept).** The same script reports **0** `REQ`/`AC`/`EDGE`/`NFR` ids lost between `46b3fe7` and `39e4904`.
+- **Secret check (security).** No added docstring contains a password, a token or a hash value; the password-related wording names only the argon2id algorithm and the length/character rules.
+
+Remaining `D` sites in `src/` after group 10: **0** — every feature group is done, so the config commit can flip the gate.
+
+### Q-26 check (docstring vs. code — no code touched, no reclassification)
+
+- **F-16 (guidance under-describes the error surface).** `UserManager.remove_role` raises a bare `ValueError` when the removal would empty the role list, and `_validate_roles` raises `ValueError` for an empty list — neither is a `UserManagerError`. `AGENTS.md` ("Exceptions are the `UserManagerError` hierarchy") presents that hierarchy as the whole surface. The code matches its spec (user-roles-permissions REQ-026 requires a non-empty role list); the guidance is incomplete. Stated as-is in the new `remove_role` and `_validate_roles` docstrings; no code touched.
+- **F-17 (pre-existing spec/guidance drift, untouched).** `docs/specs/user-management.md` REQ-006 and AC-008/AC-009 still describe a single role validated against a role set whose default is `{"admin", "member"}`; the code implements the user-roles-permissions REQ-026 amendment (injected `RoleStore`, default `StaticRoleStore(("admin", "user"))`, `roles` lists). `AGENTS.md`'s user-management section is stale the same way ("an optional `roles` iterable (default `("admin", "member")`)"). Docstrings state the code as it is; the amendment is a separate change (spec-drift work, not this chore).
+- **Not a finding.** `set_roles` / `add_role` / `remove_role` carry no `@requires_permission` and are absent from the 11-action `usermanagement` catalog — that matches user-roles-permissions REQ-026 (the assignment primitives) and REQ-012 (the permission service checks its own action, then delegates). Documented as such in the three docstrings so a reader does not mistake the gap for a missing check.
+
+**Next (S4.2, group 11):** the config commit — `pyproject.toml` (`select += "D"`, `lint.pydocstyle.convention = "google"`, the four `per-file-ignores` trees, the widened `fixable`), `mkdocs.yml`, `.pre-commit-config.yaml` rev, `AGENTS.md:743`. `src/` is `--select D` clean, so the gate flips green.
