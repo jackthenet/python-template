@@ -57,9 +57,11 @@ class MalformedQueryError(SearchError):
 
 
 class SourceQueryFailedError(SearchError):
-    """A source raising (or timing out) during a single-source query (REQ-010):
-    the source, the reason (``query_failed``/``timeout``), and the error kind
-    (no sensitive data)."""
+    """A source raising (or timing out) during a single-source query (REQ-010).
+
+    Carries the source, the reason (``query_failed``/``timeout``), and the error
+    kind (no sensitive data).
+    """
 
     def __init__(self, source: str, reason: str, error: str) -> None:
         """Raise for a source that failed in a single-source query (AC-026).

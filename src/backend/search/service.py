@@ -71,16 +71,22 @@ def _normalize(value: str) -> str:
 
 
 def _read_setting(registry: SettingsRegistry | None, key: str, fallback: Any) -> Any:
-    """Read ``key`` live from ``registry``; return ``fallback`` when the
-    registry does not exist or the key is unregistered (REQ-013)."""
+    """Read ``key`` live from ``registry`` (REQ-013).
+
+    Returns ``fallback`` when the registry does not exist or the key is
+    unregistered.
+    """
     if registry is None or not registry.has(key):
         return fallback
     return registry.get_value(key)
 
 
 def _validate_source_declaration(source: SearchSource) -> None:
-    """Validate a source declaration (EDGE-021): the name/field-name patterns
-    and duplicate field names. Raises ``ValueError`` (argument level)."""
+    """Validate a source declaration (EDGE-021).
+
+    Checks the name/field-name patterns and duplicate field names. Raises
+    ``ValueError`` (argument level).
+    """
     if not re.match(SOURCE_NAME_PATTERN, source.name):
         raise ValueError(f"invalid source name: {source.name!r}")
     seen: set[str] = set()
@@ -93,8 +99,10 @@ def _validate_source_declaration(source: SearchSource) -> None:
 
 
 def _is_identical_source(existing: SearchSource, source: SearchSource) -> bool:
-    """Whether two sources are identical (same name + equal fields + same
-    query function) (REQ-003, D2)."""
+    """Whether two sources are identical (REQ-003, D2).
+
+    Same name + equal fields + the same query function (compared by identity).
+    """
     if existing.name != source.name:
         return False
     if existing.query is not source.query:
@@ -152,8 +160,11 @@ def _find_field(source: SearchSource, name: str) -> SourceField | None:
 
 
 def _value_matches_type(value: Any, ftype: FieldType) -> bool:
-    """Whether ``value`` matches the declared field type (D3): string: str;
-    number: int/float (not bool); boolean: bool; datetime: datetime."""
+    """Whether ``value`` matches the declared field type (D3).
+
+    string: str; number: int/float (not bool); boolean: bool; datetime:
+    datetime.
+    """
     if ftype is FieldType.STRING:
         return isinstance(value, str)
     if ftype is FieldType.NUMBER:
@@ -166,8 +177,11 @@ def _value_matches_type(value: Any, ftype: FieldType) -> bool:
 
 
 def _validate_pagination(query: SearchQuery) -> None:
-    """Validate the query's pagination (REQ-010): ``limit < 1`` or
-    ``offset < 0`` raises ``MalformedQueryError`` (identifying the reason)."""
+    """Validate the query's pagination (REQ-010).
+
+    ``limit < 1`` or ``offset < 0`` raises ``MalformedQueryError`` (identifying
+    the reason).
+    """
     if query.limit is not None and query.limit < 1:
         raise MalformedQueryError(reason="invalid_limit")
     if query.offset < 0:
@@ -175,10 +189,12 @@ def _validate_pagination(query: SearchQuery) -> None:
 
 
 def _validate_query_against_source(source: SearchSource, query: SearchQuery) -> None:
-    """Validate the query against a source's declared schema (REQ-010, AC-024):
-    filters restricted to declared-filterable fields with per-type operator
-    restrictions and value types (D4, D3); a sort on a declared-sortable field
-    (REQ-008)."""
+    """Validate the query against a source's declared schema (REQ-010, AC-024).
+
+    Filters are restricted to declared-filterable fields with per-type operator
+    restrictions and value types (D4, D3); a sort must be on a declared-sortable
+    field (REQ-008).
+    """
     if query.filters is not None:
         _validate_filter_group(source, query.filters)
     if query.sort is not None:
@@ -197,9 +213,12 @@ def _validate_filter_group(source: SearchSource, group: FilterGroup) -> None:
 
 
 def _validate_filter_condition(source: SearchSource, cond: FilterCondition) -> None:
-    """Validate a single filter condition (REQ-010, D4, D3): the field is
-    declared filterable, the operator is valid for the field's type, and the
-    value matches the field's type (``is_null`` requires no value)."""
+    """Validate a single filter condition (REQ-010, D4, D3).
+
+    The field is declared filterable, the operator is valid for the field's
+    type, and the value matches the field's type (``is_null`` requires no
+    value).
+    """
     field = _find_field(source, cond.field)
     if field is None or not field.filterable:
         raise MalformedQueryError(reason="non_filterable_field", field=cond.field, source=source.name)
@@ -222,8 +241,11 @@ def _validate_filter_condition(source: SearchSource, cond: FilterCondition) -> N
 
 
 def _free_text_matches(item: SourceItem, fields: list[SourceField], free_text: str) -> bool:
-    """A non-empty free text matches if any declared-searchable string field
-    contains the normalized text (REQ-005, D13)."""
+    """Match a non-empty free text against an item (REQ-005, D13).
+
+    It matches if any declared-searchable string field contains the normalized
+    text.
+    """
     for f in fields:
         if not f.searchable:
             continue
@@ -236,8 +258,7 @@ def _free_text_matches(item: SourceItem, fields: list[SourceField], free_text: s
 
 
 def _eval_group(group: FilterGroup, fields: dict[str, Any], declared: dict[str, SourceField]) -> bool:
-    """Evaluate a (nestable) AND/OR filter group over an item's field values
-    (REQ-006, D4)."""
+    """Evaluate a (nestable) AND/OR filter group over an item's field values (REQ-006, D4)."""
     results = [
         _eval_group(cond, fields, declared)
         if isinstance(cond, FilterGroup)
@@ -248,8 +269,7 @@ def _eval_group(group: FilterGroup, fields: dict[str, Any], declared: dict[str, 
 
 
 def _eval_condition(cond: FilterCondition, fields: dict[str, Any], declared: dict[str, SourceField]) -> bool:
-    """Evaluate a single filter condition over an item's field values
-    (REQ-006, D4)."""
+    """Evaluate a single filter condition over an item's field values (REQ-006, D4)."""
     field = declared.get(cond.field)
     if field is None:
         return False  # the field is not declared (validation is the service's)
@@ -280,7 +300,7 @@ def _apply_string_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
 
 
 def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
-    """number / boolean / datetime operators: exact (REQ-012)."""
+    """Operators of number / boolean / datetime fields: exact comparison (REQ-012)."""
     if op is FilterOperator.EQUALS:
         return value == fv
     if op is FilterOperator.IN_LIST:
@@ -290,9 +310,11 @@ def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
 
 
 def _apply_operator(ftype: FieldType, value: Any, op: FilterOperator, fv: Any) -> bool:
-    """Apply a filter operator to a field value with the per-type semantics
-    (D4): string matching is case-insensitive (normalized); number/boolean/
-    datetime are exact (REQ-012)."""
+    """Apply a filter operator to a field value with the per-type semantics (D4).
+
+    String matching is case-insensitive (normalized); number/boolean/datetime
+    are exact (REQ-012).
+    """
     if op is FilterOperator.IS_NULL:
         return value is None
     if value is None or fv is None:
@@ -303,8 +325,10 @@ def _apply_operator(ftype: FieldType, value: Any, op: FilterOperator, fv: Any) -
 
 
 def _sort_key(value: Any) -> tuple:
-    """A sort key: ``None`` last, strings by their normalized value, others
-    exact (D8; deterministic)."""
+    """A sort key, ordered deterministically (D8).
+
+    ``None`` sorts last, strings by their normalized value, others exact.
+    """
     if value is None:
         return (1, "")
     if isinstance(value, str):
@@ -317,9 +341,10 @@ def _sort_key(value: Any) -> tuple:
 
 @logged_class(slow_threshold_ms=100, include_args=False)
 class SearchService:
-    """The search service: the thread-safe in-memory source registry (REQ-001,
-    REQ-003, REQ-018) and the query entry point (REQ-004, REQ-005, REQ-009,
-    REQ-010, REQ-012).
+    """The search service: the thread-safe source registry and the query entry point.
+
+    Registry: REQ-001, REQ-003, REQ-018. Query entry point: REQ-004, REQ-005,
+    REQ-009, REQ-010, REQ-012.
 
     The constructor takes an optional ``EventPublisher`` (a ``None`` event bus
     means no events and no error, REQ-014), an optional settings registry (a
@@ -375,8 +400,7 @@ class SearchService:
         self._publish(SourceRegistered(source=source.name))
 
     def unregister_source(self, name: str) -> None:
-        """Remove a source (REQ-003). An unknown name is a no-op (no event,
-        EDGE-013)."""
+        """Remove a source (REQ-003); an unknown name is a no-op, no event (EDGE-013)."""
         with self._lock:
             if name not in self._sources:
                 return
@@ -446,9 +470,12 @@ class SearchService:
         return SearchResult(items=items, total=total, offset=query.offset, limit=limit, failures=failures)
 
     def _select_sources(self, feature: str | None) -> list[SearchSource]:
-        """The sources the query targets: the single ``feature`` source (an unknown
-        feature raises ``UnknownSourceError``, REQ-010/EDGE-001), or every
-        registered source when ``feature`` is omitted (REQ-004/D6)."""
+        """The sources the query targets (REQ-004/D6).
+
+        The single ``feature`` source (an unknown feature raises
+        ``UnknownSourceError``, REQ-010/EDGE-001), or every registered source
+        when ``feature`` is omitted.
+        """
         with self._lock:
             if feature is not None:
                 source = self._sources.get(feature)
@@ -472,9 +499,11 @@ class SearchService:
         return _read_setting(self._registry(), key, fallback)
 
     def _effective_limit(self, limit: int | None) -> int:
-        """The effective limit: the live ``search.default_page_size`` when
-        ``limit`` is None, clamped to the live ``search.max_page_size``
-        (REQ-007/D5; read live, REQ-013)."""
+        """The effective page size for a query (REQ-007/D5; read live, REQ-013).
+
+        The live ``search.default_page_size`` when ``limit`` is None, clamped to
+        the live ``search.max_page_size``.
+        """
         if limit is None:
             limit = int(self._read("search.default_page_size", _DEFAULT_PAGE_SIZE))
         return min(limit, int(self._read("search.max_page_size", _MAX_PAGE_SIZE)))
@@ -482,14 +511,14 @@ class SearchService:
     def _query_source(
         self, source: SearchSource, ctx: SourceQueryContext
     ) -> tuple[SourcePage | None, str | None, str | None]:
-        """Query one source in a worker thread with the live
-        ``search.source_timeout`` (D12, REQ-019, AC-033, EDGE-011).
+        """Query one source in a worker thread under the live ``search.source_timeout``.
 
-        Returns ``(page, reason, error_kind)``: on success ``page`` is set and
-        the rest are None; on failure ``page`` is None and ``reason`` is
-        ``query_failed``/``timeout`` with the error kind (the exception type
-        name — no sensitive data, NFR-002). The timed-out thread is abandoned
-        (bounded by the pool; its result is discarded, NFR-005).
+        Returns ``(page, reason, error_kind)`` (D12, REQ-019, AC-033, EDGE-011):
+        on success ``page`` is set and the rest are None; on failure ``page`` is
+        None and ``reason`` is ``query_failed``/``timeout`` with the error kind
+        (the exception type name — no sensitive data, NFR-002). The timed-out
+        thread is abandoned (bounded by the pool; its result is discarded,
+        NFR-005).
         """
         timeout_ms = int(self._read("search.source_timeout", _SOURCE_TIMEOUT_MS))
         future = self._pool.submit(source.query, ctx)
@@ -502,8 +531,10 @@ class SearchService:
         return page, None, None
 
     def _publish(self, event: object) -> None:
-        """Publish ``event`` to the injected publisher (a ``None`` publisher
-        means no events and no error, REQ-014)."""
+        """Publish ``event`` to the injected publisher (REQ-014).
+
+        A ``None`` publisher means no events and no error.
+        """
         if self._event_bus is not None:
             self._event_bus.publish(event)
 
@@ -570,8 +601,11 @@ def get_search_service(
     settings_registry: SettingsRegistry | None = None,
     permission_service: PermissionChecker | None = None,
 ) -> SearchService:
-    """The module singleton ``SearchService`` (REQ-017): the first call
-    creates it; later calls return it."""
+    """The module singleton ``SearchService`` (REQ-017).
+
+    The first call creates it with the given collaborators; every later call
+    returns that instance and ignores its arguments.
+    """
     with _singleton_lock:
         if _singleton[0] is None:
             _singleton[0] = SearchService(
