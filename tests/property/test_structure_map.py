@@ -176,6 +176,24 @@ def _module_paths(map_text: str) -> set[str]:
     return paths
 
 
+def _inv002_path_claim(path: str, max_depth: int, entries: set[str], modules: set[str]) -> str | None:
+    """The INV-002 claim `path` violates in a tree rendered at `--max-depth`, or None if it holds."""
+    top, path_depth = path.split("/", 1)[0], _depth(path)
+    if top not in _CODE_DIRS:
+        if path in entries or path in modules:
+            return f"{path} is outside every code dir but appears in the tree or Packages scope"
+        return None
+    if path_depth <= max_depth:
+        if path not in entries:
+            return (
+                f"{path} (depth {path_depth}) is missing from the tree at --max-depth {max_depth}: {sorted(entries)!r}"
+            )
+        return None
+    if path in entries:
+        return f"{path} (depth {path_depth}) is rendered although --max-depth is {max_depth}"
+    return None
+
+
 def test_inv_002_no_module_hidden_by_pruning() -> None:
     """INV-002 (REQ-009/REQ-010/REQ-011): for any generated tree and any `--max-depth >= 1`, every
     `.py` under a code dir at depth <= `--max-depth` appears in the Directory tree, every in-scope
@@ -199,22 +217,10 @@ def test_inv_002_no_module_hidden_by_pruning() -> None:
                 f"--max-depth {max_depth}: Packages section {sorted(modules)} is not the REQ-011 scope {sorted(in_scope)}"
             )
 
-            for path in tree:
-                top, path_depth = path.split("/", 1)[0], _depth(path)
-                if top in _CODE_DIRS:
-                    if path_depth <= max_depth:
-                        assert path in entries, (
-                            f"{path} (depth {path_depth}) is missing from the tree at --max-depth {max_depth}: "
-                            f"{sorted(entries)!r}"
-                        )
-                    else:
-                        assert path not in entries, (
-                            f"{path} (depth {path_depth}) is rendered although --max-depth is {max_depth}"
-                        )
-                else:
-                    assert path not in entries and path not in modules, (
-                        f"{path} is outside every code dir but appears in the tree or Packages scope"
-                    )
+            violations = [
+                claim for claim in (_inv002_path_claim(p, max_depth, entries, modules) for p in tree) if claim
+            ]
+            assert not violations, f"--max-depth {max_depth}: {'; '.join(violations)}"
 
             counts = [line for line in _count_lines(map_text) if line.startswith(".github/")]
             assert len(counts) == 1 and f"{len(_OUTSIDE_CODE_DIRS)} files" in counts[0], (

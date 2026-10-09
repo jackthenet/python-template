@@ -645,15 +645,9 @@ def _code_dir_entry_failures(entries: list[tuple[int, str]]) -> list[str]:
     return failures
 
 
-def test_ac_009_tree_code_dirs_full_other_dirs_counted(tmp_path: Path) -> None:
-    """AC-009 (REQ-009): the tree lists the top-level files by name, renders src/, tests/, scripts/
-    and migrations/ entry by entry (one line per directory and per entry, sorted, indented two
-    spaces per level), and renders every other top-level directory as one count line carrying its
-    role label."""
-    map_text = _tree_map(tmp_path)
-    entries = _tree_entries(map_text)
+def _ac009_top_file_failures(entries: list[tuple[int, str]]) -> list[str]:
+    """AC-009 clause 1: the top-level files are listed by name, sorted, before the code dirs."""
     failures: list[str] = []
-
     top_files = [text for _, text in entries if text in {"README.md", "pyproject.toml"}]
     if top_files != ["README.md", "pyproject.toml"]:
         failures.append(f"clause 1: the top-level files are not listed by name, sorted: {top_files!r}")
@@ -661,27 +655,53 @@ def test_ac_009_tree_code_dirs_full_other_dirs_counted(tmp_path: Path) -> None:
     dir_rows = [i for i, (_, text) in enumerate(entries) if text.split("/")[0] in _CODE_DIRS]
     if file_rows and dir_rows and max(file_rows) > min(dir_rows):
         failures.append("clause 1: the top-level files must be listed before the code dirs (REQ-009 order)")
+    return failures
 
-    failures += _code_dir_entry_failures(entries)
 
+def _ac009_src_sorting_failures(entries: list[tuple[int, str]]) -> list[str]:
+    """AC-009 clause 2: the entries rendered under src/ are sorted, dirs and files separately."""
     under_src = [text for indent, text in entries if indent == _INDENT_WIDTH and text.startswith("src/")]
     src_dirs = [text for text in under_src if text.endswith("/")]
     src_files = [text for text in under_src if not text.endswith("/")]
     if src_dirs != sorted(src_dirs) or src_files != sorted(src_files):
-        failures.append(f"clause 2: the entries under src/ are not sorted (dirs {src_dirs!r}, files {src_files!r})")
+        return [f"clause 2: the entries under src/ are not sorted (dirs {src_dirs!r}, files {src_files!r})"]
+    return []
 
+
+def _ac009_dir_count_failures(entries: list[tuple[int, str]], directory: str, count: int, label: str) -> list[str]:
+    """AC-009 clause 3: `directory` is one count line counting `count` files and carrying the `label` role label."""
+    lines = [text for indent, text in entries if indent == 0 and text.startswith(directory)]
+    if len(lines) != 1:
+        return [f"clause 3: {len(lines)} tree lines for {directory}, expected one count line: {lines!r}"]
+    failures: list[str] = []
+    if f"{count} files" not in lines[0]:
+        failures.append(f"clause 3: {lines[0]!r} does not count all {count} files under {directory}")
+    if label not in lines[0]:
+        failures.append(f"clause 3: {lines[0]!r} carries no {label!r} role label")
+    return failures
+
+
+def _ac009_count_line_failures(entries: list[tuple[int, str]]) -> list[str]:
+    """AC-009 clause 3: every other top-level dir is one count line with its role label, never entry by entry."""
+    failures: list[str] = []
     for directory, count, label in _COUNT_LINES:
-        lines = [text for indent, text in entries if indent == 0 and text.startswith(directory)]
-        if len(lines) != 1:
-            failures.append(f"clause 3: {len(lines)} tree lines for {directory}, expected one count line: {lines!r}")
-            continue
-        if f"{count} files" not in lines[0]:
-            failures.append(f"clause 3: {lines[0]!r} does not count all {count} files under {directory}")
-        if label not in lines[0]:
-            failures.append(f"clause 3: {lines[0]!r} carries no {label!r} role label")
+        failures += _ac009_dir_count_failures(entries, directory, count, label)
     for path in (".github/hooks/post_edit.py", "docs/sub/c.md", "notes/deep/three.md"):
         if any(text.startswith(path) for _, text in entries):
             failures.append(f"clause 3: {path} is rendered entry by entry in a count-only directory")
+    return failures
+
+
+def test_ac_009_tree_code_dirs_full_other_dirs_counted(tmp_path: Path) -> None:
+    """AC-009 (REQ-009): the tree lists the top-level files by name, renders src/, tests/, scripts/
+    and migrations/ entry by entry (one line per directory and per entry, sorted, indented two
+    spaces per level), and renders every other top-level directory as one count line carrying its
+    role label."""
+    entries = _tree_entries(_tree_map(tmp_path))
+    failures = _ac009_top_file_failures(entries)
+    failures += _code_dir_entry_failures(entries)
+    failures += _ac009_src_sorting_failures(entries)
+    failures += _ac009_count_line_failures(entries)
     assert not failures, "\n".join(failures)
 
 
@@ -733,6 +753,38 @@ def test_ac_011_packages_scope(tmp_path: Path) -> None:
     assert not failures, "\n".join(failures)
 
 
+def _ac012_exports_failures(body: list[str]) -> list[str]:
+    """AC-012 clause 2: exactly one `exports:` line, listing the sorted `__all__` names and no import."""
+    exports = [line for line in body if "exports:" in line]
+    if len(exports) != 1:
+        return [f"clause 2: {len(exports)} exports: lines in the group: {body!r}"]
+    line = exports[0]
+    failures: list[str] = []
+    if "Alpha" not in line or "Zeta" not in line:
+        failures.append(f"clause 2: {line!r} does not list the __all__ names")
+    elif line.index("Alpha") > line.index("Zeta"):
+        failures.append(f"clause 2: {line!r} is not sorted")
+    for imported in ("Registry", "Model"):
+        if imported in line:
+            failures.append(f"clause 2: {line!r} lists the imported name {imported}, not __all__")
+    return failures
+
+
+def _ac012_header_path_failures(headers: list[str]) -> list[str]:
+    """AC-012 clause 3: one group header per containing directory, each naming exactly one directory path."""
+    header_paths = [match.group(1) for line in headers if (match := re.search(r"(\S+/)$", line))]
+    failures: list[str] = []
+    if len(header_paths) != len(headers):
+        failures.append(f"clause 3: a group header names no directory path: {headers!r}")
+    if len(header_paths) != len(set(header_paths)):
+        failures.append(f"clause 3: duplicate group headers: {header_paths!r}")
+    if set(header_paths) != _GROUP_DIRS:
+        failures.append(
+            f"clause 3: {sorted(set(header_paths))!r} are not one header per containing directory {_GROUP_DIRS!r}"
+        )
+    return failures
+
+
 def test_ac_012_package_header_and_exports(tmp_path: Path) -> None:
     """AC-012 (REQ-012): the backend.settings package has exactly one group header showing
     `backend.settings` and src/backend/settings/, one exports: line listing its __init__.py __all__
@@ -749,27 +801,8 @@ def test_ac_012_package_header_and_exports(tmp_path: Path) -> None:
     if "`backend.settings`" not in header or "src/backend/settings/" not in header:
         failures.append(f"clause 1: {header!r} shows neither the import name nor the directory path")
 
-    body = _group_body(map_text, "src/backend/settings/")
-    exports = [line for line in body if "exports:" in line]
-    if len(exports) != 1:
-        failures.append(f"clause 2: {len(exports)} exports: lines in the group: {body!r}")
-    else:
-        if "Alpha" not in exports[0] or "Zeta" not in exports[0]:
-            failures.append(f"clause 2: {exports[0]!r} does not list the __all__ names")
-        elif exports[0].index("Alpha") > exports[0].index("Zeta"):
-            failures.append(f"clause 2: {exports[0]!r} is not sorted")
-        for imported in ("Registry", "Model"):
-            if imported in exports[0]:
-                failures.append(f"clause 2: {exports[0]!r} lists the imported name {imported}, not __all__")
-    header_paths = [match.group(1) for line in headers if (match := re.search(r"(\S+/)$", line))]
-    if len(header_paths) != len(headers):
-        failures.append(f"clause 3: a group header names no directory path: {headers!r}")
-    if len(header_paths) != len(set(header_paths)):
-        failures.append(f"clause 3: duplicate group headers: {header_paths!r}")
-    if set(header_paths) != _GROUP_DIRS:
-        failures.append(
-            f"clause 3: {sorted(set(header_paths))!r} are not one header per containing directory {_GROUP_DIRS!r}"
-        )
+    failures += _ac012_exports_failures(_group_body(map_text, "src/backend/settings/"))
+    failures += _ac012_header_path_failures(headers)
     assert not failures, "\n".join(failures)
 
 
@@ -922,13 +955,23 @@ def _fenced_block(lines: Sequence[str]) -> str:
     pytest.fail("the Project Structure section contains no fenced layout block")
 
 
-def _block_dir_paths(block: str) -> set[str]:
-    """The directory paths a layout block shows, in either form the block may use.
+def _explicit_path_tokens(line: str) -> set[str]:
+    """The explicit path tokens one layout line shows (`src/backend/<feature>/` -> `src/backend/`)."""
+    return {token for token in re.findall(r"[\w.][\w./-]*/", line.split("<", 1)[0]) if "/" in token.rstrip("/")}
 
-    Explicit path tokens (`src/backend/<feature>/`) are read as written; tree-drawn nesting is
-    rebuilt into a full path from the branch-marker column. A `<placeholder>` segment stands for any
-    name, so the path is recorded only up to it (REQ-024 item 1).
-    """
+
+def _stacked_path(stack: list[tuple[int, str]]) -> str:
+    """The path the branch-marker columns of the current stack draw, cut at a `<placeholder>` segment."""
+    segments: list[str] = []
+    for _, segment in stack:
+        if segment.startswith("<"):
+            break
+        segments.append(segment)
+    return "/".join(segments) + "/" if segments else ""
+
+
+def _tree_drawn_paths(block: str) -> set[str]:
+    """The paths the tree-drawn nesting of a layout block draws, rebuilt from the branch-marker column."""
     paths: set[str] = set()
     stack: list[tuple[int, str]] = []
     for line in block.splitlines():
@@ -940,16 +983,21 @@ def _block_dir_paths(block: str) -> set[str]:
         while stack and stack[-1][0] >= column:
             stack.pop()
         stack.append((column, name.group(0).rstrip("/")))
-        segments: list[str] = []
-        for _, segment in stack:
-            if segment.startswith("<"):
-                break
-            segments.append(segment)
-        if segments:
-            paths.add("/".join(segments) + "/")
-        for token in re.findall(r"[\w.][\w./-]*/", line.split("<", 1)[0]):
-            if "/" in token.rstrip("/"):  # an explicit path token, not a bare tree-drawn name
-                paths.add(token)
+        if drawn := _stacked_path(stack):
+            paths.add(drawn)
+    return paths
+
+
+def _block_dir_paths(block: str) -> set[str]:
+    """The directory paths a layout block shows, in either form the block may use.
+
+    Explicit path tokens (`src/backend/<feature>/`) are read as written; tree-drawn nesting is
+    rebuilt into a full path from the branch-marker column. A `<placeholder>` segment stands for any
+    name, so the path is recorded only up to it (REQ-024 item 1).
+    """
+    paths = _tree_drawn_paths(block)
+    for line in block.splitlines():
+        paths |= _explicit_path_tokens(line)
     return paths
 
 
@@ -1277,8 +1325,8 @@ def test_ac_024_agents_md_layout_matches_the_map(tmp_path: Path) -> None:
     assert not cited, f"REQ-024: `tests/architecture` is cited again in {cited}"
 
 
-def test_ac_026_map_hook_is_advisory() -> None:
-    """AC-026 (REQ-026): no gate, todo status, handoff field or prohibition depends on the map."""
+def _agents_md_map_machinery_lines() -> list[str]:
+    """The AGENTS.md lines that mention the map outside the allowed sections, or state map machinery."""
     heading = ""
     wired: list[str] = []
     for line in _text_of(_AGENTS_MD).splitlines():
@@ -1286,7 +1334,11 @@ def test_ac_026_map_hook_is_advisory() -> None:
             heading = line.lstrip("#").strip()
         if _MAP_MENTION.search(line) and (heading not in _ALLOWED_MAP_SECTIONS or _MACHINERY.search(line)):
             wired.append(f"[{heading}] {line.strip()}")
-    assert not wired, f"REQ-026: the map is wired into the workflow machinery: {wired}"
+    return wired
+
+
+def _assert_phase_skills_not_wired() -> None:
+    """No phase skill (other than the map skill's own) makes the map part of a phase."""
     skills = {p: _text_of(p) for p in sorted(_SKILLS_DIR.rglob("SKILL.md")) if p.parent.name != "code-structure-map"}
     assert skills, f"no phase skill found under {_SKILLS_DIR}"
     for path, text in skills.items():
@@ -1294,6 +1346,13 @@ def test_ac_026_map_hook_is_advisory() -> None:
             continue
         hits = [line.strip() for line in text.splitlines() if _MAP_MENTION.search(line)]
         assert not hits, f"REQ-026: {path.relative_to(_REPO_ROOT)} makes the map part of a phase: {hits}"
+
+
+def test_ac_026_map_hook_is_advisory() -> None:
+    """AC-026 (REQ-026): no gate, todo status, handoff field or prohibition depends on the map."""
+    wired = _agents_md_map_machinery_lines()
+    assert not wired, f"REQ-026: the map is wired into the workflow machinery: {wired}"
+    _assert_phase_skills_not_wired()
     p1 = _md_section(_text_of(_SPECIFY_SKILL), "### P.1 Frame (orchestrator)")
     assert p1, "specify/SKILL.md has no P.1 Frame section"
     advisory = [line.strip() for line in p1 if _MAP_MENTION.search(line)]

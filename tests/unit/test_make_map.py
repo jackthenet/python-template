@@ -990,6 +990,42 @@ def test_ac_015_decorators_render_as_prefix(tmp_path: Path) -> None:
     assert not failures, "\n".join(failures)
 
 
+def _ac016_dunder_failures(default_text: str, private_text: str) -> list[str]:
+    """AC-016 clause 1: each dunder renders exactly once in both renders."""
+    failures: list[str] = []
+    for needle in ("__init__(self) -> None", "__repr__(self) -> str"):
+        for label, text in (("default", default_text), ("--include-private", private_text)):
+            if sum(needle in line for line in _symbol_lines(text, "src/vis.py")) != 1:
+                failures.append(f"clause 1: {needle!r} is not rendered exactly once {label}: {text!r}")
+    return failures
+
+
+def _ac016_private_only_failures(default_text: str, private_text: str) -> list[str]:
+    """AC-016 clause 2: the `_name` symbols render only with `--include-private`."""
+    failures: list[str] = []
+    for needle in _AC016_PRIVATE_ONLY:
+        if any(needle == line for line in _all_symbol_lines(default_text)):
+            failures.append(f"clause 2: {needle!r} renders without --include-private")
+        if not any(needle == line for line in _all_symbol_lines(private_text)):
+            failures.append(f"clause 2: {needle!r} does not render with --include-private")
+    return failures
+
+
+def _ac016_module_header_failures(default_text: str, private_text: str) -> list[str]:
+    """AC-016 clause 3: the `_name` module and package headers render identically with and without the flag."""
+    failures: list[str] = []
+    for header in _AC016_PRIVATE_PATHS:
+        for label, text in (("default", default_text), ("--include-private", private_text)):
+            if not any(line.startswith(f"#### {header} ") for line in text.splitlines()):
+                failures.append(f"clause 3: the module header for {header} is missing {label}")
+    if _section_headers(default_text) != _section_headers(private_text):
+        failures.append(
+            f"clause 3: --include-private changed the rendered modules/packages: "
+            f"{_section_headers(default_text)!r} vs {_section_headers(private_text)!r}"
+        )
+    return failures
+
+
 def test_ac_016_private_symbols_and_dunders(tmp_path: Path) -> None:
     """AC-016 (REQ-016): the dunders `__init__` and `__repr__` render with or without
     `--include-private`; `_helper`, `_Helper` and `_internal` render only with the flag; and the
@@ -1008,24 +1044,9 @@ def test_ac_016_private_symbols_and_dunders(tmp_path: Path) -> None:
         failures.append(f"clause 1: exit {default.returncode} / {private.returncode}")
     failures += _seq_failures(_symbol_lines(default_text, "src/vis.py"), _AC016_LINES_DEFAULT, "1")
     failures += _seq_failures(_symbol_lines(private_text, "src/vis.py"), _AC016_LINES_PRIVATE, "1")
-    for needle in ("__init__(self) -> None", "__repr__(self) -> str"):
-        for label, text in (("default", default_text), ("--include-private", private_text)):
-            if sum(needle in line for line in _symbol_lines(text, "src/vis.py")) != 1:
-                failures.append(f"clause 1: {needle!r} is not rendered exactly once {label}: {text!r}")
-    for needle in _AC016_PRIVATE_ONLY:
-        if any(needle == line for line in _all_symbol_lines(default_text)):
-            failures.append(f"clause 2: {needle!r} renders without --include-private")
-        if not any(needle == line for line in _all_symbol_lines(private_text)):
-            failures.append(f"clause 2: {needle!r} does not render with --include-private")
-    for header in _AC016_PRIVATE_PATHS:
-        for label, text in (("default", default_text), ("--include-private", private_text)):
-            if not any(line.startswith(f"#### {header} ") for line in text.splitlines()):
-                failures.append(f"clause 3: the module header for {header} is missing {label}")
-    if _section_headers(default_text) != _section_headers(private_text):
-        failures.append(
-            f"clause 3: --include-private changed the rendered modules/packages: "
-            f"{_section_headers(default_text)!r} vs {_section_headers(private_text)!r}"
-        )
+    failures += _ac016_dunder_failures(default_text, private_text)
+    failures += _ac016_private_only_failures(default_text, private_text)
+    failures += _ac016_module_header_failures(default_text, private_text)
     assert not failures, "\n".join(failures)
 
 
