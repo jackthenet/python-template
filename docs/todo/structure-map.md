@@ -4,8 +4,9 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
   <!-- gate cleared 2026-10-07: spec PR #69 merged into main (merge commit 570bfbc, 2026-10-06) -> Phase 2 starts -->
+  <!-- WAITING 2026-10-09: Phases 2-6 complete (7/7 DAG tasks VERIFIED, Phase 5 VERIFIED with spec coverage 100%, Phase 6 review report CLEAN: 0 blockers / 3 minors / 16 notes), version bumped 1.0.0 -> 1.1.0, change PR #75 opened (https://github.com/jackthenet/python-template/pull/75) -> waiting for the human merge (S6.4 gate) -->
 - **Change type:** FEATURE  <!-- new capability (a generator + a CLI + a CI gate); see the classification note below -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/structure-map.md`
