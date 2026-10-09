@@ -277,8 +277,10 @@ class PermissionService:
             self._publish(RolePermissionsChanged(role=role, added=[], removed=[permission]))
 
     def get_role_permissions(self, role: str) -> frozenset[str]:
-        """The role's explicit grants (REQ-008); an unknown role raises
-        :class:`RoleNotFoundError`."""
+        """The role's explicit grants (REQ-008).
+
+        An unknown role raises :class:`RoleNotFoundError`.
+        """
         if not self._role_known(role):
             raise RoleNotFoundError(role)
         return self._grant_repository.get_role_permissions(role)
@@ -336,9 +338,12 @@ class PermissionService:
             raise RoleNotFoundError(role)
 
     def _validate_grant(self, role: str, permission: str) -> None:
-        """Validate a grant/revoke target (REQ-008): the permission must be a catalog action or
-        a feature wildcard (an unknown key raises :class:`UnknownPermissionError`); an unknown
-        role raises :class:`RoleNotFoundError`."""
+        """Validate a grant/revoke target (REQ-008).
+
+        The permission must be a catalog action or a feature wildcard (an
+        unknown key raises :class:`UnknownPermissionError`); an unknown role
+        raises :class:`RoleNotFoundError`.
+        """
         if not self._is_valid_grant_key(permission):
             raise UnknownPermissionError(permission)
         if not self._role_known(role):

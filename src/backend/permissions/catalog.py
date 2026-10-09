@@ -1,9 +1,9 @@
-"""The static permission catalog (docs/specs/user-roles-permissions.md, D3).
+r"""The static permission catalog (docs/specs/user-roles-permissions.md, D3).
 
 The permission vocabulary is a closed set derived from feature-owned
 ``register_actions(catalog)`` declarations called at startup (REQ-004,
 REQ-005); no runtime creation of permission names. Action keys are
-hierarchical ``feature.action`` keys matching ``^[a-z0-9_-]+\\.[a-z0-9_-]+$``
+hierarchical ``feature.action`` keys matching ``^[a-z0-9_-]+\.[a-z0-9_-]+$``
 (REQ-002); feature-level wildcard grants (``<feature>.*``) are validated
 against this vocabulary by the grant path (REQ-003).
 """
@@ -38,9 +38,9 @@ class PermissionCatalog:
         self._features: dict[str, list[str]] = {}  # feature -> keys (insertion order)
 
     def register_feature(self, feature: str, actions: dict[str, str]) -> None:
-        """Register ``feature``'s actions (``permission key -> description``).
+        r"""Register ``feature``'s actions (``permission key -> description``).
 
-        Keys must match ``^[a-z0-9_-]+\\.[a-z0-9_-]+$`` and start with
+        Keys must match ``^[a-z0-9_-]+\.[a-z0-9_-]+$`` and start with
         ``f"{feature}."``; duplicate keys raise ``ValueError``.
         """
         for key, description in actions.items():

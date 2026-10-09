@@ -54,9 +54,12 @@ def _sqlite_file_path(database_url: str) -> str | None:
 
 
 def _make_engine(database_url: str) -> Engine:
-    """Create the SQLite engine (parent dir auto-created; busy timeout for
-    file-based URLs; a static pool for ``:memory:``; a null pool for
-    file-based so the file is released after each operation)."""
+    """Create the SQLite engine for ``database_url``.
+
+    The parent directory is auto-created; a busy timeout is set for file-based
+    URLs; a static pool makes one instance see one ``:memory:`` database; a null
+    pool releases a file-based database after each operation.
+    """
     file_path = _sqlite_file_path(database_url)
     if file_path is not None:
         Path(file_path).parent.mkdir(parents=True, exist_ok=True)
@@ -68,9 +71,11 @@ def _make_engine(database_url: str) -> Engine:
 
 
 class _SqliteRepository:
-    """Shared engine bootstrap for the SQLite repositories (the parent dir is
-    auto-created and the tables are bootstrapped via
-    ``SQLModel.metadata.create_all``)."""
+    """Shared engine bootstrap for the SQLite repositories.
+
+    The parent dir is auto-created and the tables are bootstrapped via
+    ``SQLModel.metadata.create_all``.
+    """
 
     def __init__(self, database_url: str) -> None:
         """Engine bootstrap shared by the three SQLite repositories.

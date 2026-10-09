@@ -31,8 +31,10 @@ class Role(SQLModel, table=True):
 
 
 class RolePermission(SQLModel, table=True):
-    """A dynamic role->permission grant (a catalog action key or a feature
-    wildcard ``<feature>.*``)."""
+    """A dynamic role->permission grant.
+
+    The key is a catalog action or a feature wildcard ``<feature>.*``.
+    """
 
     __tablename__ = "role_permissions"
 
