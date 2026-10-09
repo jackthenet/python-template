@@ -332,3 +332,137 @@ Both files now carry the same three MUSTs in the same words — (1) a `Recommend
 ### Phase 4 commit
 
 `chore(spec-interview-protocol): interview-protocol guidance edits` — the four scoped Markdown files plus this record. No code, no test, no version bump, no PR (Phase 6 opens it).
+
+---
+
+## Phase 5 — verification report (DOCS/CHORE light gate set)
+
+**Run:** 2026-10-09 in the change worktree at `HEAD = 984cf58` (base `main = 3ad83a0`); working tree clean before and after every command (`git status --porcelain` empty at both ends).
+
+**Gate set owed** (`AGENTS.md` Phase Matrix, DOCS/CHORE Phase 5 = "Light: lint/types where applicable"; Phase 5 item 16 = "Run lint and type checks where applicable; confirm no test files or behavior were touched") — exactly the table this record promised under "Phase 5 checks this change will run", with one addition: the `ruff format --check` gate CI runs.
+
+**Spec coverage: `n/a`.** A DOCS/CHORE change produces **no** specification, so there is no `REQ-XXX`/`AC-XXX` set to cover, no `docs/specs/<name>.md` to run `scripts/verify_spec.py` against, and no S5.3 traceability-matrix update (that step is FEATURE/CROSS-CUTTING/ISSUE: it adds evidence rows for the change's own requirements, and this change adds none). `docs/verification/traceability.md` is therefore **not** in the diff, and `scripts/check_traceability.py` is run instead as a **referential-integrity** gate — required here because `docs/specs/template.md` is touched (Edit 4).
+
+**No test file was touched** — proved by the scope proof below (`tests/` appears nowhere in `git diff --name-status main...HEAD`, nor anywhere in the branch history).
+
+### Gate results
+
+| # | Command | Result | Exit |
+|---|---|---|---|
+| 1 | `uv run ruff check .` | **`All checks passed!`** — identical to base; ruff scans Python only and no Python is in the diff | 0 |
+| 2 | `uv run ruff format --check .` | **`343 files already formatted`** — clean; **no** file (this change's or pre-existing) is unformatted, so nothing was reformatted and nothing outside the diff was touched | 0 |
+| 3 | `uv run mypy src/` | **`Success: no issues found in 84 source files`** — unchanged from `main` (no `src/` path is in the diff, so the result cannot differ) | 0 |
+| 4 | `uv run python scripts/check_traceability.py` | **`Traceability: PASS (881 matrix rows, 136 spec IDs, 801 test functions)`** — required because `docs/specs/template.md` is touched; the new §1 bullet is ID-free, so check (1) (`scripts/check_traceability.py:100-103`) cannot trip, and the template is excluded from ID extraction at `:42` | 0 |
+| 5 | `uv run pytest tests/acceptance/test_structure_map.py -q` | **`1 failed, 30 passed in 19.22s`** — exactly the base guard result recorded at `3ad83a0`; the single failure is pre-existing (proof below). No **new** failure ⇒ constraints C-1…C-4 hold | 1 (the pre-existing node) |
+| 6 | `git diff --name-status main...HEAD` | exactly the five expected paths — scope proof below | 0 |
+| 7 | `uv run --group docs mkdocs build --strict` | **deliberately skipped**, claim verified from the diff (below) | n/a |
+| 8 | gate-strength check (`grep -n` at the five floor sites + diff-deletion analysis) | **no gate weakened** — below | 0 |
+
+### Check 5 — the pre-existing failure, proved in the primary worktree
+
+The targeted guard is the only executable check that can observe this change: `tests/acceptance/test_structure_map.py` reads `AGENTS.md` and `.agents/skills/specify/SKILL.md` (the corrected E-11 premise, see P-93).
+
+| Worktree | Branch | Command | Result |
+|---|---|---|---|
+| change worktree | `chore/spec-interview-protocol` @ `984cf58` | `uv run pytest tests/acceptance/test_structure_map.py -q` | **`1 failed, 30 passed`** |
+| **primary worktree** (read-only, nothing changed there) | **`main`** | same command | **`1 failed, 30 passed`** — **identical** |
+
+Both failures are the **same node**, `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render`, with the same assertion message:
+
+```text
+AssertionError: REQ-021: the committed map is not a fresh render — line 449 differs:
+    committed: 'docs/ — 220 files (process record)'
+    fresh:     'docs/ — 223 files (process record)'
+```
+
+Independent confirmation of the same root cause, run in **both** worktrees (`--check` only — generate mode was never run, see P-94):
+
+```text
+primary worktree (main):  uv run python scripts/make_map.py --check → "STRUCTURE.md is out of date — run uv run python scripts/make_map.py"  exit 1
+change worktree (HEAD):   uv run python scripts/make_map.py --check → same message, same exit 1
+```
+
+**Classification: pre-existing, out of scope.** The committed `STRUCTURE.md` is already stale on `main` (the `docs/` count moved 220 → 223 through other merged changes, and the checked-out file additionally carries CRLF line endings on this Windows host, which is why the byte comparison reports a diff at index 22 as well). This change adds/renames/moves **no** `.py` file, so it owes **no** map regeneration (`AGENTS.md`: regenerate when a `.py` is added, renamed, moved or deleted), and `STRUCTURE.md` is not in scope — fixing the staleness is a separate chore. The test was **not** modified, weakened or skipped, and `STRUCTURE.md` was **not** regenerated.
+
+### Check 6 — scope proof (no test files, no behavior, no planning records)
+
+```text
+$ git diff --name-status main...HEAD
+M	.agents/skills/specify/SKILL.md
+M	AGENTS.md
+M	docs/questions/template.md
+M	docs/specs/template.md
+A	docs/verification/spec-interview-protocol.md
+
+$ git diff --stat main...HEAD -- .agents/skills/specify/SKILL.md AGENTS.md docs/questions/template.md docs/specs/template.md
+ .agents/skills/specify/SKILL.md | 4 +++-
+ AGENTS.md                       | 6 +++---
+ docs/questions/template.md      | 7 ++++++-
+ docs/specs/template.md          | 1 +
+ 4 files changed, 13 insertions(+), 5 deletions(-)
+```
+
+Exactly the four guidance files the scope names, plus this record — **no** `src/`, `tests/`, `scripts/`, `migrations/`, `pyproject.toml`, `.github/`, `userdocs/`, `STRUCTURE.md` or `docs/todo/` path, and **no** per-change `docs/questions/<name>.md` record. Verified mechanically (the question **template** is Edit 1 and is excluded from the forbidden set on purpose):
+
+```text
+$ git diff --name-only main...HEAD \
+    | grep -E '^(src/|tests/|scripts/|migrations/|pyproject\.toml|\.github/|userdocs/|STRUCTURE\.md|docs/todo/|docs/questions/)' \
+    | grep -v '^docs/questions/template\.md$'
+(no match, grep exit 1)
+```
+
+The only `docs/questions/` path anywhere in the branch history is `template.md`; `docs/questions/spec-interview-protocol.md` and `docs/todo/` are untouched by this branch (orchestrator-owned, `main`-only).
+
+The name-status above is the state **before** the Phase 5 commit. That commit (`chore(spec-interview-protocol): verification report + problem log`) adds exactly two paths — this record and `docs/workflow/PROBLEMS.md` (the Problem Log entries P-92…P-95 this step owes, per `AGENTS.md` "Problem Log"). The Problem Log is a workflow record, not a scoped artifact, so it is not part of the four-file guidance scope; nothing else is added. `git diff --name-status main...HEAD` after Phase 5 is therefore the five paths above plus `M docs/workflow/PROBLEMS.md` — still no `src/`, `tests/`, `scripts/`, `migrations/`, `pyproject.toml`, `.github/`, `userdocs/`, `STRUCTURE.md`, `docs/todo/` or per-change question path. Markdown hygiene (the live local gate on the edited files): `git diff --check main...HEAD` → exit **0**.
+
+### Check 7 — skipped checks, with the reason verified
+
+| Skipped | Verification of the skip claim |
+|---|---|
+| `uv run --group docs mkdocs build --strict` | The scope record lists it as skipped. Verified from the diff: `git diff --name-only main...HEAD \| grep -c '^userdocs/'` → **0**, and `mkdocs.yml:6` is `docs_dir: userdocs`, so no file in this diff is part of the published site and the CI `docs` job outcome cannot change. Not run, per the contract |
+| Full test suite (`uv run pytest tests/`) | Not owed by the DOCS/CHORE light gate; the targeted guard (check 5) plus the scope proof (check 6) are the owed test evidence, and the full suite is CI's job (`quality.yml` has no paths filter) |
+| `STRUCTURE.md` regeneration | No `.py` added/renamed/moved/deleted, so no regeneration is owed; only `make_map.py --check` (read-only) was run — generate mode rewrites the file in place (P-94) |
+| `verify_spec.py`, spec-coverage %, coverage, architecture-rule inspection, traceability-matrix update | FEATURE/CROSS-CUTTING/ISSUE/REFACTOR steps; no spec, no code, no requirement and no test in this change |
+| Version bump | `AGENTS.md` → Versioning → `REFACTOR / DOCS/CHORE → none` (Phase 6 does not bump) |
+
+### Check 8 — gate strength (the DOCS/CHORE counterpart of "tests not weakened")
+
+The ≥ 20-question floor still exists at **all five** sites (`grep -n` at HEAD):
+
+```text
+.agents/skills/specify/SKILL.md:75   - **Done-criteria:** at least 20 questions asked and recorded in …      ← P.2 done-criteria
+.agents/skills/specify/SKILL.md:175  - Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). …
+.agents/skills/specify/SKILL.md:220    - At least 20 questions were asked during interrogation and …          ← Definition of Done / READY gate
+AGENTS.md:143                        | **P.2 Interrogate** | … | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch, …
+AGENTS.md:712                        17. … ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING — plus, …
+```
+
+No gate text is deleted by the diff. The four deleted floor/entry lines are each rewritten to a **strict superset** — the floor phrase survives verbatim, and the line only grows:
+
+| Rewritten line | floor phrase: `main` count → HEAD count | line length: `main` → HEAD |
+|---|---|---|
+| `specify/SKILL.md:75` | `at least 20 questions asked and recorded` 1 → 1 | 411 → 903 (+492) |
+| `AGENTS.md:143` | `≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in` 1 → 1 | 296 → 591 (+295) |
+| `AGENTS.md:390` (entry description, not a gate) | n/a | 413 → 467 (+54) |
+| `AGENTS.md:712` | `≥ 20 interrogation questions for FEATURE/CROSS-CUTTING` 1 → 1 | 382 → 609 (+227) |
+| `docs/questions/template.md` P.2 placeholder | `at least 20 questions for FEATURE/CROSS-CUTTING` 1 → 1 | diff hunk: `-<the interrogation batch — at least 20 questions for FEATURE/CROSS-CUTTING>` → `+<… FEATURE/CROSS-CUTTING; **every** entry carries a \`Recommended:\` answer>` |
+
+Floor-bearing line **counts** are unchanged (`grep -ci '20 questions\|20 interrogation'`): `specify/SKILL.md` **3 → 3**, `AGENTS.md` **2 → 2**. Two floor lines are **byte-identical** to `main` (`diff` of `main:SKILL.md:175` vs HEAD `:175`, and `main:SKILL.md:218` vs HEAD `:220` — the shift is caused by the insert above it): both clean.
+
+The three new MUSTs are stated **identically** in `AGENTS.md` and the specify skill, with the same additive meaning:
+
+```text
+$ for f in AGENTS.md .agents/skills/specify/SKILL.md docs/questions/template.md; do
+    echo "$f Recommended:$(grep -c 'Recommended:' $f) CategoryCoverage:$(grep -c 'Category coverage' $f) nongoals:$(grep -c 'non-goals' $f)"; done
+AGENTS.md                        Recommended:2  CategoryCoverage:2  nongoals:2
+.agents/skills/specify/SKILL.md  Recommended:3  CategoryCoverage:3  nongoals:3
+docs/questions/template.md       Recommended:2  CategoryCoverage:1  nongoals:0
+```
+
+(1) a `Recommended:` answer on **every** entry with a one-line reason, (2) a `### Category coverage` table with each category `covered (Q-nn / E-nn)` or `skipped — <reason>`, (3) a non-goals / scope-boundary question — and both files state the same relation to the floor: `AGENTS.md:143` "(on top of the floor, never instead of it)", `AGENTS.md:712` "(all three **on top of** the floor, never instead of it)", `specify/SKILL.md:176` "These sit **on top of** the ≥ 20-question floor — they never replace it", `specify/SKILL.md:217` "**in addition to** the ≥ 20-question floor … never instead of it". Net gate strength: P.2's done-criteria go from 3 clauses to 6 — **strictly stronger**, nothing loosened.
+
+---
+
+## VERDICT: PASS (light gate set)
+
+Lint clean, formatter clean, types clean, traceability referential integrity PASS, the guidance-reading guard at its base result with the single failure proved pre-existing on `main` in the primary worktree, the scope proof exact (four guidance files + this record + the Problem Log this step writes; no `src/`, `tests/`, `scripts/`, `migrations/`, `pyproject.toml`, `.github/`, `userdocs/`, `STRUCTURE.md`, `docs/todo/` or per-change question record), the gate set strictly strengthened with no gate text deleted, and the docs-site build verified as a legitimate skip (no `userdocs/` path in the diff). **Spec coverage `n/a` — a DOCS/CHORE change has no spec. No test file was touched and no test was weakened, skipped or deleted.** Ready for Phase 6 (light review + PR; no version bump).
