@@ -590,7 +590,7 @@
         "uv run ruff check tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py clean (only if this task touched a test file)."
       ],
       "dependencies": ["T-006"],
-      "status": "PENDING"
+      "status": "VERIFIED"
     }
   ]
 }
