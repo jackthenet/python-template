@@ -4489,3 +4489,105 @@ No other delta: **0 failed, 0 new skips, 0 test changed or deleted by the merge*
 exit 0, full suite 816 passed / 1 skipped with the delta fully accounted for.**
 Next: **waiting for the human merge of PR #75**, then **S7.1** post-merge cleanup.
 
+
+## Phase 6 — CI red gate: the AC-008 identity witness, and the suite's ResourceWarnings (2026-10-09)
+
+**Trigger.** PR #75's CI run (`uv run pytest tests/ --cov --cov-report=xml`, the `tests` job of
+`.github/workflows/quality.yml`) reported **`1 failed, 816 passed, 1075 warnings in 272.71s`**:
+
+```text
+FAILED tests/acceptance/test_structure_map.py::test_ac_008_document_shape
+  AssertionError: clause 4: the map contains the host/user name 'runner'
+```
+
+Coverage stayed green (`93.74% ≥ 92`), so the gate's only failure is clause 4 of AC-008.
+
+### Finding 1 — AC-008 clause 4 is a false positive on a CI host; the generator leaks nothing
+
+**Evidence that the map is clean.** The committed map contains exactly **one** occurrence of the
+string `runner` (`STRUCTURE.md:497`, the rendered docstring summary of `scripts/check_sync.py`:
+*"Check that docs/tasks and .github/task-runner are in sync."*). On a GitHub Actions host both
+`platform.node()` and `getpass.getuser()` are `runner`, and `\brunner\b` matches **inside**
+`task-runner` because `-` is a non-word character. The other clause-4 patterns (timestamp, drive
+letter, `\`, absolute POSIX path, timing line) and INV-003's absolute-root check all pass on the
+same text, and the generator reads nothing but tracked paths and file bodies — there is no host
+input to leak.
+
+**Fix — witness precision, zero implementation change.**
+
+1. `_identity_pattern(identity)` (both `test_ac_008_document_shape` and `test_inv_003_…`) requires
+   the name to **stand alone**: `(?<![\w./-])name(?![\w./-])`, i.e. `-`, `.` and `/` are word
+   characters here. Measured against the committed map:
+
+   | probe | old `\brunner\b` | new pattern |
+   |---|---|---|
+   | `.github/task-runner are in sync` | **match** | clean |
+   | `runner_path` | clean | clean |
+   | `runner` / `host runner` / `user runner logged in` | match | **match** (still a leak) |
+
+2. `_repo_vocabulary()` (tracked paths + every tracked file body, 8 280 858 chars) skips an identity
+   that is **itself repository vocabulary**, where no string match can distinguish a leak: a container
+   CI runs as `root`, and the map renders "repository root" repeatedly. Measured guard behaviour:
+   `runner`, `root`, `admin`, `domin` → skipped; `totallymadeupname` → **not** skipped, so the check
+   still runs wherever it can mean something. INV-003 keeps the **unconditional** form — its trees are
+   synthetic and cannot contain a host name.
+
+**Not a weakening.** No acceptance test was made less strict about the generator: the requirement
+("no host or user name anywhere in it") and the generator are unchanged, the check still fires for
+every name the repository does not itself use, and the residual limitation is stated in the code
+where it lives. **Ceiling:** a name that is also repository vocabulary cannot be checked by string
+matching at all; the unconditional form of the check is INV-003's synthetic-tree version.
+
+### Finding 2 — 1075 `ResourceWarning: unclosed database` lines (pre-existing, repo-wide, not introduced here)
+
+**Root cause.** All four SQLite repository families (`usermanagement`, `authentication`,
+`filemanagement`, `permissions`) create their engine in `__init__` and never dispose it. When a test's
+repository goes out of scope the pooled `sqlite3.Connection` is garbage-collected **open**, and CPython
+reports the warning against whatever statement happened to trigger the collection — in the CI log,
+`sqlalchemy/event/api.py:39`. Minimal local reproduction:
+
+```python
+r = SqliteUserRepository(f"sqlite:///{tmp}/x.db"); del r; gc.collect()
+# ResourceWarning: unclosed database in <sqlite3.Connection object …>
+```
+
+QueuePool leaks one connection per instance; a `:memory:` `StaticPool` leaks its single connection.
+Census before the fix: **1095 warnings** over the full suite.
+
+**Fix — test-side, no src change, no new public API.**
+
+- `tests/conftest.py`: autouse fixture `_sqlite_engines_disposed` wraps `create_engine` **wherever it
+  is already bound** (the repository modules do `from sqlmodel import create_engine`, so patching the
+  package attribute alone would not reach them) and calls `Engine.dispose()` on every engine created
+  during the test. `dispose()` closes the pool's connections and installs a fresh pool, so an engine
+  that outlives its test remains usable — no test's assertions or fixtures change.
+- `tests/integration/permissions/test_persistence.py`: `with sqlite3.connect(db_path)` commits but
+  never **closes** → wrapped in `contextlib.closing`.
+- Deliberately **not** done here: a `close()`/`dispose()` API on the four repositories. No feature spec
+  pins a connection-lifecycle contract, so that is a CROSS-CUTTING change of its own (four features,
+  new public interface) and out of this PR's scope — recorded as a backlog candidate, not silently
+  folded into a FEATURE PR.
+
+### Gate results (after the fix)
+
+| Gate | Command | Result |
+|---|---|---|
+| **Full suite, ResourceWarnings surfaced** | `uv run pytest tests/ -q -W "always::ResourceWarning"` | **816 passed, 1 skipped, 0 warnings** (was 1095 warnings / 1075 on CI) |
+| AC-008 under the CI identity | `pytest tests/acceptance/test_structure_map.py::test_ac_008_document_shape -p ci_identity_plugin` with `getpass.getuser → "root"`, `platform.node → "runner"` | **1 passed in 1.81 s** |
+| structure-map nodes | `pytest tests/acceptance/test_structure_map.py tests/property/test_structure_map.py tests/unit/test_make_map.py tests/integration/permissions -q -W "always::ResourceWarning"` | **58 passed in 43.40 s**, 0 warnings |
+| Map freshness | `uv run python scripts/make_map.py --check` | **exit 0** (`STRUCTURE.md` regenerated once: `tests/conftest.py` 128 → 165 lines) |
+| Lint / format | `uv run ruff check .` / `uv run ruff format --check .` | **All checks passed!** / **343 files already formatted** |
+| Types | `uv run mypy src/` / `uv run mypy scripts/` | **84 / 4 source files, no issues** |
+| Dependencies | `uv run deptry .` | **Success! No dependency issues found.** |
+| Traceability | `uv run python scripts/check_traceability.py` | **PASS — 881 matrix rows, 136 spec IDs, 801 test functions** (no row changed: no REQ/AC gained or lost a witness) |
+
+**No test was added, removed, renamed or weakened**: the 55 structure-map witnesses and the 816-node
+suite are the same set as in §Phase 5 and §S6.5. The two changed witnesses keep their IDs (AC-008,
+INV-003) and their traceability rows.
+
+Friction record: **P-90** (the `\b`-boundary witness turns the CI image's user name into a failure) and
+**P-91** (1075 unclosed-database warnings bury the one real failure) in `docs/workflow/PROBLEMS.md`.
+
+**Gate: PR #75's CI failure is resolved at its root cause (the witness, not the generator), and the
+suite's 1075 ResourceWarnings are gone without touching feature code.**
+Next: **waiting for the human merge of PR #75**, then **S7.1** post-merge cleanup.

@@ -46,6 +46,16 @@ _FORBIDDEN: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("an absolute POSIX path", re.compile(r"(^|\s)/[A-Za-z0-9_.]")),
 )
 
+
+def _identity_pattern(identity: str) -> re.Pattern[str]:
+    """Match a host/user name only where it stands alone (as in AC-008 clause 4).
+
+    ``\\b`` would flag the repository's own vocabulary — on a GitHub Actions host the user
+    name is ``runner``, which ``\\brunner\\b`` finds inside ``.github/task-runner``.
+    """
+    return re.compile(rf"(?<![\w./-]){re.escape(identity)}(?![\w./-])")
+
+
 # A `.py` outside every code dir — INV-002's last clause: it is parsed but appears in neither the
 # tree nor Packages, only in its top-level directory's count line — plus a second file in the same
 # directory, so that count line has to count more than the `.py`.
@@ -257,9 +267,8 @@ def test_inv_003_no_absolute_path_or_timestamp() -> None:
 
             for identity in (platform.node(), getpass.getuser()):
                 if identity:
-                    assert not re.search(rf"\b{re.escape(identity)}\b", map_text), (
-                        f"the map contains the host/user name {identity!r}"
-                    )
+                    hit = _identity_pattern(identity).search(map_text)
+                    assert hit is None, f"the map contains the host/user name {identity!r}: {hit.group(0)!r}"
 
             for absolute in (str(root), root.as_posix(), str(base)):
                 assert absolute not in map_text, f"the map contains the absolute host path {absolute!r}"

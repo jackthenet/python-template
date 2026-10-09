@@ -1675,7 +1675,7 @@ Shared helpers for the authentication test suite.
 - @pytest.fixture def `auth(tmp_path: Path, collector: EventCollector) -> AuthFixture`
 - @pytest.fixture def `auth_service(auth: AuthFixture) -> AuthService`
 - @pytest.fixture def `user_manager(auth: AuthFixture) -> UserManager`
-#### tests/conftest.py (128 lines)
+#### tests/conftest.py (165 lines)
 Shared fixtures for the logging feature test suite.
 - @pytest.fixture(scope='session') def `session_settings(_logging_session_setup: Any) -> Any`: The Settings instance used for the session's real setup.
 - @pytest.fixture def `log_records() -> Iterator[list[Any]]`: Capture log records for the duration of a test.

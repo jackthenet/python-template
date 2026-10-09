@@ -9,7 +9,8 @@ code in a subprocess via logging_test_helpers.run_python().
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+import sys
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
@@ -77,6 +78,42 @@ def _stdlib_root_logging_restored() -> Iterator[None]:
         lg = manager.loggerDict.get(name)
         if isinstance(lg, logging.Logger):
             lg.disabled = was_disabled
+
+
+@pytest.fixture(autouse=True)
+def _sqlite_engines_disposed(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Close every engine created during a test (test hygiene, no behavior change).
+
+    The SQLite repositories hold their engine for the instance's lifetime and never
+    dispose it, so a finished test's pooled connection is garbage-collected while still
+    open and CPython reports ``ResourceWarning: unclosed database`` — 1075 of them per CI
+    run, each attributed to whatever statement happened to trigger the collection. The
+    repositories' own specs pin no connection-lifecycle contract, so the fix belongs to
+    the suite rather than to the features.
+
+    ``Engine.dispose()`` closes the pool's connections and installs a fresh pool, so an
+    engine that outlives its test stays usable. ``create_engine`` is wrapped wherever it
+    is already bound — the repository modules import it by name, so patching only
+    ``sqlmodel``/``sqlalchemy`` would not reach them — and a new SQLite repository needs
+    no registration here.
+    """
+    engines: list[Any] = []
+
+    def _tracking(create: Callable[..., Any]) -> Callable[..., Any]:
+        def _create_engine(*args: Any, **kwargs: Any) -> Any:
+            engine = create(*args, **kwargs)
+            engines.append(engine)
+            return engine
+
+        return _create_engine
+
+    for module in list(sys.modules.values()):
+        create_engine = getattr(module, "create_engine", None)
+        if callable(create_engine):
+            monkeypatch.setattr(module, "create_engine", _tracking(create_engine))
+    yield
+    for engine in engines:
+        engine.dispose()
 
 
 @pytest.fixture

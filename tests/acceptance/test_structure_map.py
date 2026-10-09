@@ -148,6 +148,46 @@ _FORBIDDEN: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("a timing line", re.compile(r"generated in", re.IGNORECASE)),
 )
 
+
+def _identity_pattern(identity: str) -> re.Pattern[str]:
+    """Match a host/user name only where it stands alone.
+
+    ``\\b`` treats ``-``, ``.`` and ``/`` as boundaries, so ``\\brunner\\b`` finds the GitHub
+    Actions user name inside the repository's own vocabulary (``.github/task-runner``) — a
+    false positive, not a leak. A name embedded in a longer token is not the name appearing;
+    a real leak (an absolute path, a host banner) still matches.
+    """
+    return re.compile(rf"(?<![\w./-]){re.escape(identity)}(?![\w./-])")
+
+
+def _repo_vocabulary() -> str:
+    """The repository's own text: every tracked path and every tracked file body.
+
+    Clause 4 can only tell a host/user name apart from repository content while the name is
+    **not** itself a repository word. GitHub Actions runs as ``runner`` and a container CI as
+    ``root``, and the map renders docstrings that say "repository root" or mention
+    ``.github/task-runner`` — for a name the repository already uses, no string match can
+    prove a leak, so the identity check is skipped for it. The unconditional form of the
+    check is kept by INV-003, whose trees are synthetic and therefore cannot contain a
+    host name.
+    """
+    tracked = subprocess.run(
+        ("git", "ls-files"),
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    ).stdout
+    bodies: list[str] = [tracked]
+    for rel in tracked.splitlines():
+        try:
+            bodies.append((_REPO_ROOT / rel).read_text(encoding="utf-8", errors="replace"))
+        except OSError:  # a tracked path that is not a readable file (a symlink, a submodule)
+            continue
+    return "\n".join(bodies)
+
+
 # NFR-001: the 2 s budget is asserted only on a host that is not much slower than the reference
 # host (the spec's "skipped on slow CI" rule). The calibration is a pure-CPU micro-benchmark
 # measured at import: parse a fixed 50-function source 40 times, best of 3. Reference value
@@ -344,9 +384,12 @@ def test_ac_008_document_shape(tmp_path: Path) -> None:
     for label, pattern in _FORBIDDEN:
         if hit := pattern.search(text):
             failures.append(f"clause 4: the map contains {label}: {hit.group(0)!r}")
+    vocabulary = _repo_vocabulary()
     for identity in (platform.node(), getpass.getuser()):
-        if identity and re.search(rf"\b{re.escape(identity)}\b", text):
-            failures.append(f"clause 4: the map contains the host/user name {identity!r}")
+        if not identity or _identity_pattern(identity).search(vocabulary):
+            continue  # the name is repository vocabulary too — the map cannot be shown to leak it
+        if hit := _identity_pattern(identity).search(text):
+            failures.append(f"clause 4: the map contains the host/user name {identity!r}: {hit.group(0)!r}")
     assert not failures, "\n".join(failures)
 
 
