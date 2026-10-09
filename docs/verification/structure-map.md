@@ -2299,3 +2299,68 @@ No change to `pyproject.toml`, `uv.lock`, any workflow or hook, `AGENTS.md`, `.a
 evidence for the five unit nodes, mypy/deptry/ruff clean on the changed paths, NFR-001 run in 0.46 s,
 NFR-003 clean with no dependency change, later-task nodes untouched and still RED.**
 
+## T-002 — S4.3 refactor (keep GREEN) (2026-10-09)
+
+Objective: improve the structure of `scripts/make_map.py` without changing specified behaviour, or
+record a justified no-op. The module was read once and judged against the repo conventions (strict
+typing, no needless abstraction, deletion over addition), the T-002 constraints (stdlib-only, exactly
+one read call site, no logging, the REQ-004 precedence, EDGE-006, the REQ-006 hard-failure path, the
+REQ-008 shape, the ~250-line NFR-006 target) and what T-003/T-004/T-005 must insert next.
+
+### Candidates considered
+
+| # | Candidate | Decision | Reason (one line) |
+|---|---|---|---|
+| 1 | `_walk_paths`: `not any(part in _IGNORED_DIRS …)` → `frozenset.isdisjoint` | **applied** | stdlib-native set test, states the intent (no directory part is ignored) in fewer tokens; identical semantics |
+| 2 | `_file_set`: the `.py` filter and the on-disk check lived only in the git branch, so the two branches applied visibly different rules | **applied** | both rules now sit once, after the branch (`candidates` → `sorted(name … if (root / name).is_file())`); EDGE-008 now demonstrably covers the fallback too; the extra `is_file()` on walk results is a no-op (the walk already filtered it) |
+| 3 | `main`: `for line in failures: print(line, …)` | **applied** | `print(*failures, sep="\n", file=sys.stderr)` — one line, byte-identical stderr |
+| 4 | The one-read rule (REQ-001 / AC-001) was only in the docstring | **applied** | a two-line marker at the read site itself, where T-004 would be tempted to re-read for source segments; comments are invisible to the AC-001 AST witness, so the count stays 1 |
+| 5 | Merge `_git_paths`/`_walk_paths` into one candidate-listing function | **rejected** | the only real duplication is the `.py` filter, and unifying it would force `rglob("*")` over the whole tree (incl. `data/`, `build/`) on the fallback branch — slower for no clarity gain; #2 already removes the asymmetry |
+| 6 | Split `_render` into `_render_tree` / `_render_packages` stubs to pre-shape T-003/T-004 | **rejected** | dead abstraction until those tasks land; T-003 replaces one list comprehension, T-004 appends after `_PACKAGES_HEADING` — both insertions are already one line wide |
+| 7 | Drop the unused `Module.source` field (or make `line_count` a property) | **rejected** | `source` is what makes the single read reusable — deleting it invites a re-read that breaks AC-001; `line_count` computed at the read site is the REQ-001 evidence, and a property would recompute per header |
+| 8 | Typed args dataclass instead of `argparse.Namespace`; `_read_modules` renamed / report printing extracted | **rejected** | mypy already passes on `scripts/`; a second helper for three lines is addition, not deletion; parameter-order churn is noise |
+| 9 | Shorten the module/function docstrings (spec-ID traces) | **rejected** | they are the spec→code traceability record the review gate reads, not prose noise |
+
+Net effect: **8 added / 6 removed lines, `scripts/make_map.py` 199 → 201 lines** (still inside the
+~250-line NFR-006 target; T-003/T-004/T-005 will push it past that and are the point where a split
+into modules would be judged — recorded here as the open question for those tasks, not acted on).
+No CLI surface, exit code, output byte, read-site count, ignore list, or precedence order changed.
+
+What the refactor bought the later tasks: T-005's `--check` insertion is unchanged (the marked point
+between the 4 and the 0 is untouched) and the failure-report line is one line shorter; T-003/T-004 get
+a file set whose two rules are stated once (so the tree and the packages body can trust that every
+`Module.path` is a `.py` file that exists, root-relative); the read-site marker tells the symbol
+renderer to take text from `Module.source` instead of reading the file again.
+
+### Gates re-run after the refactor (targeted only — no full suite, no repo-wide ruff)
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py -q
+30 failed, 19 passed in 13.93s      (identical to the S4.2 baseline: 19 / 30, same node set)
+
+uv run pytest <the 15 T-002 node ids> -q                 15 passed in 4.12s   (randomly seed active)
+uv run pytest <the 15 T-002 node ids> -q -p no:randomly  15 passed in 4.91s
+
+uv run ruff check scripts/make_map.py    All checks passed!
+uv run ruff format scripts/make_map.py   1 file left unchanged
+uv run mypy scripts/                     Success: no issues found in 4 source files (exit 0)
+uv run deptry .                           Success! No dependency issues found. (exit 0)
+```
+
+The five hard-failure / fallback nodes (`test_ac_006`, `test_edge_003/004/005`, `test_edge_007`,
+`test_edge_008`) are the witnesses for candidates 1–3 and they pass unchanged; `test_ac_001` is the
+witness for candidate 4 (still exactly one read call site) and passes.
+
+### Files changed (S4.3, T-002)
+
+| File | Change |
+|---|---|
+| `scripts/make_map.py` | +8 / −6 (199 → 201 lines) — candidates 1–4 |
+| `docs/verification/structure-map.md` | this record |
+
+No test file, `pyproject.toml`, `uv.lock` (restored after `uv run` touched it), workflow, hook,
+`docs/todo/`, `docs/questions/`, `docs/verification/traceability.md` or `tasks.json` was touched.
+
+**S4.3 (T-002) gate: PASSED — behaviour-identical refactor applied, GREEN kept (19 passed / 30 failed
+unchanged, 15/15 T-002 nodes GREEN with and without `-p no:randomly`), ruff + mypy + deptry clean.**
+

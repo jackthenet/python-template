@@ -116,7 +116,7 @@ def _walk_paths(root: Path) -> list[str]:
     paths: list[str] = []
     for path in root.rglob("*.py"):
         relative = path.relative_to(root)
-        if path.is_file() and not any(part in _IGNORED_DIRS for part in relative.parts[:-1]):
+        if path.is_file() and _IGNORED_DIRS.isdisjoint(relative.parts[:-1]):  # only directory parts
             paths.append(relative.as_posix())
     return paths
 
@@ -131,10 +131,11 @@ def _file_set(root: Path) -> list[str]:
     listing = _git_paths(root)
     if listing is None:
         print(_IGNORE_NOTE, file=sys.stderr)  # the limitation note, exactly once (EDGE-007)
-        paths = _walk_paths(root)
+        candidates = _walk_paths(root)
     else:
-        paths = [name for name in listing if name.endswith(".py") and (root / name).is_file()]
-    return sorted(paths)
+        candidates = [name for name in listing if name.endswith(".py")]
+    # Both branches end in the same two rules: `.py`, and present on disk (EDGE-008).
+    return sorted(name for name in candidates if (root / name).is_file())
 
 
 def _read_modules(paths: Sequence[str], root: Path) -> tuple[list[Module], list[str]]:
@@ -148,6 +149,8 @@ def _read_modules(paths: Sequence[str], root: Path) -> tuple[list[Module], list[
     failures: list[str] = []
     for path in paths:
         try:
+            # The module's only file-content read site (REQ-001 / AC-001): the AST and the line
+            # count below both come from this string, so a later renderer must not read again.
             source = (root / path).read_text(encoding="utf-8")
             tree = ast.parse(source, filename=path)
         except (SyntaxError, UnicodeDecodeError, OSError) as error:
@@ -181,8 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     modules, failures = _read_modules(_file_set(root), root)
     if failures:  # 4: every offending path once, sorted, on stderr; no output file written
-        for line in failures:
-            print(line, file=sys.stderr)
+        print(*failures, sep="\n", file=sys.stderr)
         return _EXIT_UNREADABLE
 
     document = _render(modules)
