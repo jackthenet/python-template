@@ -589,3 +589,24 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 in-step iteration (both found and fixed inside the same execution, per the in-step fix-and-recheck rule); the step still ran 2282 s / 50 tool uses.
 - **Resolution:** both fixed in-step; the subagent then proved sensitivity by driving a behaviour-correct **stub generator** through all 15 node IDs (15/15 pass against the stub, all fail against the absent module). **Durable rule:** the stub/sensitivity pass runs **before** RED is recorded, not after — it is the only check that surfaces a test no correct implementation could pass, which the RED gate itself cannot distinguish.
 - **Date:** 2026-10-07
+
+## P-75 — stale step relaunch (S4.2 T-001 re-run after VERIFIED)
+- **Problem:** the orchestrator re-launched **S4.2 for T-001** after T-001 had already been implemented, refactored, committed and set `VERIFIED` (and after T-002 as well). Everything in the launch brief was stale: the stated RED state, the five witness node names, and the DAG key (`id` instead of the real `task_id`). A step brief that describes work already committed sends the subagent to reproduce evidence that exists and to produce a no-op diff.
+- **Step / Phase:** S4.2 Implement + confirm GREEN (T-001) — Phase 4, change structure-map / CROSS-CUTTING
+- **Duration / iterations:** 1 wasted subagent launch (a relaunch of an already-VERIFIED task); no code change resulted.
+- **Resolution:** the step subagent verified the done-criteria by **fresh runs** instead of duplicating the evidence or producing a no-op diff. **Durable fix:** read `task_id` + `status` + the task's real `red_command`/`green_command` node names from `.github/task-runner/tasks.json` before **every** Phase 4 launch, and never carry node names forward from an earlier brief.
+- **Date:** 2026-10-09
+
+## P-76 — Phase 3 derived tests violate the repo complexity gate
+- **Problem:** `uv run complexipy` (paths `src`, `tests`, `max-complexity-allowed = 15`) is **RED** on this branch because of 6 functions written by Phase 3's own test derivation — `test_ac_009_tree_code_dirs_full_other_dirs_counted` 34, `test_ac_012_package_header_and_exports` 26, `test_ac_016_private_symbols_and_dunders` 25, `test_inv_002_no_module_hidden_by_pruning` 22, `_block_dir_paths` 21, `test_ac_026_map_hook_is_advisory` 17 — none of them in `src/` or `scripts/`. Consequence: T-007's `test_nfr_005_complexipy_threshold_holds` cannot go GREEN until those are restructured (extract helpers, keep every assertion — not a weakening), which is authorized by T-007's `allowed_files`.
+- **Step / Phase:** S3.1 Derive tests / S3.2 Ruff + confirm RED — Phase 3, change structure-map / CROSS-CUTTING (surfaced in Phase 4, T-003)
+- **Duration / iterations:** latent from Phase 3; discovered while checking the complexity gate in Phase 4, and deferred to the task that owns the NFR witness (T-007).
+- **Resolution:** logged here so the restructuring is planned work inside T-007's scope rather than a Phase 5 surprise. **Durable fix:** run `complexipy` as part of the **S3.2 ruff + RED gate**, not only at the task that owns the NFR witness.
+- **Date:** 2026-10-09
+
+## P-77 — the generated map is self-referential, so a naive byte diff can never be clean
+- **Problem:** `scripts/make_map.py` renders **its own line count** (`#### scripts/make_map.py (419 lines)`), so any edit to the generator changes the committed map by one hunk even when its behavior is unchanged — a "regenerate and diff" check can never prove a refactor was behavior-preserving.
+- **Step / Phase:** S4.3 Refactor (T-003) — Phase 4, change structure-map / CROSS-CUTTING
+- **Duration / iterations:** 1 investigation cycle to pick a usable no-behavior-change proof; plus 1 in-step workaround for the `ruff format` issue below.
+- **Resolution:** the usable no-behavior-change proof is a pre/post **code** comparison over a **fixed** tree — S4.3 did 3 invocations (default, `--max-depth 2`, `--include-private --max-depth 3`) and required byte-identical output. Also recorded here: `ruff format` under PEP 758 (Python 3.14) rejects a parenthesized `except (A, B):` without `as`, which forced an AST-shape check instead of a try/except in `_dunder_all`.
+- **Date:** 2026-10-09
