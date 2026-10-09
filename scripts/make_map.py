@@ -7,17 +7,20 @@ read exactly once: the line count and the AST come from the same read (REQ-001, 
 
 T-002 owns the harness: the CLI (REQ-002), the file set (REQ-003), the exit-code contract
 (REQ-004, codes 2/4/0 here), the unreadable-source hard failure (REQ-006), the document shape
-(REQ-008) and the `--out` parent-directory rule (EDGE-006). The Directory tree body is
-T-003's, the Packages body is T-004's, and the `--check` comparison is T-005's.
+(REQ-008) and the `--out` parent-directory rule (EDGE-006). T-003 owns the Directory tree body
+(REQ-009/REQ-010), the Packages scope, group headers and module sections (REQ-011…REQ-013) and
+the path form (REQ-020). The symbol bodies of each module section are T-004's, and the `--check`
+comparison is T-005's.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import inspect
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,6 +47,30 @@ _IGNORE_NOTE = (
 
 # REQ-002: --root defaults to the repository root that contains scripts/make_map.py.
 _DEFAULT_ROOT = Path(__file__).resolve().parents[1]
+
+# REQ-009 clause 2: the top-level directories the tree renders entry by entry (the "code dirs").
+_CODE_DIRS: tuple[str, ...] = ("src", "tests", "scripts", "migrations")
+
+# REQ-011: the directories whose every module is in Packages scope.
+_PACKAGES_DIRS: tuple[str, ...] = ("src", "scripts", "migrations")
+
+# REQ-012: the import root a package's import name is measured against.
+_IMPORT_ROOT = "src/"
+
+# REQ-018: a summary is truncated to this many characters, with the marker appended when longer.
+_SUMMARY_LIMIT = 100
+_SUMMARY_MARKER = "…"
+
+# REQ-009 clause 3: the fixed built-in role-label table for the count-only top-level directories.
+# ponytail: a literal table (spec §13 known-ceiling note). Ceiling: a top-level directory the table
+# has no entry for renders an unlabelled count line (EDGE-015), and a new label needs a code change.
+# Upgrade path: a config-driven table read at render time.
+_ROLE_LABELS: Mapping[str, str] = {
+    "docs": "process record",
+    ".agents": "skills",
+    ".github": "CI and tooling",
+    "userdocs": "published docs",
+}
 
 
 @dataclass(frozen=True)
@@ -122,19 +149,21 @@ def _walk_paths(root: Path) -> list[str]:
 
 
 def _file_set(root: Path) -> list[str]:
-    """The sorted `.py` files the map describes (REQ-003, AC-003, EDGE-007, EDGE-008).
+    """The sorted tracked file set the map describes (REQ-003, AC-003, EDGE-007, EDGE-008).
 
-    Index plus untracked-but-not-ignored, filtered to `.py`, and kept only where the path
-    exists on disk — so a new file is mapped before it is `git add`ed and a tracked file
-    deleted from the working tree is not mapped at all (EDGE-008, not an error).
+    Index plus untracked-but-not-ignored, kept only where the path exists on disk — so a new file
+    is mapped before it is `git add`ed and a tracked file deleted from the working tree is not
+    mapped at all (EDGE-008, not an error). Every file type is kept: the tree renders the code dirs
+    and counts the other top-level directories over all file types (REQ-009), while the modules are
+    the `.py` subset (REQ-003). The non-git fallback can only find `.py` files, so a non-git
+    `--root` counts `.py` alone (EDGE-007).
     """
     listing = _git_paths(root)
     if listing is None:
         print(_IGNORE_NOTE, file=sys.stderr)  # the limitation note, exactly once (EDGE-007)
         candidates = _walk_paths(root)
     else:
-        candidates = [name for name in listing if name.endswith(".py")]
-    # Both branches end in the same two rules: `.py`, and present on disk (EDGE-008).
+        candidates = listing
     return sorted(name for name in candidates if (root / name).is_file())
 
 
@@ -160,14 +189,202 @@ def _read_modules(paths: Sequence[str], root: Path) -> tuple[list[Module], list[
     return modules, sorted(failures)
 
 
-def _render(modules: Sequence[Module]) -> str:
+def _children(paths: Sequence[str], prefix: str) -> tuple[list[str], list[str]]:
+    """The direct children of the directory `prefix` in the file set: sorted names, then sorted files."""
+    dirs: set[str] = set()
+    files: list[str] = []
+    for path in paths:
+        if path.startswith(prefix):
+            name, sep, _ = path[len(prefix) :].partition("/")
+            if sep:
+                dirs.add(name)
+            else:
+                files.append(name)
+    return sorted(dirs), files
+
+
+def _hidden_counts(paths: Sequence[str], prefix: str) -> tuple[int, int]:
+    """REQ-010: how many directories and how many files the `--max-depth` prune hides under `prefix`."""
+    below = [path[len(prefix) :] for path in paths if path.startswith(prefix)]
+    hidden: set[str] = set()
+    for path in below:
+        parts = path.split("/")[:-1]
+        for index in range(1, len(parts) + 1):
+            hidden.add("/".join(parts[:index]))
+    return len(hidden), len(below)
+
+
+def _prune_marker(dirs: int, files: int) -> list[str]:
+    """REQ-010's marker line: `(+N dirs not shown)`, `(+N files not shown)`, or the combined form —
+    one wording, built from whichever of the two counts is non-zero."""
+    parts = [f"{count} {unit}" for count, unit in ((dirs, "dirs"), (files, "files")) if count]
+    return [f"(+{', '.join(parts)} not shown)"] if parts else []
+
+
+def _branch_lines(prefix: str, depth: int, paths: Sequence[str], max_depth: int) -> list[str]:
+    """The tree lines of the branch under `prefix` (REQ-009 clause 2), one per directory and per
+    entry, sorted, indented two spaces per level. `--max-depth` prunes this branch only (REQ-010):
+    the deepest rendered directory carries the marker for everything below the limit."""
+    indent = "  " * depth
+    if depth >= max_depth:
+        hidden_dirs, hidden_files = _hidden_counts(paths, prefix)
+        return [f"{indent}{line}" for line in _prune_marker(hidden_dirs, hidden_files)]
+    lines: list[str] = []
+    dirs, files = _children(paths, prefix)
+    for name in dirs:
+        child = f"{prefix}{name}/"
+        lines.append(f"{indent}{child}")
+        lines += _branch_lines(child, depth + 1, paths, max_depth)
+    return lines + [f"{indent}{prefix}{name}" for name in files]
+
+
+def _top_level_counts(paths: Sequence[str]) -> dict[str, int]:
+    """How many files sit under each top-level directory of the file set — the one place the
+    top-level split is derived; the code dirs are rendered in full, the rest are counted."""
+    counts: dict[str, int] = {}
+    for path in paths:
+        name, sep, _ = path.partition("/")
+        if sep:
+            counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def _count_lines(counts: Mapping[str, int]) -> list[str]:
+    """REQ-009 clause 3: one count line per top-level directory that is not a code dir, with its
+    role label when the built-in table has one and no label when it does not (EDGE-015)."""
+    return [
+        f"{name}/ \u2014 {count} files" + (f" ({label})" if (label := _ROLE_LABELS.get(name)) else "")
+        for name, count in sorted(counts.items())
+        if name not in _CODE_DIRS
+    ]
+
+
+def _tree_lines(paths: Sequence[str], max_depth: int) -> list[str]:
+    """The Directory tree block in REQ-009 order: the top-level files by name, then every code dir
+    rendered in full within `--max-depth`, then one count line per other top-level directory."""
+    counts = _top_level_counts(paths)
+    lines: list[str] = [path for path in paths if "/" not in path]
+    for name in _CODE_DIRS:
+        if name in counts:
+            lines.append(f"{name}/")
+            lines += _branch_lines(f"{name}/", 1, paths, max_depth)
+    return lines + _count_lines(counts)
+
+
+def _in_packages_scope(path: str) -> bool:
+    """REQ-011: every module under a packages dir, plus each `tests/` `conftest.py` or
+    `*_test_helpers.py`. No other `tests/` module, and never a `.py` outside a code dir (REQ-010)."""
+    top = path.split("/", 1)[0]
+    name = path.rsplit("/", 1)[-1]
+    return top in _PACKAGES_DIRS or (top == "tests" and (name == "conftest.py" or name.endswith("_test_helpers.py")))
+
+
+def _summary(docstring: str | None) -> str:
+    """REQ-018: the normalized first logical line of a docstring; "" when there is none (an empty
+    docstring counts as none, EDGE-001)."""
+    if not docstring:
+        return ""
+    paragraph: list[str] = []
+    for line in inspect.cleandoc(docstring).splitlines():
+        if not line.strip():
+            break
+        paragraph.append(line)
+    text = " ".join(" ".join(paragraph).replace("`", "").split())
+    return f"{text[:_SUMMARY_LIMIT]}{_SUMMARY_MARKER}" if len(text) > _SUMMARY_LIMIT else text
+
+
+def _all_assignment(node: ast.stmt) -> ast.expr | None:
+    """The value `node` assigns to `__all__`, None when it assigns no `__all__` (REQ-012)."""
+    if isinstance(node, ast.Assign):
+        targets, value = node.targets, node.value
+    elif isinstance(node, ast.AnnAssign) and node.value is not None:
+        targets, value = [node.target], node.value
+    else:
+        return None
+    if not any(isinstance(target, ast.Name) and target.id == "__all__" for target in targets):
+        return None
+    return value
+
+
+def _dunder_all(tree: ast.Module) -> list[str]:
+    """The names of a module's `__all__` assignment, [] when it defines none or binds anything but a
+    literal sequence (REQ-012)."""
+    for node in tree.body:
+        value = _all_assignment(node)
+        if value is None:
+            continue
+        if isinstance(value, ast.List | ast.Tuple | ast.Set):
+            return [str(item.value) for item in value.elts if isinstance(item, ast.Constant)]
+        return []
+    return []
+
+
+def _imported_names(node: ast.stmt) -> list[str]:
+    """The names a module-level import statement binds (REQ-012's exports fallback)."""
+    if isinstance(node, ast.Import):
+        return [alias.asname or alias.name.split(".")[0] for alias in node.names]
+    if isinstance(node, ast.ImportFrom):
+        return [alias.asname or alias.name for alias in node.names if alias.name != "*"]
+    return []
+
+
+def _public_imports(tree: ast.Module) -> list[str]:
+    """The public names a module imports at module level — REQ-012's exports fallback."""
+    names = [name for node in tree.body for name in _imported_names(node)]
+    return [name for name in names if not name.startswith("_")]
+
+
+def _group_header(directory: str, init: Module | None) -> str:
+    """REQ-012: one header per containing directory — the import name and the `--root`-relative path
+    for a package (an `__init__.py`), the path alone for a plain directory; never one per module."""
+    path = f"{directory}/"
+    if init is None:
+        return f"### {path}"
+    relative = directory.removeprefix(_IMPORT_ROOT)
+    return f"### `{relative.replace('/', '.')}` \u2014 {path}"
+
+
+def _module_lines(module: Module) -> list[str]:
+    """REQ-013: the module header with its line count, then its summary line only when the module has
+    a docstring (EDGE-001 module half, EDGE-002: an empty file renders its header alone, no error)."""
+    lines = [f"#### {module.path} ({module.line_count} lines)"]
+    if summary := _summary(ast.get_docstring(module.tree)):
+        lines.append(summary)
+    return lines
+
+
+def _packages_lines(modules: Sequence[Module]) -> list[str]:
+    """The Packages section: the REQ-011 scope in path order, grouped by containing directory
+    (REQ-012) — one header per directory, the exports line when the package has one (EDGE-013: no
+    line when it has neither `__all__` nor public imports), then each module section (REQ-013). The
+    symbol bodies are T-004's. No in-scope module is ever elided for size, whatever `--max-depth`
+    pruned in the tree (INV-002)."""
+    parsed = {module.path: module for module in modules}
+    groups: dict[str, list[Module]] = {}
+    for module in sorted((m for m in modules if _in_packages_scope(m.path)), key=lambda m: m.path):
+        groups.setdefault(module.path.rsplit("/", 1)[0], []).append(module)
+    lines: list[str] = []
+    for directory, group in groups.items():
+        init = parsed.get(f"{directory}/__init__.py")
+        lines.append(_group_header(directory, init))
+        if init is not None and (names := _dunder_all(init.tree) or _public_imports(init.tree)):
+            lines.append(f"exports: {', '.join(sorted(names))}")
+        for module in group:
+            lines += _module_lines(module)
+        lines.append("")
+    return lines
+
+
+def _render(modules: Sequence[Module], paths: Sequence[str], max_depth: int) -> str:
     """The REQ-008 document shape: title, one blank line, the generated-by line, then the two
     section headings, in that order and nothing else — no timestamp, no version banner, no
-    host path. The section bodies are T-003 (tree) and T-004 (packages)."""
+    host path (REQ-020: every path here is `--root`-relative POSIX). The tree body is REQ-009 and
+    REQ-010, the Packages body REQ-011…REQ-013; REQ-019's LF newlines and single final newline."""
     lines = [_TITLE, "", _GENERATED_BY, "", _TREE_HEADING, ""]
-    lines += [f"- {module.path}" for module in modules]
-    lines += ["", _PACKAGES_HEADING]
-    return "\n".join(lines) + "\n"
+    lines += _tree_lines(paths, max_depth)
+    lines += ["", _PACKAGES_HEADING, ""]
+    lines += _packages_lines(modules)
+    return "\n".join(lines).rstrip("\n") + "\n"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -182,12 +399,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     root = Path(args.root).resolve()
     out = Path(args.out)  # REQ-002: --out resolves against the current working directory
 
-    modules, failures = _read_modules(_file_set(root), root)
+    paths = _file_set(root)
+    modules, failures = _read_modules([path for path in paths if path.endswith(".py")], root)
     if failures:  # 4: every offending path once, sorted, on stderr; no output file written
         print(*failures, sep="\n", file=sys.stderr)
         return _EXIT_UNREADABLE
 
-    document = _render(modules)
+    document = _render(modules, paths, args.max_depth)
     if args.check:
         # T-005 (REQ-005): compare `document` against the `--out` bytes here and return 3 then 1.
         return _EXIT_OK

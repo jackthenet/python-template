@@ -2584,3 +2584,241 @@ both DAG copies (status sync belongs to S4.4). Working tree clean after the comm
 witnesses identified with the clause they cover.** Next atomic step: **S4.2 (T-003)** — implement the
 rendering layer in `scripts/make_map.py` and confirm GREEN on the targeted `green_command`.
 
+## Phase 4 — T-003 GREEN (S4.2) (2026-10-09)
+
+**Objective (single):** make T-003's `green_command` pass — all 13 witnesses GREEN — by implementing
+the rendering layer in T-003's `allowed_files.source_files` (`scripts/make_map.py`, the only allowed
+source file). No test was edited, weakened or deleted; no DAG file was edited; nothing was committed
+(the commit and the `VERIFIED` status belong to the following step).
+
+### What was implemented, per REQ
+
+All of it is in `scripts/make_map.py`; the T-002 harness (CLI, file set, exit codes, the single
+read/parse, `--out` parent rule) is untouched apart from `_file_set` (below) and `_render`.
+
+| REQ | Rendered behavior | Code |
+|---|---|---|
+| REQ-009 | Tree order: every top-level file of the file set by name, then each code dir (`src/`, `tests/`, `scripts/`, `migrations/`) rendered in full — one line per directory and per entry, sorted, indented two spaces per level — then one count line per other top-level directory. A code dir with no entries renders no header at all. | `_tree_lines`, `_children`, `_branch_lines`, `_CODE_DIRS` |
+| REQ-009 clause 3 | Count line `<name>/ — <N> files` plus the role label from the fixed built-in table (`docs` process record, `.agents` skills, `.github` CI and tooling, `userdocs` published docs); an unlisted directory renders the count with no label (EDGE-015). The table is a literal dict carrying a `ponytail:` comment naming the ceiling (a new label needs a code change) and the upgrade path (a config-driven table), per the spec §13 known-ceiling note. | `_ROLE_LABELS`, `_count_lines` |
+| REQ-010 | `--max-depth` prunes the Directory tree only. The deepest rendered directory of a pruned branch carries `(+N dirs not shown)`, `(+N files not shown)` when only files are hidden, or `(+N dirs, M files not shown)` when both. The Packages section always keeps the full REQ-011 scope. | `_branch_lines`, `_hidden_counts`, `_prune_marker` |
+| REQ-011 | Packages scope: every module under `src/`, `scripts/`, `migrations/`, plus every `tests/` module named `conftest.py` or ending `_test_helpers.py`; no other `tests/` module, no module outside a code dir, and no in-scope module elided for size. | `_in_packages_scope`, `_PACKAGES_DIRS`, `_packages_lines` |
+| REQ-012 | Exactly one group header per containing directory (never per module): `### \`<import name>\` — <path>/` for a package (a directory holding `__init__.py`), `### <path>/` for a plain directory. The import name is the directory path relative to the import root `src/` with `/` → `.`; a package outside `src/` carries its whole `--root`-relative path. Exports line: the sorted `__all__` names, else the sorted public module-level import names, else no exports line at all (EDGE-013). | `_group_header`, `_packages_lines`, `_all_assignment`, `_dunder_all`, `_imported_names`, `_public_imports` |
+| REQ-013 | Module header `#### <path> (<N> lines)` — the line count of the single read T-002 already makes — followed by the summary line only when the module has a docstring. An empty file renders its header with `(0 lines)` and no further line, and is not an error (EDGE-002); a module with no docstring renders no summary (EDGE-001 module half). The symbol bodies stay empty: AC-014…AC-018 are T-004's gate. | `_module_lines` |
+| REQ-020 | Every path in the map is `--root`-relative POSIX (`as_posix()` from the T-002 harness): forward slashes on Windows and Linux alike, no backslash, no drive letter, no UNC; no timestamp, host name or user name anywhere. | unchanged harness + `_render` |
+| REQ-018 (module half) | The summary is the normalized first logical line of the docstring: whitespace runs collapsed, backticks removed, truncated at 100 characters with `…`. Implemented now because REQ-013 needs it; T-004 reuses it for the symbol summaries. | `_summary` |
+
+`_file_set` now returns the whole tracked file set (every file type), because REQ-009 renders the code
+dirs and counts the other top-level directories over all file types (AC-009's `docs/` count included,
+from the git index plus untracked-not-ignored — P.5 fix 8); the modules passed to `_read_modules` are
+the `.py` subset, so REQ-003 and REQ-010's "every `.py` is still parsed" are unchanged. The non-git
+fallback (`_walk_paths`) can only find `.py`, so a non-git `--root` counts `.py` alone — recorded in
+the docstring (EDGE-007's fixture asserts no count line, so no witness is affected).
+
+### Gate 1 — T-003 `green_command` (13/13 GREEN)
+
+Verbatim `green_command` (`uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py -v`):
+**22 failed, 33 passed** in 28.85s. Before this step (S4.1, commit `9b4e1a8`) the same command gave
+**33 failed, 22 passed** — exactly the 11 T-003 RED witnesses flipped to GREEN, and **no
+previously-GREEN node regressed** (22 + 11 = 33).
+
+T-003's own 13 witness node ids, run as a set: **13 passed** in 9.09s —
+`test_ac_009_tree_code_dirs_full_other_dirs_counted`, `test_ac_010_max_depth_prunes_tree_only`,
+`test_ac_011_packages_scope`, `test_ac_012_package_header_and_exports`,
+`test_edge_015_unlabelled_dir_counted_without_label` (acceptance); `test_ac_013_module_header_and_summary`,
+`test_ac_020_paths_are_relative_posix`, `test_edge_001_missing_docstring_renders_no_summary`,
+`test_edge_002_empty_file_renders_header_only`, `test_edge_013_package_without_exports`,
+`test_nfr_007_output_identical_across_platforms` (unit); `test_inv_002_no_module_hidden_by_pruning`,
+`test_inv_003_no_absolute_path_or_timestamp` (property). The 2 witnesses that were already GREEN at the
+RED baseline (NFR-007 byte identity, INV-003) **stayed GREEN**.
+
+The 33 passing nodes are 13 (T-003) + 15 (T-002) + 2 (T-001: AC-025, NFR-004) + 3 incidental
+(AC-019, INV-001, INV-006 — the same three that already passed at the RED baseline). No new
+incidental pass appeared: T-004's, T-005's, T-006's and T-007's nodes are all still RED.
+
+### Gate 2 — no regression on the earlier tasks
+
+- T-002's verbatim `green_command` (`uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py -v`):
+  **20 failed, 29 passed** in 13.05s — the 20 are T-004 (7), T-005 (5 acceptance), T-006 (5) and
+  T-007 (3), i.e. the same set that was RED before, none of them a T-001/T-002 witness.
+- T-002's 15 witness node ids + T-001's 2 (`test_ac_025_mypy_covers_scripts`,
+  `test_nfr_004_mypy_and_ruff_clean`): **17 passed** in 5.47s — the harness (single read/parse,
+  exit-code contract, hard-failure set, non-git fallback, `--max-depth < 1` usage error, NFR-001
+  under 2 s, NFR-003 deptry) is intact.
+
+### Gate 3 — lint, types, complexity
+
+| Check | Command | Result |
+|---|---|---|
+| ruff lint (changed path) | `uv run ruff check scripts/make_map.py` | All checks passed! |
+| ruff format (changed path) | `uv run ruff format --check scripts/make_map.py` | 1 file already formatted |
+| mypy | `uv run mypy scripts/` | Success: no issues found in 4 source files |
+| complexipy, this file | `uv run complexipy scripts/make_map.py --max-complexity-allowed 15` | 22 functions analysed, **0 FAILED**, highest 10 (`_packages_lines`), then 9 (`_dunder_all`, `_imported_names`), 7 (`_children`, `_tree_lines`), 5 (`_all_assignment`, `_branch_lines`, `_count_lines`, `_hidden_counts`, `_summary`) |
+| complexipy, CI config | `uv run complexipy` (`paths = ["src", "tests"]`, `max-complexity-allowed = 15`) | 1980 functions analysed, **6 FAILED** — see the finding below; none in `src/`, none in `scripts/` (the CI config does not scan `scripts/`) |
+
+The renderer is deliberately built from small functions to stay under the NFR-005 ceiling; the
+threshold and the scanned paths were not touched.
+
+### Real-repository render (default `--max-depth 4`, `--root` = repo root)
+
+`uv run python scripts/make_map.py --out <tmp>` → **763 lines** (NFR-002 budget 2 000: well inside),
+exit 0, no stderr.
+
+- Tree section: 443 non-blank lines — 9 top-level files, then `src/`, `tests/`, `scripts/`,
+  `migrations/` in full, then the count lines:
+  `.agents/ — 16 files (skills)`, `.github/ — 9 files (CI and tooling)`, `.vscode/ — 2 files`
+  (no table entry → no label, exactly EDGE-015), `docs/ — 213 files (process record)`,
+  `userdocs/ — 2 files (published docs)`.
+- Packages section: **32 group headers, 119 module headers, 11 exports lines**. 119 is the spec's
+  measured 118 plus `scripts/make_map.py` itself, which entered Packages scope when T-002 added it.
+- `--max-depth 2`: the tree prunes (`src/backend/` → `(+12 dirs, 84 files not shown)`, a
+  files-only case `(+3 files not shown)`), the map drops to 372 lines, and the Packages section still
+  lists **all 119** modules — INV-002 measured on the real repository, not only on generated trees.
+- Output is LF-only, hook-clean (INV-006), byte-identical across runs (INV-001) and across host
+  locations (NFR-007) — those three witnesses are GREEN.
+
+### File size (NFR-006 record, target not a gate)
+
+`wc -l scripts/make_map.py`: **201 → 412 lines**. The ≈250-line NFR-006 target is now exceeded by
+162 lines; T-004's symbol inventory will push it further. The note carried forward from S4.3 (T-002)
+is still open and is now a decision for Phase 5 / the Phase 6 review: keep one stdlib-only module
+(NFR-006 is explicitly a target, not a gate, and no witness asserts it) or split the renderer into
+`scripts/` modules — a split would move the single-read/parse invariant and the AC-001 witness across
+files, so it is not free. Recorded, not acted on, in this step.
+
+### Findings
+
+1. **The complexipy CI job is RED on this branch, and the cause is not in `scripts/make_map.py`.**
+   `uv run complexipy` (the CI config: `paths = ["src", "tests"]`, `max-complexity-allowed = 15`)
+   reports 6 functions over the ceiling, all of them written by Phase 3:
+
+   | File | Function | Complexity |
+   |---|---|---|
+   | `tests/acceptance/test_structure_map.py` | `test_ac_009_tree_code_dirs_full_other_dirs_counted` | 34 |
+   | `tests/acceptance/test_structure_map.py` | `test_ac_012_package_header_and_exports` | 26 |
+   | `tests/acceptance/test_structure_map.py` | `_block_dir_paths` | 21 |
+   | `tests/acceptance/test_structure_map.py` | `test_ac_026_map_hook_is_advisory` | 17 |
+   | `tests/property/test_structure_map.py` | `test_inv_002_no_module_hidden_by_pruning` | 22 |
+   | `tests/unit/test_make_map.py` | `test_ac_016_private_symbols_and_dunders` | 25 |
+
+   Pre-existing at `9b4e1a8`: this step changed only `scripts/make_map.py`, which the CI config does
+   not scan, so the set is identical before and after. Consequences the orchestrator must schedule:
+   the `complexipy` job in `.github/workflows/quality.yml` fails on this branch, and **T-007's
+   `test_nfr_005_complexipy_threshold_holds` witness cannot go GREEN until these test functions are
+   restructured** — restructuring them (extracting helper functions, keeping every assertion) is not
+   weakening a test, but it edits test files, so it needs an explicit step with those paths in
+   `allowed_files` (a Phase 5 → Phase 3/4 re-entry, or widened T-007 scope). Not acted on here:
+   S4.2 may not edit tests.
+2. **No spec-versus-test conflict.** Every T-003 witness passes against the spec text as written; no
+   witness needed a weaker reading, none was edited, and no requirement had to be reinterpreted.
+   EDGE-001's symbol half stays unexercised by T-003 (AC-018 is still RED — it needs the symbol
+   summaries), as the S4.1 record predicted.
+
+### Scope of this step
+
+Files changed: **`scripts/make_map.py`** (the only allowed source file) and **this record**. No test
+file, no `docs/specs/`, no `docs/tasks/` or `.github/task-runner/tasks.json`, no `AGENTS.md` /
+`STRUCTURE.md` / `mkdocs.yml` / `.pre-commit-config.yaml` / `.github/` change. Nothing committed (the
+commit and the `VERIFIED` status belong to the next step); `uv.lock` restored with `git restore
+uv.lock` after every `uv run` (P-74) and never staged.
+
+**S4.2 (T-003) gate: PASSED — 13/13 witnesses GREEN on the verbatim `green_command` (22 failed /
+33 passed overall, the 11 RED witnesses flipped, nothing previously GREEN regressed), T-001/T-002
+witnesses 17/17 GREEN, ruff and mypy clean on the changed path, complexipy clean on
+`scripts/make_map.py` (max 10).** Next atomic step: **S4.3 (T-003)** — refactor, keep GREEN.
+
+## Phase 4 — T-003 refactor (S4.3)
+
+**Objective:** improve the structure of the code S4.2 wrote without changing any observable
+behavior, then re-confirm the targeted GREEN. Not a no-op: four structural changes were made, all
+behavior-preserving.
+
+### What changed in `scripts/make_map.py`, and why
+
+1. **`_branch_lines` — one `_children` call instead of two.** The step scanned the branch twice
+   (`_children(paths, prefix)[0]` for the directories, `[1]` for the files). Now the pair is
+   unpacked once (`dirs, files = _children(paths, prefix)`): same output, one full pass over the
+   file set per rendered directory instead of two.
+2. **`_branch_lines` — naming that matches the two different pairs.** The prune branch bound the
+   hidden counts to `dirs` / `files`, the same names the entry lists carry two statements later, and
+   mypy read the collision as a type error (`int` vs `list[str]`). The counts are now
+   `hidden_dirs` / `hidden_files`, so the REQ-010 counts and the REQ-009 entries are distinguishable
+   at the call site.
+3. **`_prune_marker` — one wording instead of three.** The `(+… not shown)` chrome was spelled out
+   in three branches (dirs-only, files-only, combined), i.e. three places to edit for one wording.
+   It is now built from whichever of the two counts is non-zero:
+   `parts = [f"{count} {unit}" for count, unit in ((dirs, "dirs"), (files, "files")) if count]`.
+   All three REQ-010 forms are unchanged (proved below by the `--max-depth 2` render).
+4. **`_top_level_counts` — the top-level split derived once.** The tree rendered the code dirs by
+   testing `any(path.startswith(f"{name}/") for path in paths)` per code dir (four scans) while
+   `_count_lines` re-derived the same top-level partition with its own `path.partition("/")` loop and
+   its own `name not in _CODE_DIRS` filter. The two halves of one rule lived in two places, expressed
+   in two idioms. `_top_level_counts(paths)` now derives it once; `_tree_lines` asks `name in counts`
+   and `_count_lines(counts)` filters `name not in _CODE_DIRS` — both read the same source.
+
+**Explicitly not changed.** `_imported_names` / `_public_imports` were tried merged (one call site
+each, so a candidate for inlining) and the merge was **reverted**: `complexipy` put the merged
+function at complexity 15 — exactly at the ceiling, against a pre-merge maximum of 10 — so the split
+earns its keep. Same judgement for `_all_assignment` / `_dunder_all`, `_prune_marker`,
+`_module_lines` and `_group_header`: each is one call site, but each names a distinct spec clause
+(REQ-012 / REQ-010 / REQ-013) and keeps its caller inside the complexity budget — indirection that
+carries traceability, not noise. No dead helper was found: an AST reference count over the module
+shows every one of the 22 functions called at least once and every module constant used, so nothing
+S4.2 left behind was superseded. The `ponytail:` ceiling comment on `_ROLE_LABELS` is kept verbatim
+(the simplification is still deliberate and still has the same ceiling and upgrade path).
+
+### Line count against NFR-006 (target ≈250, not a gate)
+
+`wc -l scripts/make_map.py`: **412 before → 419 after** (+7). The breakdown is unchanged in
+character: **245 statement lines** (243 before) against the ≈250 target, the rest is 75 docstring
+lines, 29 comment lines and 70 blank lines — the REQ/AC/INV/EDGE citations the traceability rules
+depend on. The +7 is one new named helper (`_top_level_counts`, 10 lines) bought by removing a
+duplicated scan, a duplicated partition rule and a triplicated string literal; closing the gap to 250
+would mean deleting that prose, which NFR-006 does not ask for (spec §NFR-006 and its test-strategy
+row: *"target, not a gate: Phase 5 records the actual line count"*, *no test*). Phase 5 records 419.
+
+### No-behavior-change proof (byte identity)
+
+The generated map is self-referential — it renders `#### scripts/make_map.py (N lines)` — so a naive
+before/after diff of the repository map always differs by exactly that one number. Two checks
+therefore ran:
+
+1. **Same tree, both code states.** The pre-refactor code (a reverse-applied copy at
+   `C:/tmp/pre_make_map.py`, never in the repository) and the post-refactor code each rendered the
+   same checked-out worktree (`--root .`), three invocations each, and the bytes are identical:
+   - default (`--max-depth 4`): `cmp` clean, 763 lines, md5 `6f10d2967bd75b461cd0049c793eee6a`
+   - `--max-depth 2` (exercises the REQ-010 prune marker in all its forms): `cmp` clean, 372 lines,
+     md5 `33892b809940f8bd0fd82203a55167d4`
+   - `--include-private --max-depth 3`: `cmp` clean, md5 `1221613c8c0bb0fb8fb9de923fce8245`
+2. **Repository map, before my edits vs after** (`uv run python scripts/make_map.py --out …`, default
+   root): `diff` reports exactly one hunk, line 465, `#### scripts/make_map.py (412 lines)` →
+   `(419 lines)` — the file's own length, i.e. data the map describes, not rendering behavior. No
+   other byte differs.
+
+### Gates (S4.3)
+
+| Gate | Command | Result |
+|---|---|---|
+| Byte identity | pre-refactor vs post-refactor render, 3 invocations | **identical** (`cmp` clean; md5s above) |
+| T-003 witnesses (13 nodes, targeted) | `uv run pytest <T-003 tests_to_create>` | **13 passed** in 7.75s |
+| T-001 (2) + T-002 (15) witnesses | `uv run pytest <T-001 + T-002 tests_to_create>` | **17 passed** in 5.39s — no regression |
+| Lint | `uv run ruff check scripts/make_map.py` | All checks passed! |
+| Format | `uv run ruff format --check scripts/make_map.py` | 1 file already formatted |
+| Types | `uv run mypy scripts/` | Success: no issues found in 4 source files |
+| Complexity | `uv run complexipy scripts/make_map.py --max-complexity-allowed 15` | 22 functions, **0 over**, max 10 (`_packages_lines`) |
+| Size | `wc -l scripts/make_map.py` | 412 → **419** (245 statement lines) |
+
+The full suite was **not** run (Phase 5 gate); the targeted witnesses plus the byte-identity proof
+are this step's evidence.
+
+### Scope of this step
+
+Files changed: **`scripts/make_map.py`** and **this record** only. No test file, no `docs/specs/`, no
+`docs/tasks/` or `.github/task-runner/tasks.json`, no `AGENTS.md` / `STRUCTURE.md` / `mkdocs.yml` /
+`.pre-commit-config.yaml` / `.github/` change. Nothing committed (the commit and the `VERIFIED`
+status belong to S4.4); `uv.lock` restored with `git restore uv.lock` after the `uv run`s and never
+staged (P-74).
+
+**S4.3 (T-003) gate: PASSED — output byte-identical before/after, 13/13 T-003 witnesses GREEN,
+17/17 T-001+T-002 witnesses GREEN, ruff + format + mypy clean, complexipy 0 over (max 10).** Next
+atomic step: **S4.4 (T-003)** — commit + set `"status": "VERIFIED"`.
+
