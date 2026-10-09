@@ -523,7 +523,7 @@
         "No `.py` file is committed after the hook is added without a regenerated map (REQ-027)."
       ],
       "dependencies": ["T-005"],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-007",

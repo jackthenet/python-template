@@ -625,4 +625,18 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 extra iteration, resolved **within the same S4.2 execution**, no step relaunch.
 - **Resolution:** one shared `_read_bytes(path)` site is now the module's only file-content read, used by both `_read_modules` and `_check` — two call sites, one read site (finding F-08 in `docs/verification/structure-map.md`). **Durable fix: before adding any file I/O to `scripts/make_map.py`, grep for the existing read site and route through it; when a witness counts structural features (read sites, call sites), treat that count as an invariant of the file, not of the task.**
 - **Also recorded (driver friction, same change):** passing pytest node lists through a `/tmp` file written from `uv run python` hit a Windows path mismatch (`/tmp/...` is not the path the Windows-side interpreter sees), so two invocations silently collected the **full suite** instead of the targeted nodes — ~5 minutes wasted. **Durable fix: pass node lists via a bash variable, never via a temp file written from a Python subprocess.**
+
+## P-80 — importing an acceptance test module shadowed stdlib `logging`
+- **Problem:** reusing a helper from `tests/acceptance/test_structure_map.py` by putting its directory on the import path (`sys.path.insert(0, "tests/acceptance")`) shadowed the stdlib `logging` package — `tests/acceptance/logging/` exists as a test subpackage — so the import resolved to it and pytest crashed during collection with a confusing `AttributeError` deep inside pytest's own logging setup. The failure looked like a broken test file, not a path problem, and cost a full detour before the shadowing was spotted.
+- **Step / Phase:** S4.2 Implement + confirm GREEN (T-006) — Phase 4, change structure-map / CROSS-CUTTING
+- **Duration / iterations:** 1 extra iteration, resolved **within the same S4.2 execution**, no step relaunch.
+- **Resolution:** the module is loaded by file location with `importlib.util.spec_from_file_location(...)`, so nothing is added to `sys.path` and stdlib `logging` resolves normally. **Durable fix: never put a test directory on `sys.path` to reuse a test helper — import it by file location, or move the helper to a `*_test_helpers` module that pytest imports normally.**
+- **Date:** 2026-10-09
+
+## P-81 — a DAG `green_command` scoped to a whole test file cannot reach zero failures mid-Phase-4
+- **Problem:** T-006's `green_command` runs the whole `tests/acceptance/test_structure_map.py`, so it reported **28 passed / 3 failed** even though all 5 of T-006's own witnesses were GREEN — the 3 failures are T-007's not-yet-implemented nodes, which are *supposed* to stay RED until T-007. Read literally, the gate could never pass mid-Phase-4, and the handoff wording risked a false FAILED (or a relaunch, or someone "fixing" T-007's tests early). The same ambiguity hit the reported "T-004 18" — that is the whole `tests/unit/test_make_map.py` file, while T-004's DAG entry owns 7 nodes.
+- **Step / Phase:** S4.2 Implement + confirm GREEN (T-006) — Phase 4, change structure-map / CROSS-CUTTING
+- **Duration / iterations:** 1 extra verification pass (targeted node run after the file-level run), no step relaunch.
+- **Resolution:** a task's GREEN gate is judged by **its own `tests_to_create` node list** (T-006: 5 passed), and both numbers are reported (own nodes, whole file) so the record is unambiguous. **Durable fix: when a DAG task's `green_command` is a whole file, the step brief must state which nodes belong to that task and which are other tasks' still-RED witnesses.**
+- **Date:** 2026-10-09
 - **Date:** 2026-10-09
