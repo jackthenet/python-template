@@ -1252,3 +1252,39 @@ Supporting counts (throwaway helpers `%LOCALAPPDATA%/Temp/s52_ast_count.py` and 
 **S5.2 gate: PASS** on all seven checks — lint with `D` selected over `src/`, format, types, strict docs build, the AC-009 docstring test, the AST digest with its control run, and deptry. Every value equals its S4.1 baseline.
 
 **Next (S5.3):** update `docs/verification/traceability.md` for the IDs this change touches.
+
+## Phase 5 — S5.3 traceability (2026-10-09)
+
+Objective: add/update matrix rows for the IDs this change actually touches. No source or test file was edited; the writes are this section and `docs/verification/traceability.md`.
+
+**Normative-basis correction to the step brief.** The brief names `docs/specs/docstring-guidance.md` as this change's spec. **No such file exists** (measured: `ls docs/specs/` — authentication, event-bus, file-management, logging-coverage, logging, mail-service, search, session-management, settings-coverage, settings-public-registry-setter, settings, structlog-logging, structure-map, template, user-management, user-roles-permissions), and none is expected: `ruff-d-docstrings` is **DOCS/CHORE**, a type that produces **no spec** (AGENTS.md Phase Matrix), so it defines no `REQ`/`AC`/`INV`/`EDGE`/`NFR` IDs of its own. Its normative basis is this record (§"Exact change scope", §"Invariants that MUST hold"). The rows therefore cover only the spec IDs the S5.1/S5.2 evidence reaches, plus the change's own gate as no-spec-ID rows.
+
+### Rows added (new section `## Chore: ruff-d-docstrings (docstring gate — Phase 5 S5.3, 2026-10-09)`, 3 rows, +10 matrix lines)
+
+| Row | Spec / ID | Evidence cited (already recorded, not re-measured) |
+|---|---|---|
+| Traced-class docstring wording intact (INV-A) | `logging-coverage.md` REQ-009 / AC-009 | S5.2 gate 5 `1 passed in 0.42s` (`test_traced_class_docstrings_mention_tracing`) + green inside the S5.1 acceptance run `364 passed, 1 skipped` |
+| The new docstring lint gate itself | — (chore, no spec ID) | S5.2 gate 1 `uv run ruff check .` → `All checks passed!` with `D` selected over `src/` and exactly the four exempt trees; group-11 targeted `D` re-check → 0 of the 328 sites remain; commit `16332dc` |
+| No-behavior-delta of the whole change (INV-D) | — (chore, no spec ID) | S5.2 gate 6 digest `64fc1d6e…` == baseline + the control run (docstring SAME, one-character code change DIFFERENT) + the 84 files / 43 587 nodes / 903 hosts counts; S5.1 `761 passed, 1 skipped` |
+
+**No existing row was rewritten or refreshed** (decision Q-129, convention B). The pre-existing `logging-coverage` row `REQ-009 | AC-009 | test_traced_class_docstrings_mention_tracing | GREEN` is untouched — re-run GREEN at S5.2 gate 5, but the record written by the change that observed it stands; the new row is the dated record of *this* gate.
+
+**IDs deliberately NOT touched.** `settings-public-registry-setter.md` REQ-013 / AC-018 / NFR-004 constrain `[tool.ruff.lint] select` — the very table this change's config commit edited — so their half of the evidence (`ruff check .` clean, `mypy src/` clean, `TID251` still selected) is re-verified at S5.2 gates 1 and 3. Their rows stay `PENDING (settings-public-registry-setter P.4, 2026-10-06)` because this change has **no witness** for them: `grep -rn "def test_ac_018_ruff_bans_private_slot_import\|def test_nfr_004_ruff_and_mypy_clean" tests/` → no match (that change's Phase 3 has not run), and a matrix row may not cite a test function that does not exist (`check_traceability.py` rule 3). Same reasoning for `structure-map.md` NFR-004 — its witness does not exist and this change did not touch the map renderer.
+
+### Referential-integrity check (`scripts/check_traceability.py`)
+
+```text
+before (this step's start, 822 rows):
+Traceability: PASS (822 matrix rows, 136 spec IDs, 746 test functions)
+
+after (3 new rows):
+Traceability: PASS (825 matrix rows, 136 spec IDs, 746 test functions)
+```
+
+Exit code 0 both runs. Row count +3, spec-ID and test-function counts unchanged — no new ID reference and no new test reference.
+
+**File sizes.** `docs/verification/traceability.md` 1028 → 1038 lines (+10: 1 section heading + 1 intro paragraph + blank lines + the 6-line table). `docs/verification/ruff-d-docstrings.md` 1254 → 1290 lines (+36, this section).
+
+**Working tree.** `git restore uv.lock` before committing; `uv.lock` not staged (finding **F-9**).
+
+**Next (S5.4):** the Phase 5 verification report (spec coverage for a DOCS/CHORE change = the scope items and INV-A…INV-J against the final diff).
