@@ -192,6 +192,7 @@ select = [
     "SIM",
     "C4",
     "DTZ", # flake8-datetimez: naive datetime objects are a bug
+    "D",  # pydocstyle — docstrings (google convention; src/ only, see per-file-ignores)
 ]
 fixable = [
     "I",  # isort
@@ -202,6 +203,7 @@ fixable = [
     "Q002",  # bad quotes docstring
     "Q003",  # avoidable escaped quote
     "Q004",  # unnecessary escaped quote
+    "D204", "D207", "D208", "D209", "D211", "D212", "D403",  # docstring layout, always-fixable (Q-12)
 ]
 ignore = [
     "PLR0913",
@@ -211,6 +213,15 @@ ignore = [
 exclude = [
     "data/", "__pycache__", ".venv", "venv", "build", "dist",
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"          # Q-1 / Q-2
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]              # Q-3 / Q-29 → sibling change docstrings-tests
+"scripts/*" = ["D"]            # Q-3
+"migrations/*" = ["D"]         # Q-23
+".github/*" = ["D"]            # Q-3
 
 [tool.pytest.ini_options]
 addopts = "-ra"

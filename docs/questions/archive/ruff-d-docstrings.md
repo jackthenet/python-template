@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/ruff-d-docstrings.md`
 - **Spec:** n/a
 - **Opened:** 2026-10-04
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Status:** ALL ANSWERED  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
+- **Answer rounds:** 7  <!-- r1 Q-1..Q-4 · r2 Q-5..Q-7 + Q-29 · r3 Q-9..Q-12 · r4 Q-13..Q-17 · r5 Q-18..Q-21, Q-23 · r6 Q-22, Q-24..Q-26 · r7 Q-27, Q-28. Q-8, Q-10, Q-21 closed by implication -->
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -73,10 +73,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(b) `"D1"` only** — 198 sites, the smallest gate and the smallest diff; docstring *formatting* stays unenforced and can drift again.
   - **(c) `"D"` with no convention (pep257)** — 386 sites; every ruff run prints two incompatible-rule warnings until one of each pair is ignored by hand.
   - **(d) A hand-written code list** (e.g. `"D1","D2","D3","D400","D403"`) — maximum control, but every future ruff release adds a `D` code that is silently outside the list.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) `"D"` plus `[tool.ruff.lint.pydocstyle] convention = "google"`** (user, 2026-10-07). Full `D` family, google convention: 328 `src/` sites today, one config line, no incompatible-rule warnings, matches the mkdocstrings default parser, and D401 (imperative mood) is off — which also keeps the existing `AC-009: …` style test docstrings legal.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 scope: `pyproject.toml` `[tool.ruff.lint] select` gains `"D"`; a new `[tool.ruff.lint.pydocstyle] convention = "google"` section is added
 
 ## Q-2 — Which docstring style do the new docstrings follow?
 - **Step:** P.2 Interrogate
@@ -88,10 +88,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(b) Google style with `Args:`/`Returns:`/`Raises:`** — richest published API reference, but every one of the 195 published objects grows a section block and the diff roughly triples.
   - **(c) NumPy style (`Parameters\n ----------`)** — same cost as (b) and needs `docstring_style: numpy` in `mkdocs.yml` to render.
   - **(d) reST/Sphinx (`:param x:`)** — same cost again, needs `docstring_style: sphinx`; nothing in the repo uses it.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) Google style with `Args:` / `Returns:` / `Raises:`** (user, 2026-10-07) — **not** the recommended plain-prose option. Consequences the user accepted by choosing it: the ~195 published `src/` objects each grow a section block (the diff roughly triples over the missing-docstring count), and the 414 existing prose docstrings become the inconsistent minority unless also converted (raised as a follow-up in round 2). Consistent with Q-1's `convention = "google"`, so ruff enforces the section grammar (`D417` etc.).
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 scope: the backfill writes Google sections; `mkdocs.yml` needs no `docstring_style` change (griffe's default is google) — to be re-verified at P.4
 
 ## Q-3 — Which trees does the `D` gate cover?
 - **Step:** P.2 Interrogate
@@ -103,10 +103,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(b) `src/` + `scripts/` + `migrations/` + `.github/hooks/`** — 400 sites total; cheap now, but every future alembic autogen file must carry a docstring.
   - **(c) Everything (`ruff check .` as-is)** — 1 164 sites; the biggest backfill in the repo's history and it collides with every in-flight change's tests.
   - **(d) `src/` + `tests/`** — 1 148 sites; makes test intent enforceable but swamps the change.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) `src/` only** — add `[tool.ruff.lint.per-file-ignores]` for `tests/*`, `scripts/*`, `migrations/*`, `.github/*` (user, 2026-10-07). **Conflict flagged by the orchestrator:** Q-4 was answered "backfill all 313 test docstrings **and gate `tests/`**", which contradicts gating `src/` only. Resolved in round 2 (see the new Q-29).
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** partially — the `per-file-ignores` section is in scope; whether `tests/*` stays in it waits on Q-29
 
 ## Q-4 — Are the 313 undocumented test functions a gap to backfill, or exempt by design?
 - **Step:** P.2 Interrogate
@@ -118,10 +118,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(b) Required — backfill all 313 with `AC-XXX:`/`INV-XXX:` docstrings and gate `tests/`** — traceability becomes enforceable, but the change roughly quadruples.
   - **(c) Required only for `tests/acceptance/`** — the category that carries spec evidence gets the rule; unit/property/contract stay free.
   - **(d) Exempt now, separate backlog item for `tests/` later** — keeps this change small and records the intent.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) Required — backfill all 313 with `AC-XXX:`/`INV-XXX:` docstrings and gate `tests/`** (user, 2026-10-07). Traceability is to be enforceable, not a convention. **Conflict flagged by the orchestrator:** this contradicts Q-3 (a), which exempts `tests/*` via `per-file-ignores`; and with Q-2 = Google style the `tests/` backfill is 468 `D1xx` + 294 format sites, not 313. Resolved in round 2 (Q-29).
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** pending Q-29 — the intent (test docstrings mandatory + enforced) is recorded; the file set and site count wait on it
 
 ## Q-5 — One change, or one change per feature?
 - **Step:** P.2 Interrogate
@@ -133,10 +133,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(b) One change per feature (up to 9), `select` in the last one** — smallest review unit each, but 9 worktrees, 9 PRs, 9 verification records, and `D` enforces nothing until the last one merges.
   - **(c) Two changes: big four (authentication, usermanagement, filemanagement, permissions = 164) then the rest + config** — three PRs, each reviewable.
   - **(d) One sweep PR with no per-feature commits** — fewest ceremony, worst reviewability (the risk the TODO flags).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) One change, one commit per feature, `select` in the last commit** (user, 2026-10-07). One PR, bisectable per feature, no half-gated state on `main`.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 scope: single change `ruff-d-docstrings`, commit order = 9 feature commits (authentication, usermanagement, filemanagement, permissions, settings, mail, search, eventbus, sessionmanagement) then the config commit
 
 ## Q-6 — If it is split, does the orchestrator open the sibling TODOs now?
 - **Step:** P.2 Interrogate
@@ -147,10 +147,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — create them at P.1 with the chain, and keep this item as the first feature + the config edit (Recommended)** — the backlog shows the real work and the never-idle scheduler can pick them up.
   - **(b) No — keep one TODO and let Phase 4 commits carry the split** — fewer planning records, but the backlog understates the remaining work.
   - **(c) Create one sibling TODO only ("docstrings: tests/" or "docstrings: remaining features")** — one extra record, coarse tracking.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — create the sibling pair now** (user, 2026-10-07). Q-5 answered (a) — one change, one commit per feature — so Q-6's "if it is split" premise is false for the `src/` backfill; the sibling the answers actually require is the **`tests/`** one from Q-29. The orchestrator creates `docs/todo/docstrings-tests.md` + `docs/questions/docstrings-tests.md` at P.1 with `Depends on: ruff-d-docstrings` and its own value triage.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `docstrings-tests` framed at P.1 on `main` (2026-10-07), chain recorded in both TODO files
 
 ## Q-7 — How does the `select` edit land without ever turning `lint.yml` red?
 - **Step:** P.2 Interrogate
@@ -161,10 +161,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Docstrings first, `select` in the final commit of the same PR (Recommended)** — `main` is never red, no temporary config to delete, and the PR diff is "docstrings + one config line".
   - **(b) Add `D` to `select` first with a `per-file-ignores` allowlist of the undocumented features, then delete entries feature by feature** — a visible ratchet that stops new violations in already-clean features, but it lands a config block that must later be removed and each intermediate PR re-edits `pyproject.toml`.
   - **(c) Add `D` to `select` only for the features that are clean, extend the selection per PR** — same ratchet effect expressed in `select`, more `pyproject.toml` churn.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Docstrings first, `select` gains `"D"` in the final commit of the same PR** (user, 2026-10-07). `main` is never red, no temporary config block to delete, and the PR diff is "docstrings per feature + one config line + the `pydocstyle`/`per-file-ignores` sections".
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 commit order: per-feature docstring commits first, `pyproject.toml` `select` edit last; the lint job stays green at every commit
 
 ## Q-8 — If intermediate PRs leave `D` off, what guarantees the rest gets done?
 - **Step:** P.2 Interrogate
@@ -175,10 +175,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) The `Depends on:` chain plus the backlog records — accept the gap, keep it short (Recommended)** — no temporary config; the gap is only as long as the queue between the sibling changes.
   - **(b) Land the shrinking `per-file-ignores` ratchet from Q-7 (b) so every feature is gated as soon as it is clean** — no gap for completed features, at the cost of churn in `pyproject.toml`.
   - **(c) Do the whole `src/` backfill in one PR (Q-5 a/d) so there is no gap at all** — the gap disappears by construction.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Closed by implication (orchestrator, 2026-10-07)** — Q-5 = (a) and Q-7 = (a) mean the whole `src/` backfill and the `select` edit land in **one** PR, so option (c) holds by construction and there is no intermediate ungated window on `main`. The only gap is the one Q-29 accepts: `tests/` stays ungated until `docstrings-tests` merges.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — no ratchet config in scope; the gap question is answered by the single-PR shape
 
 ## Q-9 — Are `__init__` docstrings required (D107, 51 sites)?
 - **Step:** P.2 Interrogate
@@ -189,10 +189,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes, but only where the constructor adds context the class docstring lacks; disable `D107` for `*/errors.py` (Recommended)** — keeps the useful ones, avoids 19 "Initialize self."-class fillers in exception modules.
   - **(b) Yes, all 51, no exemption** — uniform rule, but the exception-class docstrings will be near-empty.
   - **(c) No — disable `D107` globally (the numpy convention choice)** — 51 fewer docstrings; constructor context has to live in the class docstring.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) Yes, all 51, no exemption** (user, 2026-10-07) — **not** the recommended partial exemption. `D107` stays on for every class including the exception modules (`permissions/errors.py` 6, `filemanagement/errors.py` 6, `usermanagement/errors.py` 4, `search/errors.py` 3, `mail/errors.py` 3, …). Consequence: the exception-class `__init__` docstrings must still pass the Q-15 no-filler rule, so they have to say something the class docstring does not (or the class docstring carries the content and the `__init__` docstring names the constructor's contract). Flagged for the Phase 6 checklist.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — no `per-file-ignores` entry for `*/errors.py`; all 51 `D107` sites are in the backfill
 
 ## Q-10 — Is `D401` (imperative-mood first line) enforced?
 - **Step:** P.2 Interrogate
@@ -203,10 +203,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Off — pick the convention that disables it (google) (Recommended)** — descriptive noun phrases are correct for queries and lookups, and 58 hand rewrites add review noise to a docs-only change.
   - **(b) On — rewrite all 58 to imperative mood** — strict PEP 257 voice across the published API reference.
   - **(c) On, but with `# noqa: D401` at the sites where a noun phrase is genuinely better** — the rule stays visible; the exceptions are explicit and greppable.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Closed by implication (orchestrator, 2026-10-07)** — Q-1 chose `convention = "google"`, which **disables** `D401`; option (a) therefore holds without a further decision. The 58 descriptive noun-phrase first lines stay as they are.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `D401` is not enforced; no imperative-mood rewrites in scope
 
 ## Q-11 — Are the `D2xx` formatting fixes (123 sites in `src/`) part of this change?
 - **Step:** P.2 Interrogate
@@ -217,10 +217,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — same change, separate commits from the docstring additions (Recommended)** — one config edit covers the whole `D` subset, and the commit split keeps the review readable.
   - **(b) No — select only the codes that are already clean, and defer formatting to a follow-up TODO** — smaller diff now, but the formatting rules stay unenforced.
   - **(c) Only the auto-fixable ones (`D209`, `D301`, `D403`), hand-written `D205` deferred** — cheapest half, but a partial rule set is the confusing middle ground.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — same change, separate commits from the docstring additions** (user, 2026-10-07). All 123 `src/` format sites are in scope (`D205` 66, `D209` 57, `D301` 3, `D403` 4); the commit split keeps the two kinds of work reviewable separately.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — full `D` subset selected (Q-1) and the format families are part of the backfill, not deferred
 
 ## Q-12 — Does `[tool.ruff.lint] fixable` gain the fixable `D` codes?
 - **Step:** P.2 Interrogate
@@ -231,10 +231,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes, but scoped to the codes actually selected (Recommended)** — the 123 formatting sites become one command on the changed paths, and pre-commit keeps them from regressing.
   - **(b) No — keep `fixable` as-is and apply the formatting by hand** — nothing new is auto-rewritten in a docs change, at the cost of 123 manual edits.
   - **(c) Yes, and run the fix once as an explicit first step of this change only** — mechanical sweep now, no permanent widening of `fixable`.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes, scoped to the codes actually selected** (user, 2026-10-07). `[tool.ruff.lint] fixable` gains the fixable `D` codes (always-fixable: `D204`, `D207`, `D208`, `D209`, `D211`, `D212`, `D403`; sometimes-fixable ones stay under ruff's own safety rules). AGENTS.md's P-6 rule still applies: `--fix` is scoped to the step's changed paths, never repo-wide during a task step.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `pyproject.toml` `fixable` allow-list extended in the same config commit as `select`
 
 ## Q-13 — Are the two `D105` magic methods documented?
 - **Step:** P.2 Interrogate
@@ -245,10 +245,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — two one-line docstrings naming the context-manager contract (Recommended)** — it is published behaviour and it clears the rule with no exemption needed.
   - **(b) No — add `D105` to `ignore`** — dunders stay undocumented repo-wide, and future dunders never trigger the rule.
   - **(c) No — `# noqa: D105` on the two lines** — rule stays active, the exception is local and visible.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — two one-line docstrings naming the context-manager contract** (user, 2026-10-07). `D105` stays selected; no ignore, no noqa.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `src/backend/eventbus/eventbus.py:158,161` are in the backfill
 
 ## Q-14 — Are private helpers in scope even though `D` never requires them?
 - **Step:** P.2 Interrogate
@@ -259,10 +259,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Strictly what `D` covers (Recommended)** — the gate and the diff stay aligned, and the change stays mechanically checkable ("`ruff check --select D src` is clean").
   - **(b) Also the private helpers in the files already being touched** — better docs where the complexity is, but the diff grows and no gate proves it.
   - **(c) Also the private helpers of the functions `pyproject-tooling-gaps` refactored** — targeted at the known-complex code, but it drags that change's files back in.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b) Also the private helpers in the files already being touched** (user, 2026-10-07) — **not** the recommended strict scope. Consequences recorded: the diff grows beyond what `ruff check --select D src` can prove, so the Phase 5 done-criterion is "`D` clean **plus** every private helper in a touched file documented" (checked by review, not by the gate); the private-helper docstrings are still subject to the Q-15 no-filler rule.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — scope: private helpers inside the 43 `src/` files the change touches are in scope; the gate stays `ruff check --select D src` clean, the extra coverage is a review check
 
 ## Q-15 — How is the "no filler docstring" rule enforced?
 - **Step:** P.2 Interrogate
@@ -274,10 +274,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(b) A small scripted check in `scripts/` that fails a docstring equal to/near the de-snaked callable name** — enforceable, but it is new tooling with its own false positives, and it needs its own tests.
   - **(c) Enable `D402` + `D419` and rely on ruff** — free, but measured 0 hits today, so it catches almost no filler in practice.
   - **(d) Nothing explicit — rely on the per-feature commit split (Q-5 a) keeping each chunk reviewable** — cheapest, weakest.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Reviewer rule stated in the scope record + the Phase 6 review checklist** (user, 2026-10-07). No new tooling. The rule is recorded in `docs/verification/ruff-d-docstrings.md` at P.4 and becomes a Phase 6 review check: no docstring that restates the signature ("Get the user.") may pass review; per-feature commits are the unit of that check.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — scope record carries the no-filler rule; Phase 6 checklist gains the check; no `scripts/` checker, no `D402`/`D419` reliance
 
 ## Q-16 — Do REQ/AC IDs stay inside published docstrings?
 - **Step:** P.2 Interrogate
@@ -288,10 +288,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes, follow the existing style — IDs in docstrings (Recommended)** — consistent with the docstrings already in `src/`, and it keeps code↔spec links greppable.
   - **(b) No — reader-facing prose only, no internal IDs** — cleaner published pages, but it breaks the established convention and the grep-ability.
   - **(c) IDs only where the docstring explains a rule the spec defines, not as decoration** — middle ground, reviewer judgement.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — IDs stay in docstrings** (user, 2026-10-07), following the existing style (`filemanagement/search_source.py:100` "… (REQ-021)"). Recorded caveat: `docs/specs/` is not published (`mkdocs.yml` site source is `userdocs/`), so a reader of the API reference sees an ID with nothing to resolve it against — accepted, because code↔spec grep-ability is the higher value here.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — the scope record's docstring convention names REQ/AC citation as expected, not forbidden
 
 ## Q-17 — Is the traced-class docstring wording (REQ-009 / AC-009) a hard constraint on this change?
 - **Step:** P.2 Interrogate
@@ -302,10 +302,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — record it as a MUST-hold invariant and re-run that acceptance test in Phase 5 (Recommended)** — one sentence in the scope record, and the test already exists.
   - **(b) No — rely on the full test suite to catch it** — the test does catch it, but only if the suite is run, and a light-tier Phase 5 might not run it.
   - **(c) Yes, and additionally exclude traced classes' docstrings from any reformatting step** — belt and braces, but it leaves 45 classes outside the formatting rules.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — a MUST-hold invariant, and Phase 5 re-runs `tests/acceptance/logging_coverage/test_docstrings.py::test_traced_class_docstrings_mention_tracing`** (user, 2026-10-07). Rewording is allowed; dropping "traced" or "logged" from any of the 45 `@logged_class` classes' docstrings is not.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — recorded as an invariant of the scope record; the named acceptance test is in the Phase 5 evidence set
 
 ## Q-18 — Does `mkdocs.yml` pin the docstring parser explicitly?
 - **Step:** P.2 Interrogate
@@ -316,10 +316,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) No — leave `mkdocs.yml` untouched (Recommended)** — plain prose needs no parser, and touching the docs config is a second gate to re-verify for no gain.
   - **(b) Yes — pin `docstring_style: google` to match the ruff convention (Q-1 a)** — the two tools can no longer drift apart, at the cost of a config line that means nothing while no sections exist.
   - **(c) Yes — pin it to whatever Q-2 chooses** — self-consistent by construction, same cost as (b).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(b/c) Yes — pin `handlers.python.options.docstring_style: google` in `mkdocs.yml`** (user, 2026-10-07). The premise changed after Q-1/Q-2 chose Google sections: griffe's default is already `google`, so the line is a drift guard, not a behavior change. One config line in the same config commit as `select`.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `mkdocs.yml` joins the config surface; `mkdocs build --strict` (Q-19) verifies it
 
 ## Q-19 — Is `mkdocs build --strict` a Phase 5 gate for this change?
 - **Step:** P.2 Interrogate
@@ -330,10 +330,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — it is the only check that sees the docstrings as published output (Recommended)** — one extra command in Phase 5, and it is the change's real deliverable.
   - **(b) No — rely on the CI `docs` job on the PR** — no local step, but a failure then surfaces after the whole change is committed.
   - **(c) Yes, and also add `userdocs/`-adjacent paths to the `mkdocs-build` pre-push hook's `files:` filter** — closes the local gap permanently, but edits CI config beyond the change's scope.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — Phase 5 runs `uv run --group docs mkdocs build --strict` and records the result** (user, 2026-10-07). No change to the pre-push hook's `files:` filter.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — named in the Phase 5 evidence set for this change (see Q-25)
 
 ## Q-20 — Does `userdocs/api.md` gain the three packages it does not render?
 - **Step:** P.2 Interrogate
@@ -344,10 +344,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) No — leave `api.md` as-is; document the code, let a docs change extend the page (Recommended)** — keeps the DOCS/CHORE scope at docstrings + config, and the `D` gate covers all 11 packages regardless.
   - **(b) Yes — add `permissions` and `search` (not `shared`)** — the backfill pays off for readers immediately; two lines of `api.md`.
   - **(c) Yes — all 11 packages** — the page becomes complete, but `shared` is plumbing and its inclusion is its own judgement call.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) No — `userdocs/api.md` stays as-is** (user, 2026-10-07). The `D` gate still covers `permissions`, `search` and `shared` (Q-3's `src/` scope is all of `src/`), so 38 documented objects remain unrendered; extending the page is a separate docs change. Recorded as a known gap, not an oversight.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `userdocs/api.md` is out of scope; the TODO's out-of-scope line stands
 
 ## Q-21 — How is `structlog-logging` sequenced against this change?
 - **Step:** P.2 Interrogate
@@ -358,10 +358,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Run alongside, and leave `src/backend/logging/` out of this backfill (Recommended)** — only 3 `D` sites and 0 `D1xx` there, so nothing is lost, and the two branches never touch the same file.
   - **(b) Wait for `structlog-logging` to merge, then start** — zero collision risk, but this change cannot start while the queue has other READY work.
   - **(c) Run alongside including `logging`** — 3 sites of avoidable conflict in a package the other change is rewriting.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Closed by implication (orchestrator, 2026-10-07)** — the premise is stale: `structlog-logging` **merged** on 2026-10-07 (PR #74, merge commit `c7a9119`), so `ruff-d-docstrings` branches from a `main` that already contains it. No sequencing decision is needed; the `src/` `D` measurements in this file were taken on that `main`. Option (a)'s concern (touching `src/backend/logging/` while it is being rewritten) no longer applies — `logging` is in scope like any other feature (3 `D` sites, 0 `D1xx`).
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — no `Depends on:` entry for `structlog-logging`
 
 ## Q-22 — How is `structure-map` sequenced (AGENTS.md, `scripts/`, and the map's docstring summaries)?
 - **Step:** P.2 Interrogate
@@ -372,10 +372,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) This change first, `structure-map` rebases (Recommended)** — the map is generated, so it picks up the new docstring summaries for free on its first regeneration; and `D` covering `scripts/` is decided before `make_map.py` is written.
   - **(b) `structure-map` first, this change rebases** — the map exists while the backfill runs (useful navigation for a 43-file sweep), but its committed `STRUCTURE.md` goes stale the moment docstrings are added.
   - **(c) Either order, with a note in both PR bodies to regenerate `STRUCTURE.md` after merge** — no sequencing constraint, but whoever is second must re-run the generator.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) `ruff-d-docstrings` first, `structure-map` rebases** (user, 2026-10-07). The generated map picks up the new docstring summaries free on its first regeneration, and the "does `D` cover `scripts/`" decision (Q-3: no) is settled before `scripts/make_map.py` is written. Recorded as a `Depends on:` note in `docs/todo/structure-map.md`.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — ordering recorded in both TODO files; `AGENTS.md` edits (Q-24 here, `structure-map` Q-11) are sequenced by this decision
 
 ## Q-23 — Are `migrations/` files permanently exempt from `D`?
 - **Step:** P.2 Interrogate
@@ -386,10 +386,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Exempt permanently via `per-file-ignores` (Recommended)** — generated files stay generated; the 11 sites are never touched.
   - **(b) Cover them: document the 11 sites now and hold future revisions to it** — uniform gate, and the `-m` habit covers most of it.
   - **(c) Cover `migrations/env.py` only, exempt `versions/*`** — the hand-written scaffold is documented, the autogen output is not.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Exempt permanently via `per-file-ignores`** (user, 2026-10-07). `migrations/*` joins the Q-3 exemption list; the 11 sites are never touched, and no standing obligation lands on future `alembic revision` output.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `per-file-ignores` = `tests/*`, `scripts/*`, `migrations/*`, `.github/*`
 
 ## Q-24 — Does `AGENTS.md` gain a normative docstring convention line?
 - **Step:** P.2 Interrogate
@@ -400,10 +400,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — extend the existing line with the chosen convention and the no-filler rule (Recommended)** — one or two lines where the guidance already lives, so future code lands clean and the gate costs nothing later.
   - **(b) No — the ruff rule is the guidance; `AGENTS.md` stays untouched** — no `AGENTS.md` conflict with `structure-map`, but agents learn the rule only by failing the lint job.
   - **(c) Yes, and also add a docstring section to the `python-best-practices` skill** — better placement for agents, but that skill's content is out of this change's scope (`track-python-skill` committed it as-is).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — extend `AGENTS.md:737`** (user, 2026-10-07) with the enforced convention: Google-style sections (`Args:` / `Returns:` / `Raises:`) where a callable has parameters or a return, one-line summary + blank line (D205), and the no-filler rule. The `python-best-practices` skill is not touched.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `AGENTS.md` "General Code & Style Conventions" is in this change's file set; sequenced before `structure-map` (Q-22)
 
 ## Q-25 — How is "no behavior delta" proven for a ~200-docstring diff?
 - **Step:** P.2 Interrogate
@@ -414,10 +414,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Full suite + `ruff check .` + `ruff format --check .` + `mkdocs build --strict`, plus a one-off AST-equality check (docstrings stripped) recorded in the verification file (Recommended)** — cheap, mechanical, and it proves the claim rather than asserting it.
   - **(b) Full suite + lint/format/mkdocs only** — the repo's normal DOCS/CHORE evidence; the docstring-vs-code claim rests on review.
   - **(c) Targeted suite per feature + the full suite at the Phase 6 pre-merge gate** — faster during Phase 4, same final evidence.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Full suite + `ruff check .` + `ruff format --check .` + `uv run --group docs mkdocs build --strict` + a one-off AST-equality check (docstrings stripped) recorded in `docs/verification/ruff-d-docstrings.md`** (user, 2026-10-07). The AST check proves the executable code is byte-identical before and after the sweep — the claim is demonstrated, not asserted.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — Phase 5 evidence set for this change; the AST check is a throwaway script run during Phase 5, not a permanent `scripts/` addition
 
 ## Q-26 — What happens when a docstring reveals that a behavior claim is wrong?
 - **Step:** P.2 Interrogate
@@ -428,10 +428,10 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Record it as a finding, write the docstring that matches the code, and open a separate ISSUE TODO (Recommended)** — the docs change stays DOCS/CHORE and finishes; the defect gets its own RED/GREEN cycle.
   - **(b) Reclassify this change to ISSUE mid-flight per the Escalation Rules** — one change carries both, but the branch re-runs Phase P for ISSUE and the docstring work waits.
   - **(c) Stop the change entirely and wait for the human to decide** — safest, but it strands every feature already done.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Record it as a finding, write the docstring that matches the code, and open a separate ISSUE TODO** (user, 2026-10-07). This change stays DOCS/CHORE and finishes; the defect gets its own triage + RED/GREEN cycle. The TODO's "stop and reclassify as ISSUE" line is amended to this procedure in the P.4 scope record.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — escalation procedure recorded in the scope record; no mid-flight reclassification
 
 ## Q-27 — Version bump: none, or patch?
 - **Step:** P.2 Interrogate
@@ -441,10 +441,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(a) None — follow the DOCS/CHORE rule (Recommended)** — consistent with `update-readme`/`workflow-docs-nits`; the published site is rebuilt from `main` regardless of the version string.
   - **(b) `patch` — treat the published docs change as a release-visible fix** — signals the docs change, but it deviates from the version table and needs the reason recorded.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) None — follow the DOCS/CHORE rule** (user, 2026-10-07). No bump at S6.4. Note: the version is **1.0.0** today (bumped by `structlog-logging` in `137b7e9`), not the 0.6.1 quoted in the context above.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — S6.4 skips the bump for this change
 
 ## Q-28 — Does this change align the pre-commit ruff pin with the dev pin?
 - **Step:** P.2 Interrogate
@@ -455,10 +455,20 @@ Every question that needs user input is recorded HERE — never in a central fil
   - **(a) Yes — bump the hook rev to the ruff version the dev group pins (Recommended)** — one line, and it removes a known source of local-vs-CI disagreement before the new rules start biting.
   - **(b) No — leave the pin alone; it is a separate chore** — keeps this change's diff to docstrings + `select`, but the skew stays live.
   - **(c) Yes, and pin both sides to an exact version (`ruff==0.16.9`)** — removes drift permanently, but changes the project's `>=` pinning convention for ruff.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-05
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **(a) Yes — bump the `ruff-pre-commit` hook rev to match the dev pin (v0.16.9)** (user, 2026-10-07). One line in `.pre-commit-config.yaml:11`; the `>=` pinning convention in `pyproject.toml:62` is unchanged. The hook runs `ruff-check --fix`, so with Q-12's widened `fixable` list the hook and CI must agree on the rule set.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `.pre-commit-config.yaml` joins this change's file set
+
+## Q-29 — Q-3 (gate `src/` only) contradicts Q-4 (backfill **and** gate `tests/`)
+- **Step:** P.3 Answer — orchestrator-raised conflict, round 2 (2026-10-07)
+- **Why needed:** Round 1 answered Q-3 = "`src/` only, add `per-file-ignores` for `tests/*`" and Q-4 = "backfill all 313 test docstrings **and gate `tests/`**". Both cannot hold: a tree listed in `per-file-ignores` is by definition not gated. The contradiction has to be resolved before P.4 can state a file set and a site count.
+- **Context:** Measured `tests/` `D` sites = **762** (468 `D1xx` — D103 358, D102 49, D104 42, D107 19 — plus 294 format/phrasing), not 313: the 313 figure is the AST count of undocumented `test_*` functions, while ruff also counts helpers, classes and modules. With Q-2 = Google style the section-block cost applies to `tests/` too. `scripts/verify_spec.py:63` (the orphaned-acceptance-test check) is skipped, so nothing parses test docstrings today.
+- **Question:** Which resolution: `src/` gated now and `tests/` as a follow-up change, `tests/` gated for missing-docstring codes only, both trees fully gated in one change, or `tests/` backfilled without gating?
+- **Answer:** **`src/` now, `tests/` as a follow-up change** (user, 2026-10-07). This change gates `src/` only (328 sites, `per-file-ignores` for `tests/*`, `scripts/*`, `migrations/*`, `.github/*`); the `tests/` backfill **and** its gate move to a new sibling change **`docstrings-tests`**, framed at P.1 with `Depends on: ruff-d-docstrings`. Q-4's intent (test docstrings mandatory and enforced) survives; it is delivered by the follow-up, not dropped.
+- **Date:** 2026-10-07
+- **Status:** ANSWERED
+- **Incorporated:** yes — `ruff-d-docstrings` scope = `src/` only; `docstrings-tests` created at P.1 (`docs/todo/docstrings-tests.md`) carrying the `tests/` backfill + gate; Q-3/Q-4 answers annotated accordingly
 
 ## Late questions (Phases 2–6)
 

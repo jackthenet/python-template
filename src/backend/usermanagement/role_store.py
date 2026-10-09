@@ -34,10 +34,17 @@ class StaticRoleStore(RoleStore):
     """A fixed role set (the default: ``("admin", "user")``)."""
 
     def __init__(self, roles: Iterable[str]) -> None:
+        """Snapshot ``roles`` into a tuple at construction.
+
+        A later change to the caller's collection cannot alter the accepted
+        role set.
+        """
         self._roles = tuple(roles)
 
     def has_role(self, role: str) -> bool:
+        """Exact, case-sensitive membership test against the stored tuple."""
         return role in self._roles
 
     def list_roles(self) -> Sequence[str]:
+        """The stored tuple itself — immutable, so a caller cannot mutate the accepted set."""
         return self._roles

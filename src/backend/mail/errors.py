@@ -21,6 +21,7 @@ class MailConfigurationError(MailError):
     """
 
     def __init__(self, reason: str) -> None:
+        """``reason`` names the configuration problem and doubles as the message."""
         self.reason = reason
         super().__init__(reason)
 
@@ -35,6 +36,7 @@ class MailTransportError(MailError):
     """
 
     def __init__(self, reason: str) -> None:
+        """``reason`` names the delivery failure kind and doubles as the message."""
         self.reason = reason
         super().__init__(reason)
 
@@ -50,5 +52,6 @@ class MailTemplateError(MailError):
     """
 
     def __init__(self, reason: str) -> None:
+        """``reason`` names the failure (``missing_variable:<name>`` for a gap) and is the message."""
         self.reason = reason
         super().__init__(reason)

@@ -73,6 +73,17 @@ class SessionService:
         settings_registry: SettingsRegistry | None = None,
         permission_service: PermissionChecker | None = None,
     ) -> None:
+        """Store the injected seams and subscribe the lifecycle handlers.
+
+        Construction is the only place the feature wires itself to other
+        features: cap eviction is subscribed to the *shared* event bus (where
+        authentication publishes ``LoginSucceeded``), while user-lifecycle
+        revocation is subscribed to the *injected* publisher and only when it
+        exposes ``subscribe`` — a bare collector in tests is left untouched
+        (REQ-014, REQ-015, AC-038). A ``None`` ``permission_service`` means
+        standalone mode: no ``sessionmanagement.<method>`` enforcement
+        (AC-031).
+        """
         self._repository = repository
         self._event_bus = event_bus
         self._settings_registry = settings_registry
@@ -214,8 +225,11 @@ class SessionService:
         )
 
     def _order_with_current(self, valid: list[Session], current_session_id: UUID | None) -> list[Session]:
-        """Pin the current session first; the remainder is already created_at descending
-        from ``list_for_user`` (REQ-006, INV-005)."""
+        """Pin the current session first; the remainder keeps its incoming order.
+
+        The remainder is already ``created_at`` descending from
+        ``list_for_user`` (REQ-006, INV-005).
+        """
         if current_session_id is None:
             return valid
         current = [row for row in valid if row.id == current_session_id]

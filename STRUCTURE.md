@@ -446,7 +446,7 @@ migrations/
 .agents/ — 17 files (skills)
 .github/ — 9 files (CI and tooling)
 .vscode/ — 2 files
-docs/ — 213 files (process record)
+docs/ — 220 files (process record)
 userdocs/ — 2 files (published docs)
 
 ## Packages
@@ -507,36 +507,36 @@ Verify specification traceability against test functions.
 exports: AttemptTracker, AuthEvent, AuthService, AuthenticationError, InMemoryAttemptTracker, InvalidCredentialsError, InvalidPasskeyResponseError, InvalidResetTokenError, InvalidSessionError, LoginFailed, LoginRequest, LoginResult, LoginSucceeded, Logout, PasskeyCredentialNotFoundError, PasskeyDeleted, PasskeyHijackError, PasskeyLoginBegin, PasskeyLoginComplete, PasskeyRegistered, PasskeyRegistrationBegin, PasskeyRegistrationComplete, PasswordReset, PasswordResetComplete, PasswordResetCompleted, PasswordResetRepository, PasswordResetRequest, PasswordResetRequested, PyWebAuthnProvider, Session, SessionInfo, SessionRepository, SqlitePasswordResetRepository, SqliteSessionRepository, SqliteWebAuthnCredentialRepository, VerifiedAssertion, VerifiedCredential, WebAuthnCredential, WebAuthnCredentialRead, WebAuthnCredentialRepository, WebAuthnProvider, hash_token, new_token, register_settings
 #### src/backend/authentication/__init__.py (111 lines)
 Public API of the authentication feature (module: backend.authentication).
-#### src/backend/authentication/errors.py (49 lines)
+#### src/backend/authentication/errors.py (54 lines)
 Structured domain errors for the authentication feature (REQ-019).
 - class `AuthenticationError(Exception)`: Base class for all authentication domain errors.
 - class `InvalidCredentialsError(AuthenticationError)`: Unified login failure.
 - class `InvalidSessionError(AuthenticationError)`: The session token is unknown, revoked, or expired.
 - class `InvalidResetTokenError(AuthenticationError)`: The reset token is invalid.
-  - `__init__(self, reason: str) -> None`
+  - `__init__(self, reason: str) -> None`: Carry the rejection reason and render it into the message.
 - class `PasskeyCredentialNotFoundError(AuthenticationError)`: No stored WebAuthn credential for the requested credential id.
 - class `InvalidPasskeyResponseError(AuthenticationError)`: The WebAuthn response failed verification (registration or authentication).
 - class `PasskeyHijackError(AuthenticationError)`: The assertion sign count is lower than the stored sign count (hijack signal).
-#### src/backend/authentication/events.py (55 lines)
+#### src/backend/authentication/events.py (78 lines)
 Typed lifecycle events for authentication (REQ-020).
 - class `AuthEvent(BaseModel)`: Base class for all authentication lifecycle events (occurred_at is UTC).
   - `occurred_at: datetime`
-- class `LoginSucceeded(AuthEvent)`
+- class `LoginSucceeded(AuthEvent)`: Published once per accepted login (REQ-020/AC-031), whichever method was used.
   - `user_id: UUID`
   - `method: str`
-- class `LoginFailed(AuthEvent)`
+- class `LoginFailed(AuthEvent)`: Published for every rejected password login (REQ-020/AC-032).
   - `identifier: str`
   - `method: str`
-- class `Logout(AuthEvent)`
+- class `Logout(AuthEvent)`: Published when logout revokes a live session; the idempotent no-op path publishes nothing (AC-014).
   - `user_id: UUID`
-- class `PasswordResetRequested(AuthEvent)`
+- class `PasswordResetRequested(AuthEvent)`: Published for every reset request, registered email or not (EDGE-007).
   - `email: str`
-- class `PasswordResetCompleted(AuthEvent)`
+- class `PasswordResetCompleted(AuthEvent)`: Published after the password is changed and the user's sessions revoked (REQ-012).
   - `user_id: UUID`
-- class `PasskeyRegistered(AuthEvent)`
+- class `PasskeyRegistered(AuthEvent)`: Published once a credential row is stored (REQ-014); the public key is never carried.
   - `user_id: UUID`
   - `credential_id: str`
-- class `PasskeyDeleted(AuthEvent)`
+- class `PasskeyDeleted(AuthEvent)`: Published after a credential is deleted (REQ-017); a rejected deletion publishes nothing.
   - `user_id: UUID`
   - `credential_id: str`
 #### src/backend/authentication/feature_actions.py (37 lines)
@@ -638,7 +638,7 @@ Repository ABCs for authentication persistence.
   - @abstractmethod `get(self, session_id: UUID) -> Session | None`: Return the session row for a session id (any revocation state), or None.
   - @abstractmethod `list_for_user(self, user_id: UUID) -> Sequence[Session]`: Return ALL rows for a user (any revocation state), created_at descending.
   - @abstractmethod `revoke_user_sessions(self, user_id: UUID, exclude_session_id: UUID | None=None) -> int`: Revoke all of a user's sessions except the excluded one; return the count revoked.
-  - @abstractmethod `delete_expired(self, limit: int | None=None) -> int`: Delete up to limit expired sessions (None = all, the previous behavior) and return the count.
+  - @abstractmethod `delete_expired(self, limit: int | None=None) -> int`: Delete up to limit expired sessions and return the count deleted.
   - @abstractmethod `list_all(self) -> Sequence[Session]`: Return ALL sessions (any revocation state, no user filter), created_at descending.
 - @logged_class(slow_threshold_ms=100) class `PasswordResetRepository(ABC)`: Persistence for password-reset token rows.
   - @abstractmethod `add(self, reset: PasswordReset) -> PasswordReset`: Insert a reset row and return it.
@@ -651,75 +651,75 @@ Repository ABCs for authentication persistence.
   - @abstractmethod `list_for_user(self, user_id: UUID) -> Sequence[WebAuthnCredential]`: Return all of a user's stored credentials.
   - @abstractmethod `update_sign_count(self, credential_id: str, sign_count: int) -> None`: Update a credential's sign count.
   - @abstractmethod `delete(self, credential_id: str) -> None`: Delete a credential row.
-#### src/backend/authentication/repository.py (263 lines)
+#### src/backend/authentication/repository.py (347 lines)
 SQLite/SQLModel implementations of the authentication repository ABCs.
 - @logged_class(slow_threshold_ms=100, include_args=False) class `SqliteSessionRepository(SessionRepository)`: A SQLite/SQLModel implementation of :class:SessionRepository.
-  - `__init__(self, database_url: str) -> None`
-  - `add(self, session: Session) -> Session`
-  - `get_by_token_hash(self, token_hash: str) -> Session | None`
-  - `revoke(self, session_id: UUID) -> None`
-  - `revoke_all_for_user(self, user_id: UUID) -> None`
-  - `get(self, session_id: UUID) -> Session | None`
-  - `list_for_user(self, user_id: UUID) -> list[Session]`
-  - `revoke_user_sessions(self, user_id: UUID, exclude_session_id: UUID | None=None) -> int`
-  - `delete_expired(self, limit: int | None=None) -> int`
-  - `list_all(self) -> list[Session]`
+  - `__init__(self, database_url: str) -> None`: Open the database and bootstrap the shared SQLModel metadata tables.
+  - `add(self, session: Session) -> Session`: Insert a session row in its own transaction and return the object given in.
+  - `get_by_token_hash(self, token_hash: str) -> Session | None`: Look a session up by its stored SHA-256 hash, with tz-aware timestamps.
+  - `revoke(self, session_id: UUID) -> None`: Set revoked on one session row; an unknown id or an already revoked row writes nothing.
+  - `revoke_all_for_user(self, user_id: UUID) -> None`: Revoke every session of a user (the logout-all side of a completed password reset, REQ-012).
+  - `get(self, session_id: UUID) -> Session | None`: Read a row by primary key regardless of revocation or expiry.
+  - `list_for_user(self, user_id: UUID) -> list[Session]`: Every row of a user, newest first (id breaks created_at ties).
+  - `revoke_user_sessions(self, user_id: UUID, exclude_session_id: UUID | None=None) -> int`: Revoke a user's sessions except exclude_session_id and report rows actually changed.
+  - `delete_expired(self, limit: int | None=None) -> int`: Delete past-expiry sessions, oldest expiry first, and report how many.
+  - `list_all(self) -> list[Session]`: Every session in the database, newest first, unfiltered by user or state.
 - @logged_class(slow_threshold_ms=100, include_args=False) class `SqlitePasswordResetRepository(PasswordResetRepository)`: A SQLite/SQLModel implementation of :class:PasswordResetRepository.
-  - `__init__(self, database_url: str) -> None`
-  - `add(self, reset: PasswordReset) -> PasswordReset`
-  - `get_by_token_hash(self, token_hash: str) -> PasswordReset | None`
-  - `invalidate_all_for_user(self, user_id: UUID) -> None`
-  - `mark_used(self, reset_id: UUID) -> None`
+  - `__init__(self, database_url: str) -> None`: Open the database and bootstrap the shared SQLModel metadata tables.
+  - `add(self, reset: PasswordReset) -> PasswordReset`: Insert a reset row in its own transaction and return the object given in.
+  - `get_by_token_hash(self, token_hash: str) -> PasswordReset | None`: Look a reset row up by its stored hash, with tz-aware timestamps.
+  - `invalidate_all_for_user(self, user_id: UUID) -> None`: Mark every pending reset row of a user used, so an older token cannot be spent after a new request (…
+  - `mark_used(self, reset_id: UUID) -> None`: Consume one reset row (single-use, INV-003); an unknown or already used id writes nothing.
 - @logged_class(slow_threshold_ms=100) class `SqliteWebAuthnCredentialRepository(WebAuthnCredentialRepository)`: A SQLite/SQLModel implementation of :class:WebAuthnCredentialRepository.
-  - `__init__(self, database_url: str) -> None`
-  - `add(self, credential: WebAuthnCredential) -> WebAuthnCredential`
-  - `get_by_credential_id(self, credential_id: str) -> WebAuthnCredential | None`
-  - `list_for_user(self, user_id: UUID) -> list[WebAuthnCredential]`
-  - `update_sign_count(self, credential_id: str, sign_count: int) -> None`
-  - `delete(self, credential_id: str) -> None`
-#### src/backend/authentication/service.py (352 lines)
+  - `__init__(self, database_url: str) -> None`: Open the database and bootstrap the shared SQLModel metadata tables.
+  - `add(self, credential: WebAuthnCredential) -> WebAuthnCredential`: Insert a credential row in its own transaction and return the object given in.
+  - `get_by_credential_id(self, credential_id: str) -> WebAuthnCredential | None`: Look a credential up by the id the browser presents (the assertion's own identity, not the user's).
+  - `list_for_user(self, user_id: UUID) -> list[WebAuthnCredential]`: All credentials of a user in storage order (no order_by — the service does not promise one).
+  - `update_sign_count(self, credential_id: str, sign_count: int) -> None`: Store the counter an assertion presented, the basis for hijack detection (REQ-015/REQ-016).
+  - `delete(self, credential_id: str) -> None`: Delete a credential row; an unknown id is a no-op (the service checks ownership first, REQ-017).
+#### src/backend/authentication/service.py (453 lines)
 The authentication service (T-004, T-005, T-006).
 - @logged_class(slow_threshold_ms=250, include_args=False) class `AuthService`: The authentication use-case service.
-  - `__init__(self, user_manager: UserManager, user_repository: UserRepository, session_repository: SessionRepository, reset_repository: PasswordResetRepository, webauthn_repository: WebAuthnCredentialRepository, *, webauthn_provider: WebAuthnProvider | None=None, event_bus: EventPublisher | None=None, attempt_tracker: AttemptTracker | None=None, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta, max_failed_attempts: int=5, lockout_duration: timedelta, rp_id: str='localhost', rp_name: str='Python Template', origin: str, permission_service: PermissionChecker | None=None) -> None`
-  - `login(self, request: LoginRequest, principal: Principal=_SYSTEM_PRINCIPAL) -> LoginResult`
-  - `session_info(self, token: str, principal: Principal=_SYSTEM_PRINCIPAL) -> SessionInfo`
-  - `logout(self, token: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`
-  - `request_password_reset(self, request: PasswordResetRequest, principal: Principal=_SYSTEM_PRINCIPAL) -> str | None`
-  - `complete_password_reset(self, request: PasswordResetComplete, principal: Principal=_SYSTEM_PRINCIPAL) -> None`
-  - @requires_permission('authentication.begin_passkey_registration') `begin_passkey_registration(self, request: PasskeyRegistrationBegin, principal: Principal=_SYSTEM_PRINCIPAL) -> dict[str, Any]`
-  - @requires_permission('authentication.complete_passkey_registration') `complete_passkey_registration(self, request: PasskeyRegistrationComplete, principal: Principal=_SYSTEM_PRINCIPAL) -> WebAuthnCredentialRead`
-  - `begin_passkey_login(self, request: PasskeyLoginBegin, principal: Principal=_SYSTEM_PRINCIPAL) -> dict[str, Any]`
-  - `complete_passkey_login(self, request: PasskeyLoginComplete, principal: Principal=_SYSTEM_PRINCIPAL) -> LoginResult`
-  - @requires_permission('authentication.list_passkeys') `list_passkeys(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> list[WebAuthnCredentialRead]`
-  - @requires_permission('authentication.delete_passkey') `delete_passkey(self, user_id: UUID, credential_id: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`
+  - `__init__(self, user_manager: UserManager, user_repository: UserRepository, session_repository: SessionRepository, reset_repository: PasswordResetRepository, webauthn_repository: WebAuthnCredentialRepository, *, webauthn_provider: WebAuthnProvider | None=None, event_bus: EventPublisher | None=None, attempt_tracker: AttemptTracker | None=None, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta, max_failed_attempts: int=5, lockout_duration: timedelta, rp_id: str='localhost', rp_name: str='Python Template', origin: str, permission_service: PermissionChecker | None=None) -> None`: Wire the service from injected collaborators.
+  - `login(self, request: LoginRequest, principal: Principal=_SYSTEM_PRINCIPAL) -> LoginResult`: Authenticate by username or email and open a session (REQ-001).
+  - `session_info(self, token: str, principal: Principal=_SYSTEM_PRINCIPAL) -> SessionInfo`: Introspect the session a raw token stands for (REQ-008).
+  - `logout(self, token: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Revoke the session behind a raw token (REQ-009).
+  - `request_password_reset(self, request: PasswordResetRequest, principal: Principal=_SYSTEM_PRINCIPAL) -> str | None`: Start a password reset for an email address (REQ-010).
+  - `complete_password_reset(self, request: PasswordResetComplete, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Spend a reset token: change the password, consume the token, revoke every session (REQ-012).
+  - @requires_permission('authentication.begin_passkey_registration') `begin_passkey_registration(self, request: PasskeyRegistrationBegin, principal: Principal=_SYSTEM_PRINCIPAL) -> dict[str, Any]`: Return the WebAuthn registration options for a user (REQ-014/AC-022).
+  - @requires_permission('authentication.complete_passkey_registration') `complete_passkey_registration(self, request: PasskeyRegistrationComplete, principal: Principal=_SYSTEM_PRINCIPAL) -> WebAuthnCredentialRead`: Verify a registration response, store the credential, and return its read model (REQ-014/AC-023).
+  - `begin_passkey_login(self, request: PasskeyLoginBegin, principal: Principal=_SYSTEM_PRINCIPAL) -> dict[str, Any]`: Return the WebAuthn assertion request for a stored credential id (REQ-015/AC-024).
+  - `complete_passkey_login(self, request: PasskeyLoginComplete, principal: Principal=_SYSTEM_PRINCIPAL) -> LoginResult`: Verify an assertion and open the session it earned (REQ-015/AC-025).
+  - @requires_permission('authentication.list_passkeys') `list_passkeys(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> list[WebAuthnCredentialRead]`: The credentials stored for a user as read models (REQ-017/AC-027).
+  - @requires_permission('authentication.delete_passkey') `delete_passkey(self, user_id: UUID, credential_id: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Remove one of a user's credentials (REQ-017/AC-028).
 #### src/backend/authentication/tokens.py (32 lines)
 Opaque token generation and hashing (REQ-006, NFR-002).
 - @logged(slow_threshold_ms=10, include_args=False) def `new_token() -> str`: Return a fresh 256-bit URL-safe random token (43 chars for token_urlsafe(32)).
 - @logged(slow_threshold_ms=10, include_args=False) def `hash_token(token: str) -> str`: Return the SHA-256 hex digest of token (the form stored at rest).
-#### src/backend/authentication/tracker.py (58 lines)
+#### src/backend/authentication/tracker.py (82 lines)
 In-memory brute-force throttling for login identifiers (REQ-004).
 - @logged_class(slow_threshold_ms=10, include_args=False) class `InMemoryAttemptTracker`: A thread-safe in-memory attempt tracker.
-  - `__init__(self, max_failed_attempts: int, lockout_duration: timedelta) -> None`
-  - `record_failure(self, identifier: str) -> None`
-  - `record_success(self, identifier: str) -> None`
-  - `is_locked(self, identifier: str) -> bool`
-#### src/backend/authentication/webauthn.py (112 lines)
+  - `__init__(self, max_failed_attempts: int, lockout_duration: timedelta) -> None`: Fix the lockout policy for the tracker's whole lifetime.
+  - `record_failure(self, identifier: str) -> None`: Count one rejected attempt for an identifier (REQ-004).
+  - `record_success(self, identifier: str) -> None`: Discard all recorded state for an identifier (REQ-004/AC-008); an unknown identifier is a no-op.
+  - `is_locked(self, identifier: str) -> bool`: Whether an identifier is locked right now — true only while lock_until lies in the future.
+#### src/backend/authentication/webauthn.py (145 lines)
 WebAuthn (passkey) provider wrapping py-webauthn (T-006, ADR-031).
 - @logged_class(slow_threshold_ms=500, include_args=False) class `PyWebAuthnProvider(WebAuthnProvider)`: A WebAuthn provider backed by py-webauthn.
-  - `__init__(self, rp_id: str, rp_name: str, origin: str) -> None`
-  - `generate_registration_options(self, user_id: UUID, username: str, display_name: str | None) -> dict[str, Any]`
-  - `verify_registration_response(self, user_id: UUID, username: str, response: dict[str, Any]) -> VerifiedCredential`
-  - `generate_authentication_options(self, credential_id: str) -> dict[str, Any]`
-  - `verify_authentication_response(self, credential_id: str, response: dict[str, Any]) -> VerifiedAssertion`
+  - `__init__(self, rp_id: str, rp_name: str, origin: str) -> None`: Fix the relying-party identity used as the expected values of every verification.
+  - `generate_registration_options(self, user_id: UUID, username: str, display_name: str | None) -> dict[str, Any]`: Build registration options and remember their challenge under the user id.
+  - `verify_registration_response(self, user_id: UUID, username: str, response: dict[str, Any]) -> VerifiedCredential`: Verify a registration response against the challenge stored for the user id (REQ-014).
+  - `generate_authentication_options(self, credential_id: str) -> dict[str, Any]`: Build the assertion request for one credential id and remember its challenge under that id.
+  - `verify_authentication_response(self, credential_id: str, response: dict[str, Any]) -> VerifiedAssertion`: Verify an assertion and report the sign count it presents (REQ-015).
 
 ### `backend.eventbus` — src/backend/eventbus/
 exports: EventBus, get_event_bus, register_settings, reset_event_bus
 #### src/backend/eventbus/__init__.py (12 lines)
 Public API for the event bus feature.
-#### src/backend/eventbus/eventbus.py (244 lines)
+#### src/backend/eventbus/eventbus.py (257 lines)
 In-memory, asynchronous event bus for decoupled backend communication.
 - @logged_class(slow_threshold_ms=250) class `EventBus`: A bounded, thread-safe, asynchronous in-memory event bus.
-  - `__init__(self, max_queue_size: int | None=None) -> None`
+  - `__init__(self, max_queue_size: int | None=None) -> None`: Build a bus with a bounded pending-event queue; no worker thread yet.
   - @property `max_queue_size(self) -> int`: The configured maximum queue size.
   - `subscribe(self, event_type: type[T], handler: Callable[[T], None]) -> None`: Register handler for event_type.
   - `unsubscribe(self, event_type: type[T], handler: Callable[[T], None]) -> None`: Remove handler for event_type. No-op if not subscribed.
@@ -729,8 +729,8 @@ In-memory, asynchronous event bus for decoupled backend communication.
   - @property `is_running(self) -> bool`: True if the background worker is running.
   - @property `pending_count(self) -> int`: Number of events currently queued.
   - @property `dropped_count(self) -> int`: Number of events dropped (backpressure).
-  - `__enter__(self) -> EventBus`
-  - `__exit__(self, *exc: object) -> None`
+  - `__enter__(self) -> EventBus`: Enter the context-manager form: the bus itself, still without a worker.
+  - `__exit__(self, *exc: object) -> None`: Leave the context manager: drain queued events, then stop.
 - @logged(slow_threshold_ms=5) def `get_event_bus() -> EventBus`: Return the shared default event bus (singleton).
 - @logged(slow_threshold_ms=5) def `reset_event_bus() -> None`: Reset the shared default event bus (for tests).
 #### src/backend/eventbus/feature_settings.py (27 lines)
@@ -741,22 +741,22 @@ Feature-owned settings registration for the event bus (REQ-001).
 exports: AVATAR_ALLOWED_TYPES, AVATAR_MAX_HEIGHT, AVATAR_MAX_WIDTH, AVATAR_VARIANT_SIZES, AvatarDeleted, AvatarError, AvatarEvent, AvatarRead, AvatarUploaded, DEFAULT_AVATAR_PATH, EventPublisher, FileDeleted, FileDownloaded, FileEvent, FileManagementError, FileManagementNotFoundError, FileRead, FileRecord, FileRepository, FileService, FileTooLargeError, FileTypeNotAllowedError, FileUploaded, FileValidationError, FileValidationFailed, InMemoryStorageBackend, KEY_PATTERN, LocalDiskStorageBackend, NAMESPACE_PATTERN, SqliteFileRepository, StorageBackend, StorageError, StorageStat, UserAvatar, build_file_source, get_default_avatar, register_settings
 #### src/backend/filemanagement/__init__.py (98 lines)
 Public API of the file-management feature (module: backend.filemanagement).
-#### src/backend/filemanagement/errors.py (105 lines)
+#### src/backend/filemanagement/errors.py (137 lines)
 Structured domain errors for the file-management feature (REQ-023, D11, ADR-059).
 - class `FileManagementError(Exception)`: Base class for all file-management domain errors.
 - class `FileManagementNotFoundError(FileManagementError)`: No file exists for the requested key (REQ-010, REQ-011, REQ-014).
-  - `__init__(self, key: str) -> None`
+  - `__init__(self, key: str) -> None`: key is the looked-up key, echoed verbatim into the message.
 - class `FileTooLargeError(FileManagementError)`: Content exceeds the effective max size (REQ-003).
-  - `__init__(self, key: str | None, size: int, limit: int) -> None`
+  - `__init__(self, key: str | None, size: int, limit: int) -> None`: Both sizes are bytes; limit is the effective limit at check time.
 - class `FileTypeNotAllowedError(FileManagementError)`: The detected MIME type is not in the effective allowed set (REQ-006).
-  - `__init__(self, key: str | None, detected: str, allowed: frozenset[str]) -> None`
+  - `__init__(self, key: str | None, detected: str, allowed: frozenset[str]) -> None`: allowed is the effective set at check time, snapshotted into the error.
 - class `FileValidationError(FileManagementError)`: An upload was rejected by validation (REQ-003..REQ-007, REQ-019).
-  - `__init__(self, key: str | None, reason: str, *, declared: str | None=None, detected: str | None=None, width: int | None=None, height: int | None=None) -> None`
+  - `__init__(self, key: str | None, reason: str, *, declared: str | None=None, detected: str | None=None, width: int | None=None, height: int | None=None) -> None`: Only the context matching reason is populated; the rest stays None.
 - class `StorageError(FileManagementError)`: A storage operation failed (REQ-008, REQ-016).
-  - `__init__(self, key: str | None, reason: str) -> None`
+  - `__init__(self, key: str | None, reason: str) -> None`: reason is the stable classification callers branch on (REQ-023).
 - class `AvatarError(FileManagementError)`: An avatar lifecycle operation was invalid (REQ-017).
-  - `__init__(self, user_id: str, operation: str) -> None`
-#### src/backend/filemanagement/events.py (87 lines)
+  - `__init__(self, user_id: str, operation: str) -> None`: One class covers both causes; the caller branches on operation.
+#### src/backend/filemanagement/events.py (93 lines)
 Typed lifecycle events for the file-management feature (REQ-022, D10, ADR-058).
 - class `FileEvent(BaseModel)`: Base for file lifecycle events; occurred_at is UTC.
   - `occurred_at: datetime`
@@ -787,7 +787,7 @@ Typed lifecycle events for the file-management feature (REQ-022, D10, ADR-058).
 - class `AvatarDeleted(AvatarEvent)`: Published when a user's avatar is deleted (REQ-022).
   - `file_id: UUID`
 - class `EventPublisher(Protocol)`: Structural publisher protocol (ADR-058); the real event bus satisfies it.
-  - `publish(self, event: object) -> None`
+  - `publish(self, event: object) -> None`: Deliver event to whatever consumes it (the only method used here).
 #### src/backend/filemanagement/feature_actions.py (34 lines)
 Feature-owned permission action declarations (docs/specs/user-roles-permissions.md, D3).
 - def `register_actions(catalog: PermissionCatalog) -> None`: Register the filemanagement actions (permission key -> description).
@@ -835,37 +835,37 @@ Domain models and fixed constants for the file-management feature.
 - class `StorageStat(BaseModel)`: A storage content's size and updated time (UTC).
   - `size: int`
   - `updated_at: datetime`
-#### src/backend/filemanagement/repository.py (209 lines)
+#### src/backend/filemanagement/repository.py (281 lines)
 Persistence contract and the SQLite/SQLModel repository (REQ-013).
 - @logged_class(slow_threshold_ms=100) class `FileRepository(ABC)`: The persistence contract the service depends on (REQ-013).
-  - @abstractmethod `add(self, record: FileRecord) -> FileRecord`: Insert record; if a record with the same key exists it is atomically replaced (last-write-wins, D5) …
-  - @abstractmethod `get_by_key(self, key: str) -> FileRecord | None`
-  - @abstractmethod `get_by_id(self, file_id: UUID) -> FileRecord | None`
-  - @abstractmethod `update(self, record: FileRecord) -> FileRecord`
-  - @abstractmethod `delete(self, file_id: UUID) -> None`
-  - @abstractmethod `list_by_namespace(self, namespace: str | None=None, limit: int=100, offset: int=0) -> Sequence[FileRecord]`: Return records whose namespace starts with namespace (None → all), ordered by created_at, with limit…
-  - @abstractmethod `set_user_avatar(self, user_id: str, file_id: UUID) -> None`
-  - @abstractmethod `get_user_avatar(self, user_id: str) -> UUID | None`
-  - @abstractmethod `clear_user_avatar(self, user_id: str) -> None`
+  - @abstractmethod `add(self, record: FileRecord) -> FileRecord`: Insert record, atomically replacing any record with the same key.
+  - @abstractmethod `get_by_key(self, key: str) -> FileRecord | None`: Look a record up by its unique key.
+  - @abstractmethod `get_by_id(self, file_id: UUID) -> FileRecord | None`: Look a record up by its id.
+  - @abstractmethod `update(self, record: FileRecord) -> FileRecord`: Persist changes to an existing record and return the stored instance.
+  - @abstractmethod `delete(self, file_id: UUID) -> None`: Delete the metadata row with this id; an unknown id is a silent no-op.
+  - @abstractmethod `list_by_namespace(self, namespace: str | None=None, limit: int=100, offset: int=0) -> Sequence[FileRecord]`: Return records whose namespace starts with namespace.
+  - @abstractmethod `set_user_avatar(self, user_id: str, file_id: UUID) -> None`: Point user_id's avatar at file_id, replacing any earlier mapping.
+  - @abstractmethod `get_user_avatar(self, user_id: str) -> UUID | None`: The file id mapped to user_id, or None when there is no mapping.
+  - @abstractmethod `clear_user_avatar(self, user_id: str) -> None`: Remove the mapping row only; no mapping is a no-op.
 - @logged_class(slow_threshold_ms=100) class `SqliteFileRepository(FileRepository)`: A SQLite/SQLModel implementation of :class:FileRepository.
-  - `__init__(self, database_url: str) -> None`
-  - `add(self, record: FileRecord) -> FileRecord`
-  - `get_by_key(self, key: str) -> FileRecord | None`
-  - `get_by_id(self, file_id: UUID) -> FileRecord | None`
-  - `update(self, record: FileRecord) -> FileRecord`
-  - `delete(self, file_id: UUID) -> None`
-  - `list_by_namespace(self, namespace: str | None=None, limit: int=100, offset: int=0) -> Sequence[FileRecord]`
-  - `set_user_avatar(self, user_id: str, file_id: UUID) -> None`
-  - `get_user_avatar(self, user_id: str) -> UUID | None`
-  - `clear_user_avatar(self, user_id: str) -> None`
-#### src/backend/filemanagement/search_source.py (211 lines)
+  - `__init__(self, database_url: str) -> None`: Open and bootstrap the database at database_url.
+  - `add(self, record: FileRecord) -> FileRecord`: Replace any same-key record inside one transaction (D5, ADR-054).
+  - `get_by_key(self, key: str) -> FileRecord | None`: Exact-key lookup; the returned timestamps are tz-aware UTC.
+  - `get_by_id(self, file_id: UUID) -> FileRecord | None`: Id lookup; the returned timestamps are tz-aware UTC.
+  - `update(self, record: FileRecord) -> FileRecord`: Merge the record: an id that is not stored is inserted, not rejected.
+  - `delete(self, file_id: UUID) -> None`: Delete the row by id; an unknown id commits nothing.
+  - `list_by_namespace(self, namespace: str | None=None, limit: int=100, offset: int=0) -> Sequence[FileRecord]`: Prefix match, ordering and pagination, all applied in SQL.
+  - `set_user_avatar(self, user_id: str, file_id: UUID) -> None`: Insert or update the mapping row, stamping updated_at either way.
+  - `get_user_avatar(self, user_id: str) -> UUID | None`: The mapped id; no check that the referenced file still exists.
+  - `clear_user_avatar(self, user_id: str) -> None`: Delete the mapping row only; the avatar file itself is untouched.
+#### src/backend/filemanagement/search_source.py (226 lines)
 The file-management search source (docs/specs/search.md, REQ-021, D19).
-- def `build_file_source(repository: FileRepository) -> SearchSource`: Build the file-management search source over repository (REQ-021, D19, ADR-077): name filemanagement…
-#### src/backend/filemanagement/service.py (833 lines)
+- def `build_file_source(repository: FileRepository) -> SearchSource`: Build the file-management search source over repository.
+#### src/backend/filemanagement/service.py (849 lines)
 File management service (REQ-001..REQ-009, REQ-012, REQ-015, REQ-022).
 - @logged_class(slow_threshold_ms=5000, include_args=False) class `FileService`: Use-case service for file uploads (REQ-001..REQ-009, REQ-012, REQ-022).
-  - `__init__(self, repository: FileRepository, backend: StorageBackend | None=None, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`
-  - @requires_permission('filemanagement.upload') `upload(self, source: str | bytes | BinaryIO, *, key: str | None=None, namespace: str='general', original_filename: str | None=None, declared_mime_type: str | None=None, uploader: str | None=None, principal: Principal=_SYSTEM_PRINCIPAL) -> FileRead`: Upload source (a filesystem path, raw bytes, or a file-like binary stream) and return the stored fil…
+  - `__init__(self, repository: FileRepository, backend: StorageBackend | None=None, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`: Wire the collaborators; only repository is required.
+  - @requires_permission('filemanagement.upload') `upload(self, source: str | bytes | BinaryIO, *, key: str | None=None, namespace: str='general', original_filename: str | None=None, declared_mime_type: str | None=None, uploader: str | None=None, principal: Principal=_SYSTEM_PRINCIPAL) -> FileRead`: Upload source and return the stored file's FileRead.
   - @requires_permission('filemanagement.upload_avatar') `upload_avatar(self, user_id: str, source: str | bytes | BinaryIO, *, declared_mime_type: str | None=None, principal: Principal=_SYSTEM_PRINCIPAL) -> AvatarRead`: Upload the user's first avatar (REQ-017).
   - @requires_permission('filemanagement.replace_avatar') `replace_avatar(self, user_id: str, source: str | bytes | BinaryIO, *, declared_mime_type: str | None=None, principal: Principal=_SYSTEM_PRINCIPAL) -> AvatarRead`: Replace the user's avatar (REQ-017).
   - @requires_permission('filemanagement.delete_avatar') `delete_avatar(self, user_id: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Delete the user's avatar (REQ-017).
@@ -876,7 +876,7 @@ File management service (REQ-001..REQ-009, REQ-012, REQ-015, REQ-022).
   - @requires_permission('filemanagement.get_file') `get_file(self, key: str, principal: Principal=_SYSTEM_PRINCIPAL) -> FileRead`: Return the metadata for a key (REQ-014).
   - `list_files(self, namespace: str | None=None, limit: int=100, offset: int=0, principal: Principal=_SYSTEM_PRINCIPAL) -> list[FileRead]`: Return files whose namespace starts with the prefix (REQ-014).
 - @logged def `get_default_avatar() -> bytes`: The built-in default avatar asset's bytes (REQ-020, D9).
-#### src/backend/filemanagement/storage.py (199 lines)
+#### src/backend/filemanagement/storage.py (248 lines)
 Storage backends for the file-management feature (REQ-015, REQ-016).
 - @logged_class(slow_threshold_ms=100, include_args=False) class `StorageBackend(ABC)`: Seam for storage content (REQ-015).
   - @abstractmethod `put(self, key: str, data: bytes | BinaryIO) -> None`: Atomically write content to key, replacing existing content (last-write-wins).
@@ -885,25 +885,25 @@ Storage backends for the file-management feature (REQ-015, REQ-016).
   - @abstractmethod `exists(self, key: str) -> bool`: Whether content exists at key.
   - @abstractmethod `stat(self, key: str) -> StorageStat | None`: Return the content's size/updated time at key, or None if absent.
 - @logged_class(slow_threshold_ms=100, include_args=False) class `LocalDiskStorageBackend(StorageBackend)`: Local-disk storage backend (REQ-015, REQ-016).
-  - `__init__(self, root: Path) -> None`
-  - `put(self, key: str, data: bytes | BinaryIO) -> None`
-  - `get(self, key: str) -> BinaryIO`
-  - `delete(self, key: str) -> None`
-  - `exists(self, key: str) -> bool`
-  - `stat(self, key: str) -> StorageStat | None`
+  - `__init__(self, root: Path) -> None`: Store content under root; the directory itself is made by put.
+  - `put(self, key: str, data: bytes | BinaryIO) -> None`: Write to a temp file in root, then os.replace it into place.
+  - `get(self, key: str) -> BinaryIO`: Open the stored file; the caller owns closing the returned stream.
+  - `delete(self, key: str) -> None`: Unlink the stored file; an already-missing file is not an error.
+  - `exists(self, key: str) -> bool`: Whether a regular file sits at key.
+  - `stat(self, key: str) -> StorageStat | None`: Size and modification time read from the filesystem (mtime as UTC).
 - @logged_class(slow_threshold_ms=100, include_args=False) class `InMemoryStorageBackend(StorageBackend)`: Public in-memory storage backend for tests/DI (REQ-015).
-  - `__init__(self) -> None`
-  - `put(self, key: str, data: bytes | BinaryIO) -> None`
-  - `get(self, key: str) -> BinaryIO`
-  - `delete(self, key: str) -> None`
-  - `exists(self, key: str) -> bool`
-  - `stat(self, key: str) -> StorageStat | None`
+  - `__init__(self) -> None`: Start empty; the two dicts are the instance's entire state.
+  - `put(self, key: str, data: bytes | BinaryIO) -> None`: Replace the whole value in one assignment and stamp the write time.
+  - `get(self, key: str) -> BinaryIO`: A fresh BytesIO over the stored bytes on every call.
+  - `delete(self, key: str) -> None`: Drop the value and its timestamp; a missing key is a no-op.
+  - `exists(self, key: str) -> bool`: Membership in the content dict — no key validation happens here.
+  - `stat(self, key: str) -> StorageStat | None`: Size computed from the stored bytes, timestamp from the last write.
 
 ### `backend.logging` — src/backend/logging/
 exports: Settings, _read_setting, get_logger, get_settings, logged, logged_class, register_settings, setup_logger
 #### src/backend/logging/__init__.py (25 lines)
 Logging feature public API (docs/specs/logging.md).
-#### src/backend/logging/_decorator.py (253 lines)
+#### src/backend/logging/_decorator.py (256 lines)
 Tracing decorators for callables and classes (REQ-007, REQ-008, REQ-015).
 - def `logged(func: Callable[..., Any] | None=None, *, level: str='DEBUG', slow_threshold_ms: float | None=None, slow_threshold_setting: str | None=None, include_args: bool=False) -> Callable[..., Any]`: Log a callable's entry, exit (with elapsed ms), and exceptions.
 - def `logged_class(cls: type | None=None, *, slow_threshold_ms: float | None=None, include_args: bool=False) -> type | Callable[[type], type]`: Apply :func:logged to every public (non-private) method of a class.
@@ -952,15 +952,15 @@ Feature-owned settings registration and live-read helper for logging.
 exports: EMAIL_VERIFICATION_TEMPLATE, EmailFailed, EmailSendResult, EmailSent, EmailTemplate, EmailVerificationEmailRequest, EventPublisher, MailConfig, MailConfigurationError, MailError, MailEvent, MailService, MailTemplateError, MailTransportError, PASSWORD_RESET_TEMPLATE, PasswordResetEmailRequest, RenderedTemplate, SmtpTransport, SmtpTransportImpl, build_message, register_actions, register_settings, render_template, resolve_mail_config, validate_recipient
 #### src/backend/mail/__init__.py (58 lines)
 Public API of the mail feature (module: backend.mail).
-#### src/backend/mail/errors.py (54 lines)
+#### src/backend/mail/errors.py (57 lines)
 The mail error hierarchy (docs/specs/mail-service.md, D8, ADR-045).
 - class `MailError(Exception)`: Base class for all mail domain errors.
 - class `MailConfigurationError(MailError)`: The mail service is not correctly configured at send time.
-  - `__init__(self, reason: str) -> None`
+  - `__init__(self, reason: str) -> None`: reason names the configuration problem and doubles as the message.
 - class `MailTransportError(MailError)`: The SMTP transport failed to deliver the email.
-  - `__init__(self, reason: str) -> None`
+  - `__init__(self, reason: str) -> None`: reason names the delivery failure kind and doubles as the message.
 - class `MailTemplateError(MailError)`: The email could not be prepared from its template.
-  - `__init__(self, reason: str) -> None`
+  - `__init__(self, reason: str) -> None`: reason names the failure (missing_variable:<name> for a gap) and is the message.
 #### src/backend/mail/events.py (39 lines)
 Typed lifecycle events (docs/specs/mail-service.md, D9).
 - class `MailEvent(BaseModel)`: Base class for mail lifecycle events.
@@ -992,7 +992,7 @@ Feature-owned settings registration and live config resolution for mail.
 Message building and recipient validation (docs/specs/mail-service.md).
 - def `build_message(to: str, rendered: RenderedTemplate, from_name: str, from_address: str) -> EmailMessage`: Build a multipart/alternative (text + HTML) EmailMessage.
 - def `validate_recipient(to: str) -> None`: Validate to is a valid email address (format-only, no DNS).
-#### src/backend/mail/models.py (52 lines)
+#### src/backend/mail/models.py (58 lines)
 Request/representation models and the structural publisher protocol.
 - class `PasswordResetEmailRequest(BaseModel)`: A request to send a password-reset email.
   - `to: EmailStr`
@@ -1006,7 +1006,7 @@ Request/representation models and the structural publisher protocol.
   - `to: str`
   - `template: str`
 - @logged_class(slow_threshold_ms=10) class `EventPublisher(ABC)`: Structural publisher protocol (satisfied by the shared event bus).
-  - @abstractmethod `publish(self, event: object) -> None`
+  - @abstractmethod `publish(self, event: object) -> None`: Hand event to the publisher's subscribers.
 #### src/backend/mail/render.py (76 lines)
 Secure {{variable}} template rendering (docs/specs/mail-service.md, D3, ADR-044).
 - class `RenderedTemplate(BaseModel)`: The rendered subject and bodies (values HTML-escaped).
@@ -1014,10 +1014,10 @@ Secure {{variable}} template rendering (docs/specs/mail-service.md, D3, ADR-044)
   - `body_html: str`
   - `body_text: str`
 - def `render_template(template: EmailTemplate, context: dict[str, str]) -> RenderedTemplate`: Render template with context (HTML-escaped values).
-#### src/backend/mail/service.py (121 lines)
+#### src/backend/mail/service.py (128 lines)
 The MailService use-case service (docs/specs/mail-service.md, D4-D6, D10, D13).
 - @logged_class(slow_threshold_ms=5000, include_args=False) class `MailService`: The reusable email-sending service other features consume.
-  - `__init__(self, transport: SmtpTransport | None=None, event_bus: EventPublisher | None=None, permission_service: PermissionChecker | None=None) -> None`
+  - `__init__(self, transport: SmtpTransport | None=None, event_bus: EventPublisher | None=None, permission_service: PermissionChecker | None=None) -> None`: Wire the three optional seams.
   - @requires_permission('mail.send_email') `send_email(self, to: str, template: EmailTemplate, context: dict[str, str], principal: Principal=_SYSTEM_PRINCIPAL) -> EmailSendResult`: The core send operation (REQ-003, REQ-006).
   - @requires_permission('mail.send_password_reset_email') `send_password_reset_email(self, request: PasswordResetEmailRequest, principal: Principal=_SYSTEM_PRINCIPAL) -> EmailSendResult`: Send a password-reset email using the built-in template (REQ-004).
   - @requires_permission('mail.send_email_verification_email') `send_email_verification_email(self, request: EmailVerificationEmailRequest, principal: Principal=_SYSTEM_PRINCIPAL) -> EmailSendResult`: Send an email-verification email using the built-in template (REQ-005).
@@ -1028,42 +1028,42 @@ Email templates (docs/specs/mail-service.md, D2).
   - `subject: str`
   - `body_html: str`
   - `body_text: str`
-#### src/backend/mail/transport.py (94 lines)
+#### src/backend/mail/transport.py (100 lines)
 The SMTP transport ABC and the smtplib-backed implementation (D1, ADR-043/046).
 - @logged_class(slow_threshold_ms=5000) class `SmtpTransport(ABC)`: The physical SMTP send (the seam for testability).
   - @abstractmethod `send(self, message: EmailMessage) -> None`: Send message; raise MailTransportError on failure.
 - @logged_class(slow_threshold_ms=5000, include_args=False) class `SmtpTransportImpl(SmtpTransport)`: The smtplib-backed default transport (connects per send).
-  - `__init__(self, host: str, port: int, *, username: str, password: str, use_tls: bool, timeout: float) -> None`
+  - `__init__(self, host: str, port: int, *, username: str, password: str, use_tls: bool, timeout: float) -> None`: Capture the SMTP endpoint and credentials; nothing connects here.
   - `send(self, message: EmailMessage) -> None`: Connect, authenticate when credentials are present, send, close.
 
 ### `backend.permissions` — src/backend/permissions/
 exports: AuthorizationError, BOOTSTRAP_SYSTEM_PERMISSIONS, EventPublisher, GrantRepository, MemoryGrantRepository, MemoryRoleRepository, MemorySystemPrincipalRepository, PermissionCatalog, PermissionDenied, PermissionDeniedError, PermissionEvent, PermissionRead, PermissionService, Role, RoleAlreadyExistsError, RoleCreated, RoleDeleted, RoleInUseError, RoleNotFoundError, RolePermission, RolePermissionsChanged, RoleProtectedError, RoleRead, RoleRepository, SqliteGrantRepository, SqliteRoleRepository, SqliteSystemPrincipalRepository, SystemPrincipalPermission, SystemPrincipalRepository, UnknownPermissionError, get_permission_service, register_settings, reset_permission_service
 #### src/backend/permissions/__init__.py (89 lines)
 Public API of the permissions feature (module: backend.permissions).
-#### src/backend/permissions/catalog.py (68 lines)
+#### src/backend/permissions/catalog.py (74 lines)
 The static permission catalog (docs/specs/user-roles-permissions.md, D3).
 - @logged_class class `PermissionCatalog`: In-memory registry of declared actions.
-  - `__init__(self) -> None`
+  - `__init__(self) -> None`: Both indexes start empty — nothing is seeded or loaded.
   - `register_feature(self, feature: str, actions: dict[str, str]) -> None`: Register feature's actions (permission key -> description).
   - `has(self, permission: str) -> bool`: Whether permission is a declared action key.
   - `features(self) -> frozenset[str]`: The declared features.
   - `actions(self, feature: str | None=None) -> Sequence[PermissionRead]`: The declared actions, optionally restricted to feature.
-#### src/backend/permissions/errors.py (75 lines)
+#### src/backend/permissions/errors.py (85 lines)
 Structured authorization error hierarchy (docs/specs/user-roles-permissions.md, D18).
 - class `AuthorizationError(Exception)`: Root of the permissions error hierarchy (REQ-021).
 - class `PermissionDeniedError(AuthorizationError)`: A permission check was denied (fail-closed, D12).
-  - `__init__(self, user_id: UUID | None, permission: str, reason: str) -> None`
+  - `__init__(self, user_id: UUID | None, permission: str, reason: str) -> None`: Build the message from the check context and keep the context as attributes.
 - class `RoleNotFoundError(AuthorizationError)`: The referenced role does not exist.
-  - `__init__(self, role: str) -> None`
+  - `__init__(self, role: str) -> None`: Carry the rejected role name so the caller never parses the message (AC-026).
 - class `RoleAlreadyExistsError(AuthorizationError)`: A role with the same name already exists.
-  - `__init__(self, role: str) -> None`
+  - `__init__(self, role: str) -> None`: Raised by the role repositories on a duplicate insert; create_role lets it propagate (REQ-006).
 - class `RoleInUseError(AuthorizationError)`: The role is assigned to one or more users and cannot be deleted.
-  - `__init__(self, role: str) -> None`
+  - `__init__(self, role: str) -> None`: The deletion guard for a still-assigned role (REQ-007); the role is left in place.
 - class `RoleProtectedError(AuthorizationError)`: A built-in role (admin, user) is protected from deletion.
-  - `__init__(self, role: str) -> None`
+  - `__init__(self, role: str) -> None`: The guard on the seeded admin / user roles (REQ-007); no row is ever deleted.
 - class `UnknownPermissionError(AuthorizationError)`: The referenced permission is not in the catalog (D18).
-  - `__init__(self, permission: str) -> None`
-#### src/backend/permissions/events.py (56 lines)
+  - `__init__(self, permission: str) -> None`: Raised by the grant/revoke and system-set paths for a key outside the closed catalog (REQ-008, EDGE-…
+#### src/backend/permissions/events.py (63 lines)
 Typed lifecycle events for the permissions feature (docs/specs/user-roles-permissions.md, D17).
 - class `PermissionEvent(BaseModel)`: Base class for permissions lifecycle events (occurred_at is UTC).
   - `occurred_at: datetime`
@@ -1080,18 +1080,18 @@ Typed lifecycle events for the permissions feature (docs/specs/user-roles-permis
   - `added: list[str]`
   - `removed: list[str]`
 - class `EventPublisher(Protocol)`: Structural publisher protocol satisfied by the shared event bus.
-  - `publish(self, event: object) -> None`
+  - `publish(self, event: object) -> None`: Hand event to the bus (the shared event bus only enqueues it).
 #### src/backend/permissions/feature_settings.py (34 lines)
 Feature-owned settings registration for permissions (REQ-019, D16).
 - @logged(slow_threshold_ms=5) def `register_settings(registry: SettingsRegistry) -> None`: Register the permissions feature's settings with registry (REQ-019).
-#### src/backend/permissions/models.py (102 lines)
+#### src/backend/permissions/models.py (111 lines)
 Domain models for the permissions feature (docs/specs/user-roles-permissions.md, D15).
 - class `Role(SQLModel, table=True)`: A runtime-managed role (the single source of truth for role names, D4).
   - `role: str`
   - `description: str | None`
   - `is_builtin: bool`
   - `created_at: datetime`
-- class `RolePermission(SQLModel, table=True)`: A dynamic role->permission grant (a catalog action key or a feature wildcard <feature>.*).
+- class `RolePermission(SQLModel, table=True)`: A dynamic role->permission grant.
   - `role: str`
   - `permission: str`
   - `granted_at: datetime`
@@ -1112,8 +1112,8 @@ Domain models for the permissions feature (docs/specs/user-roles-permissions.md,
   - `expires_at: datetime`
   - `revoked: bool`
 - class `SessionLookup(Protocol)`: Structural session-validation seam (D9).
-  - `get_by_token_hash(self, token_hash: str) -> SessionRecord | None`
-#### src/backend/permissions/repositories.py (280 lines)
+  - `get_by_token_hash(self, token_hash: str) -> SessionRecord | None`: Look a session up by the SHA-256 hash of its token, never by the token itself (D9).
+#### src/backend/permissions/repositories.py (338 lines)
 Persistence contract and concrete repositories (docs/specs/user-roles-permissions.md, REQ-022, REQ-0…
 - @logged_class(slow_threshold_ms=100) class `RoleRepository(ABC)`: The role persistence contract (REQ-022).
   - @abstractmethod `add(self, role: str, description: str | None, is_builtin: bool) -> None`: Insert role; raise :class:RoleAlreadyExistsError on a duplicate role.
@@ -1129,38 +1129,38 @@ Persistence contract and concrete repositories (docs/specs/user-roles-permission
   - @abstractmethod `set_permissions(self, permissions: Iterable[str]) -> None`: Atomically replace the system set with permissions.
   - @abstractmethod `get_permissions(self) -> frozenset[str]`: The current system set.
 - class `SqliteRoleRepository(_SqliteRepository, RoleRepository)`: A SQLite/SQLModel implementation of :class:RoleRepository.
-  - `add(self, role: str, description: str | None, is_builtin: bool) -> None`
-  - `get(self, role: str) -> Role | None`
-  - `list_all(self) -> Sequence[Role]`
-  - `delete(self, role: str) -> None`
+  - `add(self, role: str, description: str | None, is_builtin: bool) -> None`: Insert the role row, translating the primary-key violation into :class:RoleAlreadyExistsError.
+  - `get(self, role: str) -> Role | None`: Read one role in its own session; a missing role is None, never an error.
+  - `list_all(self) -> Sequence[Role]`: Every role row, ordered by role name (not by creation time).
+  - `delete(self, role: str) -> None`: Delete the role and its grant rows in one session.
 - class `SqliteGrantRepository(_SqliteRepository, GrantRepository)`: A SQLite/SQLModel implementation of :class:GrantRepository.
-  - `grant(self, role: str, permission: str) -> None`
-  - `revoke(self, role: str, permission: str) -> None`
-  - `get_role_permissions(self, role: str) -> frozenset[str]`
-  - `list_all(self) -> Sequence[RolePermission]`
+  - `grant(self, role: str, permission: str) -> None`: Insert the grant row only when it is absent, so a repeat grant keeps the original granted_at.
+  - `revoke(self, role: str, permission: str) -> None`: Delete the grant row when present; an absent grant is a no-op (REQ-008).
+  - `get_role_permissions(self, role: str) -> frozenset[str]`: The role's explicit grant keys.
+  - `list_all(self) -> Sequence[RolePermission]`: Every grant row, ordered by (role, permission).
 - class `SqliteSystemPrincipalRepository(_SqliteRepository, SystemPrincipalRepository)`: A SQLite/SQLModel implementation of :class:SystemPrincipalRepository.
-  - `set_permissions(self, permissions: Iterable[str]) -> None`
-  - `get_permissions(self) -> frozenset[str]`
+  - `set_permissions(self, permissions: Iterable[str]) -> None`: Replace the whole system set inside one session, so no reader sees a half-written set (REQ-018).
+  - `get_permissions(self) -> frozenset[str]`: Full table read on every call — the system set is live, never cached (REQ-018).
 - class `MemoryRoleRepository(RoleRepository)`: An in-memory implementation (tests/DI); instances are isolated.
-  - `__init__(self) -> None`
-  - `add(self, role: str, description: str | None, is_builtin: bool) -> None`
-  - `get(self, role: str) -> Role | None`
-  - `list_all(self) -> Sequence[Role]`
-  - `delete(self, role: str) -> None`
+  - `__init__(self) -> None`: A fresh store: no roles, and no state shared with any other instance.
+  - `add(self, role: str, description: str | None, is_builtin: bool) -> None`: Dict membership is the in-memory stand-in for the SQLite primary key (same error).
+  - `get(self, role: str) -> Role | None`: Direct dict lookup; a missing role is None.
+  - `list_all(self) -> Sequence[Role]`: Sorted by role name, matching the SQLite repository's ordering.
+  - `delete(self, role: str) -> None`: Silent no-op for an unknown role (pop with a default).
 - class `MemoryGrantRepository(GrantRepository)`: An in-memory implementation (tests/DI); instances are isolated.
-  - `__init__(self) -> None`
-  - `grant(self, role: str, permission: str) -> None`
-  - `revoke(self, role: str, permission: str) -> None`
-  - `get_role_permissions(self, role: str) -> frozenset[str]`
-  - `list_all(self) -> Sequence[RolePermission]`
+  - `__init__(self) -> None`: A fresh store keyed by the (role, permission) pair — one row per pair.
+  - `grant(self, role: str, permission: str) -> None`: Insert-only: an existing grant is left untouched (idempotent, REQ-008).
+  - `revoke(self, role: str, permission: str) -> None`: Drop the pair when present; an absent grant is ignored.
+  - `get_role_permissions(self, role: str) -> frozenset[str]`: Linear scan over the grant keys — fine at the fixture sizes this store is built for.
+  - `list_all(self) -> Sequence[RolePermission]`: Grant rows ordered by their (role, permission) key, as the SQLite listing is.
 - class `MemorySystemPrincipalRepository(SystemPrincipalRepository)`: An in-memory implementation (tests/DI); instances are isolated.
-  - `__init__(self) -> None`
-  - `set_permissions(self, permissions: Iterable[str]) -> None`
-  - `get_permissions(self) -> frozenset[str]`
-#### src/backend/permissions/service.py (533 lines)
+  - `__init__(self) -> None`: A fresh store, empty — the bootstrap system set is seeded by the migration, not here (REQ-022).
+  - `set_permissions(self, permissions: Iterable[str]) -> None`: Rebuild the whole mapping (a replacement, not a merge): keys not listed are dropped.
+  - `get_permissions(self) -> frozenset[str]`: Snapshot copy: mutating the returned set cannot change the store.
+#### src/backend/permissions/service.py (552 lines)
 The permission service foundation (docs/specs/user-roles-permissions.md, D19, REQ-023).
 - @logged_class(include_args=False) class `PermissionService`: The RBAC use-case service (constructor DI, REQ-023).
-  - `__init__(self, role_repository: RoleRepository, grant_repository: GrantRepository, system_repository: SystemPrincipalRepository, user_manager: UserManager, session_lookup: SessionLookup | None=None, catalog: PermissionCatalog | None=None, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None) -> None`
+  - `__init__(self, role_repository: RoleRepository, grant_repository: GrantRepository, system_repository: SystemPrincipalRepository, user_manager: UserManager, session_lookup: SessionLookup | None=None, catalog: PermissionCatalog | None=None, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None) -> None`: Construction is the only wiring point (constructor DI, REQ-023, D19).
   - `has_permission(self, user_id: UUID | None, permission: str, session_token: str | None=None) -> bool`: Whether user_id (or the system principal when None) holds permission.
   - `require_permission(self, user_id: UUID | None, permission: str, session_token: str | None=None) -> None`: Raise :class:PermissionDeniedError unless the check passes (fail-closed, ADR-075).
   - `set_system_permissions(self, permissions: Iterable[str]) -> None`: Atomically replace the system-principal set (validated against the catalog, D18).
@@ -1171,7 +1171,7 @@ The permission service foundation (docs/specs/user-roles-permissions.md, D19, RE
   - `delete_role(self, role: str) -> None`: Delete a role (and its grants) with the deletion guards (REQ-007).
   - `grant_permission(self, role: str, permission: str) -> None`: Grant permission to role (REQ-008; idempotent — no duplicate row).
   - `revoke_permission(self, role: str, permission: str) -> None`: Revoke permission from role (REQ-008; idempotent no-op when absent).
-  - `get_role_permissions(self, role: str) -> frozenset[str]`: The role's explicit grants (REQ-008); an unknown role raises :class:RoleNotFoundError.
+  - `get_role_permissions(self, role: str) -> frozenset[str]`: The role's explicit grants (REQ-008).
   - `assign_role(self, user_id: UUID, role: str) -> UserRead`: Assign role to user_id (replace semantics) via the UserManager.
   - `add_role(self, user_id: UUID, role: str) -> UserRead`: Add role to user_id (append semantics) via the UserManager.
   - `remove_role(self, user_id: UUID, role: str) -> UserRead`: Remove role from user_id via the UserManager.
@@ -1183,16 +1183,16 @@ The permission service foundation (docs/specs/user-roles-permissions.md, D19, RE
 exports: EventPublisher, FieldType, FilterCondition, FilterGroup, FilterOperator, InMemorySource, MalformedQueryError, SearchError, SearchQuery, SearchResult, SearchResultItem, SearchService, SearchSource, Sort, SourceFailure, SourceField, SourceItem, SourcePage, SourceQueryContext, SourceQueryFailed, SourceQueryFailedError, SourceRegistered, SourceUnregistered, UnknownSourceError, get_search_service, register_actions, register_settings, reset_search_service
 #### src/backend/search/__init__.py (84 lines)
 Search feature — cross-feature search over registered sources.
-#### src/backend/search/errors.py (54 lines)
+#### src/backend/search/errors.py (77 lines)
 The domain SearchError hierarchy (docs/specs/search.md, D10, REQ-010).
 - class `SearchError(Exception)`: The domain error root for the search feature (REQ-010).
 - class `UnknownSourceError(SearchError)`: A query named a feature that is not registered (REQ-010, EDGE-001).
-  - `__init__(self, source: str) -> None`
+  - `__init__(self, source: str) -> None`: Raise for a feature that names no registered source.
 - class `MalformedQueryError(SearchError)`: A malformed query (REQ-010, AC-024).
-  - `__init__(self, reason: str, field: str | None=None, source: str | None=None) -> None`
-- class `SourceQueryFailedError(SearchError)`: A source raising (or timing out) during a single-source query (REQ-010): the source, the reason (que…
-  - `__init__(self, source: str, reason: str, error: str) -> None`
-#### src/backend/search/events.py (37 lines)
+  - `__init__(self, reason: str, field: str | None=None, source: str | None=None) -> None`: Compose the message from exactly the context that applies.
+- class `SourceQueryFailedError(SearchError)`: A source raising (or timing out) during a single-source query (REQ-010).
+  - `__init__(self, source: str, reason: str, error: str) -> None`: Raise for a source that failed in a single-source query (AC-026).
+#### src/backend/search/events.py (46 lines)
 Typed lifecycle/failure events for the search feature (D15, REQ-014).
 - class `SourceRegistered(BaseModel)`: A source was registered or replaced (D15).
   - `source: str`
@@ -1201,18 +1201,18 @@ Typed lifecycle/failure events for the search feature (D15, REQ-014).
 - class `SourceQueryFailed(BaseModel)`: A source query failed (query_failed/timeout) (D15).
   - `source: str`
   - `reason: str`
-- class `EventPublisher(Protocol)`: Structural publisher protocol (the real event bus satisfies it; a None publisher means no events and…
-  - `publish(self, event: object) -> None`
+- class `EventPublisher(Protocol)`: Structural publisher protocol (the real event bus satisfies it).
+  - `publish(self, event: object) -> None`: Deliver one search lifecycle/failure event to the publisher (D15).
 #### src/backend/search/feature_actions.py (29 lines)
 Feature-owned permission action declarations (docs/specs/search.md, D16).
 - @logged def `register_actions(catalog: PermissionCatalog) -> None`: Register the search action (permission key -> description).
 #### src/backend/search/feature_settings.py (51 lines)
 Feature-owned settings registration for search (docs/specs/search.md).
 - @logged def `register_settings(registry: SettingsRegistry) -> None`: Register the search feature's settings with registry (REQ-013).
-#### src/backend/search/models.py (184 lines)
+#### src/backend/search/models.py (202 lines)
 Data structures for the search feature (docs/specs/search.md, section 3).
-- class `FieldType(StrEnum)`: The closed field-type set (REQ-002): a list field is not representable and not exposed.
-- class `SourceField(BaseModel)`: A declared source field (REQ-002): a name, a type from the closed set, and the searchable/filterable…
+- class `FieldType(StrEnum)`: The closed field-type set (REQ-002).
+- class `SourceField(BaseModel)`: A declared source field (REQ-002).
   - `name: str`
   - `type: FieldType`
   - `searchable: bool`
@@ -1222,11 +1222,11 @@ Data structures for the search feature (docs/specs/search.md, section 3).
 - class `SourceItem(BaseModel)`: A source item: an opaque item_id + the declared display field values.
   - `item_id: str`
   - `fields: dict[str, Any]`
-- class `SourcePage(BaseModel)`: A source's query result page: at most limit items starting at offset, plus the total match count (ig…
+- class `SourcePage(BaseModel)`: A source's query result page.
   - `items: list[SourceItem]`
   - `total: int`
 - class `FilterOperator(StrEnum)`: Filter DSL operators (REQ-006, D4).
-- class `FilterCondition(BaseModel)`: A single filter condition (REQ-006): a field, an operator, and a value (required for every operator …
+- class `FilterCondition(BaseModel)`: A single filter condition (REQ-006).
   - `field: str`
   - `operator: FilterOperator`
   - `value: Any | None`
@@ -1253,40 +1253,40 @@ Data structures for the search feature (docs/specs/search.md, section 3).
   - `offset: int`
   - `limit: int | None`
   - `sort: Sort | None`
-- class `SearchResultItem(BaseModel)`: A result item: feature (the source name) + item_id + the declared display field values (REQ-009).
+- class `SearchResultItem(BaseModel)`: A result item (REQ-009).
   - `feature: str`
   - `item_id: str`
   - `fields: dict[str, Any]`
-- class `SourceFailure(BaseModel)`: A per-source failure marker (resilient global fan-out, D11): the feature, the reason (query_failed/t…
+- class `SourceFailure(BaseModel)`: A per-source failure marker (resilient global fan-out, D11).
   - `feature: str`
   - `reason: str`
   - `error: str`
-- class `SearchResult(BaseModel)`: The query entry point's result (REQ-009): the result items, the page metadata (total, offset, limit)…
+- class `SearchResult(BaseModel)`: The query entry point's result (REQ-009).
   - `items: list[SearchResultItem]`
   - `total: int`
   - `offset: int`
   - `limit: int`
   - `failures: list[SourceFailure]`
-#### src/backend/search/service.py (572 lines)
+#### src/backend/search/service.py (623 lines)
 The search service (docs/specs/search.md).
-- @logged_class(slow_threshold_ms=100, include_args=False) class `SearchService`: The search service: the thread-safe in-memory source registry (REQ-001, REQ-003, REQ-018) and the qu…
-  - `__init__(self, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`
+- @logged_class(slow_threshold_ms=100, include_args=False) class `SearchService`: The search service: the thread-safe source registry and the query entry point.
+  - `__init__(self, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`: Store the collaborators without doing any eager work.
   - `register_source(self, source: SearchSource) -> None`: Register a source (REQ-001).
-  - `unregister_source(self, name: str) -> None`: Remove a source (REQ-003). An unknown name is a no-op (no event, EDGE-013).
+  - `unregister_source(self, name: str) -> None`: Remove a source (REQ-003); an unknown name is a no-op, no event (EDGE-013).
   - `list_sources(self) -> list[str]`: The registered source names in registration order (REQ-001).
   - `reset(self) -> None`: Clear all registrations (no events) (REQ-003, REQ-017, EDGE-016).
   - @requires_permission('search.search') `search(self, query: SearchQuery, principal: Principal=_SYSTEM_PRINCIPAL) -> SearchResult`: Search the registered sources (REQ-004).
 - @logged_class(slow_threshold_ms=10, include_args=False) class `InMemorySource`: Public in-memory source for tests/DI (REQ-017).
-  - `__init__(self, name: str, fields: list[SourceField], items: list[SourceItem]) -> None`
+  - `__init__(self, name: str, fields: list[SourceField], items: list[SourceItem]) -> None`: Snapshot the source definition for repeated in-memory queries.
   - `to_source(self) -> SearchSource`: A SearchSource over this in-memory source's items.
-- @logged(slow_threshold_ms=5) def `get_search_service(event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> SearchService`: The module singleton SearchService (REQ-017): the first call creates it; later calls return it.
+- @logged(slow_threshold_ms=5) def `get_search_service(event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> SearchService`: The module singleton SearchService (REQ-017).
 - @logged(slow_threshold_ms=5) def `reset_search_service() -> None`: Clear the module singleton (tests) (REQ-017).
 
 ### `backend.sessionmanagement` — src/backend/sessionmanagement/
 exports: AllSessionsRevoked, EventPublisher, ExpiredSessionsDeleted, SessionEntry, SessionRevoked, SessionService, SessionsListed, build_session_source, get_session_service, register_actions, register_settings, reset_session_service
 #### src/backend/sessionmanagement/__init__.py (36 lines)
 Public API of the session-management feature (module: backend.sessionmanagement).
-#### src/backend/sessionmanagement/events.py (55 lines)
+#### src/backend/sessionmanagement/events.py (63 lines)
 Typed events for the session-management feature (docs/specs/session-management.md).
 - class `SessionRevoked(_FrozenEvent)`: Published when a single session is revoked (REQ-018).
   - `user_id: UUID`
@@ -1300,7 +1300,7 @@ Typed events for the session-management feature (docs/specs/session-management.m
   - `user_id: UUID`
   - `count: int`
 - class `EventPublisher(Protocol)`: Structural publisher protocol; the real event bus satisfies it.
-  - `publish(self, event: object) -> None`
+  - `publish(self, event: object) -> None`: Hand a finished event object to the bus (synchronous, fire-and-forget).
 #### src/backend/sessionmanagement/feature_actions.py (30 lines)
 Feature-owned permission action declarations (docs/specs/user-roles-permissions.md, D3).
 - def `register_actions(catalog: PermissionCatalog) -> None`: Register the sessionmanagement actions (permission key -> description).
@@ -1318,13 +1318,13 @@ Representations for the session-management feature (docs/specs/session-managemen
   - `ip: str | None`
   - `device_name: str | None`
   - `login_method: str | None`
-#### src/backend/sessionmanagement/search_source.py (194 lines)
+#### src/backend/sessionmanagement/search_source.py (206 lines)
 The session-management search source (docs/specs/search.md, REQ-022, D19).
-- def `build_session_source(repository: SessionRepository) -> SearchSource`: Build the session-management search source over repository (REQ-022, D19, ADR-077): name sessionmana…
-#### src/backend/sessionmanagement/service.py (371 lines)
+- def `build_session_source(repository: SessionRepository) -> SearchSource`: Build the session-management search source over repository.
+#### src/backend/sessionmanagement/service.py (385 lines)
 The SessionService use-case service (docs/specs/session-management.md).
 - @logged_class(slow_threshold_ms=100, include_args=False) class `SessionService`: Manages the sessions owned by the authentication feature (REQ-001..REQ-018).
-  - `__init__(self, repository: SessionRepository, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`
+  - `__init__(self, repository: SessionRepository, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`: Store the injected seams and subscribe the lifecycle handlers.
   - @requires_permission('sessionmanagement.list_sessions') `list_sessions(self, token: str | None=None, user_id: UUID | None=None, limit: int | None=None, principal: Principal=_SYSTEM_PRINCIPAL) -> list[SessionEntry]`: List the user's valid sessions (REQ-001..REQ-007).
   - @requires_permission('sessionmanagement.revoke_session') `revoke_session(self, session_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Revoke the session with that id (REQ-008).
   - @requires_permission('sessionmanagement.logout_all_sessions') `logout_all_sessions(self, token: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Revoke all sessions for the token's user, including the caller's (REQ-009).
@@ -1414,10 +1414,10 @@ Frozen Pydantic models for the settings feature.
 - def `is_valid_value(kind: SettingKind, value: Any, *, slider_min: float | None=None, slider_max: float | None=None, slider_step: float | None=None, select_options: tuple[str, ...] | None=None, pattern: str | None=None, min_length: int | None=None, max_length: int | None=None, min_value: float | None=None, max_value: float | None=None, list_spec: ListSpec | None=None) -> bool`: Return True iff value is valid for kind with the given params.
 - def `value_valid_for(d: SettingDefinition, value: Any) -> bool`: Return True iff value is valid for the setting d.
 - def `is_template_name_valid(name: str) -> bool`: Return True iff name matches the template name format.
-#### src/backend/settings/registry.py (408 lines)
-The settings registry: registration, validated value access, resets, hierarchy/views, and template C…
+#### src/backend/settings/registry.py (433 lines)
+The settings registry.
 - @logged_class(slow_threshold_ms=250) class `SettingsRegistry`: Central registry of typed settings with template support.
-  - `__init__(self, event_bus: EventBus | None=None, template_repository: TemplateRepository | None=None, value_repository: ValueRepository | None=None, permission_service: PermissionChecker | None=None) -> None`
+  - `__init__(self, event_bus: EventBus | None=None, template_repository: TemplateRepository | None=None, value_repository: ValueRepository | None=None, permission_service: PermissionChecker | None=None) -> None`: Build a registry over the injected seams, falling back to the shared defaults.
   - @requires_permission('settings.register') `register(self, definition: SettingDefinition, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Register a setting. Duplicate keys are rejected.
   - @property `value_repository(self) -> ValueRepository`: The value repository backing this registry (REQ-010).
   - @requires_permission('settings.register_feature') `register_feature(self, feature: str, definitions: list[SettingDefinition], principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Register a feature's settings; each key must start with f"{feature}.".
@@ -1440,32 +1440,32 @@ The settings registry: registration, validated value access, resets, hierarchy/v
   - @requires_permission('settings.list_templates') `list_templates(self, principal: Principal=_SYSTEM_PRINCIPAL) -> list[Template]`: Return all stored templates, name-ordered.
 - @logged(slow_threshold_ms=5) def `get_settings_registry(required: bool=True) -> SettingsRegistry | None`: Return the shared default registry (singleton).
 - @logged(slow_threshold_ms=5) def `reset_settings_registry() -> None`: Reset the shared default registry (for tests).
-#### src/backend/settings/repository.py (307 lines)
+#### src/backend/settings/repository.py (372 lines)
 Template storage (repository pattern).
 - @logged_class(slow_threshold_ms=100) class `ValueRepository(ABC)`: Persists the registry's current values (REQ-010).
   - @abstractmethod `load(self) -> dict[str, Any] | None`: Return the persisted values, or None if none are persisted.
   - @abstractmethod `save(self, values: dict[str, Any]) -> None`: Persist values (overwriting any existing values).
 - @logged_class(slow_threshold_ms=100) class `YamlValueRepository(ValueRepository)`: Single values.yaml file, safe YAML, atomic write, thread-safe (REQ-010).
-  - `__init__(self, directory: str) -> None`
-  - `save(self, values: dict[str, Any]) -> None`
-  - `load(self) -> dict[str, Any] | None`
+  - `__init__(self, directory: str) -> None`: Store all values in <directory>/values.yaml, creating the directory eagerly.
+  - `save(self, values: dict[str, Any]) -> None`: Write the whole value set atomically: temp file in the same directory, then os.replace.
+  - `load(self) -> dict[str, Any] | None`: The stored values, or None when no file exists yet.
 - @logged_class(slow_threshold_ms=100) class `TemplateRepository(ABC)`: Storage-agnostic interface for named templates.
   - @abstractmethod `save(self, template: Template) -> None`: Persist template (overwriting any existing template of the name).
   - @abstractmethod `get(self, name: str) -> Template | None`: Return the template of name, or None if it does not exist.
   - @abstractmethod `delete(self, name: str) -> None`: Delete the template of name (idempotent).
   - @abstractmethod `list(self) -> list[Template]`: Return all stored templates, name-ordered.
 - @logged_class(slow_threshold_ms=100) class `MemoryTemplateRepository(TemplateRepository)`: In-memory template storage (the default when none is supplied).
-  - `__init__(self) -> None`
-  - `save(self, template: Template) -> None`
-  - `get(self, name: str) -> Template | None`
-  - `delete(self, name: str) -> None`
-  - `list(self) -> list[Template]`
+  - `__init__(self) -> None`: An empty store: nothing is loaded, nothing is persisted.
+  - `save(self, template: Template) -> None`: Store template under its name, replacing an existing one silently.
+  - `get(self, name: str) -> Template | None`: The stored template with this name, or None when there is none.
+  - `delete(self, name: str) -> None`: Drop the named template; an unknown name is a silent no-op.
+  - `list(self) -> list[Template]`: Every stored template, ordered by name (not by insertion order).
 - @logged_class(slow_threshold_ms=100) class `YamlTemplateRepository(TemplateRepository)`: YAML file storage: one <name>.yaml file per template.
-  - `__init__(self, directory: Path | str) -> None`
-  - `save(self, template: Template) -> None`
-  - `get(self, name: str) -> Template | None`
-  - `delete(self, name: str) -> None`
-  - `list(self) -> list[Template]`
+  - `__init__(self, directory: Path | str) -> None`: One <name>.yaml file per template under directory, created eagerly.
+  - `save(self, template: Template) -> None`: Write the template's four fields to its own file, atomically via a .<name>.yaml.tmp sibling.
+  - `get(self, name: str) -> Template | None`: Parse the file for name, or None when the file is absent.
+  - `delete(self, name: str) -> None`: Unlink the template file; an absent file is a silent no-op.
+  - `list(self) -> list[Template]`: Parse every *.yaml file in the directory, file-name ordered.
 
 ### `backend.shared` — src/backend/shared/
 exports: PermissionChecker, Principal, requires_permission
@@ -1485,55 +1485,55 @@ Shared enforcement plumbing (docs/specs/user-roles-permissions.md, D14, ADR-070)
 exports: EventPublisher, InvalidRoleError, LastAdminError, RoleStore, SqliteUserRepository, StaticRoleStore, User, UserActivated, UserAlreadyExistsError, UserCreate, UserCreated, UserDeactivated, UserDeleted, UserEvent, UserManager, UserManagerError, UserNotFoundError, UserPasswordChanged, UserRead, UserRepository, UserRoleChanged, UserUpdate, UserUpdated, build_user_source, register_actions, register_settings
 #### src/backend/usermanagement/__init__.py (64 lines)
 Public API of the user-management feature (module: backend.usermanagement).
-#### src/backend/usermanagement/errors.py (49 lines)
+#### src/backend/usermanagement/errors.py (64 lines)
 Structured domain errors for the user-management feature (REQ-014).
 - class `UserManagerError(Exception)`: Base class for all user-management domain errors.
 - class `UserAlreadyExistsError(UserManagerError)`: A user with the same username or email already exists.
-  - `__init__(self, field: str) -> None`
+  - `__init__(self, field: str) -> None`: field names the unique column that collided.
 - class `UserNotFoundError(UserManagerError)`: No user exists for the requested id or username.
-  - `__init__(self, message: str | None=None) -> None`
+  - `__init__(self, message: str | None=None) -> None`: An explicit message names the identifier the raising site looked up.
 - class `InvalidRoleError(UserManagerError)`: The requested role is not in the role store's role set.
-  - `__init__(self, role: str, allowed: Sequence[str]) -> None`
+  - `__init__(self, role: str, allowed: Sequence[str]) -> None`: allowed is the whole role set the store accepts.
 - class `LastAdminError(UserManagerError)`: The operation would leave zero active admins (last-admin protection).
-  - `__init__(self, message: str | None=None) -> None`
-#### src/backend/usermanagement/events.py (65 lines)
+  - `__init__(self, message: str | None=None) -> None`: Every guard site raises it bare, so the default wording is what a caller sees (REQ-008).
+#### src/backend/usermanagement/events.py (113 lines)
 Typed lifecycle events and the publisher protocol (REQ-016, REQ-017).
 - class `UserEvent(BaseModel)`: Base class for all user lifecycle events (occurred_at is UTC).
   - `occurred_at: datetime`
-- class `UserCreated(UserEvent)`
+- class `UserCreated(UserEvent)`: Published once after a successful create_user (REQ-016, AC-030).
   - `user_id: UUID`
   - `username: str`
   - `email: str`
   - `roles: list[str]`
-- class `UserUpdated(UserEvent)`
+- class `UserUpdated(UserEvent)`: Published after a non-empty update (AC-031).
   - `user_id: UUID`
   - `changed_fields: list[str]`
-- class `UserDeleted(UserEvent)`
+- class `UserDeleted(UserEvent)`: Published after the hard delete (AC-032).
   - `user_id: UUID`
   - `username: str`
-- class `UserPasswordChanged(UserEvent)`
+- class `UserPasswordChanged(UserEvent)`: Published after a re-hash (AC-033).
   - `user_id: UUID`
-- class `UserRoleChanged(UserEvent)`
+- class `UserRoleChanged(UserEvent)`: Published after a role assignment (user-roles-permissions AC-037).
   - `user_id: UUID`
   - `old_roles: list[str]`
   - `new_roles: list[str]`
-- class `UserActivated(UserEvent)`
+- class `UserActivated(UserEvent)`: Published on an actual inactive-to-active transition (AC-035).
   - `user_id: UUID`
-- class `UserDeactivated(UserEvent)`
+- class `UserDeactivated(UserEvent)`: Published on an actual active-to-inactive transition (AC-036).
   - `user_id: UUID`
 - class `EventPublisher(Protocol)`: Structural publisher protocol satisfied by the shared event bus.
-  - `publish(self, event: object) -> None`
+  - `publish(self, event: object) -> None`: Accept one event from a producing feature.
 #### src/backend/usermanagement/feature_actions.py (35 lines)
 Feature-owned permission action declarations (docs/specs/user-roles-permissions.md, D3).
 - def `register_actions(catalog: PermissionCatalog) -> None`: Register the usermanagement actions (permission key -> description).
 #### src/backend/usermanagement/feature_settings.py (27 lines)
 Feature-owned settings registration for user-management (REQ-001).
 - @logged(slow_threshold_ms=5) def `register_settings(registry: SettingsRegistry) -> None`: Register the user-management feature's settings with registry (REQ-001).
-#### src/backend/usermanagement/models.py (202 lines)
+#### src/backend/usermanagement/models.py (228 lines)
 Domain models and request/response schemas for user management.
-- class `RoleListType(TypeDecorator)`: Persist a role list as JSON text in a VARCHAR column (REQ-026).
-  - `process_bind_param(self, value: Any, dialect: Dialect) -> Any`
-  - `process_result_value(self, value: Any, dialect: Dialect) -> Any`
+- class `RoleListType(TypeDecorator)`: Persist a role list as JSON text in a VARCHAR column (user-roles-permissions REQ-026).
+  - `process_bind_param(self, value: Any, dialect: Dialect) -> Any`: Bind hook: a role list is written as a JSON array string; None is stored as NULL.
+  - `process_result_value(self, value: Any, dialect: Dialect) -> Any`: Load hook: a stored JSON string is decoded back to a list.
 - class `User(SQLModel, table=True)`: The users table (persistence).
   - `id: UUID`
   - `username: str`
@@ -1568,57 +1568,57 @@ Domain models and request/response schemas for user management.
   - `is_active: bool`
   - `created_at: datetime`
   - `updated_at: datetime`
-#### src/backend/usermanagement/repository.py (205 lines)
+#### src/backend/usermanagement/repository.py (252 lines)
 Persistence contract and the SQLite/SQLModel repository (REQ-013).
 - @logged_class(slow_threshold_ms=100) class `UserRepository(ABC)`: The persistence contract the service depends on (REQ-013).
   - @abstractmethod `add(self, user: User) -> User`: Insert user; raise :class:UserAlreadyExistsError on a uniqueness-constraint violation (race guard).
-  - @abstractmethod `get_by_id(self, user_id: UUID) -> User | None`
-  - @abstractmethod `get_by_username(self, username: str) -> User | None`
-  - @abstractmethod `get_by_email(self, email: str) -> User | None`
-  - @abstractmethod `update(self, user: User) -> User`
-  - @abstractmethod `delete(self, user_id: UUID) -> None`
-  - @abstractmethod `list_all(self, include_inactive: bool=False) -> Sequence[User]`
-  - @abstractmethod `count_active_by_role(self, role: str) -> int`: Count active users whose roles include role (multi-role, REQ-026).
+  - @abstractmethod `get_by_id(self, user_id: UUID) -> User | None`: The row for user_id, or None when no such user exists.
+  - @abstractmethod `get_by_username(self, username: str) -> User | None`: Exact, case-sensitive match — usernames are stored as typed (REQ-003).
+  - @abstractmethod `get_by_email(self, email: str) -> User | None`: Case-insensitive lookup (REQ-003).
+  - @abstractmethod `update(self, user: User) -> User`: Write the given instance back (merge semantics).
+  - @abstractmethod `delete(self, user_id: UUID) -> None`: Hard delete by id; an unknown id is a no-op (REQ-012).
+  - @abstractmethod `list_all(self, include_inactive: bool=False) -> Sequence[User]`: All users, inactive ones only when include_inactive (REQ-010); ordering is unspecified.
+  - @abstractmethod `count_active_by_role(self, role: str) -> int`: Count active users whose roles include role (multi-role, user-roles-permissions REQ-026).
 - @logged_class(slow_threshold_ms=100) class `SqliteUserRepository(UserRepository)`: A SQLite/SQLModel implementation of :class:UserRepository.
-  - `__init__(self, database_url: str) -> None`
-  - `add(self, user: User) -> User`
-  - `get_by_id(self, user_id: UUID) -> User | None`
-  - `get_by_username(self, username: str) -> User | None`
-  - `get_by_email(self, email: str) -> User | None`
-  - `update(self, user: User) -> User`
-  - `delete(self, user_id: UUID) -> None`
-  - `list_all(self, include_inactive: bool=False) -> Sequence[User]`
-  - `count_active_by_role(self, role: str) -> int`
-#### src/backend/usermanagement/role_store.py (43 lines)
+  - `__init__(self, database_url: str) -> None`: Create the engine and bootstrap the schema.
+  - `add(self, user: User) -> User`: Insert in one session; a unique-constraint violation maps to the colliding field (EDGE-015).
+  - `get_by_id(self, user_id: UUID) -> User | None`: Primary-key lookup; naive stored timestamps get UTC attached.
+  - `get_by_username(self, username: str) -> User | None`: Single-row match with no normalization of the argument (case-sensitive).
+  - `get_by_email(self, email: str) -> User | None`: Matches the lowercased argument against the lowercased stored column (D5).
+  - `update(self, user: User) -> User`: session.merge plus commit, so a detached instance read earlier is written back whole.
+  - `delete(self, user_id: UUID) -> None`: Fetch-then-delete: an unknown id simply commits nothing.
+  - `list_all(self, include_inactive: bool=False) -> Sequence[User]`: One SELECT; the inactive filter is applied in SQL, never in Python.
+  - `count_active_by_role(self, role: str) -> int`: Count the users the last-admin guard counts: active, and holding role (REQ-008).
+#### src/backend/usermanagement/role_store.py (50 lines)
 The role store: the single source of truth for which roles exist (D4, ADR-072).
 - @logged_class class `RoleStore(ABC)`: The role store interface (D4).
   - @abstractmethod `has_role(self, role: str) -> bool`: Whether role is an existing role.
   - @abstractmethod `list_roles(self) -> Sequence[str]`: The existing roles.
 - @logged_class class `StaticRoleStore(RoleStore)`: A fixed role set (the default: ("admin", "user")).
-  - `__init__(self, roles: Iterable[str]) -> None`
-  - `has_role(self, role: str) -> bool`
-  - `list_roles(self) -> Sequence[str]`
-#### src/backend/usermanagement/search_source.py (202 lines)
+  - `__init__(self, roles: Iterable[str]) -> None`: Snapshot roles into a tuple at construction.
+  - `has_role(self, role: str) -> bool`: Exact, case-sensitive membership test against the stored tuple.
+  - `list_roles(self) -> Sequence[str]`: The stored tuple itself — immutable, so a caller cannot mutate the accepted set.
+#### src/backend/usermanagement/search_source.py (204 lines)
 The user-management search source (docs/specs/search.md, REQ-020, D19).
-- def `build_user_source(repository: UserRepository) -> SearchSource`: Build the user-management search source over repository (REQ-020, D19, ADR-077): name usermanagement…
-#### src/backend/usermanagement/service.py (314 lines)
+- def `build_user_source(repository: UserRepository) -> SearchSource`: Build the user-management search source over repository (search REQ-020, D19, ADR-077).
+#### src/backend/usermanagement/service.py (384 lines)
 The user-management service (use cases, domain rules, events).
 - @logged_class(slow_threshold_ms=250) class `UserManager`: Use-case entry point for managing user account records.
-  - `__init__(self, repository: UserRepository, role_store: RoleStore | None=None, event_bus: EventPublisher | None=None, permission_service: PermissionChecker | None=None) -> None`
-  - @requires_permission('usermanagement.get_user') `get_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`
-  - @requires_permission('usermanagement.get_user_by_username') `get_user_by_username(self, username: str, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`
-  - @requires_permission('usermanagement.list_users') `list_users(self, include_inactive: bool=False, principal: Principal=_SYSTEM_PRINCIPAL) -> list[UserRead]`
-  - @requires_permission('usermanagement.create_user') `create_user(self, data: UserCreate, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`
-  - @requires_permission('usermanagement.update_user') `update_user(self, user_id: UUID, data: UserUpdate, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`
-  - @requires_permission('usermanagement.delete_user') `delete_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> None`
-  - @requires_permission('usermanagement.change_password') `change_password(self, user_id: UUID, new_password: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`
-  - @requires_permission('usermanagement.verify_password') `verify_password(self, user_id: UUID, password: str, principal: Principal=_SYSTEM_PRINCIPAL) -> bool`
-  - @requires_permission('usermanagement.set_role') `set_role(self, user_id: UUID, role: str, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`
-  - `set_roles(self, user_id: UUID, roles: Iterable[str]) -> UserRead`
-  - `add_role(self, user_id: UUID, role: str) -> UserRead`
-  - `remove_role(self, user_id: UUID, role: str) -> UserRead`
-  - @requires_permission('usermanagement.activate_user') `activate_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`
-  - @requires_permission('usermanagement.deactivate_user') `deactivate_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`
+  - `__init__(self, repository: UserRepository, role_store: RoleStore | None=None, event_bus: EventPublisher | None=None, permission_service: PermissionChecker | None=None) -> None`: Store the dependencies as given; the only work is constructing the argon2id hasher.
+  - @requires_permission('usermanagement.get_user') `get_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Read by id, enforced as usermanagement.get_user.
+  - @requires_permission('usermanagement.get_user_by_username') `get_user_by_username(self, username: str, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Case-sensitive username lookup; an unknown username is echoed in the error (AC-023).
+  - @requires_permission('usermanagement.list_users') `list_users(self, include_inactive: bool=False, principal: Principal=_SYSTEM_PRINCIPAL) -> list[UserRead]`: Every user in one list — inactive ones only when include_inactive (AC-024); no pagination.
+  - @requires_permission('usermanagement.create_user') `create_user(self, data: UserCreate, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Validate the roles, hash the password with argon2id, then insert (REQ-002).
+  - @requires_permission('usermanagement.update_user') `update_user(self, user_id: UUID, data: UserUpdate, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Mutate email, display name and profile picture URL — usernames are immutable (REQ-011).
+  - @requires_permission('usermanagement.delete_user') `delete_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Hard delete, guarded first: deleting the last active admin raises :class:LastAdminError (AC-017).
+  - @requires_permission('usermanagement.change_password') `change_password(self, user_id: UUID, new_password: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Validate the new password through :class:NewPassword before re-hashing (AC-013).
+  - @requires_permission('usermanagement.verify_password') `verify_password(self, user_id: UUID, password: str, principal: Principal=_SYSTEM_PRINCIPAL) -> bool`: Check password against the stored argon2id hash (REQ-005).
+  - @requires_permission('usermanagement.set_role') `set_role(self, user_id: UUID, role: str, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Single-role compatibility shim: replace the whole role list with [role] (Q-76).
+  - `set_roles(self, user_id: UUID, roles: Iterable[str]) -> UserRead`: Replace the user's whole role list (user-roles-permissions REQ-026).
+  - `add_role(self, user_id: UUID, role: str) -> UserRead`: Add one role; an already-present role is an idempotent no-op (user-roles-permissions AC-034).
+  - `remove_role(self, user_id: UUID, role: str) -> UserRead`: Remove one role; an absent role is an idempotent no-op (user-roles-permissions AC-034).
+  - @requires_permission('usermanagement.activate_user') `activate_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Set is_active; an already active user is a no-op — no write, no event (AC-021).
+  - @requires_permission('usermanagement.deactivate_user') `deactivate_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Clear is_active, guarded first: the last active admin raises :class:LastAdminError (AC-018).
 
 ### src/
 #### src/main.py (221 lines)

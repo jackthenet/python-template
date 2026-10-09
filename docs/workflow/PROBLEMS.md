@@ -668,3 +668,39 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 full matrix-authoring pass in S5.3 (plus the independent ID diff) that Phase 3 would have produced incrementally at RED time.
 - **Resolution:** make the gap impossible to miss — **S3.2's done-criteria must include "a matrix row exists for every ID of the change spec (status `RED`)"**, or `check_traceability.py` must scope IDs per spec file (a per-spec namespace) so a missing row is a CI failure. Until one of those lands, S5.3 must verify coverage directly (extract the spec's IDs, diff against the change's section) — that diff is what proved 83/83 here.
 - **Date:** 2026-10-09
+
+## P-73 — a ~10 KB bash here-doc append silently truncated the P.4 scope record mid-table (P.4)
+- **Problem:** the P.4 subagent appended the second half of `docs/verification/ruff-d-docstrings.md` with a `cat >> … <<'EOF'` here-doc of ~10 KB; the write landed **truncated in the middle of a table** with no error and no non-zero exit. Caught only because the step re-read the file and checked `wc -l`.
+- **Step / Phase:** P.4 Draft (change ruff-d-docstrings / DOCS-CHORE) — Phase P
+- **Duration / iterations:** 1 repair pass with the file-edit tool (~5 min).
+- **Resolution:** the missing rows were restored with an `edit` call and the file verified at 239 lines. **Sixth recurrence of P-50**, and now a rule for every launch brief the orchestrator writes: long markdown/JSON content is written with the **file-write / file-edit tool**, never here-doc'd through bash, and the step verifies the line count before and after. Bash here-docs are for short snippets only.
+- **Date:** 2026-10-08
+
+## P-74 — `uv.lock` on `main` is stale (records `python-template 0.6.1`, `pyproject.toml` says `1.0.0`), so every `uv run` in every worktree dirties the tree
+- **Problem:** `uv.lock:1653` still pins the project's own version at `0.6.1` while `pyproject.toml:4` is `1.0.0` (the `structlog-logging` `major` bump commit did not carry a lock refresh). Any `uv run` — including a read-only `ruff check` — rewrites `uv.lock` (1-line diff), so a freshly created worktree can never be `git status` clean, and an incidental `uv.lock` change can ride into an unrelated commit. Cost a revert cycle in the P.4 step and dirtied `main` itself when the step measured the `D` figures there.
+- **Step / Phase:** P.4 Draft (change ruff-d-docstrings / DOCS-CHORE) — Phase P; affects every worktree and every step that runs `uv run`
+- **Duration / iterations:** 1 revert cycle in the change worktree + 1 `git restore` on `main`.
+- **Resolution / decision (orchestrator, 2026-10-08):** the one-line lock refresh is folded into **`ruff-d-docstrings`' config commit** (that change already owns the config surface, and a separate one-line chore would cost a whole change cycle plus a human merge). Until it merges, every step brief states: **revert incidental `uv.lock` churn (`git restore uv.lock`) before committing** unless the task's `allowed_files` names it. Recorded as finding **F-9** in `docs/verification/ruff-d-docstrings.md`. **Durable lesson:** a version bump must refresh `uv.lock` in the same commit — add it to the S6.4 bump checklist.
+- **Date:** 2026-10-08
+
+## P-86 — the full-suite baseline is not byte-for-byte reproducible: `test_nfr_001_performance_budgets` failed under full-suite load, passed in isolation (S4.1)
+- **Problem:** the group-11 baseline run reported `1 failed, 760 passed, 1 skipped` — the failure was `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets`, whose measured median (306 ms) exceeded the 300 ms NFR-001 budget under full-suite load. The same node passes in isolation, so the delta is load-sensitive timing, not a behavior change from this branch (which touches no `src/` executable code — INV-D digest unchanged).
+- **Step / Phase:** S4.1 (change ruff-d-docstrings / DOCS-CHORE) — Phase 4 baseline
+- **Duration / iterations:** 1 isolated re-run to confirm the node is green alone.
+- **Resolution:** Phase 5 treats that node as the **known flake**: re-run it isolated (`uv run pytest tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets -q`) and record both results in the verification record. Any **other** delta from `1 failed, 760 passed, 1 skipped` is a regression and must be investigated, not excused. Related: P-35 (the same NFR-001 budget tripping under different load conditions) and P-36 (the budget's realism).
+- **Date:** 2026-10-09
+
+## P-87 — the S5.2 launch brief asserted an AST figure the digest script never prints ("266 nodes"); the gate was unverifiable as briefed (S5.2)
+- **Problem:** the S5.2 step brief stated that the docstring-stripped AST digest "covers 266 nodes". The script of §No-behavior-delta proof plan prints **only the hex digest** — it emits no node count at all — so the asserted figure was neither reproducible nor falsifiable, and a subagent trying to check the gate against the brief would have "failed" a gate that had in fact passed. The step had to write two extra throwaway helpers (`%LOCALAPPDATA%/Temp/s52_ast_count.py`, `s52_doc_count.py`) to answer a number the brief presented as if it were the command's own output.
+- **Step / Phase:** S5.2 Lint + types (change ruff-d-docstrings / DOCS-CHORE) — Phase 5
+- **Duration / iterations:** 2 extra throwaway scripts + one measurement pass over both the base and the change state (~10 min) to establish the real figures.
+- **Real figures (measured, both states identical):** `src/` = **84 files / 43 587 docstring-stripped AST nodes / 903 docstring hosts**; docstrings stripped go 628 → 859 (+231) from `45aa61c` to the final state. Recorded in §Phase 5 — S5.2.
+- **Resolution / durable rule:** a launch brief may quote **only figures the named command actually emits**, or must name the separate command that produces them; an unmeasured number in a brief is a defect in the brief, not a gate criterion — the subagent measures and reports, and the record's figures supersede the brief. Same class as P-54 (the orchestrator's P.4 prompt asserted an unmeasured count) and P-60 (a brief stated the wrong resulting version).
+- **Date:** 2026-10-09
+
+## P-88 — the §9 control-run procedure is under-specified: mutating a docstring on a host that already HAS one legitimately changes the digest (S5.2)
+- **Problem:** §"No-behavior-delta proof plan" gives the control run as "+ docstring on `EventBus.__enter__` → SAME" without saying **why** that host. The digest script strips only the **first** docstring `Expr` of each host, so inserting a second string constant into a host that already has a docstring leaves a real extra AST node behind and the digest legitimately changes. The first mutation attempt targeted such a host, produced a DIFFERENT digest for the wrong reason, and burned a full digest cycle (re-export of `45aa61c` via `git archive` + re-hash) before the cause was identified.
+- **Step / Phase:** S5.2 Lint + types (change ruff-d-docstrings / DOCS-CHORE) — Phase 5, INV-D control run
+- **Duration / iterations:** 1 wasted digest cycle + 1 re-run with the corrected target (~10 min).
+- **Resolution:** the control now targets a **docstring-free** host (`EventBus.__enter__`) and states both expectations — SAME for the added docstring, DIFFERENT for the one-character code change (`max_queue_size 1000 → 1001`); the corrected run is recorded in §Phase 5 — S5.2 and the rule is written into §No-behavior-delta proof plan (amended at S5.4). **Durable rule:** a control run must name a host its mutation cannot legitimately alter, and must state the expected result for both the blind case and the sensitive case — a control without a stated expectation proves nothing in either direction.
+- **Date:** 2026-10-09

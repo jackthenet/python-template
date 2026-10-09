@@ -743,7 +743,7 @@ An agent MUST:
 - **Type Safety:** Strict typing required. Every function signature must have explicit parameters and return type hints.
 - **Testing Standard:** Framework `pytest`. Tests must precede implementation code. Never remove existing tests without explicit spec authorization.
 - **Property Testing:** Use `hypothesis` for invariant verification. Strategies must match the domain.
-- **Documentation:** Keep docstrings concise; explain *why* non-obvious logic exists rather than restating *what* the code does.
+- **Documentation:** Keep docstrings concise; explain *why* non-obvious logic exists rather than restating *what* the code does. Docstrings are **Google style** and gated by ruff `D` over `src/` (`tests/`, `scripts/`, `migrations/`, `.github/` are exempt via `per-file-ignores`); every public object in a backend package carries a docstring that states something its signature does not — filler that restates the signature ("Get the user.") is rejected in review.
 
 ---
 

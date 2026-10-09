@@ -1,5 +1,7 @@
-"""The settings registry: registration, validated value access, resets,
-hierarchy/views, and template CRUD.
+"""The settings registry.
+
+Registration, validated value access, resets, hierarchy/views, and template
+CRUD, plus the shared-default singleton accessors.
 """
 
 from __future__ import annotations
@@ -63,6 +65,17 @@ class SettingsRegistry:
         value_repository: ValueRepository | None = None,
         permission_service: PermissionChecker | None = None,
     ) -> None:
+        """Build a registry over the injected seams, falling back to the shared defaults.
+
+        A ``None`` ``event_bus`` uses the shared bus, imported lazily because
+        ``backend.eventbus`` imports this package (a module-level import would
+        be circular); a ``None`` ``template_repository`` keeps templates in
+        memory, while a ``None`` ``value_repository`` reads and writes
+        ``settings/values.yaml``. Persisted values are loaded once here and
+        take precedence over newly registered defaults (REQ-009, REQ-011); a
+        ``None`` ``permission_service`` means standalone mode, i.e. no
+        ``settings.<method>`` enforcement (AC-031).
+        """
         # Lazy import: backend.eventbus imports backend.settings (via its
         # feature_settings module), so importing it at module level here would
         # create a circular import.
@@ -365,19 +378,31 @@ class SettingsRegistry:
     # -- internal --
 
     def _require_definition(self, key: str) -> SettingDefinition:
+        """The definition registered under ``key``; an unknown key raises ``SettingsNotFoundError``."""
         d = self._definitions.get(key)
         if d is None:
             raise SettingsNotFoundError(f"unknown setting {key}")
         return d
 
     def _scope_keys(self, category: str, group: str | None) -> list[str]:
+        """The keys registered in one scope.
+
+        ``group`` is matched exactly, so ``None`` selects the ungrouped scope,
+        not "any group".
+        """
         return [key for key, d in self._definitions.items() if d.category == category and d.group == group]
 
     def _publish_setting_changed(self, key: str, value: Any, previous: Any) -> None:
+        """Report a committed value change to the bus, carrying the value it replaced."""
         # Publishing is best-effort: the bus drops events when shut down.
         self._event_bus.publish(SettingChanged(key=key, value=value, previous=previous))
 
     def _persist_values(self) -> None:
+        """Snapshot the current values under the lock, then save them outside it.
+
+        Values equal to their default are persisted as well (REQ-009,
+        EDGE-009), so a reset-to-default still leaves the value on disk.
+        """
         # All current values are persisted (REQ-009), including those equal
         # to their defaults (EDGE-009).
         with self._lock:

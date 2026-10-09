@@ -45,6 +45,13 @@ class EventBus:
     """
 
     def __init__(self, max_queue_size: int | None = None) -> None:
+        """Build a bus with a bounded pending-event queue; no worker thread yet.
+
+        Passing ``None`` for ``max_queue_size`` resolves the limit at construction
+        time (AC-017/AC-018): the live ``eventbus.max_queue_size`` setting when a
+        settings registry already exists, otherwise 1000. The background worker is
+        started lazily by the first ``publish()``, not here.
+        """
         if max_queue_size is None:
             # AC-017/AC-018: read eventbus.max_queue_size from the settings
             # registry when it exists; otherwise fall back to the original
@@ -166,9 +173,15 @@ class EventBus:
             return self._dropped
 
     def __enter__(self) -> EventBus:
+        """Enter the context-manager form: the bus itself, still without a worker."""
         return self
 
     def __exit__(self, *exc: object) -> None:
+        """Leave the context manager: drain queued events, then stop.
+
+        The exception arguments are ignored, so a propagating exception is never
+        suppressed.
+        """
         self.shutdown()
 
     # -- internal --

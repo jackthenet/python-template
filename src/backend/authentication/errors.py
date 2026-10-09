@@ -33,6 +33,11 @@ class InvalidResetTokenError(AuthenticationError):
     """
 
     def __init__(self, reason: str) -> None:
+        """Carry the rejection reason and render it into the message.
+
+        The message names the reason only (NFR-002): never the token, its hash,
+        or the user it belongs to.
+        """
         self.reason = reason
         super().__init__(f"reset token is {reason}")
 

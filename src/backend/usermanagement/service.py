@@ -5,14 +5,16 @@ stores only Argon2id hashes (REQ-004), returns only :class:`UserRead`
 (ADR-024), and publishes exactly one typed event per successful mutation to
 the injected :class:`EventPublisher` (REQ-016, REQ-017).
 
-Enforcement wiring (REQ-024, ADR-071): every enforced public method takes a
-trailing ``principal: Principal = _SYSTEM_PRINCIPAL`` parameter and is decorated
-with ``@requires_permission("usermanagement.<method>")``; the injected
+Enforcement wiring (user-roles-permissions REQ-024, ADR-071): every enforced
+public method takes a trailing ``principal: Principal = _SYSTEM_PRINCIPAL``
+parameter and is decorated with
+``@requires_permission("usermanagement.<method>")``; the injected
 ``permission_service`` (the structural ``PermissionChecker``; the shared
 PermissionService at the composition root) enforces the permission at entry.
 A ``None`` checker is standalone mode: no check is performed (open, as
-before — AC-031). The feature depends only on ``backend.shared`` plus the
-injected checker, never on ``backend.permissions`` (ADR-070).
+before — user-roles-permissions AC-031). The feature depends only on
+``backend.shared`` plus the injected checker, never on
+``backend.permissions`` (ADR-070).
 
 The class is traced via the shared logging feature (``@logged_class``);
 ``include_args`` stays at its default ``False`` so method arguments —
@@ -53,6 +55,7 @@ from backend.usermanagement.role_store import RoleStore, StaticRoleStore
 
 
 def _utcnow() -> datetime:
+    """The single clock source for created/updated timestamps (tz-aware UTC)."""
     return datetime.now(UTC)
 
 
@@ -82,6 +85,12 @@ class UserManager:
         event_bus: EventPublisher | None = None,
         permission_service: PermissionChecker | None = None,
     ) -> None:
+        """Store the dependencies as given; the only work is constructing the argon2id hasher.
+
+        A ``None`` role store becomes ``StaticRoleStore(("admin", "user"))``;
+        a ``None`` permission service means standalone mode — the enforced
+        methods then run unchecked (user-roles-permissions AC-031).
+        """
         self._repository = repository
         self._event_bus = event_bus
         self._hasher = PasswordHasher()
@@ -98,10 +107,15 @@ class UserManager:
 
     @requires_permission("usermanagement.get_user")
     def get_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        """Read by id, enforced as ``usermanagement.get_user``.
+
+        Raises :class:`UserNotFoundError` for an unknown id (AC-022).
+        """
         return _to_read(self._get_user_or_raise(user_id))
 
     @requires_permission("usermanagement.get_user_by_username")
     def get_user_by_username(self, username: str, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        """Case-sensitive username lookup; an unknown username is echoed in the error (AC-023)."""
         user = self._repository.get_by_username(username)
         if user is None:
             raise UserNotFoundError(f"user {username!r} not found")
@@ -109,6 +123,7 @@ class UserManager:
 
     @requires_permission("usermanagement.list_users")
     def list_users(self, include_inactive: bool = False, principal: Principal = _SYSTEM_PRINCIPAL) -> list[UserRead]:
+        """Every user in one list — inactive ones only when ``include_inactive`` (AC-024); no pagination."""
         users = self._repository.list_all(include_inactive)
         return [_to_read(user) for user in users]
 
@@ -116,6 +131,12 @@ class UserManager:
 
     @requires_permission("usermanagement.create_user")
     def create_user(self, data: UserCreate, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        """Validate the roles, hash the password with argon2id, then insert (REQ-002).
+
+        Nothing is written when the roles are unknown or the store rejects
+        the row: the email is lowercased before it is stored, and
+        ``created_at``/``updated_at`` are set to the same instant.
+        """
         self._validate_roles(data.roles)
         now = _utcnow()
         user = User(
@@ -138,6 +159,12 @@ class UserManager:
 
     @requires_permission("usermanagement.update_user")
     def update_user(self, user_id: UUID, data: UserUpdate, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        """Mutate email, display name and profile picture URL — usernames are immutable (REQ-011).
+
+        An email already held by another user raises
+        :class:`UserAlreadyExistsError`; an update that changes nothing is an
+        idempotent no-op: no write, no event, ``updated_at`` untouched.
+        """
         user = self._get_user_or_raise(user_id)
         changed_fields: list[str] = []
         if data.email is not None:
@@ -163,6 +190,7 @@ class UserManager:
 
     @requires_permission("usermanagement.delete_user")
     def delete_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
+        """Hard delete, guarded first: deleting the last active admin raises :class:`LastAdminError` (AC-017)."""
         user = self._get_user_or_raise(user_id)
         self._assert_not_last_admin(user, keeps_active_admin=False)
         self._repository.delete(user_id)
@@ -172,6 +200,11 @@ class UserManager:
 
     @requires_permission("usermanagement.change_password")
     def change_password(self, user_id: UUID, new_password: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
+        """Validate the new password through :class:`NewPassword` before re-hashing (AC-013).
+
+        A weak password raises ``pydantic.ValidationError`` and leaves the
+        stored hash untouched.
+        """
         user = self._get_user_or_raise(user_id)
         NewPassword(password=new_password)  # raises pydantic.ValidationError
         user.password_hash = self._hasher.hash(new_password)
@@ -180,6 +213,11 @@ class UserManager:
 
     @requires_permission("usermanagement.verify_password")
     def verify_password(self, user_id: UUID, password: str, principal: Principal = _SYSTEM_PRINCIPAL) -> bool:
+        """Check ``password`` against the stored argon2id hash (REQ-005).
+
+        Any argon2 failure — including a malformed stored hash — counts as a
+        wrong password and returns ``False`` instead of raising.
+        """
         user = self._get_user_or_raise(user_id)
         try:
             return self._hasher.verify(user.password_hash, password)
@@ -190,10 +228,22 @@ class UserManager:
 
     @requires_permission("usermanagement.set_role")
     def set_role(self, user_id: UUID, role: str, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
-        # Preserved (replace semantics): set_role = set_roles([role]) (Q-76).
+        """Single-role compatibility shim: replace the whole role list with ``[role]`` (Q-76).
+
+        Enforced as ``usermanagement.set_role``; the multi-role assignment
+        methods below are not in the permission catalog.
+        """
         return self.set_roles(user_id, [role])
 
     def set_roles(self, user_id: UUID, roles: Iterable[str]) -> UserRead:
+        """Replace the user's whole role list (user-roles-permissions REQ-026).
+
+        Not permission-enforced: the permission service's assignment
+        pass-throughs check their own action before delegating here
+        (user-roles-permissions REQ-012). Setting the same role list is a
+        no-op that publishes nothing; a change that would leave no active
+        admin raises :class:`LastAdminError`.
+        """
         user = self._get_user_or_raise(user_id)
         new_roles = self._validate_roles(roles)
         if new_roles == list(user.roles):
@@ -202,6 +252,11 @@ class UserManager:
         return self._apply_roles(user, new_roles, guard=True)
 
     def add_role(self, user_id: UUID, role: str) -> UserRead:
+        """Add one role; an already-present role is an idempotent no-op (user-roles-permissions AC-034).
+
+        The last-admin guard is skipped on purpose: adding a role can never
+        remove ``admin``.
+        """
         user = self._get_user_or_raise(user_id)
         self._validate_roles([role])
         if role in user.roles:
@@ -211,6 +266,14 @@ class UserManager:
         return self._apply_roles(user, [*user.roles, role], guard=False)
 
     def remove_role(self, user_id: UUID, role: str) -> UserRead:
+        """Remove one role; an absent role is an idempotent no-op (user-roles-permissions AC-034).
+
+        Removing the role that would empty the list raises a bare
+        ``ValueError`` (the role list must stay non-empty) — unlike the
+        domain errors, it is not a :class:`UserManagerError`. Removing
+        ``admin`` from the last active admin raises
+        :class:`LastAdminError`.
+        """
         user = self._get_user_or_raise(user_id)
         if role not in user.roles:
             # Not present: idempotent no-op — no event.
@@ -224,6 +287,7 @@ class UserManager:
 
     @requires_permission("usermanagement.activate_user")
     def activate_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        """Set ``is_active``; an already active user is a no-op — no write, no event (AC-021)."""
         user = self._get_user_or_raise(user_id)
         if user.is_active:
             # Already active: idempotent no-op — no event.
@@ -235,6 +299,7 @@ class UserManager:
 
     @requires_permission("usermanagement.deactivate_user")
     def deactivate_user(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> UserRead:
+        """Clear ``is_active``, guarded first: the last active admin raises :class:`LastAdminError` (AC-018)."""
         user = self._get_user_or_raise(user_id)
         if not user.is_active:
             # Already inactive: idempotent no-op — no event.
@@ -248,17 +313,18 @@ class UserManager:
     # --- internals ---
 
     def _get_user_or_raise(self, user_id: UUID) -> User:
-        """Fetch ``user_id`` from the repository or raise
-        :class:`UserNotFoundError` (D9)."""
+        """Fetch ``user_id`` from the repository or raise :class:`UserNotFoundError` (D9)."""
         user = self._repository.get_by_id(user_id)
         if user is None:
             raise UserNotFoundError(f"user {user_id} not found")
         return user
 
     def _apply_roles(self, user: User, new_roles: list[str], guard: bool) -> UserRead:
-        """Persist ``new_roles`` on ``user`` and publish
-        :class:`UserRoleChanged` (D10). ``guard`` runs the last-admin check
-        first; ``add_role`` never removes admin and skips it (``guard=False``)."""
+        """Persist ``new_roles`` on ``user`` and publish :class:`UserRoleChanged` (D10).
+
+        ``guard`` runs the last-admin check first; ``add_role`` never removes
+        admin and skips it (``guard=False``).
+        """
         if guard:
             self._assert_not_last_admin(user, keeps_active_admin=("admin" in new_roles))
         old_roles = list(user.roles)
@@ -271,7 +337,8 @@ class UserManager:
         """Validate each role against the RoleStore; return the role list.
 
         Raises :class:`InvalidRoleError` for a role the store does not have
-        and ``ValueError`` for an empty list (REQ-026: non-empty).
+        and ``ValueError`` for an empty list (user-roles-permissions REQ-026:
+        non-empty).
         """
         role_list = list(roles)
         if not role_list:
@@ -282,17 +349,18 @@ class UserManager:
         return role_list
 
     def _assert_not_last_admin(self, user: User, keeps_active_admin: bool) -> None:
-        """Raise :class:`LastAdminError` if the operation would leave zero
-        active admins (ADR-022 extended to every assignment path, ADR-072).
+        """Raise :class:`LastAdminError` if the operation would leave zero active admins.
 
-        An "active admin" is an active user whose ``roles`` include
-        ``admin``. ``keeps_active_admin`` is whether the user remains an
-        active admin after the operation.
+        ADR-022 extended to every assignment path (ADR-072). An "active
+        admin" is an active user whose ``roles`` include ``admin``;
+        ``keeps_active_admin`` is whether the user remains an active admin
+        after the operation.
 
         The guard is scoped to a last active admin who holds ``admin``
         alongside at least one other role: a single-role admin
         (``roles == ["admin"]``) is not protected on these paths, so
-        demoting/deactivating/deleting it is allowed (AC-034 vs AC-036).
+        demoting/deactivating/deleting it is allowed (user-roles-permissions
+        AC-034 vs AC-036).
         """
         if "admin" not in self._role_store.list_roles():
             return
@@ -306,9 +374,11 @@ class UserManager:
             raise LastAdminError()
 
     def _publish(self, event: UserEvent) -> None:
-        """Publish ``event`` if a publisher was injected; a ``None`` publisher
-        means no events and no errors (REQ-017). Publisher exceptions
-        propagate to the caller with the mutation already committed
-        (EDGE-020)."""
+        """Publish ``event`` when a publisher was injected (REQ-017).
+
+        A ``None`` publisher means no events and no errors. Publisher
+        exceptions propagate to the caller with the mutation already
+        committed (EDGE-020).
+        """
         if self._event_bus is not None:
             self._event_bus.publish(event)

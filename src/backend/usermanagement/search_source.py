@@ -102,8 +102,7 @@ def _user_fields(user: User) -> dict[str, Any]:
 
 
 def _free_text_matches(fields: dict[str, Any], free_text: str) -> bool:
-    """A non-empty (normalized) free text matches if any searchable string
-    field contains it (REQ-005, D13)."""
+    """A non-empty (normalized) free text matches if any searchable string field contains it (search REQ-005, D13)."""
     for name in _SEARCHABLE:
         value = fields.get(name)
         if isinstance(value, str) and free_text in _normalize(value):
@@ -112,8 +111,7 @@ def _free_text_matches(fields: dict[str, Any], free_text: str) -> bool:
 
 
 def _eval_group(group: FilterGroup, fields: dict[str, Any]) -> bool:
-    """Evaluate a (nestable) AND/OR filter group over the field values
-    (REQ-006, D4)."""
+    """Evaluate a (nestable) AND/OR filter group over the field values (search REQ-006, D4)."""
     results = [
         _eval_group(cond, fields) if isinstance(cond, FilterGroup) else _eval_condition(cond, fields)
         for cond in group.conditions
@@ -122,9 +120,11 @@ def _eval_group(group: FilterGroup, fields: dict[str, Any]) -> bool:
 
 
 def _eval_condition(cond: FilterCondition, fields: dict[str, Any]) -> bool:
-    """Evaluate a single filter condition over the field values (REQ-006, D4):
-    string matching is case-insensitive (normalized); boolean/datetime are
-    exact (REQ-012)."""
+    """Evaluate a single filter condition over the field values (search REQ-006, D4).
+
+    String matching is case-insensitive (normalized); boolean and datetime
+    values are compared exactly (search REQ-012).
+    """
     value = fields.get(cond.field)
     if cond.operator is FilterOperator.IS_NULL:
         return value is None
@@ -150,7 +150,7 @@ def _apply_string_operator(value: str, op: FilterOperator, fv: Any) -> bool:
 
 
 def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
-    """boolean / datetime operators: exact (REQ-012)."""
+    """Operators of boolean / datetime fields: exact comparison (search REQ-012)."""
     if op is FilterOperator.EQUALS:
         return value == fv
     if op is FilterOperator.IN_LIST:
@@ -160,8 +160,7 @@ def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
 
 
 def _sort_key(value: Any) -> tuple:
-    """A sort key: ``None`` last, strings by their normalized value, others
-    exact (D8; deterministic)."""
+    """A sort key: ``None`` last, strings by their normalized value, others exact (D8; deterministic)."""
     if value is None:
         return (1, "")
     if isinstance(value, str):
@@ -170,10 +169,12 @@ def _sort_key(value: Any) -> tuple:
 
 
 def _query(repository: UserRepository, ctx: SourceQueryContext) -> SourcePage:
-    """The source's query function (REQ-020): over the existing
-    ``UserRepository.list_all`` (``include_inactive=True`` so the
-    ``is_active`` field is meaningful); applies free text, filters, sort, and
-    pagination; the default ordering is ``username`` ascending."""
+    """The source's query function (search REQ-020), reading through the repository.
+
+    ``list_all(include_inactive=True)`` keeps the ``is_active`` field
+    meaningful; free text, filters, sort and pagination are applied in
+    memory; the default ordering is ``username`` ascending.
+    """
     users = repository.list_all(include_inactive=True)
     items = [SourceItem(item_id=str(user.id), fields=_user_fields(user)) for user in users]
     matched = [
@@ -195,8 +196,9 @@ def _query(repository: UserRepository, ctx: SourceQueryContext) -> SourcePage:
 
 
 def build_user_source(repository: UserRepository) -> SearchSource:
-    """Build the user-management search source over ``repository``
-    (REQ-020, D19, ADR-077): name ``usermanagement``, the field schema, and
+    """Build the user-management search source over ``repository`` (search REQ-020, D19, ADR-077).
+
+    The source is the name ``usermanagement``, the declared field schema, and
     the sync query function over the existing ``UserRepository.list_all``.
     """
     return SearchSource(name=_SOURCE_NAME, fields=list(_FIELDS), query=lambda ctx: _query(repository, ctx))
