@@ -646,3 +646,120 @@ No docstring contradicts the code; each of the following is stated **as the code
 - Citation check (INV-I / Q-16): every ID cited by the new docstrings is defined in `docs/specs/user-roles-permissions.md` (REQ-004/005/006/007/008/018/019/020/022/023, AC-021/025/026/027, EDGE-007/020); no pre-existing citation was removed or re-pointed.
 
 **Next (S4.2, group 7):** `authentication` (51 sites).
+
+## Phase 4 — group 7 (S4.2, 2026-10-09)
+
+`authentication` — 7 files carry `D` sites (of the feature's 14 modules); 7 files committed. Gate list measured at `049294f`: **51** sites = **50 `D1xx`** + **1 format**, exactly the §Fresh measurement row (`D102`:36 `D101`:7 `D107`:7 `D205`:1). Two commits per Q-11: `98b5dbc` additions, `cb45758` format.
+
+### Additions half — 50 gate sites + 9 Q-14 private helpers (`98b5dbc`)
+
+```text
+authentication  src/backend/authentication/errors.py
+  35  D107 InvalidResetTokenError.__init__   added (reason rendered into a secret-free message, NFR-002)
+authentication  src/backend/authentication/events.py
+  26  D101 LoginSucceeded                    added (published per accepted login, either method)
+  31  D101 LoginFailed                       added (password path only — passkey failures publish none)
+  36  D101 Logout                            added (the idempotent no-op path publishes nothing, AC-014)
+  40  D101 PasswordResetRequested            added (fires for unregistered emails too, EDGE-007; no token)
+  44  D101 PasswordResetCompleted            added (after the change + the session revoke, REQ-012)
+  48  D101 PasskeyRegistered                 added (public key never carried)
+  53  D101 PasskeyDeleted                    added (a rejected deletion publishes nothing)
+authentication  src/backend/authentication/repository.py
+  73  D107 SqliteSessionRepository.__init__  added (parent dir auto-created, 30 s busy timeout, StaticPool for `:memory:`)
+  89  D102 .add                              added (returns the object given in, not a re-read copy)
+  95  D102 .get_by_token_hash                added (hash in, tz-aware out; never sees a raw token)
+  100 D102 .revoke                           added (unknown id / already revoked writes nothing)
+  108 D102 .revoke_all_for_user              added (the logout-all of a completed reset, REQ-012)
+  117 D102 .get                              added (state-agnostic read; validity is the service's, INV-002)
+  121 D102 .list_for_user                    added (newest first, `id` tie-break, revoked+expired included)
+  128 D102 .revoke_user_sessions             added (count = rows changed, not rows matched)
+  140 D102 .delete_expired                   added (oldest expiry first, `limit` bounds the batch)
+  152 D102 .list_all                         added (the search REQ-022 backing read, unpaginated)
+  166 D107 SqlitePasswordResetRepository.__init__ added (same engine setup, normally the same database file)
+  182 D102 .add                              added (hash only, REQ-011)
+  188 D102 .get_by_token_hash                added (expired/used rows returned — the service maps the reason)
+  193 D102 .invalidate_all_for_user          added (REQ-011/EDGE-011)
+  202 D102 .mark_used                        added (single-use, INV-003)
+  218 D107 SqliteWebAuthnCredentialRepository.__init__ added (args visible in tracing: only a database URL)
+  234 D102 .add                              added (`transports` stored as JSON text)
+  240 D102 .get_by_credential_id             added (the id the browser presents)
+  245 D102 .list_for_user                    added (storage order — no `order_by`, no promised order)
+  250 D102 .update_sign_count                added (the hijack basis, REQ-015/REQ-016; unknown id ignored)
+  258 D102 .delete                           added (no-op; the service checks ownership first, REQ-017)
+authentication  src/backend/authentication/service.py
+  108 D107 AuthService.__init__              added (what each keyword selects; TTLs fixed at construction and
+                                          stamped per row; `max_failed_attempts`/`lockout_duration` unused when a
+                                          tracker is injected; `permission_service=None` = standalone, AC-031)
+  198 D102 .login                            added (one error kind for four causes; dummy verify on the locked and
+                                          unknown/inactive paths; failures counted against the identifier as typed)
+  230 D102 .session_info                     added (hashed lookup; the three failure causes are indistinguishable)
+  236 D102 .logout                           added (idempotent no-op publishes nothing, EDGE-006)
+  244 D102 .request_password_reset           added (identical observable result either way; address lower-cased;
+                                          earlier pending tokens invalidated first)
+  267 D102 .complete_password_reset          added (reason order unknown → used → expired, so used+expired reports
+                                          `"used"`; the password change is delegated, REQ-002)
+  284 D102 .begin_passkey_registration       added (enforced action id; a second begin replaces the challenge)
+  292 D102 .complete_passkey_registration    added (provider username passed empty; nothing stored on failure)
+  313 D102 .begin_passkey_login              added (fails before a challenge is generated; exempt operation)
+  321 D102 .complete_passkey_login           added (assertion verified before the store is read; count advanced;
+                                          coexists with the password path, REQ-018)
+  335 D102 .list_passkeys                    added (transports decoded; public key never exposed, REQ-021)
+  347 D102 .delete_passkey                   added (unknown and foreign are the same error on purpose)
+authentication  src/backend/authentication/tracker.py
+  33  D107 InMemoryAttemptTracker.__init__   added (policy fixed for the tracker's lifetime; one internal lock, NFR-005)
+  39  D102 .record_failure                   added (the count never decays → a failure after an elapsed lock re-locks
+                                          immediately)
+  49  D102 .record_success                   added (all state discarded, AC-008)
+  53  D102 .is_locked                        added (an elapsed lock reports `False` without clearing anything)
+authentication  src/backend/authentication/webauthn.py
+  44  D107 PyWebAuthnProvider.__init__       added (the two challenge maps are the provider's only state)
+  51  D102 .generate_registration_options    added (`display_name` fallback; returns `public_dict`, not the options object)
+  63  D102 .verify_registration_response     added (`username` unused; the challenge is consumed before verification,
+                                          so an unpaired response meets an empty expectation)
+  86  D102 .generate_authentication_options  added (`"preferred"` matches `require_user_verification=False`)
+  96  D102 .verify_authentication_response   added (returns the presented count; the comparison is the caller's)
+  --  Q-14 private helpers (not gate-detected, found by an `ast` walk): `events._utcnow`,
+      `repository._session` ×3, `service._publish` / `_user_by_identifier` / `_issue_session`,
+      `tracker._AttemptState` — 9 in total. The walk now reports no undocumented def in the
+      seven touched files. (`models.py` has 0 gate sites and is untouched by this change; its
+      two private password validators stay undocumented — INV-H is scoped to touched files.)
+```
+
+Gate-site count: **36 `D102` + 7 `D101` + 7 `D107` = 50** — matches §Fresh measurement.
+
+### Format half — 1 finding over 1 docstring (`cb45758`)
+
+```text
+authentication  src/backend/authentication/repositories.py
+  71  D205 SessionRepository.delete_expired  summary line split onto one line + blank line before the
+                                          description — hand-edited (`--fix --diff` offers nothing, F-10
+                                          re-confirmed on this group)
+```
+
+No `D209` / `D301` / `D403` in this feature (the only format site in the fresh table). The `delete_expired` ABC body is the docstring alone — no `...` was involved, and the group-4 INV-D lesson was checked by digest after the additions commit anyway.
+
+### Gates & no-behavior-delta (INV-D)
+
+```text
+uv run ruff check src/backend/authentication                                  → All checks passed!
+uv run ruff check src/backend/authentication --select D (google)              → All checks passed!   (0)
+uv run ruff format src/backend/authentication                                 → 13 files left unchanged
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src                      → 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0
+                                                                                 (after the additions commit AND after the format commit)
+uv run pytest tests/{acceptance,contract,integration,property,unit}/authentication -q → 69 passed in 21.08s
+git diff --stat 98b5dbc~1..cb45758                                            → 7 files, +272/−2, all inside docstrings
+```
+
+Remaining `D` sites in `src/` after group 7: **189** (`D102` 61, `D205` 51, `D209` 45, `D107` 22, `D101` 7, `D403` 3).
+
+### Q-26 check (docstring vs. code)
+
+No docstring was written that contradicts the code; each point below is stated **as the code is**, with no code change and no reclassification:
+
+- **F-11 (new finding, for the Problem Log / after-workflow-optimization).** `AuthService._publish` does **not** catch a publisher exception, so a raising publisher propagates out of `login` / `logout` / the reset flow / the passkey operations. `AGENTS.md` promises the opposite for this feature ("best-effort; a publisher failure never breaks the operation"), and `docs/specs/authentication.md` REQ-020 promises only that a `None` publisher means no events — so the code matches its spec and the *guidance* is what is wrong. The new `_publish` docstring states the actual behavior. Same asymmetry already recorded for mail (group 3); user-management/file-management were the ones claimed to be isolated. Fixing either the guidance or the code is a separate ISSUE, not this change.
+- `SqliteWebAuthnCredentialRepository` is the only repository traced **without** `include_args=False`, so its `add` entry records carry the credential argument (public key, credential id). NFR-002 forbids passwords, raw session/reset tokens and password hashes — a WebAuthn public key is none of those, so this is not a defect; documented at the constructor.
+- `InMemoryAttemptTracker` never decays a failure count: an *elapsed* lock reports `is_locked() == False` while the count stays at/above the threshold, so the next failed attempt re-locks immediately. AC-008 still holds (a *successful* login clears the state). Documented at `record_failure` / `is_locked`.
+- `PyWebAuthnProvider.verify_registration_response` ignores its `username` argument, and both `verify_*` methods `pop()` the challenge *before* verifying, so a failed verification consumes the challenge and an unpaired response is checked against an empty expectation (it fails, but by way of an empty expected challenge). Documented as-is.
+- Citation check (INV-I / Q-16): every ID the new docstrings cite is defined in `docs/specs/authentication.md` (REQ-001…REQ-022, AC-008/014/016/022/023/024/025/027/028/031/032, EDGE-004/005/006/007/011/013/014/016, INV-002/INV-003, NFR-002/003/005), except the deliberately qualified cross-feature ones — `session-management` REQ-017 (ADR-061), `search` REQ-022 (ADR-080), and `user-roles-permissions` REQ-024 / AC-031 for the enforcement wiring (authentication.md stops at REQ-022). The pre-existing `service.py` module-docstring citations to REQ-024 and EDGE-022 (also user-roles-permissions) were left untouched.
+
+**Next (S4.2, group 8):** `filemanagement` (58 sites).
