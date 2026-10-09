@@ -176,6 +176,15 @@ def _module_paths(map_text: str) -> set[str]:
     return paths
 
 
+def _inv002_count_line_claim(map_text: str) -> None:
+    """INV-002: a `.py` outside a code dir appears only in its top-level directory's count line."""
+    counts = [line for line in _count_lines(map_text) if line.startswith(".github/")]
+    assert len(counts) == 1 and f"{len(_OUTSIDE_CODE_DIRS)} files" in counts[0], (
+        f"the .github/ count line is {counts!r}, expected one line counting "
+        f"{len(_OUTSIDE_CODE_DIRS)} files (INV-002: a .py outside a code dir appears nowhere else)"
+    )
+
+
 def _inv002_path_claim(path: str, max_depth: int, entries: set[str], modules: set[str]) -> str | None:
     """The INV-002 claim `path` violates in a tree rendered at `--max-depth`, or None if it holds."""
     top, path_depth = path.split("/", 1)[0], _depth(path)
@@ -222,11 +231,7 @@ def test_inv_002_no_module_hidden_by_pruning() -> None:
             ]
             assert not violations, f"--max-depth {max_depth}: {'; '.join(violations)}"
 
-            counts = [line for line in _count_lines(map_text) if line.startswith(".github/")]
-            assert len(counts) == 1 and f"{len(_OUTSIDE_CODE_DIRS)} files" in counts[0], (
-                f"the .github/ count line is {counts!r}, expected one line counting "
-                f"{len(_OUTSIDE_CODE_DIRS)} files (INV-002: a .py outside a code dir appears nowhere else)"
-            )
+            _inv002_count_line_claim(map_text)
 
     check()
 
