@@ -1205,3 +1205,50 @@ The AC-009 invariant test from the §No-behavior-delta proof plan (`tests/accept
 **S5.1 gate: PASS.** Suite reproduced (762 collected, 1 skip, the single baseline failure classified as the known pre-existing flake with isolated evidence in both directions).
 
 **Next (S5.2):** `uv run ruff check .` (whole-repo sweep — the one full-repo run, with `D` now selected over `src/`) + `uv run ruff format --check .` + `uv run mypy src/` + `uv run --group docs mkdocs build --strict` + the docstring-stripped AST digest, each compared to its S4.1 baseline value.
+
+## Phase 5 — S5.2 lint, types, docs build and digest (2026-10-09)
+
+Measured in this worktree at `903339c` (all eleven groups in, `D` selected over `src/`). The full suite is **not** re-run here — S5.1 recorded it (`761 passed, 1 skipped`, no regression). Toolchain at measurement: `ruff 0.16.10`, `mypy 2.4.0 (compiled: yes)`.
+
+| # | Gate | Command | Result line | Verdict |
+|---|---|---|---|---|
+| 1 | Lint **with the new gate** (CI parity, `.github/workflows/lint.yml`) | `uv run ruff check .` | `All checks passed!` (exit 0) | **PASS** |
+| 2 | Format gate | `uv run ruff format --check .` | `339 files already formatted` (exit 0) | **PASS** — identical to the S4.1 baseline |
+| 3 | Types | `uv run mypy src/` | `Success: no issues found in 84 source files` | **PASS** — identical to the S4.1 baseline |
+| 4 | Published site still builds | `uv run --group docs mkdocs build --strict` | `INFO    -  Documentation built in 2.05 seconds` (exit 0) | **PASS** |
+| 5 | INV-A / AC-009 wording intact | `uv run pytest tests/acceptance/logging_coverage/test_docstrings.py::test_traced_class_docstrings_mention_tracing -q` | `1 passed in 0.42s` | **PASS** |
+| 6 | INV-D executable code identical | `uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src` | `64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0` | **PASS** — matches the P.4 / S4.1 baseline digest |
+| 7 | Dependencies (the config commit edited `pyproject.toml`) | `uv run deptry .` | `Success! No dependency issues found.` (`Scanning 90 files...`) | **PASS** |
+
+Gate 1 is the acceptance signal, and it is the gate that actually tests this change: `D` is in `select` (`pyproject.toml:195`, google convention) and `per-file-ignores` (`pyproject.toml:220-224`) exempts **exactly** the four decided trees — `tests/*`, `scripts/*`, `migrations/*`, `.github/*`. No `# noqa` anywhere, no `src/` exemption (**INV-C**).
+
+Gate 7 is not in the S4.1 gate-baseline table; it is in the group-11 config-commit gate table, re-run here because that commit is the one that changed `pyproject.toml`.
+
+### AST digest — change state vs. control run (INV-D, and its non-vacuity)
+
+Change state (this worktree at `903339c`, **relative** `src` root, per §AST digest reproduction):
+
+```text
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src
+→ 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0
+```
+
+Control run — the **pre-change** `src/` exported from the base commit `45aa61c` (`git archive 45aa61c src | tar -x -C <tempdir>`) into a temp directory **outside** the worktree, digested with the same script and the same relative `src` root, then mutated in place:
+
+```text
+base (45aa61c)                     : 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0   SAME as the change state
++ docstring on EventBus.__enter__  : 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0   SAME      (blind to docstrings)
++ max_queue_size 1000 → 1001       : ce0e01e8e1fdb396b90731ecb1801fa894b5fa9bf39cc39544c5eec33e332248   DIFFERENT (catches a code change)
+```
+
+The control reproduces the P.4 control: the digest is blind to a docstring and sensitive to a one-character code change, so the gate-6 match is evidence rather than a vacuous equality. Mutator: `%LOCALAPPDATA%/Temp/s52_control_mutate.py` (throwaway, never added to `scripts/`, Q-25).
+
+Supporting counts (throwaway helpers `%LOCALAPPDATA%/Temp/s52_ast_count.py` and `s52_doc_count.py`): `src/` = **84 files / 43 587 docstring-stripped AST nodes** and **903 docstring hosts** in **both** states — no definition was added or removed (INV-D / INV-J) — while docstrings stripped go **628 → 859 (+231)** from `45aa61c` to the final state. The step brief's "266 nodes" is not reproducible from the script (it prints only the digest); the measured figures above supersede it.
+
+### Working tree
+
+`git status --porcelain` after the gate runs: `M uv.lock` — the stale-lock rewrite of finding **F-9**, forced by `uv run`, not an artifact of this change. Restored with `git restore uv.lock` before this commit and not staged.
+
+**S5.2 gate: PASS** on all seven checks — lint with `D` selected over `src/`, format, types, strict docs build, the AC-009 docstring test, the AST digest with its control run, and deptry. Every value equals its S4.1 baseline.
+
+**Next (S5.3):** update `docs/verification/traceability.md` for the IDs this change touches.
