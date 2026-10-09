@@ -2456,3 +2456,131 @@ per-task programmatic comparison OK; validator `check_sync` passed), DAG validat
 traceability PASS, 15/15 T-002 nodes GREEN. Files changed by this step: the two DAG copies and this
 record.**
 
+## Phase 4 — T-003 RED (S4.1) (2026-10-09)
+
+**Task picked: T-003** (`status: PENDING`, `dependencies: [T-002]` — T-001 and T-002 are `VERIFIED`, so
+the linear DAG has exactly one ready task and no ordering choice exists). T-003 covers **REQ-009,
+REQ-010, REQ-011, REQ-012, REQ-013, REQ-020** (AC-009/010/011/012/013/020, INV-002/INV-003,
+EDGE-001/002/013/015, NFR-007): the Directory tree section (top-level files, the four code dirs in
+full within `--max-depth` with the pruning marker, the labelled count lines), the Packages scope and
+the package/module headers and summaries, with every path `--root-relative` and `as_posix()`.
+
+Task entry extracted programmatically (never read the whole DAG file):
+
+```bash
+uv run python -c "import json;d=json.load(open('.github/task-runner/tasks.json'));t=[x for x in d['tasks'] if x['task_id']=='T-003'][0];print(json.dumps(t,indent=2))"
+```
+
+### RED gate — the DAG's verbatim `red_command`
+
+```bash
+uv run pytest tests/acceptance/test_structure_map.py::test_ac_009_tree_code_dirs_full_other_dirs_counted tests/acceptance/test_structure_map.py::test_ac_010_max_depth_prunes_tree_only tests/acceptance/test_structure_map.py::test_ac_011_packages_scope tests/acceptance/test_structure_map.py::test_ac_012_package_header_and_exports tests/acceptance/test_structure_map.py::test_edge_015_unlabelled_dir_counted_without_label tests/unit/test_make_map.py::test_ac_013_module_header_and_summary tests/unit/test_make_map.py::test_ac_020_paths_are_relative_posix tests/unit/test_make_map.py::test_edge_001_missing_docstring_renders_no_summary tests/unit/test_make_map.py::test_edge_002_empty_file_renders_header_only tests/unit/test_make_map.py::test_edge_013_package_without_exports tests/unit/test_make_map.py::test_nfr_007_output_identical_across_platforms tests/property/test_structure_map.py::test_inv_002_no_module_hidden_by_pruning tests/property/test_structure_map.py::test_inv_003_no_absolute_path_or_timestamp -v
+```
+
+Run in the change worktree at HEAD `19cb969` (T-002 `VERIFIED`; `scripts/make_map.py` = 201 lines,
+CLI + git file set + exit codes + document chrome only — the rendering layer T-003 must add is
+absent).
+
+**Summary line: `11 failed, 2 passed in 6.52s`** (re-run with `--tb=no` for the per-node list:
+`11 failed, 2 passed in 6.37s`). **13/13 nodes collected, 0 errors, 0 skipped, 0 collection
+failures** — every node ran and asserted.
+
+| # | Node | State | One-line reason (assertion message, first clause) |
+|---|---|---|---|
+| 1 | `tests/acceptance/test_structure_map.py::test_ac_009_tree_code_dirs_full_other_dirs_counted` | **RED** | `clause 1: the top-level files are not listed by name, sorted: []` — plus `clause 2: no tree line renders the code dir src` / `tests` / `scripts` / `migrations` (and every entry under them), and `clause 3: 0 tree lines for docs/, expected one count line: []` (same for `.github/`) |
+| 2 | `…::test_ac_010_max_depth_prunes_tree_only` | **RED** | `clause 1: src/backend/ itself is not rendered at --max-depth 2: []` — plus `clause 2: no \`(+N … not shown)\` marker in the src/backend/ branch: []` and `clause 3: the Packages section misses/added [<every src/ module>] under src/` |
+| 3 | `…::test_ac_011_packages_scope` | **RED** | `clause 1/2: no Packages entry for ['migrations/0001_initial.py', 'migrations/env.py', 'scripts/build.py', 'src/backend/__init__.py', … 15 fixture modules]` and `the Packages section lists 0 modules, expected 15` |
+| 4 | `…::test_ac_012_package_header_and_exports` | **RED** | `clause 1: 0 group headers mention backend.settings: []` (the header/exports/no-per-module-header clauses are never reached) |
+| 5 | `…::test_edge_015_unlabelled_dir_counted_without_label` | **RED** | `clause 1: 0 tree lines for notes/, expected one count line: []` |
+| 6 | `tests/unit/test_make_map.py::test_ac_013_module_header_and_summary` | **RED** | `clause 1: the header is [], expected '#### src/with_doc.py (4 lines)' — the file's line count`; `clause 1: no summary line after the header: []`; `clause 2: the header is [], expected '#### src/no_doc.py (2 lines)'` |
+| 7 | `tests/unit/test_make_map.py::test_ac_020_paths_are_relative_posix` | **RED** | `clause 3: module headers are not the --root-relative posix paths: missing [12 headers], unexpected []` (clauses 1–2 already hold: no forbidden path form, no absolute host path in the map) |
+| 8 | `tests/unit/test_make_map.py::test_edge_001_missing_docstring_renders_no_summary` | **RED** | `clause 2: src/no_doc.py renders [], expected its header line` (same for `src/comment_only.py`) |
+| 9 | `tests/unit/test_make_map.py::test_edge_002_empty_file_renders_header_only` | **RED** | `clause 2: the empty module renders [], expected only its header with (0 lines)` |
+| 10 | `tests/unit/test_make_map.py::test_edge_013_package_without_exports` | **RED** | `clause 2: no group section for the package src/nopub_pkg/` + `no group section for the package src/pub_pkg/` + `clause 3: 0 exports line(s) for src/pub_pkg/: []` |
+| 11 | `tests/unit/test_make_map.py::test_nfr_007_output_identical_across_platforms` | **GREEN** | All three runs exit 0 and the bytes match: same tree at two absolute locations and `--root` spelled with host vs posix separators render identical bytes, LF-only (`b"\r" not in near_bytes`) — the NFR-007 / REQ-020 byte-identity clause already holds |
+| 12 | `tests/property/test_structure_map.py::test_inv_002_no_module_hidden_by_pruning` | **RED** | `--max-depth 1: Packages section [] is not the REQ-011 scope ['src/conftest.py', 'src/mod.py']` (Hypothesis falsifying example; INV-002 requires pruning to never hide an in-scope module) |
+| 13 | `tests/property/test_structure_map.py::test_inv_003_no_absolute_path_or_timestamp` | **GREEN** | No forbidden pattern (absolute path / drive letter / UNC / timestamp / host name / user name) and never the handed `--root`, over generated trees at `--max-depth` 1…5 — the INV-003 clause already holds |
+
+**Counts: 11 RED / 2 GREEN of 13 T-003 witnesses.**
+
+### Every failure is a behavior failure
+
+All 11 failures are `AssertionError` raised by the witness's own `assert not failures` on the
+rendered map text — the generator exits 0 and writes a file, and the map is missing the tree lines,
+count lines, prune markers, group headers, exports lines, module headers and summary lines T-003 must
+render. No node failed with a collection error, an `ImportError`, a `ValidationError`/`ValueError`
+from fixture construction, a `pytest.fail` "generator does not exist" guard (`scripts/make_map.py`
+exists, so the T-002 guards in the property file are not firing), or an environment problem. The
+fixtures build their own trees under `tmp_path` via `_git_tree`, so nothing depends on the working
+tree's contents. This matches the Phase 3 gate (S3.2: 54 failed / 1 passed across all 7 tasks) —
+T-003's 11 REDs are part of that recorded set, re-observed here at the post-T-002 head.
+
+### The witnesses are non-vacuous (quoted pinning assertions)
+
+Tree (AC-009, `tests/acceptance/test_structure_map.py:658`/`:676`/`:679`):
+
+```python
+if top_files != ["README.md", "pyproject.toml"]:
+    failures.append(f"clause 1: the top-level files are not listed by name, sorted: {top_files!r}")
+for directory, count, label in _COUNT_LINES:            # ("docs/", 3, "(process record)"), (".github/", 2, "(CI and tooling)")  :523
+    if len(lines) != 1:
+        failures.append(f"clause 3: {len(lines)} tree lines for {directory}, expected one count line: {lines!r}")
+    if f"{count} files" not in lines[0]:
+        failures.append(f"clause 3: {lines[0]!r} does not count all {count} files under {directory}")
+```
+
+Depth pruning (AC-010, `:701`/`:704`/`:716`):
+
+```python
+if "src/backend" not in paths:
+    failures.append(f"clause 1: src/backend/ itself is not rendered at --max-depth 2: {sorted(paths)!r}")
+marker = _prune_marker_in_branch(pruned, "src/backend")
+if not marker:
+    failures.append(f"clause 2: no `(+N … not shown)` marker in the src/backend/ branch: {sorted(paths)!r}")
+elif not _COMBINED_MARKER.fullmatch(marker):            # r"\(\+\d+ dirs, \d+ files not shown\)"  :533
+    failures.append(f"clause 2: {marker!r} is not the combined `(+N dirs, M files not shown)` form")
+if src_modules != expected_src:                       # expected_src = every fixture path under src/
+    failures.append(f"clause 3: the Packages section misses/added {sorted(src_modules ^ expected_src)} under src/")
+```
+
+Package scope and headers (AC-011 / AC-012, `:728`/`:732`/`:746`):
+
+```python
+if missing := sorted(_PACKAGES_SCOPE - listed):
+    failures.append(f"clause 1/2: no Packages entry for {missing}")
+if len(listed) != _EXPECTED_PACKAGE_COUNT:              # 15, hand-counted cross-check  :477
+    failures.append(f"the Packages section lists {len(listed)} modules, expected {_EXPECTED_PACKAGE_COUNT}")
+if len(group) != 1:
+    failures.append(f"clause 1: {len(group)} group headers mention backend.settings: {group!r}")
+```
+
+Each pins an exact expected output (a sorted entry list, an exact count line with its role label, the
+combined prune-marker form, an exact 15-module scope, exactly one group header carrying both
+`` `backend.settings` `` and `src/backend/settings/`), so an empty or partial render cannot pass.
+
+### The 2 GREEN witnesses (not a defect — they must stay GREEN)
+
+- **NFR-007 / REQ-008 byte identity** (`test_nfr_007_output_identical_across_platforms`): the render
+  is already byte-identical across two absolute host locations and both `--root` spellings, and is
+  LF-only. It holds today because the T-002 render contains no host paths yet; it becomes a live
+  guard the moment T-003 puts paths into the map, and it must stay GREEN through T-003.
+- **INV-003 no absolute path / drive letter / UNC / timestamp / host / user**
+  (`test_inv_003_no_absolute_path_or_timestamp`): the negative assertion already holds over generated
+  trees at every `--max-depth` 1…5 for the same reason, and is the regression guard for REQ-020's
+  path form once the tree and headers are rendered.
+
+The remaining 11 witnesses are the ones that can only pass with T-003's rendering layer, so the
+GREEN gate for T-003 is unambiguous: **13/13 GREEN** (11 newly implemented + 2 preserved).
+
+### Scope of this step
+
+Files changed by S4.1: **only this record** (`docs/verification/structure-map.md`). No test, no
+`scripts/make_map.py`, no `AGENTS.md`/`STRUCTURE.md`/`mkdocs.yml`/`.pre-commit-config.yaml`/`.github/`
+change; `uv.lock` restored (`git restore uv.lock`, P-74) and never staged; T-003 stays `PENDING` in
+both DAG copies (status sync belongs to S4.4). Working tree clean after the commit.
+
+**S4.1 (T-003) gate: PASSED — RED observed on the verbatim `red_command` set (11 failed / 2 passed,
+0 collection errors), every failure a behavior failure, witnesses shown non-vacuous, the 2 GREEN
+witnesses identified with the clause they cover.** Next atomic step: **S4.2 (T-003)** — implement the
+rendering layer in `scripts/make_map.py` and confirm GREEN on the targeted `green_command`.
+
