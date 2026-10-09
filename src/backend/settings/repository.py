@@ -46,12 +46,12 @@ _YAML_LINE_BREAKS = "\x85\u2028\u2029"
 
 
 def _str_representer(dumper: Any, data: str) -> ScalarNode:
-    """Represent ``str`` scalars, forcing double-quoted style on affected ones.
+    r"""Represent ``str`` scalars, forcing double-quoted style on affected ones.
 
     ruamel's emitter writes U+0085 (NEL) literally inside a single-quoted
     scalar while its reader folds that same character to a line break, so a
     stored value silently comes back changed (settings INV-009 /
-    settings-coverage INV-002: ``'\\x85'`` loaded as ``' '``). Only scalars that
+    settings-coverage INV-002: ``'\x85'`` loaded as ``' '``). Only scalars that
     actually contain such a character get the escaped style, so the on-disk
     format stays byte-identical for every other value (keys, ``null``, numbers
     and unaffected strings are untouched).

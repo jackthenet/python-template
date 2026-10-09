@@ -1,5 +1,7 @@
-"""The settings registry: registration, validated value access, resets,
-hierarchy/views, and template CRUD.
+"""The settings registry.
+
+Registration, validated value access, resets, hierarchy/views, and template
+CRUD, plus the shared-default singleton accessors.
 """
 
 from __future__ import annotations
