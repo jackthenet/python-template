@@ -19,6 +19,7 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** <the ambiguity, missing requirement, or decision>
 - **Context:** <what the step had learned at the time>
 - **Question:** <the question for the user>
+- **Recommended:** <the step's proposed answer + one-line reason>
 - **Answer:** <the user's answer>  (or **PENDING**)
 - **Date:** <YYYY-MM-DD>
 - **Status:** PENDING | ANSWERED
@@ -27,7 +28,11 @@ Every question that needs user input is recorded HERE — never in a central fil
 
 ## Preparation questions (P.2)
 
-<the interrogation batch — at least 20 questions for FEATURE/CROSS-CUTTING>
+<the interrogation batch — at least 20 questions for FEATURE/CROSS-CUTTING; **every** entry carries a `Recommended:` answer>
+
+### Category coverage
+
+<one row per interrogation category this change uses: `covered (Q-nn / E-nn)` or `skipped — <reason>`. Required for every change type; it sits **on top of** the ≥ 20-question floor, never instead of it.>
 
 ## Late questions (Phases 2–6)
 
