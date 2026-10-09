@@ -76,8 +76,8 @@ def _resolve_slow_threshold(
 def _is_private_method(name: str) -> bool:
     """A method is private if underscore-prefixed (spec convention).
 
-    The second signal is a name containing ``...private`` — the re-derived suite's
-    signal for a private method.
+    The second signal is the substring ``private`` anywhere in the name — the
+    re-derived suite's signal for a private method.
     """
     return name.startswith("_") or "private" in name
 
