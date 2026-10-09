@@ -75,16 +75,40 @@ class FileRepository(ABC):
         ...
 
     @abstractmethod
-    def get_by_key(self, key: str) -> FileRecord | None: ...
+    def get_by_key(self, key: str) -> FileRecord | None:
+        """Look a record up by its unique key.
+
+        The key is matched exactly — prefix/namespace matching belongs to
+        :meth:`list_by_namespace`.
+        """
+        ...
 
     @abstractmethod
-    def get_by_id(self, file_id: UUID) -> FileRecord | None: ...
+    def get_by_id(self, file_id: UUID) -> FileRecord | None:
+        """Look a record up by its id.
+
+        Ids are internal: callers address files by key, the repository uses ids
+        for delete and for the avatar mapping.
+        """
+        ...
 
     @abstractmethod
-    def update(self, record: FileRecord) -> FileRecord: ...
+    def update(self, record: FileRecord) -> FileRecord:
+        """Persist changes to an existing record and return the stored instance.
+
+        The returned instance is not necessarily the argument, so callers must
+        read results from the return value.
+        """
+        ...
 
     @abstractmethod
-    def delete(self, file_id: UUID) -> None: ...
+    def delete(self, file_id: UUID) -> None:
+        """Delete the metadata row with this id; an unknown id is a silent no-op.
+
+        Only metadata is removed — storage content is the caller's
+        responsibility.
+        """
+        ...
 
     @abstractmethod
     def list_by_namespace(
@@ -98,13 +122,30 @@ class FileRepository(ABC):
         ...
 
     @abstractmethod
-    def set_user_avatar(self, user_id: str, file_id: UUID) -> None: ...
+    def set_user_avatar(self, user_id: str, file_id: UUID) -> None:
+        """Point ``user_id``'s avatar at ``file_id``, replacing any earlier mapping.
+
+        The previously referenced file is left in place — deleting it is the
+        caller's decision (REQ-017).
+        """
+        ...
 
     @abstractmethod
-    def get_user_avatar(self, user_id: str) -> UUID | None: ...
+    def get_user_avatar(self, user_id: str) -> UUID | None:
+        """The file id mapped to ``user_id``, or ``None`` when there is no mapping.
+
+        A dangling id (its file was deleted) is returned as stored; resolving it
+        is the service's job (EDGE-011).
+        """
+        ...
 
     @abstractmethod
-    def clear_user_avatar(self, user_id: str) -> None: ...
+    def clear_user_avatar(self, user_id: str) -> None:
+        """Remove the mapping row only; no mapping is a no-op.
+
+        The avatar file and its variants are untouched here.
+        """
+        ...
 
 
 @logged_class(slow_threshold_ms=100)
@@ -115,6 +156,14 @@ class SqliteFileRepository(FileRepository):
     """
 
     def __init__(self, database_url: str) -> None:
+        """Open and bootstrap the database at ``database_url``.
+
+        A file-based URL gets its parent directory created (EDGE-015) and a
+        30 s busy timeout so concurrent writers serialize (NFR-004);
+        ``sqlite:///:memory:`` instead gets a ``StaticPool`` so every session of
+        this instance shares one database. Tables are created here — this
+        repository does not use migrations.
+        """
         self._database_url = database_url
         file_path = _sqlite_file_path(database_url)
         if file_path is not None:
@@ -134,11 +183,17 @@ class SqliteFileRepository(FileRepository):
         SQLModel.metadata.create_all(self._engine)
 
     def _session(self) -> Session:
+        """A new session per operation — the repository holds no session state."""
         # expire_on_commit=False keeps attributes loaded after commit so
         # detached instances stay readable (the service reads them after add/update).
         return Session(self._engine, expire_on_commit=False)
 
     def add(self, record: FileRecord) -> FileRecord:
+        """Replace any same-key record inside one transaction (D5, ADR-054).
+
+        The argument instance is returned with its attributes still loaded, so
+        the caller can read it after the session closes.
+        """
         with self._session() as session:
             # Immediate same-key replacement (last-write-wins, D5): the bulk
             # delete executes before the deferred insert flushes, so the
@@ -150,20 +205,24 @@ class SqliteFileRepository(FileRepository):
         return record
 
     def get_by_key(self, key: str) -> FileRecord | None:
+        """Exact-key lookup; the returned timestamps are tz-aware UTC."""
         with self._session() as session:
             return _attach_utc(session.exec(select(FileRecord).where(FileRecord.key == key)).first())
 
     def get_by_id(self, file_id: UUID) -> FileRecord | None:
+        """Id lookup; the returned timestamps are tz-aware UTC."""
         with self._session() as session:
             return _attach_utc(session.get(FileRecord, file_id))
 
     def update(self, record: FileRecord) -> FileRecord:
+        """Merge the record: an id that is not stored is inserted, not rejected."""
         with self._session() as session:
             merged = session.merge(record)
             session.commit()
             return _attach_utc(merged)
 
     def delete(self, file_id: UUID) -> None:
+        """Delete the row by id; an unknown id commits nothing."""
         with self._session() as session:
             record = session.get(FileRecord, file_id)
             if record is not None:
@@ -176,6 +235,12 @@ class SqliteFileRepository(FileRepository):
         limit: int = 100,
         offset: int = 0,
     ) -> Sequence[FileRecord]:
+        """Prefix match, ordering and pagination, all applied in SQL.
+
+        The prefix is interpolated into a ``LIKE`` pattern without escaping, so
+        the ``_`` that ``NAMESPACE_PATTERN`` allows acts as a single-character
+        wildcard (see the Q-26 finding in the change's verification record).
+        """
         with self._session() as session:
             statement = select(FileRecord)
             if namespace is not None:
@@ -186,6 +251,7 @@ class SqliteFileRepository(FileRepository):
             return [_attach_utc(row) for row in rows]
 
     def set_user_avatar(self, user_id: str, file_id: UUID) -> None:
+        """Insert or update the mapping row, stamping ``updated_at`` either way."""
         with self._session() as session:
             row = session.exec(select(UserAvatar).where(UserAvatar.user_id == user_id)).first()
             if row is None:
@@ -197,11 +263,13 @@ class SqliteFileRepository(FileRepository):
             session.commit()
 
     def get_user_avatar(self, user_id: str) -> UUID | None:
+        """The mapped id; no check that the referenced file still exists."""
         with self._session() as session:
             row = session.exec(select(UserAvatar).where(UserAvatar.user_id == user_id)).first()
             return row.file_id if row is not None else None
 
     def clear_user_avatar(self, user_id: str) -> None:
+        """Delete the mapping row only; the avatar file itself is untouched."""
         with self._session() as session:
             row = session.exec(select(UserAvatar).where(UserAvatar.user_id == user_id)).first()
             if row is not None:

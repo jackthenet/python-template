@@ -170,6 +170,14 @@ class FileService:
         settings_registry: SettingsRegistry | None = None,
         permission_service: PermissionChecker | None = None,
     ) -> None:
+        """Wire the collaborators; only ``repository`` is required.
+
+        Nothing is constructed eagerly: with ``backend=None`` a local-disk
+        backend is built from the live ``filemanagement.storage_root`` setting
+        on every operation (so a settings change takes effect at once, REQ-024),
+        and ``settings_registry=None`` resolves the shared singleton on first
+        use. ``permission_service=None`` means no enforcement at all (AC-031).
+        """
         self._repository = repository
         self._backend = backend
         self._event_bus = event_bus

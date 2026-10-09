@@ -84,4 +84,10 @@ class AvatarDeleted(AvatarEvent):
 class EventPublisher(Protocol):
     """Structural publisher protocol (ADR-058); the real event bus satisfies it."""
 
-    def publish(self, event: object) -> None: ...
+    def publish(self, event: object) -> None:
+        """Deliver ``event`` to whatever consumes it (the only method used here).
+
+        The feature never inspects a return value and catches nothing raised
+        here, so a failing publisher propagates into the calling operation.
+        """
+        ...
