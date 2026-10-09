@@ -112,7 +112,7 @@ The verify phase is decomposed into four atomic steps. Each has a **single objec
 ### All types
 
 - Produce a verification report with pass/fail status per check.
-- Confirm the change's `CHANGELOG.md` entry exists under `## [Unreleased]` (every change type owes one, REFACTOR and DOCS/CHORE included) and record that in the report.
+- Record in the report that the change owes a `CHANGELOG.md` entry under `## [Unreleased]` (every change type owes one, REFACTOR and DOCS/CHORE included) and that it is added in Phase 6 — AGENTS.md Phase 6 item 10; the entry does not exist yet at this phase.
 - Commit verification artifacts: `docs(<name>): add verification report`.
 
 ## MUST-NOT

@@ -78,7 +78,7 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 - **Objective:** Commit the implementation and set the task status to `VERIFIED`.
 - **Inputs:** the committed-ready implementation.
 - **Outputs:** a committed implementation; the task status set to `VERIFIED` in `.github/task-runner/tasks.json` (synced to `docs/tasks/[name].tasks.json`).
-- **Done-criteria:** the implementation is committed; the task status is set to `VERIFIED` in `.github/task-runner/tasks.json`; the final statuses are synced back to `docs/tasks/[name].tasks.json`; the change's `CHANGELOG.md` entry under `## [Unreleased]` is committed with it (AGENTS.md "Versioning").
+- **Done-criteria:** the implementation is committed; the task status is set to `VERIFIED` in `.github/task-runner/tasks.json`; the final statuses are synced back to `docs/tasks/[name].tasks.json`.
 
 ## Process
 
@@ -113,7 +113,7 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 
 ### 7. Commit & update status — FEATURE/CROSS-CUTTING
 
-12. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`. Commit the change's `CHANGELOG.md` entry under `## [Unreleased]` with the change (every change type owes one — AGENTS.md "Versioning").
+12. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`. The change's `CHANGELOG.md` entry under `## [Unreleased]` is added in Phase 6, not here (every change type owes one — AGENTS.md "Versioning").
 
 ## Rules
 

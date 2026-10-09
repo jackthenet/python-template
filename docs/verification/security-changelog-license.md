@@ -581,3 +581,151 @@ file was touched.
 
 - **next:** S6.x Phase 6 (light review + PR). The full test suite must run and pass at S6.4
   before the PR opens (§8 recommendation), and the review should resolve F-8 and F-9.
+
+## Phase 6 — review report (S6.1–S6.4, DOCS/CHORE light review)
+
+Reviewed the **final state** of the changed files at branch head `b227341` against the
+normative basis — this scope record (§2 scope, §3 planned text, §4 forbidden list, §5
+no-behavior-delta, §6 F-1…F-7, §8 check set, §11 Phase 4 evidence) plus the Phase 5 report
+and its findings F-8/F-9/F-10. NOT a commit-by-commit diff; the full suite was run once, as
+the S6.4 pre-merge gate (§8 recommendation), because `pyproject.toml` is touched.
+
+### Check 1 — scope conformance: PASS
+
+`git diff --name-status main...HEAD` → 12 paths: §2's 8 scoped items (item 6 = the three
+skill files) + `STRUCTURE.md` (§3.8 / F-1) + this record + `docs/workflow/PROBLEMS.md` (the
+workflow-mandated Problem Log, AGENTS.md "Problem Log"). Nothing from §4: no `src/`, `tests/`,
+`scripts/`, `migrations/`, `docs/specs/`, `docs/decisions/`, `docs/tasks/`,
+`docs/verification/traceability.md`, `mkdocs.yml`, `userdocs/`, `.github/`,
+`.pre-commit-config.yaml`, `docs/todo/`, `docs/questions/`. The Phase 6 commit below adds no
+new path — it edits four already-scoped files.
+
+### Check 2 — no behavior delta: PASS
+
+No `src/`, `tests/`, `scripts/` or `migrations/` path in the diff. `pyproject.toml` diff = one
+hunk, two added keys in `[project]` (`license = "MIT"`, `authors = [{ name = "jackthenet" }]`).
+`version = "1.1.0"` (`:4`) and `current_version = "1.1.0"` (`:87`) unchanged; no `classifiers`
+key; no `[build-system]`; no `[tool.bumpversion]` change; `dependencies` unchanged.
+`git log --oneline main..HEAD | grep -i bump` → no bump commit; `git tag --list` → empty. No
+version bump anywhere (DOCS/CHORE → none).
+
+### Check 3 — factual accuracy of the new documents: PASS (one wording nit → F-8, fixed)
+
+**`LICENSE`** — the canonical MIT text (header, grant, the "above copyright notice and this
+permission notice" condition, the all-caps disclaimer), copyright line exactly
+`Copyright (c) 2026 jackthenet` (handle, single year, no range, Q-2). `file` → ASCII text;
+newline-terminated; no trailing whitespace.
+
+**`SECURITY.md`** — every claim re-verified against the repository:
+
+| Claim | Verified against |
+|---|---|
+| `security` job of `quality.yml` runs `uv run pip-audit` and `uv run bandit -r src/` | job at `quality.yml:30`, `pip-audit` `:43`, `bandit` `:45` |
+| `dependency-review` job runs `actions/dependency-review-action@v5` on pull requests only | job `:63`, `if: github.event_name != 'push'` `:68`, action `:81` |
+| dependabot weekly PRs for `uv` and `github-actions` | `.github/dependabot.yml:4`/`:7`, `:39`/`:42`, both `interval: "weekly"` |
+| a real dependency CVE fixed through the process (PR #48) | `10066d5 Merge pull request #48 from jackthenet/issue/anyio-cve-fix` + `docs/verification/anyio-cve-fix.md` |
+| no email published | the only `@` in the file is the action reference; no `mailto:`; `:8` states "No email address is published" |
+| private-reporting channel depends on the user's repository setting | `:9-12` states it (F-2 stated, not papered over) |
+| latest release only, snapshot parenthetical | `\| latest release (currently \`1.1.0\`) \| ✅ \|` + "not part of the rule" (F-7) |
+| 14-day acknowledgement, no fix SLA | `## Response` |
+| template-scope paragraph | `## Scope: this is a template, not a service` |
+
+`SECURITY.md` cites **no line numbers**, so the record's `:67` vs the actual `:68` drift in the
+Phase 5 table is not in the shipped file.
+
+**`CHANGELOG.md`** — 15 `##` sections: `## [Unreleased]` + **14 dated release sections,
+newest-first** (`1.1.0` 2026-10-09 … `0.1.0` 2026-08-16). Sub-headings only
+`Added`/`Changed`/`Fixed`/`Removed`. No `see <range>` pointer anywhere (grep → none), as §3.3
+predicted. Six releases re-checked against `git log` (≥ 4 required, `0.1.0` and `1.1.0`
+included):
+
+| Release | Re-checked | Result |
+|---|---|---|
+| `1.1.0` | `git log --first-parent 137b7e9..744eea1` | `725e7ca` T-007 commit `STRUCTURE.md`, `28a24be` T-005 `--check`, `8d6334e` T-006 skill + hook, `c7a9119` PR #74 — matches the entries, incl. the "implementation credited under 1.0.0" note |
+| `1.0.0` | `df81d8b..137b7e9` first-parent | merges #63, #64, #65, #66, #67, #68 in range; #69 (`570bfbc`) is an ancestor of the marker but not of `df81d8b` — exactly as the entry says |
+| `0.5.1` | `6d6f120..c6fd876` | `f9cfe45` NEL round-trip, `4d9514e` managed-sinks reconfigure, `dd27702` dependency-review on PR events only |
+| `0.4.2` | `8ae9978..1646862` | `bab5cd2 fix(deps): upgrade anyio to >= 4.14.2 (CVE-2026-63374, CVE-2026-64847)` |
+| `0.4.1` | `7290f94..8ae9978` | `fe35f82 … fix infinite loop in AC-045 assertion loop (GREEN)` |
+| `0.1.0` | `git ls-tree -r e9fd8c1` | 20 tracked files: `src/main.py`, `src/core/logging/{__init__,_decorator,_setup}.py`, `.pre-commit-config.yaml`, `.github/workflows/lint.yml`, `.vscode/`, the `.github/` prompt + ruff-post-edit hooks — the entry describes the 2026-08-16 tree |
+
+Every `PR #NN` cited resolves to a real merge (`git log --all --grep="pull request #NN"`);
+#24 is squash-merged (`d0c99e1 … specification (#24)`). No invented entry or PR number.
+
+**F-11 (new, accepted)** — the `0.3.0` / `0.3.1` boundary. `Bump version: 0.2.0 → 0.3.0`
+(`50344bc`) is **not** on `main`'s first-parent chain (the pre-worktree workflow bumped on the
+feature branch); it reached `main` with the PR #25 merge `c38e7b2`, so `main` first read
+`version = "0.3.0"` at the very merge that delivered file-management. The file therefore credits
+file-management under `0.3.1` — the window that starts at that merge and closes at `8a2f931`
+(2026-09-15) — which is the marker-to-marker-on-`main` convention the other 13 sections use.
+Both readings are defensible; the entry is real, correctly dated, and credited exactly once, so
+it is **accepted** rather than rewritten (moving a whole feature across a release boundary on a
+judgment call is a bigger risk than the ambiguity).
+
+### Check 4 — the rule the change introduces is internally consistent: PASS after fixing F-9
+
+See the F-9 resolution below: all five sites now state the **Phase 6** timing, and the
+obligation content is identical everywhere.
+
+### Check 5 — boundaries / architecture: PASS
+
+`LICENSE`, `SECURITY.md`, `CHANGELOG.md` are **root-only**: `grep -rn "SECURITY.md|CHANGELOG.md|LICENSE" mkdocs.yml userdocs/` → no reference, so no nav entry and no `userdocs/` mirror
+(Q-8), and `mkdocs build --strict` passes. No new dependency (`dependencies` unchanged, `deptry`
+PASS at Phase 5). No CI or hook change (`.github/`, `.pre-commit-config.yaml` not in the diff).
+No `src/` module touched, so the feature-boundary and architecture rules are unaffected.
+
+### Check 6 — tests not weakened: PASS
+
+No test path appears in `git diff --name-status main...HEAD`; no test was created, modified,
+weakened or deleted. `STRUCTURE.md` is generator output, never hand-edited: `uv run python
+scripts/make_map.py --check` exits 0, i.e. the committed map is a byte-exact fresh render, and
+`test_ac_021_committed_map_matches_fresh_render` is GREEN here (RED on `main`, F-6).
+
+### Check 7 — the change obeys its own new rule (F-10): PASS
+
+`CHANGELOG.md` `## [Unreleased]` → `### Added` carries this change's own entry (the three root
+files + the `pyproject.toml` metadata, and the changelog-entry rule). It is factual, cites the
+change name (`security-changelog-license`) rather than a PR number — the PR did not exist when
+the entry was written — and the only PR it cites in that block, #76, resolves to `2ab0461
+Merge pull request #76 from jackthenet/chore/ruff-d-docstrings`.
+
+### Findings and resolutions
+
+| ID | Finding | Resolution |
+|---|---|---|
+| **F-8** | `SECURITY.md` said the `security` job runs "on every push and pull request"; `quality.yml:3-7` triggers on `push: branches: [main]` and `pull_request: branches: [main]`. | **Fixed.** The posture line now reads "on pushes to `main` and on pull requests targeting `main`" — what the workflow actually does. |
+| **F-9** | Timing drift: `AGENTS.md` adds the entry in Phase 6, the `implement` skill committed it at S4.5 (Phase 4), and the `verify` skill's Phase 5 check was only satisfiable under the Phase 4 timing. | **Fixed — Phase 6 timing chosen** (AGENTS.md is normative, and the Phase 4 timing is wrong on its own terms: S4.5 repeats per DAG task while the entry describes the *change*). Edits: `implement` S4.5 done-criteria reverted (the entry is not that step's gate) and Process step 12 reworded to "added in Phase 6, not here"; `verify`'s All-types bullet reworded to what is true at Phase 5 — record that the entry is **owed** and lands at Phase 6 item 10, since it does not exist yet at Phase 5; `review`'s MUST bullet now says the check applies when the PR opens, not in S6.1, and S6.4's done-criteria now requires the entry present under `## [Unreleased]` before the bump-move clause. `AGENTS.md` untouched (it already states the Phase 6 timing). Obligation content identical at all five sites: entry under `## [Unreleased]`; a bump moves those entries to `## [<new version>] - <YYYY-MM-DD>` in the bump commit; **every** change type owes one, REFACTOR and DOCS/CHORE included; the file is hand-maintained and `bump-my-version` does not touch it. Nothing weakened. The ≥ 20-question interview text and the Question-files subsection were **not** touched (PR #77's territory). |
+| **F-10** | This change shipped without a `CHANGELOG.md` entry for itself. | **Closed** — fixed at Phase 5, confirmed here (check 7). Note: it was added by the Phase 5 step under the old `verify` wording; under the corrected timing it belongs to Phase 6. Either way it is present and part of the reviewed PR. |
+| **F-11** | New in this review: the `0.3.0`/`0.3.1` attribution of file-management (see check 3). | **Accepted** with the reasoning recorded; no edit. |
+
+### S6.4 pre-merge gate (full suite — required because `pyproject.toml` is touched)
+
+`uv run pytest tests/ -q` → **`816 passed, 1 skipped in 283.74s (0:04:43)`**, exit 0. The single
+skip is `tests\acceptance\filemanagement\test_filemanagement.py:364` ("symlinks not available on
+this host") — pre-existing and unrelated. No test was edited or weakened.
+
+Gates re-run after the F-8/F-9 edits (commit `chore(security-changelog-license): review findings
+F-8, F-9`):
+
+| Gate | Result |
+|---|---|
+| `uv run ruff check .` | `All checks passed!` exit 0 |
+| `uv run ruff format --check .` | `343 files already formatted` exit 0 |
+| `uv run python scripts/make_map.py --check` | exit 0 |
+| `uv run --group docs mkdocs build --strict` | `Documentation built in 2.04 seconds` exit 0 |
+
+**Version bump: none** (DOCS/CHORE → none in the bump mapping); `1.1.0` untouched, no tag.
+Working tree clean apart from the four files this step edited, which are committed with this
+report.
+
+### Verdict
+
+All seven checks PASS; F-8 and F-9 fixed, F-10 closed, F-11 accepted with a recorded reason; the
+full suite passes; no version bump.
+
+**REVIEW REPORT: CLEAN**
+
+- **next:** human merge of the change PR (S6.4 gate), then S7.1 post-merge cleanup.
+- **Merge order:** merge **after** PR #77 (`chore/spec-interview-protocol`) — both edit
+  `AGENTS.md` and `.agents/skills/`, in non-overlapping sections (§7).
+- **User action outside this PR (F-2):** enable GitHub **private vulnerability reporting** in the
+  repository's Security settings — `SECURITY.md` points at that channel.

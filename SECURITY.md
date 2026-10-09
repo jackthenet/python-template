@@ -40,8 +40,8 @@ What is in scope: a vulnerability in the template's own shipped code
 ## Current posture (stated as fact, not as a promise)
 
 - The `security` job of `.github/workflows/quality.yml` runs `uv run pip-audit`
-  (dependency CVE audit) and `uv run bandit -r src/` (source scan) on every push
-  and pull request.
+  (dependency CVE audit) and `uv run bandit -r src/` (source scan) on pushes to
+  `main` and on pull requests targeting `main`.
 - The `dependency-review` job runs `actions/dependency-review-action@v5` on pull
   requests only, so a PR that adds a known-vulnerable dependency fails review.
 - `.github/dependabot.yml` opens weekly update pull requests for the `uv` and
