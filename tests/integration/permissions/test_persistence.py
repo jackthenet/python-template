@@ -144,6 +144,7 @@ def test_migration_seeds_roles_and_system_set(tmp_path: Path) -> None:
     bootstrap set, and the SQLite repositories work on the same file.
     """
     import sqlite3
+    from contextlib import closing
 
     from backend.permissions import (
         SqliteGrantRepository,
@@ -155,7 +156,9 @@ def test_migration_seeds_roles_and_system_set(tmp_path: Path) -> None:
     _alembic_upgrade_head(db_path)
 
     # The tables are inspected directly in the migrated database file.
-    with sqlite3.connect(db_path) as conn:
+    # `closing` because `with sqlite3.connect(...)` commits but never closes, and an
+    # unclosed connection is reported as a ResourceWarning when it is collected.
+    with closing(sqlite3.connect(db_path)) as conn:
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert {"roles", "role_permissions", "system_principal_permissions"} <= tables, (
             f"expected the permissions tables after the migration, got {sorted(tables)}"

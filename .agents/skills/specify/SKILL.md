@@ -63,6 +63,7 @@ The FEATURE/CROSS-CUTTING path is decomposed into atomic steps. Each has a **sin
 
 - **Objective:** Classify the change type (Phase 0) and open the change's planning record; value-triage the change (overlap, beneficiary, 1–5 score, recommendation).
 - **Inputs:** the change idea; `docs/todo/template.md`; `docs/questions/template.md`; the existing TODO files in `docs/todo/`; the codebase (to check for existing functionality that covers the idea).
+- **Advisory:** if `STRUCTURE.md` exists at the repository root, read it before walking the tree — it is the generated map of the repository (skill `code-structure-map`).
 - **Outputs:** `docs/todo/<name>.md` and `docs/questions/<name>.md` created from their templates **on `main`** and committed directly to `main` (git skill, "Commit planning artifacts and status advances (orchestrator, `main`)"); the change's todo set; the TODO's `## Value triage` section filled in.
 - **Done-criteria:** both files exist on `main` with the orchestrator having set TODO `Status: PREPARING` and question file `Status: OPEN`; the change type is recorded in the TODO file; the `## Value triage` section is filled in, and the user's implement / merge / drop decision is recorded in it **before P.4** creates the branch and worktree. No worktree yet — it is created at P.4.
 

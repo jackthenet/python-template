@@ -53,7 +53,7 @@ Not lazy about: understanding the problem (read it fully and trace the real flow
 This repository utilizes modern Python tooling managed via `uv`:
 - **Package Manager:** `uv` (Use `uv run <command>` for isolated execution)
 - **Quality Assurance & Formatting:** `ruff` (`uv run ruff check .` / `uv run ruff format .`). **Scope split:** per-task steps (S3.2, S4.3, S4.4) lint only the step's changed paths (`uv run ruff check <changed-paths>`); the whole-repo sweep (`uv run ruff check .`) runs **once at Phase 5** (verify), matching CI (`.github/workflows/lint.yml`) exactly — pre-existing lint errors are in scope, not out of scope. Ruff's built-in content-hash cache (`.ruff_cache`) makes re-runs over unchanged files cheap.
-- **Type Checking:** `mypy` (`uv run mypy src/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool. mypy runs on `src/` (the import closure needs the whole package); its built-in cache (`.mypy_cache`) is keyed on file hashes, so unchanged files are not re-checked.
+- **Type Checking:** `mypy` (`uv run mypy src/` / `uv run mypy scripts/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool. mypy runs on `src/` (the import closure needs the whole package); its built-in cache (`.mypy_cache`) is keyed on file hashes, so unchanged files are not re-checked.
 - **Test Runner:** `pytest` (`uv run pytest`)
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`
@@ -62,6 +62,7 @@ This repository utilizes modern Python tooling managed via `uv`:
 - **Dependency Check:** `deptry` (`uv run deptry .`) — detects unused/missing/misplaced dependencies; configuration in `[tool.deptry]` (per-rule ignores for CLI/pytest-plugin tools).
 - **Documentation Site:** `mkdocs` + `mkdocs-material` + `mkdocstrings[python]` (`uv run --group docs mkdocs build --strict`) — published docs generated from `userdocs/` (never `docs/` — that is the internal process record).
 - **Test Tooling:** `polyfactory` (factories for Pydantic/SQLModel models), `respx` (httpx mocking), `time-machine` (time travel) — see "Using the Test Tooling".
+- **Structure Map:** `STRUCTURE.md` (repository root) is the generated map of the repository — generate it with `uv run python scripts/make_map.py`, check it with `uv run python scripts/make_map.py --check`; regenerate it in the same commit as the `.py` change, and on a merge conflict in it take either side and regenerate (never hand-merge the generated file). How-to skill: `code-structure-map`.
 
 **MkDocs site note.** Published docs live in `userdocs/` (binding decision Q-64; never `docs/` — that is the internal process record: specs, decisions, verification, workflow). Build gate: `uv run --group docs mkdocs build --strict` (the docs tooling is the `docs` dependency group, not the default `dev` group; `uv sync --group docs` installs it); CI: the `docs` job in `.github/workflows/quality.yml`; pre-push: the `mkdocs-build` hook in `.pre-commit-config.yaml`.
 
@@ -322,6 +323,8 @@ POST-MERGE [S] CLEANUP (git skill)
 | Phase 5: VERIFY | `verify` | all | Produces evidence that the change satisfies its type-specific gates. |
 | Phase 6: REVIEW | `review` | all | Reviews the change against its type-specific criteria before reviewing implementation style. |
 | (cross-cutting) | `git` | all | Branch/worktree creation, PR creation, post-merge cleanup. |
+| (ambient) | `code-structure-map` | all | Optional, before exploring: read the generated `STRUCTURE.md` map instead of walking the tree, and regenerate it with the change. |
+| (ambient) | `python-best-practices` | all | Conventions and vetted good-code examples for writing, reviewing or refactoring Python. |
 
 Non-phase skills: `.agents/skills/update-readme/` (refresh `README.md` to current GitHub front-page practice, badges backed only by facts that exist) maps to no workflow phase.
 
@@ -1118,33 +1121,40 @@ Before starting Phase 2, verify approval via:
 The spec is drafted and self-checked during **Phase P**; S1.4 only commits it and opens the approval PR, so the approval check runs after that PR is merged — the caching rule is unchanged.
 
 ## Project Structure
-The project is organized around a single `src/` package, with `frontend` and `backend` as the primary runtime boundaries inside it.
+The project is organized around a single `src/` package, and `backend` is the only runtime boundary that exists inside it: no `src/frontend/` directory exists (the coverage configuration reserves the name). Feature packages under `src/backend/` are flat — there is no `model/` and no `services/` subdirectory anywhere — and the only nested directory under `src/` is `src/backend/filemanagement/assets/`.
 
 ```text
 project/
+├── .agents/
+│   └── skills/
+├── .github/
+├── .vscode/
 ├── docs/
-│   ├── specs/
-│   └── decisions/
+├── userdocs/
+│
+├── scripts/
+├── migrations/
+│   └── versions/
 │
 ├── src/
 │   ├── main.py
-│   ├── frontend/
-│   │   ├── <feature>/
-│   │   │   ├── model/
-│   │   │   ├── services/
-│   │   │   └── ...
-│   │   └── shared/
 │   └── backend/
 │       ├── <feature>/
-│       │   ├── model/
-│       │   ├── services/
-│       │   └── ...
+│       │   └── <module>.py
+│       ├── filemanagement/
+│       │   └── assets/
 │       └── shared/
 │
 └── tests/
-    └── acceptance/
-        └── <feature>/
+    ├── acceptance/
+    │   └── <feature>/
+    ├── contract/
+    ├── integration/
+    ├── property/
+    └── unit/
 ```
+
+The generated `STRUCTURE.md` at the repository root is the authoritative map of this layout (see "Tooling & Execution Environment"); it is never hand-edited.
 
 ### Principles
 

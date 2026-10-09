@@ -994,6 +994,102 @@ extended.
 | EDGE-013, EDGE-014 (`session-management.md` v2) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
 | REQ-001 (`logging-coverage.md` v3 — inventory rows only, no new ID) | — | — | N/A (inventory-only amendment; covered by the change spec's AC-015) |
 
+## Structure Map Matrix (structure-map FEATURE — S5.3, 2026-10-09)
+
+Rows for `docs/specs/structure-map.md`: 27 REQ + 27 AC + 6 INV + 16 EDGE + 7 NFR = **83 IDs**.
+**No structure-map row existed before this step** (`grep -n structure-map docs/verification/traceability.md`
+returned nothing — Phase 3 never added the RED rows spec §12 anticipates), so **56 rows are added, 0 updated**,
+and no row of any other change is touched or refreshed (convention B). The 27 REQ/AC rows cover the 54
+REQ/AC IDs 1:1 exactly as §7 pairs them.
+
+Witness placement is fixed by spec §11/Q-10 — acceptance in `tests/acceptance/test_structure_map.py`, unit in
+`tests/unit/test_make_map.py`, property in `tests/property/test_structure_map.py`; rows cite the bare function
+names. The same gate record appears in every Status cell: **S5.1** (full suite 816 passed, 1 skipped — the skip
+is the pre-existing file-management symlink skip, no structure-map node was skipped; acceptance subset 395
+passed / 1 skipped; property subset 77 passed; the 18 unit witnesses run inside the full suite) and **S5.2**
+(all quality gates clean), recorded in `docs/verification/structure-map.md` at commit `3ec204c`.
+
+**The checker cannot police these rows** (spec §12, finding 2 in `docs/verification/structure-map.md`):
+`check_traceability.py` treats `REQ-XXX`/`AC-XXX` as one global namespace and all 54 REQ/AC IDs this spec
+defines are already defined by other specs, so its PASS is not evidence of this spec's coverage — the rows
+below are.
+
+### REQ / AC (27 rows, 54 IDs)
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| REQ-001 | AC-001 | `test_ac_001_stdlib_only_and_single_read` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-002 | AC-002 | `test_ac_002_cli_options_and_defaults` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-003 | AC-003 | `test_ac_003_file_set_includes_untracked_drops_deleted` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-004 | AC-004 | `test_ac_004_exit_code_contract` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-005 | AC-005 | `test_ac_005_check_byte_exact_single_message_exit_3` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-006 | AC-006 | `test_ac_006_parse_error_is_hard_failure` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped — tests/unit/ runs in the full suite only; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-007 | AC-007 | `test_ac_007_grammar_is_the_running_interpreter` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-008 | AC-008 | `test_ac_008_document_shape` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-009 | AC-009 | `test_ac_009_tree_code_dirs_full_other_dirs_counted` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-010 | AC-010 | `test_ac_010_max_depth_prunes_tree_only` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-011 | AC-011 | `test_ac_011_packages_scope` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-012 | AC-012 | `test_ac_012_package_header_and_exports` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-013 | AC-013 | `test_ac_013_module_header_and_summary` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-014 | AC-014 | `test_ac_014_symbol_inventory_and_unparsed_signatures` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-015 | AC-015 | `test_ac_015_decorators_render_as_prefix` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-016 | AC-016 | `test_ac_016_private_symbols_and_dunders` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-017 | AC-017 | `test_ac_017_class_fields_capped_untyped_omitted` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-018 | AC-018 | `test_ac_018_summary_normalization` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-019 | AC-019 | `test_ac_019_double_run_byte_identical_and_hook_clean` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-020 | AC-020 | `test_ac_020_paths_are_relative_posix` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-021 | AC-021 | `test_ac_021_committed_map_matches_fresh_render` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; `uv run python scripts/make_map.py --check` also exits 0 at 3ec204c; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-022 | AC-022 | `test_ac_022_skill_exists_with_four_rules` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-023 | AC-023 | `test_ac_023_hook_is_check_only_and_no_ci_job` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-024 | AC-024 | `test_ac_024_agents_md_layout_matches_the_map` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-025 | AC-025 | `test_ac_025_mypy_covers_scripts` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 `mypy scripts/` clean — 4 source files; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-026 | AC-026 | `test_ac_026_map_hook_is_advisory` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-027 | AC-027 | `test_ac_027_freshness_policy_documented_twice` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+
+### INV (6 rows, property witnesses)
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| INV-001 (REQ-019) | — | `test_inv_001_render_is_deterministic` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| INV-002 (REQ-010) | — | `test_inv_002_no_module_hidden_by_pruning` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean — complexipy 15 ceiling holds after the T-007 extraction of the count-line claim; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| INV-003 (REQ-008) | — | `test_inv_003_no_absolute_path_or_timestamp` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| INV-004 (REQ-005) | — | `test_inv_004_check_matches_byte_equality` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| INV-005 (REQ-005) | — | `test_inv_005_check_writes_nothing` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| INV-006 (REQ-019) | — | `test_inv_006_output_is_hook_clean` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+
+### EDGE (16 rows)
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| EDGE-001 (REQ-013) | — | `test_edge_001_missing_docstring_renders_no_summary` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-002 (REQ-013) | — | `test_edge_002_empty_file_renders_header_only` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-003 (REQ-006) | — | `test_edge_003_newer_syntax_is_hard_failure` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-004 (REQ-006) | — | `test_edge_004_non_utf8_is_hard_failure` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-005 (REQ-006) | — | `test_edge_005_unopenable_file_is_hard_failure` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-006 (REQ-002) | — | `test_edge_006_out_parent_directory_created` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-007 (REQ-003) | — | `test_edge_007_non_git_root_falls_back_to_ignore_list` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-008 (REQ-003) | — | `test_edge_008_deleted_tracked_file_absent` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-009 (REQ-003) | — | `test_edge_009_untracked_file_listed_then_stale_on_clone` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-010 (REQ-005) | — | `test_edge_010_hand_edited_map_is_stale` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-011 (REQ-017) | — | `test_edge_011_field_cap_marker` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-012 (REQ-018) | — | `test_edge_012_long_summary_truncated` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-013 (REQ-012) | — | `test_edge_013_package_without_exports` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-014 (REQ-002) | — | `test_edge_014_max_depth_below_one_is_usage_error` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-015 (REQ-009) | — | `test_edge_015_unlabelled_dir_counted_without_label` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-016 (REQ-005) | — | `test_edge_016_crlf_checkout_is_not_stale` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+
+### NFR (7 rows)
+
+| Requirement | Acceptance Criterion | Test | Status |
+|-------------|---------------------|------|--------|
+| NFR-001 (REQ-001) | — | `test_nfr_001_full_run_under_two_seconds` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped — the `skipif` calibration guard did not trigger on this host, so the budget was actually measured; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| NFR-002 (REQ-011) | — | `test_nfr_002_map_line_budget` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| NFR-003 (REQ-001) | — | `test_nfr_003_deptry_clean` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 `deptry .` clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| NFR-004 (REQ-025) | — | `test_nfr_004_mypy_and_ruff_clean` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 `ruff check .` / `ruff format --check .` 343 files / `mypy src/` 84 files / `mypy scripts/` 4 files all clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| NFR-005 (REQ-021) | — | `test_nfr_005_complexipy_threshold_holds` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 complexipy 15 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| NFR-006 (REQ-001) | — | — (spec §11 record row: no witness by design) | VERIFIED (structure-map S5.1/S5.2 record: `wc -l scripts/make_map.py` = 567 lines against the ≈250-line target — the target is exceeded and recorded, it is explicitly not a gate and no witness asserts it; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| NFR-007 (REQ-020) | — | `test_nfr_007_output_identical_across_platforms` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+
 ## Chore: ruff-d-docstrings (docstring gate — Phase 5 S5.3, 2026-10-09)
 
 Chore `ruff-d-docstrings` (type **DOCS/CHORE**; scope, invariants and gate evidence: `docs/verification/ruff-d-docstrings.md` §"Exact change scope", §"Invariants that MUST hold" (INV-A…INV-J), §"Phase 4 — group 11 config commit", §"Phase 5 — S5.1", §"Phase 5 — S5.2"). The change defines **no normative IDs of its own** — DOCS/CHORE produces no spec — so the rows below cover only the spec IDs its Phase 5 evidence actually reaches, plus its own gate as no-spec-ID rows. **No existing row is rewritten or refreshed** (decision Q-129, convention B): the pre-existing `logging-coverage` row `REQ-009 | AC-009 | test_traced_class_docstrings_mention_tracing | GREEN` stays exactly as the change that observed it wrote it — it was re-run GREEN at S5.2 gate 5, but not edited.

@@ -21,6 +21,8 @@ jobs:
         run: uv sync --only-group dev
       - name: Run mypy (gate)
         run: uv run mypy src/
+      - name: Run mypy scripts/ (gate)
+        run: uv run mypy scripts/
       - name: Run ty (informational)
         run: uv run ty check src/
         continue-on-error: true
