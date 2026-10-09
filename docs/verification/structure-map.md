@@ -1948,3 +1948,79 @@ repo-wide ruff remain Phase 5 gates (P-6).
 call; the only smaller alternative (a `type: ignore`) trades the widened gate for a shorter diff and was
 rejected on purpose. Files changed by this step: none (this record only).**
 
+---
+
+## Phase 4 — S4.4 (T-001) Commit + update status (2026-10-09)
+
+**Objective:** set T-001 to `"status": "VERIFIED"` in the task DAG, sync the `docs/tasks/` copy, record
+the DAG state, commit. No implementation, test or spec file was touched by this step.
+
+### Status flip
+
+`T-001` `"status": "PENDING"` → `"status": "VERIFIED"` in both DAG copies:
+
+- `.github/task-runner/tasks.json:152` (active build environment)
+- `docs/tasks/structure-map.tasks.json:152` (planning copy)
+
+Both files were edited at the same place (T-001's `"dependencies": []` line is the only empty-dependency
+block in the DAG, so the anchor is unique) and the edit is the **only** change in either file.
+
+### Both copies in sync (proven, not eyeballed)
+
+```
+$ diff .github/task-runner/tasks.json docs/tasks/structure-map.tasks.json
+(no output; exit 0 → the two files are byte-identical)
+```
+
+Programmatic cross-check (`json.load` of both files):
+
+```
+task entries equal: True
+top-level keys equal (feature/spec/branch/change_type/adr/grouping/gate_interlock/id_coverage): True
+statuses: T-001 VERIFIED, T-002..T-007 PENDING
+```
+
+The DAG validator's own `check_sync` (which compares the per-task `status` field between the two
+files) also ran and passed — see the gate below.
+
+### Gates (cheap, step-scoped; the full suite stays a Phase 5 gate)
+
+| Gate | Command | Result |
+|---|---|---|
+| Task DAG validator (docs copy → also runs `check_sync` against the runner copy) | `uv run python scripts/validate_task_dag.py docs/tasks/structure-map.tasks.json` | **PASSED** — `Task DAG validation PASSED: 7 tasks, acyclic, well-formed.` exit 0 |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** — `Traceability: PASS (822 matrix rows, 136 spec IDs, 801 test functions)` exit 0 |
+| T-001 `green_command` (re-run at close) | `uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean -v` | **2 passed in 1.55s** exit 0 (`--randomly-seed=1958164124`) |
+| ruff | n/a for this step — the step's changed paths are two JSON files and this Markdown record; no Python was written or modified. The S4.2 ruff result on the changed paths (`scripts/verify_spec.py`, `tests/acceptance/test_structure_map.py`) stands. |
+
+Not re-run here (already recorded at S4.2, unchanged inputs): `uv run mypy scripts/` (exit 0),
+`uv run mypy src/` (exit 0), the `verify_spec.py` witness report (byte-identical), and the
+`-p no:randomly` variant of the two nodes.
+
+### T-001 close-out
+
+T-001 (REQ-025 / AC-025 / NFR-004) is **VERIFIED**: RED observed at S4.1 (`6eab550`), GREEN at S4.2
+(`b1c6116`), refactor no-op at S4.3 (`2e522c0`), status VERIFIED at S4.4 (this commit). All six
+`completion_gates` of the task are covered by the S4.1/S4.2 records plus the two gates re-run above.
+
+### DAG state for the orchestrator (after this commit)
+
+| Task | Group | Dependencies | Status |
+|---|---|---|---|
+| T-001 | tooling — `scripts/` joins the type gate (ADR-086) | — | **VERIFIED** |
+| T-002 | `scripts/make_map.py` — generator harness (module, CLI, file set, exit codes, document shape) | T-001 ✅ | PENDING ← **ready** |
+| T-003 | `scripts/make_map.py` — Directory tree, Packages scope, group/module headers, path form | T-002 | PENDING |
+| T-004 | `scripts/make_map.py` — symbol inventory | T-003 | PENDING |
+| T-005 | `scripts/make_map.py` — `--check` semantics, determinism, hook-clean output | T-004 | PENDING |
+| T-006 | integration surface — the skill, the pre-commit hook, AGENTS.md, the advisory rule, the freshness policy | T-005 | PENDING |
+| T-007 | the committed artifact — `STRUCTURE.md` | T-006 | PENDING |
+
+- **VERIFIED: 1 of 7** (T-001). **PENDING: 6** (T-002, T-003, T-004, T-005, T-006, T-007).
+- The DAG is a single linear chain, so exactly **one** task is ready: **T-002** — it is therefore also
+  the easiest next task by default (no ordering choice exists), and it is the natural next step: it
+  creates `scripts/make_map.py` from scratch, so nothing else can be verified before it lands.
+- Next atomic step: **S4.1 (T-002)** — pick T-002 and confirm RED on its `red_command` set.
+
+**S4.4 gate: PASSED — T-001 `VERIFIED` in both DAG copies (byte-identical `diff`, exit 0; validator
+`check_sync` passed), DAG validator PASSED, traceability PASS, `green_command` 2 passed. Files changed
+by this step: the two DAG copies and this record.**
+
