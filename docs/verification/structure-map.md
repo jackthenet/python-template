@@ -2024,3 +2024,141 @@ T-001 (REQ-025 / AC-025 / NFR-004) is **VERIFIED**: RED observed at S4.1 (`6eab5
 `check_sync` passed), DAG validator PASSED, traceability PASS, `green_command` 2 passed. Files changed
 by this step: the two DAG copies and this record.**
 
+## Phase 4 — S4.1 (T-002) RED re-confirmation (2026-10-09)
+
+**Picked task: T-002** — `scripts/make_map.py` generator harness (module, CLI, file set, exit codes
+2/4, document shape); REQ-001/002/003/004/006/007/008 · AC-001/002/003/006/007/008 ·
+EDGE-003/004/005/006/007/008/014 · NFR-001/003/006; `dependencies: ["T-001"]`, `status: PENDING`.
+
+**Pick rationale.** The DAG is a single linear chain (T-001 → T-002 → … → T-007), and T-001 is
+`VERIFIED` (`80d7c15`), so **exactly one task is ready: T-002** — T-003…T-007 are dependency-blocked.
+No ordering choice exists, so the AGENTS.md "easiest first" tie-break is moot; T-002 is also the
+necessary next step, since it creates `scripts/make_map.py` (absent at this head — `scripts/` holds
+only `check_traceability.py`, `validate_task_dag.py`, `verify_spec.py`) and nothing later can be
+verified before it lands. **No implementation was written in this step.**
+
+### RED evidence (red_command run verbatim, re-measured — not carried over from S3.2)
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py::test_ac_001_stdlib_only_and_single_read tests/acceptance/test_structure_map.py::test_ac_002_cli_options_and_defaults tests/acceptance/test_structure_map.py::test_ac_003_file_set_includes_untracked_drops_deleted tests/acceptance/test_structure_map.py::test_ac_008_document_shape tests/acceptance/test_structure_map.py::test_edge_006_out_parent_directory_created tests/acceptance/test_structure_map.py::test_edge_007_non_git_root_falls_back_to_ignore_list tests/acceptance/test_structure_map.py::test_edge_008_deleted_tracked_file_absent tests/acceptance/test_structure_map.py::test_edge_014_max_depth_below_one_is_usage_error tests/acceptance/test_structure_map.py::test_nfr_001_full_run_under_two_seconds tests/acceptance/test_structure_map.py::test_nfr_003_deptry_clean tests/unit/test_make_map.py::test_ac_006_parse_error_is_hard_failure tests/unit/test_make_map.py::test_ac_007_grammar_is_the_running_interpreter tests/unit/test_make_map.py::test_edge_003_newer_syntax_is_hard_failure tests/unit/test_make_map.py::test_edge_004_non_utf8_is_hard_failure tests/unit/test_make_map.py::test_edge_005_unopenable_file_is_hard_failure -v
+
+=========================== short test summary info ===========================
+FAILED tests/unit/test_make_map.py::test_edge_005_unopenable_file_is_hard_failure
+FAILED tests/unit/test_make_map.py::test_edge_003_newer_syntax_is_hard_failure
+FAILED tests/unit/test_make_map.py::test_ac_006_parse_error_is_hard_failure
+FAILED tests/unit/test_make_map.py::test_ac_007_grammar_is_the_running_interpreter
+FAILED tests/unit/test_make_map.py::test_edge_004_non_utf8_is_hard_failure
+FAILED tests/acceptance/test_structure_map.py::test_ac_001_stdlib_only_and_single_read
+FAILED tests/acceptance/test_structure_map.py::test_edge_014_max_depth_below_one_is_usage_error
+FAILED tests/acceptance/test_structure_map.py::test_edge_007_non_git_root_falls_back_to_ignore_list
+FAILED tests/acceptance/test_structure_map.py::test_ac_002_cli_options_and_defaults
+FAILED tests/acceptance/test_structure_map.py::test_edge_008_deleted_tracked_file_absent
+FAILED tests/acceptance/test_structure_map.py::test_nfr_001_full_run_under_two_seconds
+FAILED tests/acceptance/test_structure_map.py::test_ac_008_document_shape
+FAILED tests/acceptance/test_structure_map.py::test_edge_006_out_parent_directory_created
+FAILED tests/acceptance/test_structure_map.py::test_ac_003_file_set_includes_untracked_drops_deleted
+======================== 14 failed, 1 passed in 2.23s =========================
+```
+
+**15 items collected, 14 failed, 1 passed, 0 errors, 0 skipped** — identical to the Phase 3 gate
+(`d945952`, 14 failed / 1 passed). There is **no collection error, no import error and no fixture
+error anywhere**: every node was collected, its body ran, and it reported a `Failed:`/`AssertionError`
+at its own assertion or at an explicit `pytest.fail` guard. The single pass is
+`test_nfr_003_deptry_clean`.
+
+### Per-node results and the clause each node pins
+
+| # | Node (def line) | Clause pinned | Observed failure (site) | Result |
+|---|---|---|---|---|
+| 1 | `test_ac_001_stdlib_only_and_single_read` (:248) | AC-001: run exits 0 · only stdlib imports · exactly **one** file-read call site · `deptry .` exits 0 | `pytest.fail`: `scripts\make_map.py does not exist — T-002 Phase 4 has not implemented the generator` (:252) | FAILED |
+| 2 | `test_ac_002_cli_options_and_defaults` (:270) | AC-002: `--help` lists all six options (`_CLI_OPTIONS`, :138) and states the `STRUCTURE.md` and `4` defaults · `--out here.md` resolves against the CWD · `--root` defaults to the script's repository root · `--nope` → usage exit 2 | `_map_text` fail: `no map file at …\test_ac_002_cli_options_and_de0\default.md (exit 2)` — the default-`--root` run wrote nothing (:238) | FAILED |
+| 3 | `test_ac_003_file_set_includes_untracked_drops_deleted` (:303) | AC-003: a new **untracked** `.py` appears in the map; a tracked file **deleted** from the working tree is omitted | `no map file at …\test_ac_003_file_set_includes_0\STRUCTURE.md (exit 2)` (:238) | FAILED |
+| 4 | `test_ac_008_document_shape` (:326) | AC-008 (REQ-008): `# Repository structure`, one blank line, the generated-by line, `## Directory tree`, `## Packages` — nothing else; no timestamp, absolute path, drive letter, host or user name | `no map file at …\test_ac_008_document_shape0\STRUCTURE.md (exit 2)` (:238) | FAILED |
+| 5 | `test_edge_006_out_parent_directory_created` (:353) | EDGE-006: a missing `--out` parent directory is created before writing (clause 1 exit 0, clause 2 a non-empty file at the nested path) | both clauses: `clause 1: exit 2 …` + `clause 2: …\deep\nested\STRUCTURE.md was not written (its parents did not exist)` (:367) | FAILED |
+| 6 | `test_edge_007_non_git_root_falls_back_to_ignore_list` (:370) | EDGE-007: a non-git `--root` uses the built-in ignore list (`.venv`, `__pycache__`, `data` absent; `src/mod.py` present), prints **exactly one** git limitation note to stderr, does **not** parse `.gitignore`, still exits 0 | `no map file at …\test_edge_007_non_git_root_fal0\STRUCTURE.md (exit 2)` (:238) | FAILED |
+| 7 | `test_edge_008_deleted_tracked_file_absent` (:406) | EDGE-008: a tracked file deleted from the working tree (still in the index) is absent from the map | `no map file at …\test_edge_008_deleted_tracked_0\STRUCTURE.md (exit 2)` (:238) | FAILED |
+| 8 | `test_edge_014_max_depth_below_one_is_usage_error` (:428) | EDGE-014: `--max-depth 0` and `--max-depth -3` each produce an **argparse usage error on stderr** and exit 2 | `--max-depth 0: no argparse usage error on stderr: …` and the same for `--max-depth -3` (:444) | FAILED |
+| 9 | `test_nfr_001_full_run_under_two_seconds` (:451) | NFR-001: a full generate run over this repository exits 0 in under 2 s | `generate run exits 2: … can't open file '…\scripts\make_map.py'` — `assert 2 == 0` (:457) | FAILED |
+| 10 | `test_nfr_003_deptry_clean` (:464) | NFR-003: `deptry .` exits 0 (no unused/missing/misplaced dependency) | — | **PASSED** |
+| 11 | `test_ac_006_parse_error_is_hard_failure` (unit :136) | AC-006, five clauses: exit **4**; every offending path reported once, sorted, `--root`-relative, with `SyntaxError`; nothing on stdout in generate mode; a pre-existing output file left **byte-unchanged**; no output file written at all | `_run_generator` guard `pytest.fail` — generator module absent (test_make_map.py:56) | FAILED |
+| 12 | `test_ac_007_grammar_is_the_running_interpreter` (unit :162) | AC-007, four clauses: syntax the running interpreter accepts (`type Alias = int \| None`, `def first[T](…)`) exits 0; `--feature-version 3.12` exits **2** (no grammar option, REQ-002); `--help` exits 0; `--help` advertises no `feature_version`/grammar option | same guard (:56) | FAILED |
+| 13 | `test_edge_003_newer_syntax_is_hard_failure` (unit :190) | EDGE-003: source newer than the interpreter → `SyntaxError` → exit 4, `src/future.py` reported once naming the type, no output file | same guard (:56); the fixture self-check `_is_unparseable` passed, so the fixture is valid test data | FAILED |
+| 14 | `test_edge_004_non_utf8_is_hard_failure` (unit :210) | EDGE-004: a file that is not valid UTF-8 → `UnicodeDecodeError` → exit 4, `src/latin.py` reported once naming the type, no output file | same guard (:56); the fixture self-check (must **not** decode as UTF-8) passed | FAILED |
+| 15 | `test_edge_005_unopenable_file_is_hard_failure` (unit :234) | EDGE-005: an unopenable file (Windows sharing violation via `_unopenable`) → exit 4, `src/locked.py` reported **exactly once** naming an OSError-family type, no output file | same guard (:56) | FAILED |
+
+### Non-vacuity
+
+- Every failing node's message names the **concrete missing behavior** — the absent generator module,
+  the map file it should have written, or the argparse usage line it should have printed — never an
+  import, collection or fixture problem. The unit-file guard at `test_make_map.py:45-56` is
+  deliberate (`pytest.fail` so "the unimplemented generator … must surface as a test failure, never
+  as a collection/import error"), which is why the run reports 14 `FAILED` and **0 `ERROR`**.
+- The `exit 2` in the acceptance messages is **CPython's** "can't open file" exit code, not the
+  generator's argparse usage exit. No node passes by coincidence on it: `test_edge_014` additionally
+  requires an argparse usage line on stderr (absent → fails), and `test_ac_007` clause 2 is never
+  reached because the unit helper fails first.
+- The fixture-side self-checks fired and passed, so the RED is not invalid test data (AGENTS.md
+  Phase 3): `test_ac_007` asserts `ast.parse(modern)` succeeds before running; `test_edge_003`
+  `pytest.fail`s if its source parses on the running interpreter; `test_edge_004` `pytest.fail`s if
+  its bytes decode as UTF-8; `test_edge_005` skips only when `mode 000` cannot block root (not the
+  case here — 0 skips in the run).
+- `test_nfr_003_deptry_clean` passes **at RED** because `deptry .` is already clean over the scan set
+  (`src/`, `migrations/`, `scripts/`) before the generator exists. It is a regression guard, not a
+  witness of T-002's code: S4.2 must keep it green by staying stdlib-only with **no**
+  `pyproject.toml`/`uv.lock` change (AC-001 clause 4 asserts the same thing from inside the
+  generator's own run).
+- **NFR-001 skipif calibration guard is live, not skipped**: `_CALIBRATION_REFERENCE_SECONDS = 0.011`
+  and the guard skips only when the best-of-3 `ast.parse` micro-benchmark (`_calibrate`, :162-170,
+  40 rounds) exceeds 6× that. On this host the node **ran** (it is in the FAILED list, not skipped),
+  so the < 2 s wall-clock assertion is a real gate S4.2 must meet.
+
+### S4.2 work list (what implementation must do — no code written here)
+
+1. **Create `scripts/make_map.py`** (the only allowed source file) importing **only** the standard
+   library — `ast` (incl. `ast.unparse`), `argparse`, `pathlib`, `subprocess`, `sys`, plus
+   `collections`/`re`/`dataclasses` as needed — with the standard typing surface; no project
+   dependency, **no logging framework at all** (REQ-001, ADR-086, spec §10 Observability).
+2. **argparse surface with exactly the six REQ-002 options** — `--root`, `--out`,
+   `--include-private`, `--max-depth` (default `4`, bound `>= 1`), `--check`, `-h/--help`; anything
+   else is an argparse usage error exiting **2** (EDGE-014). `--out` resolves against the CWD;
+   `--root` defaults to the repository root containing `scripts/make_map.py`, resolved with
+   `pathlib` (AC-002). `--help` must state the `STRUCTURE.md` and `4` defaults and must **not**
+   advertise a grammar/`feature_version` option (AC-007 clause 4).
+3. **File set** = `git ls-files --cached --others --exclude-standard` filtered to `*.py` and kept only
+   for paths that exist on disk (REQ-003, AC-003, EDGE-008). Non-git root or no git → the built-in
+   ignore list (`.git`, `.venv`, `__pycache__`, `.mypy_cache`, `.ruff_cache`, `.pytest_cache`, `data`,
+   `dist`, `build`, `.idea`), **no `.gitignore` parsing**, and the limitation note printed to stderr
+   **exactly once** (EDGE-007).
+4. **One read per file** — the line count and the AST must come from the *same* read; AC-001 clause 3
+   counts read call sites in the module's own AST and requires exactly one (REQ-001, AC-001).
+5. **Hard-failure path** (REQ-006, AC-006, EDGE-003/004/005): on `SyntaxError`, `UnicodeDecodeError`
+   or `OSError` for any file in the set — print every offending path once, **sorted**, `--root`-
+   relative, with the exception type; write **no** output file; leave a pre-existing output file
+   **byte-unchanged**; exit **4**. No degraded mode, no `(parse error)` marker, nothing on stdout in
+   generate mode.
+6. **Exit-code precedence 2 → 4 → 3 → 1 → 0** (REQ-004), structured so T-005 can insert 3 (missing
+   `--out` in `--check` mode) then 1 (stale) in the same order. **This task produces 2 and 4 only**;
+   `--check`'s comparison is **not** implemented here — AC-004/AC-005 are T-005's gate, and 1 and 3
+   never occur in generate mode.
+7. **REQ-008 document shape** — `# Repository structure`, one blank line, the generated-by line,
+   `## Directory tree`, `## Packages`, nothing else; no timestamp, no version banner, no absolute
+   path, no drive letter, no host or user name. The **shape** is this task's gate (AC-008); the
+   section **bodies** belong to T-003 (tree, group/module headers, path form) and T-004 (symbol
+   inventory) — do not implement them here.
+8. **Create `--out`'s parent directory** when missing, before writing (EDGE-006); write no file other
+   than `--out` (INV-005's carve-out is exactly that directory).
+9. **Type gate now covers the new module**: `uv run mypy scripts/` must be clean with
+   `scripts/make_map.py` present under the repository's strict configuration
+   (`disallow_untyped_defs`, `check_untyped_defs`, `python_version 3.14`) — the gate T-001 widened.
+10. **NFR-001 stays skipif-guarded** on the measured calibration run (never a CI gate); the
+    implementation must still finish a full generate run over this repository in under 2 s on a host
+    that passes the calibration, so keep the per-file work linear and the subprocess count minimal.
+11. **NFR-003 / NFR-006**: `uv run deptry .` must stay clean with no `pyproject.toml` change; the
+    ~250-line target for `scripts/make_map.py` is a target, not a gate — Phase 5 records the actual
+    line count.
+12. **Gate set for S4.2 GREEN**: `green_command` = `uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py -v`; then `uv run mypy scripts/`, `uv run deptry .`, and `uv run ruff check` + `ruff format` on `scripts/make_map.py tests/acceptance/test_structure_map.py tests/unit/test_make_map.py`. No change to `pyproject.toml`, `uv.lock`, workflows, hooks, `AGENTS.md` or skills.
+
+**S4.1 (T-002) gate: PASSED — RED re-observed per node (15 collected: 14 failed / 1 passed, 0 errors,
+0 skips, matching Phase 3's `d945952`), every failing node failing on behavior, non-vacuity confirmed,
+no implementation written. Files changed by this step: this record only.**
+
