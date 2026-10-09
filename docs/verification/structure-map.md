@@ -2931,3 +2931,267 @@ staged (P-74).
 errors, 0 invalid-test-data failures), recorded above.** Next atomic step: **S4.2 (T-004)** —
 implement the symbol layer in `scripts/make_map.py` + confirm GREEN.
 
+## Phase 4 — T-004 GREEN (S4.2)
+
+**Step:** S4.2 (T-004) Implement + confirm GREEN — the symbol inventory layer (REQ-014…REQ-018,
+AC-014…AC-018, EDGE-011/EDGE-012). **Changed file: `scripts/make_map.py` only** (419 → 531 lines,
+T-004's sole `allowed_files.source_files` entry). No test file, no spec, no DAG, no CLI, no tree
+section, no `--check` path was touched. No commit (S4.4 commits).
+
+### What the symbol layer does, per REQ
+
+New module-level helpers in `scripts/make_map.py` (all stdlib `ast`, REQ-001 — no new import at
+all; `ast` was already imported):
+
+- **REQ-014 — `_symbol_lines(module, include_private)`**: the module's symbols grouped, each group
+  in source order — module-level classes first, then module-level functions. Statements that are
+  not symbols (assignments, imports, `if TYPE_CHECKING` blocks) render nothing; only module- and
+  class-level statements are walked, so a class or function defined inside a **function body** is
+  never reached (P-5 fix 5). `_class_lines(node, indent, include_private)` renders the class line
+  and then its members one indent level deeper: annotated fields, then nested classes (a `class`
+  statement directly in a class body becomes a member line, its own members at the next level),
+  then methods.
+- **REQ-014 line forms — `_symbol_line(node, indent, keyword)`**: `- ` + decorators + keyword +
+  backticked target + `: ` + summary, where the keyword is `class ` for a class, `def ` for a
+  module-level function, and empty for a method (two-space indent). No summary ⇒ no `: ` at all
+  (REQ-018).
+- **REQ-014 signatures — `_signature(node)` + `_drop_long_defaults(args)`**: the signature text is
+  `ast.unparse` output, so source formatting drift cannot change the map (AC-014 clause 2). A
+  parameter default is kept only when its unparsed text is ≤ `_DEFAULT_MAX_CHARS = 20` — the
+  positional list is filtered (it aligns to the tail of the argument list, so alignment is kept),
+  the keyword list is `None`-ed in place (it aligns one-to-one with `kwonlyargs`). `ast.unparse`
+  renders the decorator list **and the whole body** of a function node, so `_signature` sets both
+  aside for the unparse (stub body `...`, suffix `:\n    ...` removed) and **restores them** — the
+  docstring the caller reads through `ast.get_docstring` must survive. The `def ` keyword is
+  stripped; an `async def` keeps its `async ` prefix inside the backticks.
+- **REQ-014 class names — `_class_name(node)`**: backticked `Name(Base, ...)`, bases and class
+  keywords unparsed.
+- **REQ-015 — inside `_symbol_line`**: `"".join(f"@{ast.unparse(d)} " for d in decorator_list)` —
+  every decorator, in source order, before the `class`/`def`/signature token. `ast.unparse` gives
+  the compact `@name` for a plain name, `@pytest.fixture` for an attribute chain and
+  `@lru_cache(maxsize=8)` for a call, so one expression covers the whole REQ-015 rule.
+- **REQ-016 — `_public(name)` + the `include_private` argument**: a dunder (`__init__`, `__repr__`)
+  is public and always rendered; a `_name` function, method or class renders only with
+  `--include-private` (a private class takes its members with it). The flag is threaded
+  `main` → `_render` → `_packages_lines` → `_module_lines` → the symbol layer and **nowhere else**:
+  the file set, the Packages scope, the group headers and the module headers never see it, so the
+  rendered module/package set is identical with and without it (AC-016 clause 3).
+- **REQ-017 — `_field_lines(body, indent)` + `_FIELD_CAP = 15` + `_FIELD_MARKER = "…"`**: class-level
+  `AnnAssign` targets render as `  - \`name: annotation\`` — no default value, no `Field(...)`
+  payload — in source order; more than 15 ⇒ the first 15 plus exactly one
+  `  - … +N fields` marker line (EDGE-011). An unannotated class-level assignment is not a field:
+  it renders nothing and is not counted by the cap.
+- **REQ-018 — reuse of T-003's `_summary()`**: the symbol summaries call the **same** `_summary()`
+  the module summary uses (no second normalizer). 100 characters of **normalized** text, then the
+  marker (EDGE-012); an empty or missing docstring renders no summary and no trailing `:`.
+
+The four hardcoded constants stay hardcoded and un-configurable, as the spec states them: 20
+(`_DEFAULT_MAX_CHARS`), 15 (`_FIELD_CAP`), 100 (`_SUMMARY_LIMIT`), `--max-depth 4`.
+
+### GREEN gate — T-004's verbatim `green_command`
+
+`uv run pytest tests/unit/test_make_map.py -v` → **18 passed, 0 failed** (4.06 s). The 7 T-004
+witnesses, one line each:
+
+| Witness | Result |
+|---|---|
+| `test_ac_014_symbol_inventory_and_unparsed_signatures` | PASSED |
+| `test_ac_015_decorators_render_as_prefix` | PASSED |
+| `test_ac_016_private_symbols_and_dunders` | PASSED |
+| `test_ac_017_class_fields_capped_untyped_omitted` | PASSED |
+| `test_ac_018_summary_normalization` | PASSED |
+| `test_edge_011_field_cap_marker` | PASSED |
+| `test_edge_012_long_summary_truncated` | PASSED |
+
+The other 11 nodes in the same file were already GREEN and stay GREEN (T-002's 5 hard-failure units
+`test_ac_006`/`test_ac_007`/`test_edge_003`/`test_edge_004`/`test_edge_005`, and T-003's 6
+`test_ac_013`/`test_ac_020`/`test_edge_001`/`test_edge_002`/`test_edge_013`/`test_nfr_007`). The
+already-GREEN sub-clauses S4.1 named are still GREEN: `test_ac_016` clause 3 (`--include-private`
+leaves the module/package set identical — `_section_headers` equal) and `test_ac_018` clause 2 (the
+REQ-018 module-summary normalization through T-003's `_summary()`).
+
+### No regression — the earlier tasks' witnesses re-run after the change
+
+- **T-003's 13 witness nodes: 13 passed.** 5 acceptance (`test_ac_009`, `test_ac_010`, `test_ac_011`,
+  `test_ac_012`, `test_edge_015`) + 2 property (`test_inv_002_no_module_hidden_by_pruning`,
+  `test_inv_003_no_absolute_path_or_timestamp`) in the 19-node run below, and the 6 unit nodes in
+  the 18-node run above.
+- **T-001's 2 + T-002's 15 witness nodes: 17 passed.** T-001: `test_ac_025_mypy_covers_scripts`,
+  `test_nfr_004_mypy_and_ruff_clean`. T-002: 10 acceptance (`test_ac_001`, `test_ac_002`,
+  `test_ac_003`, `test_ac_008`, `test_edge_006`, `test_edge_007`, `test_edge_008`, `test_edge_014`,
+  `test_nfr_001`, `test_nfr_003`) + 5 unit (listed above).
+- The 17 acceptance nodes + T-003's 2 property nodes were run as one pytest invocation:
+  **19 passed, 0 failed** (10.87 s). `test_ac_008_document_shape` and `test_nfr_001` render the
+  **real repository**, so the symbol layer is covered by the INV-003 forbidden-pattern scan (no
+  timestamp, drive letter, backslash or absolute path appears in any real symbol summary) and by
+  the NFR-001 time budget.
+
+### Quality gates on the changed path
+
+- **ruff (the S4.2 ruff gate):** `uv run ruff check scripts/make_map.py` → `All checks passed!`;
+  `uv run ruff format --check scripts/make_map.py` → `1 file already formatted`. Two RUF005 findings
+  (list concatenation) and one format drift (slice spacing) were fixed **inside this execution** —
+  list unpacking and `removeprefix` instead of a sliced f-string.
+- **mypy:** `uv run mypy scripts/` → `Success: no issues found in 4 source files` (exit 0).
+- **complexipy:** `uv run complexipy scripts/make_map.py --max-complexity-allowed 15` → *All
+  functions are within the allowed complexity*, **0 over**; the maximum is **11** (`_class_lines`),
+  then `_symbol_lines` 10 and `_packages_lines` 10 — comfortably under the 15 ceiling, no helper
+  needed splitting.
+- **`git status --short`** at the end of the step: `M scripts/make_map.py` plus the evidence file
+  `docs/verification/structure-map.md` — nothing else. `uv.lock` was rewritten by the `uv run`
+  invocations (P-74) and restored with `git restore uv.lock`; it is not staged and not committed.
+
+### Facts for the later tasks (measured, not gates here)
+
+- A fresh render of the real repository with the symbol layer is **1 937 lines** in **0.37 s**
+  (default visibility) — inside NFR-002's ≤ 2 000 ceiling with a **63-line margin**, and close to
+  the spec's ≈1 875 projection. `--include-private` renders 2 244 lines (NFR-002 governs the
+  committed default-visibility map, not the flag run). **T-006 note:** the margin is thin — the
+  15-field cap is the safety valve and must not be raised (ADR-085, F-01).
+- The unit fixture set covers everything spec §11 requires of T-004: a nested class (`Outer.Inner`),
+  an `async def` (`fetch`), decorated symbols (`@logged_class`, `@property`, `@staticmethod`,
+  `@classmethod`, `@override`, `@pytest.fixture`, a stacked pair, a decorator call), a class over
+  the field cap (17 fields in `test_ac_017`, 16/20 in `test_edge_011`) and a default longer than 20
+  characters (`data`, `over`, `pool`) beside one of exactly 20 (`exact`).
+
+### Findings
+
+- **No spec-vs-test conflict.** Every witness matched the spec wording of REQ-014…REQ-018 and
+  EDGE-011/EDGE-012; no test was weakened, edited or deleted, and no test file was touched (the 6
+  over-complex Phase-3 test functions are left for T-007, P-76).
+- **F-06 (open point the spec does not decide, resolved by decision, not by a question):** REQ-014
+  fixes the group order as *fields first, then methods*, and says a nested class renders as a member
+  line, but does not say which group a **nested class** belongs to. Implemented as
+  **fields → nested classes → methods**, mirroring the module-level rule (classes before functions).
+  No witness can distinguish the two orders: the AC-014 fixture's `Outer` has no fields and no
+  methods, and 0 classes are nested in a class at this head. Recorded here so a later change that
+  meets a real nested class knows the choice was deliberate.
+- **F-07 (mechanism note, not a defect):** `_drop_long_defaults` mutates the parsed tree (it is
+  idempotent and each module is rendered exactly once), and `_signature` temporarily stubs the body
+  and decorator list because `ast.unparse` renders them. Both are invisible in the output; they are
+  the reason no `copy` import and no second signature builder were needed.
+- **Friction (for the Problem Log):** the field-cap marker was first appended *after* the cap slice,
+  so a 16-field class rendered 16 field lines and no marker — one iteration of the 7-witness set
+  (3 of 7 still failing) before the truncate-then-append order was fixed. Not a test problem, not a
+  spec problem.
+
+**S4.2 (T-004) gate: GREEN OBSERVED — T-004's `green_command` 18 passed / 0 failed (7/7 witnesses),
+no regression in T-001/T-002/T-003's 30 witnesses, ruff + mypy + complexipy(≤15, max 11) clean on
+the changed path.** Next atomic step: **S4.3 (T-004)** — refactor, keep GREEN.
+
+## Phase 4 — T-004 refactor (S4.3) (2026-10-09)
+
+**Objective:** improve the structure of the symbol layer S4.2 just wrote (REQ-014…REQ-018) with no
+observable behavior change. Not a no-op: four changes, all inside `scripts/make_map.py`.
+
+### What was examined
+
+The whole symbol layer as S4.2 left it — `_drop_long_defaults`, `_signature`, `_class_name`,
+`_field_lines`, `_public`, `_symbol_line`, `_class_lines`, `_symbol_lines`, `_module_lines` — plus
+two sweeps:
+
+- **dead code:** every one of the file's 31 module-level functions has exactly one definition and at
+  least one call site, and every module-level constant is read — S4.2 left nothing dead.
+- **single-call-site indirection:** `_signature`, `_class_name`, `_field_lines`,
+  `_drop_long_defaults`, `_module_lines` are each called from exactly one place. Kept: each names one
+  spec clause, and inlining them would only lengthen `_symbol_line` / `_member_lines`.
+
+### Changes
+
+1. **`_signature` — the stub/restore dance is gone (finding F-07).** The old version unparsed the
+   whole `ast.FunctionDef`, so it had to set the decorator list and the body aside, patch in an
+   `Ellipsis` stub, and `removesuffix(":\n    ...")` afterwards. It now unparses the parts REQ-014
+   asks for separately — `ast.unparse(node.args)`, `ast.unparse(node.returns)`, and the PEP 695
+   `type_params` — and never mutates the node. No stub, no restore, no `removesuffix`, and the
+   `async def` string surgery collapses to one `prefix` variable. `_drop_long_defaults` still mutates
+   `node.args` (idempotent, one render per module): avoiding that would need a `copy` import or a
+   hand-rebuilt `ast.arguments`, i.e. more code for no gain.
+   *API assumption:* `ast.unparse` applied to an `ast.arguments` node returns the parameter-list text
+   (`_Unparser.visit_arguments`); verified on the project interpreter (Python 3.14.5) and
+   byte-identical over the 343-file fixture below.
+2. **`_class_lines` + `_symbol_lines` → one recursive `_member_lines(body, indent, include_private)`.**
+   The REQ-014 group order (classes first — each class line, its REQ-017 fields, its own members one
+   level deeper — then the functions) and the REQ-016 visibility filter were each written twice: four
+   `isinstance` tests, four `(include_private or _public(...))` conditions, two near-identical
+   double loops. They are now written once, and the recursion covers module body, class body and
+   nested class body uniformly. The `indent` carries the level, so a module-level function gets the
+   `def ` keyword and a method does not (REQ-014).
+3. **`_visible(node, include_private)`** — the four copies of the visibility condition folded into
+   one named predicate; `_public` keeps the Definitions wording.
+4. **`_drop_long_defaults` docstring corrected (comment only).** It claimed "dropping an entry keeps
+   the alignment". Positional defaults are one list aligned to the *tail* of the argument list, so
+   dropping one shifts the kept ones onto earlier parameters — the proof fixture shows it:
+   `long_defaults(self, a: int, b: str=1, *, …)` where `a`'s `1` renders on `b`. The wording now says
+   what happens. **Finding F-08:** that shift is real rendering behavior, is **not** witnessed
+   (AC-014's fixture puts its long defaults in `kw_defaults`, where the drop is one-to-one, and its
+   one positional case is the only default of its function), and was **not** changed — changing it
+   would change REQ-014/AC-014 output, which is a Spec Amendment, not a refactor.
+
+### Deliberately not changed
+
+- **Size:** 531 → 523 lines. NFR-006's ≈250 is a target, not a gate (its test-strategy row: *no
+  test*, Phase 5 records the count); closing the rest from here would mean deleting spec-carrying
+  prose or rendering behavior, which this step must not do.
+- **`_class_name` ignores a class's `type_params`** — `class G[T](typing.Generic[T])` renders
+  `G(typing.Generic[T])`. That is the behavior the committed map and the T-004 witnesses have (no
+  generic class exists in the repository, and `_AC014_LINES` has none), so it stays; noted rather
+  than silently "fixed" — the function-side `type_params` ARE rendered, because `ast.unparse` of the
+  whole definition rendered them before and byte identity requires keeping them.
+- Every T-003 helper (tree, scope, header, exports layer) — out of this task's layer, and the S4.3
+  (T-003) refactor already reduced it.
+
+### No-behavior-change proof (byte identity, P-77)
+
+The map is self-referential (it renders `#### scripts/make_map.py (N lines)`), so a
+regenerate-and-diff of the repository map proves nothing. Both code states therefore rendered one
+**fixed fixture tree**: `C:/tmp/s43/fixture` — a copy of the worktree's `src/`, `tests/`, `scripts/`
+and `migrations/` (343 `.py` files, `git init`ed so the REQ-003 git path is the one taken), plus a
+hand-written `src/weird.py` that exercises nested classes, the REQ-017 cap marker, PEP 695 generic
+classes and functions, positional-only / star / kw-only parameters, dropped and kept defaults, call
+and subscript decorators, async methods, dunders, `_name` symbols and function-local classes. The
+fixture's copy of `make_map.py` is frozen at the pre-edit state, so the line count and symbol
+inventory the map renders *for that file* cannot move between the two runs.
+
+Pre-edit code (a copy at `C:/tmp/s43/pre_make_map.py`, never in the repository) and post-edit code,
+same fixture, three invocations each — `cmp` clean on all three, exit 0, empty stderr:
+
+| Invocation | lines | md5 (pre = post) |
+|---|---|---|
+| default (`--max-depth 4`) | 2147 | `d283cbf75ba5d474fb013c3b289534c2` |
+| `--max-depth 2` | 1582 | `ba095d10897acf61631530696376aaa3` |
+| `--include-private --max-depth 3` | 2063 | `a1e461bfa08442d77acc9c24e3fcde50` |
+
+### Gates (S4.3)
+
+| Gate | Command | Result |
+|---|---|---|
+| Byte identity | pre- vs post-edit code over the fixed fixture tree, 3 invocations | **identical** (`cmp` clean, md5s above) |
+| T-004 `green_command` | `uv run pytest tests/unit/test_make_map.py -v` | **18 passed**, 0 failed in 4.03s (7/7 T-004 witnesses) |
+| T-003 witnesses (13 nodes, targeted) | `uv run pytest <T-003 tests_to_create>` | **13 passed** in 8.25s |
+| T-001 (2) + T-002 (15) witnesses | `uv run pytest <T-001 + T-002 tests_to_create>` | **17 passed** in 5.31s — no regression |
+| Lint | `uv run ruff check scripts/make_map.py` | All checks passed! |
+| Format | `uv run ruff format --check scripts/make_map.py` | 1 file already formatted |
+| Types | `uv run mypy scripts/` | Success: no issues found in 4 source files (exit 0) |
+| Complexity | `uv run complexipy scripts/make_map.py --max-complexity-allowed 15` | 31 functions, **0 over**, max **12** (`_member_lines`), then `_packages_lines` 10 |
+| Size | `wc -l scripts/make_map.py` | 531 → **523** |
+
+The full suite was **not** run (Phase 5 gate); the targeted witnesses plus the byte-identity proof
+are this step's evidence. The 17-node figure is T-001's 2 + T-002's 15 `tests_to_create` nodes; the
+"19" in the S4.2 record counted T-003's 2 property nodes in the same invocation.
+
+### Scope of this step
+
+Files changed: **`scripts/make_map.py`** and **this record** only. No test file (the 6
+over-complex Phase-3 test functions stay T-007's authorized work, P-76), no `docs/specs/`, no
+`docs/tasks/` or `.github/task-runner/tasks.json`, no `AGENTS.md` / `STRUCTURE.md` / `mkdocs.yml` /
+`.pre-commit-config.yaml` / `.github/` change. Nothing committed (the commit and the `VERIFIED`
+status belong to S4.4); `uv.lock` restored with `git restore uv.lock` after the `uv run`s and never
+staged (P-74).
+
+**S4.3 (T-004) gate: PASSED — output byte-identical before/after over a fixed 343-file tree at 3
+invocations, 18/18 T-004 witnesses GREEN, 13/13 T-003 and 17/17 T-001+T-002 witnesses GREEN, ruff +
+format + mypy clean, complexipy 0 over (max 12), 531 → 523 lines.** Next atomic step: **S4.4
+(T-004)** — commit + set `"status": "VERIFIED"`.
+
+
+

@@ -9,8 +9,8 @@ T-002 owns the harness: the CLI (REQ-002), the file set (REQ-003), the exit-code
 (REQ-004, codes 2/4/0 here), the unreadable-source hard failure (REQ-006), the document shape
 (REQ-008) and the `--out` parent-directory rule (EDGE-006). T-003 owns the Directory tree body
 (REQ-009/REQ-010), the Packages scope, group headers and module sections (REQ-011…REQ-013) and
-the path form (REQ-020). The symbol bodies of each module section are T-004's, and the `--check`
-comparison is T-005's.
+the path form (REQ-020). T-004 owns the symbol inventory of each module section (REQ-014…REQ-018).
+The `--check` comparison is T-005's.
 """
 
 from __future__ import annotations
@@ -60,6 +60,14 @@ _IMPORT_ROOT = "src/"
 # REQ-018: a summary is truncated to this many characters, with the marker appended when longer.
 _SUMMARY_LIMIT = 100
 _SUMMARY_MARKER = "…"
+
+# REQ-014: a parameter default is rendered only when its ast.unparse text is at most this long.
+_DEFAULT_MAX_CHARS = 20
+
+# REQ-017: the number of class fields rendered per class (the NFR-002 safety valve), and the `…`
+# marker that reports the elided count — the same character REQ-018 uses for a long summary.
+_FIELD_CAP = 15
+_FIELD_MARKER = "…"
 
 # REQ-009 clause 3: the fixed built-in role-label table for the count-only top-level directories.
 # ponytail: a literal table (spec §13 known-ceiling note). Ceiling: a top-level directory the table
@@ -344,21 +352,117 @@ def _group_header(directory: str, init: Module | None) -> str:
     return f"### `{relative.replace('/', '.')}` \u2014 {path}"
 
 
-def _module_lines(module: Module) -> list[str]:
-    """REQ-013: the module header with its line count, then its summary line only when the module has
-    a docstring (EDGE-001 module half, EDGE-002: an empty file renders its header alone, no error)."""
-    lines = [f"#### {module.path} ({module.line_count} lines)"]
-    if summary := _summary(ast.get_docstring(module.tree)):
-        lines.append(summary)
+def _drop_long_defaults(args: ast.arguments) -> None:
+    """AC-014: keep a parameter default only when its unparsed text is <= 20 characters.
+
+    Mutates the parsed tree (each module is rendered once, and the filter is idempotent). The
+    positional defaults are one list aligned to the tail of the argument list, so dropping an entry
+    shifts the kept ones onto the earlier parameters; the keyword defaults align one-to-one with
+    `kwonlyargs`, so a dropped entry becomes None rather than being removed."""
+    args.defaults = [d for d in args.defaults if len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS]
+    args.kw_defaults = [
+        d if d is not None and len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS else None for d in args.kw_defaults
+    ]
+
+
+def _signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """REQ-014: the backticked signature of a function or method — parameters, annotations and
+    return annotation rendered by `ast.unparse`, so source formatting drift cannot change the map.
+    The `def ` keyword is dropped (a method line carries none); an `async def` keeps its `async `
+    prefix inside the backticks.
+
+    The parts are unparsed separately rather than the whole node: `ast.unparse` of a function
+    definition also renders the decorators REQ-015 renders as its own prefix, and the body."""
+    _drop_long_defaults(node.args)
+    generics = f"[{', '.join(ast.unparse(param) for param in node.type_params)}]" if node.type_params else ""
+    returns = f" -> {ast.unparse(node.returns)}" if node.returns is not None else ""
+    prefix = "async " if isinstance(node, ast.AsyncFunctionDef) else ""
+    return f"{prefix}{node.name}{generics}({ast.unparse(node.args)}){returns}"
+
+
+def _class_name(node: ast.ClassDef) -> str:
+    """REQ-014: the class line's backticked `Name(Base, ...)` — bases and class keywords unparsed."""
+    parts = [ast.unparse(base) for base in node.bases]
+    parts += [f"{kw.arg}={ast.unparse(kw.value)}" for kw in node.keywords if kw.arg]
+    return f"{node.name}({', '.join(parts)})" if parts else node.name
+
+
+def _field_lines(body: Sequence[ast.stmt], indent: str) -> list[str]:
+    """REQ-017: the class-level annotated assignments of `body` as `name: annotation` lines — no
+    default value and no `Field(...)` payload — in source order, capped at 15 per class, followed by
+    the `… +N fields` marker when a class has more (EDGE-011). An unannotated class-level
+    assignment is not a field: it renders nothing and is not counted by the cap."""
+    lines = [
+        f"{indent}- `{ast.unparse(node.target)}: {ast.unparse(node.annotation)}`"
+        for node in body
+        if isinstance(node, ast.AnnAssign) and node.annotation is not None
+    ]
+    if len(lines) > _FIELD_CAP:
+        elided = len(lines) - _FIELD_CAP
+        return [*lines[:_FIELD_CAP], f"{indent}- {_FIELD_MARKER} +{elided} fields"]
     return lines
 
 
-def _packages_lines(modules: Sequence[Module]) -> list[str]:
+def _public(name: str) -> bool:
+    """REQ-016 (Definitions: public symbol): a dunder name is public; a `_name` is not."""
+    return not name.startswith("_") or name.endswith("__")
+
+
+def _visible(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef, include_private: bool) -> bool:
+    """REQ-016: a public symbol always renders; a `_name` function, method or class renders only when
+    `--include-private` was passed."""
+    return include_private or _public(node.name)
+
+
+def _symbol_line(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef, indent: str, keyword: str) -> str:
+    """One REQ-014 symbol line: indent, bullet, every decorator as a compact `@name` prefix in
+    source order (REQ-015 — `ast.unparse` renders a call or subscript decorator as its text), the
+    keyword (`class ` for a class, `def ` for a module-level function, nothing for a method), the
+    backticked name or signature, and `: ` + summary only when the symbol has one (REQ-018)."""
+    decorators = "".join(f"@{ast.unparse(decorator)} " for decorator in node.decorator_list)
+    target = _class_name(node) if isinstance(node, ast.ClassDef) else _signature(node)
+    head = f"{indent}- {decorators}{keyword}`{target}`"
+    return f"{head}: {summary}" if (summary := _summary(ast.get_docstring(node))) else head
+
+
+def _member_lines(body: Sequence[ast.stmt], indent: str, include_private: bool) -> list[str]:
+    """The REQ-014 symbol lines of one module body or one class body, grouped and each group in
+    source order: the classes first — each class line, then its REQ-017 fields, then its own members
+    one indent deeper — then the functions. The `indent` says which level this is: a module-level
+    function carries the `def ` keyword and no indent, a method carries neither (REQ-014), and
+    REQ-016 decides which symbols render. Statements that are not symbols (assignments, imports,
+    `if TYPE_CHECKING` blocks) render nothing, and only module- and class-level statements are
+    walked, so a class or function defined inside a function body is never reached."""
+    inner = indent + "  "
+    lines: list[str] = []
+    for node in body:
+        if isinstance(node, ast.ClassDef) and _visible(node, include_private):
+            lines.append(_symbol_line(node, indent, "class "))
+            lines += _field_lines(node.body, inner)
+            lines += _member_lines(node.body, inner, include_private)
+    for node in body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _visible(node, include_private):
+            lines.append(_symbol_line(node, indent, "def " if not indent else ""))
+    return lines
+
+
+def _module_lines(module: Module, include_private: bool) -> list[str]:
+    """REQ-013: the module header with its line count, then its summary line only when the module has
+    a docstring (EDGE-001 module half, EDGE-002: an empty file renders its header alone, no error),
+    then its REQ-014 symbol inventory."""
+    lines = [f"#### {module.path} ({module.line_count} lines)"]
+    if summary := _summary(ast.get_docstring(module.tree)):
+        lines.append(summary)
+    return lines + _member_lines(module.tree.body, "", include_private)
+
+
+def _packages_lines(modules: Sequence[Module], include_private: bool) -> list[str]:
     """The Packages section: the REQ-011 scope in path order, grouped by containing directory
     (REQ-012) — one header per directory, the exports line when the package has one (EDGE-013: no
-    line when it has neither `__all__` nor public imports), then each module section (REQ-013). The
-    symbol bodies are T-004's. No in-scope module is ever elided for size, whatever `--max-depth`
-    pruned in the tree (INV-002)."""
+    line when it has neither `__all__` nor public imports), then each module section (REQ-013) with
+    its symbol inventory (REQ-014…REQ-018). `--include-private` changes only which symbols render
+    here, never which modules or packages appear (REQ-016). No in-scope module is ever elided for
+    size, whatever `--max-depth` pruned in the tree (INV-002)."""
     parsed = {module.path: module for module in modules}
     groups: dict[str, list[Module]] = {}
     for module in sorted((m for m in modules if _in_packages_scope(m.path)), key=lambda m: m.path):
@@ -370,12 +474,12 @@ def _packages_lines(modules: Sequence[Module]) -> list[str]:
         if init is not None and (names := _dunder_all(init.tree) or _public_imports(init.tree)):
             lines.append(f"exports: {', '.join(sorted(names))}")
         for module in group:
-            lines += _module_lines(module)
+            lines += _module_lines(module, include_private)
         lines.append("")
     return lines
 
 
-def _render(modules: Sequence[Module], paths: Sequence[str], max_depth: int) -> str:
+def _render(modules: Sequence[Module], paths: Sequence[str], max_depth: int, include_private: bool) -> str:
     """The REQ-008 document shape: title, one blank line, the generated-by line, then the two
     section headings, in that order and nothing else — no timestamp, no version banner, no
     host path (REQ-020: every path here is `--root`-relative POSIX). The tree body is REQ-009 and
@@ -383,7 +487,7 @@ def _render(modules: Sequence[Module], paths: Sequence[str], max_depth: int) -> 
     lines = [_TITLE, "", _GENERATED_BY, "", _TREE_HEADING, ""]
     lines += _tree_lines(paths, max_depth)
     lines += ["", _PACKAGES_HEADING, ""]
-    lines += _packages_lines(modules)
+    lines += _packages_lines(modules, include_private)
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
@@ -405,7 +509,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(*failures, sep="\n", file=sys.stderr)
         return _EXIT_UNREADABLE
 
-    document = _render(modules, paths, args.max_depth)
+    document = _render(modules, paths, args.max_depth, args.include_private)
     if args.check:
         # T-005 (REQ-005): compare `document` against the `--out` bytes here and return 3 then 1.
         return _EXIT_OK
