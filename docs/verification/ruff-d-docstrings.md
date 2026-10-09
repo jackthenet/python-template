@@ -1585,3 +1585,11 @@ Each item is stated with file, function, observed vs. required, so a TODO can be
 `git restore uv.lock` before committing; `uv.lock` **not staged** — the lock stays untouched on this branch (finding **F-9**; PR #75 carries the refresh). `git status --porcelain` is empty after the report commit. Written with the file-edit tool, never a bash here-doc (P-73). `docs/verification/ruff-d-docstrings.md` **1499 → 1587 lines (+88, this section)**; `docs/verification/traceability.md` unchanged at **1038 lines** (S6.3 wrote no matrix row).
 
 **Next (S6.4):** open the PR for `chore/ruff-d-docstrings` → `main` — **no version bump**, full regression suite as the pre-merge gate, then STOP for human merge (S7.1 cleanup after the merge).
+
+## Phase 6 — S6.4 PR opened (2026-10-09)
+
+**PR #76 — https://github.com/jackthenet/python-template/pull/76** (`chore/ruff-d-docstrings` → `main`, title `chore(ruff): gate docstrings with ruff rule D (google) over src/`, body from `C:/workspace/active-projects/_scratch_pr_body_ruff_d.md` per P-73, branch pushed at `385a178`); **no version bump** (DOCS/CHORE, INV-E — `pyproject.toml` stays `1.0.0`), the PR is **not** merged (human governance), and `uv.lock` is absent from the diff (F-9 — the refresh lands via PR #75).
+
+Pre-flight at the pushed HEAD: `git status --short` empty; `git log --oneline 45aa61c..HEAD | wc -l` = **37** commits; `git diff --name-only 45aa61c..HEAD | grep -c "^tests/"` = **0**; `uv run ruff check .` → `All checks passed!`; `uv run ruff format --check .` → `339 files already formatted`. The full suite and `mypy src/` were **not** re-run (Phase 5/6 own those gates — P-27).
+
+**Diff-size note (not a finding against this change).** GitHub reports **81 files** for PR #76, not this change's 48, because local `main` (`85a54ec`) is **28 commits ahead of `origin/main`** (`aabf878`) — 33 `docs/todo/` + `docs/questions/` planning-record commits the orchestrator has not pushed. The extra 33 files are **all** planning records (`git diff --name-only aabf878..45aa61c | grep -cE "^(src|tests)/"` = **0**), so the PR carries no other change's code; pushing `main` would shrink the PR to its own 48 files.
