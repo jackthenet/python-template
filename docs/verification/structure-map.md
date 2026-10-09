@@ -1670,3 +1670,126 @@ Phase 3 test set; **Phase 4 (IMPLEMENT) may start**, beginning with S4.1 (T-001)
 `tasks.json` statuses are left `PENDING` (status sync belongs to S4.4); the traceability matrix is
 not touched (S5.3).
 
+---
+
+## Phase 4 — S4.1 (T-001) RED re-confirmation (2026-10-09)
+
+**Picked task: T-001** — `tooling - scripts/ joins the type gate (ADR-086)`; REQ-025 / AC-025 /
+NFR-004; `dependencies: []`, `status: PENDING`. All 7 DAG tasks are ready after the Phase 3 gate
+(`d945952`), so the AGENTS.md "easiest first" ordering decides. T-001 is the easiest: two edits —
+one added step in `.github/workflows/quality.yml`'s `type-check` job, one mypy narrowing at
+`scripts/verify_spec.py:74` — with no new module and no new pattern. It also establishes the widened
+type gate (NFR-004 runs `mypy scripts/` repo-wide) that the later tasks' GREEN runs depend on: any
+later task that adds code under `scripts/` is type-checked only once this gate exists. No
+implementation was done in this step.
+
+### RED evidence (red_command run verbatim, re-measured — not carried over from S3.2)
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean -v
+
+tests\acceptance\test_structure_map.py::test_ac_025_mypy_covers_scripts FAILED
+tests\acceptance\test_structure_map.py::test_nfr_004_mypy_and_ruff_clean FAILED
+============================== 2 failed in 1.49s ==============================
+```
+
+`test_ac_025_mypy_covers_scripts` (test_structure_map.py:99, assertion at :119) — two of its three
+clauses fail:
+
+```text
+AssertionError: clause 1: the type-check job of quality.yml does not run 'uv run mypy scripts/'
+  clause 2: mypy over scripts/ exits 1: scripts\verify_spec.py:74: error: Item "TextIO" of "TextIO | Any" has no attribute "reconfigure"  [union-attr]
+  Found 1 error in 1 file (checked 3 source files)
+```
+
+`test_nfr_004_mypy_and_ruff_clean` (test_structure_map.py:122, assertion at :131) — one of its four
+gates fails:
+
+```text
+AssertionError: mypy scripts/: exit 1: scripts\verify_spec.py:74: error: Item "TextIO" of "TextIO | Any" has no attribute "reconfigure"  [union-attr]
+  Found 1 error in 1 file (checked 3 source files)
+```
+
+**Both nodes fail on behavior, not on a fixture, import or collection error** — the module imports
+cleanly, both test bodies run to their `assert`, and the failure text is the concrete missing
+behavior. Two distinct causes, both re-measured directly rather than trusted from S3.2:
+
+**Cause 1 — the workflow has no `mypy scripts/` step.** `type-check` job step list at this head
+(`.github/workflows/quality.yml:10-26`):
+
+```text
+10:  type-check:
+12:    steps:
+13:      - uses: actions/checkout@v7
+14:      - name: Setup uv            (15: uses: astral-sh/setup-uv@v7)
+16:      - name: Setup Python        (17-19: uses: actions/setup-python@v7, python-version '3.14')
+20:      - name: Sync tooling        (21: run: uv sync --only-group dev)
+22:      - name: Run mypy (gate)     (23: run: uv run mypy src/)
+24:      - name: Run ty (informational) (25: run: uv run ty check src/, 26: continue-on-error: true)
+```
+
+The only mypy invocation is `uv run mypy src/` at line 23 — the string `uv run mypy scripts/` does
+not occur in the job block, so clause 1 is false for the right reason.
+
+**Cause 2 — `mypy scripts/` is not clean at this head** (run directly, verbatim):
+
+```text
+uv run mypy scripts/
+scripts\verify_spec.py:74: error: Item "TextIO" of "TextIO | Any" has no attribute "reconfigure"  [union-attr]
+Found 1 error in 1 file (checked 3 source files)
+exit code: 1
+```
+
+Exactly **1 error in 1 file** (3 source files checked), at `scripts/verify_spec.py:74` — the
+`sys.stdout.reconfigure(encoding="utf-8")` call inside
+`with contextlib.suppress(AttributeError, ValueError, OSError):` (line 73-74). mypy types
+`sys.stdout` as `TextIO | Any`, and `TextIO` has no `reconfigure`, so the attribute access is a
+`union-attr` error. This matches the ADR-086 measured baseline and the S3.2 row exactly; no second
+error appeared, so `allowed_files` needs no DAG correction.
+
+### Non-vacuity of the two witnesses
+
+- **AC-025 is threefold and each clause is independently checked** (test_structure_map.py:105-117):
+  clause 1 greps the `type-check` job block extracted by `_workflow_job_block` (job-scoped, so a
+  `mypy scripts/` step in a *different* job would not satisfy it); clause 2 runs
+  `sys.executable -m mypy scripts/` and requires exit 0; clause 3 runs
+  `uv run python scripts/verify_spec.py docs/specs/template.md` and requires exit 0 **and** stdout
+  equal to `_VERIFY_SPEC_REPORT_BEFORE_FIX` (test_structure_map.py:34-47, the 11-line report
+  measured before the fix). Clause 3 **already passes at this head** — measured directly:
+  `uv run python scripts/verify_spec.py docs/specs/template.md` exits **0** with exactly the
+  recorded 11-line report (`Specification validation` / rule / 7 `✓` lines / blank /
+  `Traceability: PASS`). A witness that passes now and would fail if the fix changed the report is
+  a live constraint, not a vacuous one.
+- **NFR-004 runs four gates** (`_NFR_004_GATES`, test_structure_map.py:50-55): `mypy scripts/`,
+  `mypy src/`, `ruff check .`, `ruff format --check .`, each as a subprocess from the repo root with
+  exit-code checked. Only `mypy scripts/` was reported dirty, which simultaneously evidences that
+  the other three gates are clean at this head — so the only offender NFR-004 names is the one file
+  T-001 is allowed to edit.
+- Neither test asserts a weaker post-condition than the spec: the workflow clause is a text search
+  for the exact command, and the type/lint clauses are exit-code checks on the real tools.
+
+### Phase 4 (S4.2, T-001) work list — targets and constraints
+
+1. `.github/workflows/quality.yml` — add **one** step to the `type-check` job, immediately after the
+   existing `Run mypy (gate)` step (`quality.yml:22-23` at this head):
+   `run: uv run mypy scripts/`. No new job; the informational `ty` step (`quality.yml:24-26`,
+   `continue-on-error: true`) untouched; **no step may mention `make_map.py`** (AC-023 — no CI job
+   for the map in this change, ADR-085).
+2. `scripts/verify_spec.py:74` — narrow the `union-attr` error so `uv run mypy scripts/` exits 0,
+   **behaviour-preservingly**: the `reconfigure` call stays on the same object, guarded/asserted
+   rather than assumed, still inside the `contextlib.suppress(AttributeError, ValueError, OSError)`
+   at line 73. `verify_spec.py`'s **exit codes, report text, stdout format and argument handling
+   must not change** — its only witness is
+   `uv run python scripts/verify_spec.py docs/specs/template.md` exiting 0 with the unchanged
+   11-line report (the script has no unit tests: spec §7 AC-025, ADR-086).
+3. Nothing else: no `pyproject.toml` key, no coverage/`fail_under = 92`, no complexipy/bandit/`ty`
+   scope change (ADR-086); no generator, map, skill, hook or `AGENTS.md` change (out of T-001's
+   `implementation_scope`).
+4. GREEN command: `uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean -v` → 2 passed.
+   Ruff gate on the changed paths: `uv run ruff check .github/workflows/quality.yml scripts/verify_spec.py`.
+   `uv.lock` is rewritten by the first `uv run` in this worktree (P-42) — restore it before the commit.
+
+**S4.1 gate: PASSED — T-001 RED re-observed (2 failed, exit 1), both causes measured directly, both
+witnesses non-vacuous.** No source, test, `tasks.json`, todo/question or traceability file was
+modified by this step.
+
