@@ -254,3 +254,189 @@ def test_inv_003_no_absolute_path_or_timestamp() -> None:
                 assert absolute not in map_text, f"the map contains the absolute host path {absolute!r}"
 
     check()
+
+
+# --- T-005: determinism, --check byte equality, --check writes nothing, hook-clean output -------
+# (INV-001, INV-004, INV-005, INV-006 / REQ-004, REQ-005, REQ-019)
+
+_EXIT_MISSING = 3  # REQ-004: --check found no --out file
+
+
+def _check_run(root: Path, out: Path, max_depth: int) -> subprocess.CompletedProcess[str]:
+    """Run `--check` for `root` against `out` at `--max-depth max_depth` (the exit code is the witness)."""
+    if not _GENERATOR.is_file():
+        pytest.fail(f"{_GENERATOR} does not exist — T-002 Phase 4 has not implemented the generator")
+    return subprocess.run(
+        [
+            sys.executable,
+            str(_GENERATOR),
+            "--root",
+            str(root),
+            "--out",
+            str(out),
+            "--check",
+            "--max-depth",
+            str(max_depth),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=_REPO_ROOT,
+        check=False,
+    )
+
+
+def _hook_clean(text: str) -> str:
+    """The active `trailing-whitespace` and `end-of-file-fixer` transforms applied to `text` (INV-006).
+
+    Re-implemented at this layer (the same two transforms as the acceptance witness) because the
+    property node asserts the byte-level effect for every generated tree, not the config entry.
+    """
+    stripped = "\n".join(line.rstrip(" \t") for line in text.split("\n"))
+    return stripped.rstrip("\n") + "\n" if stripped.strip() else stripped
+
+
+def _snapshot(base: Path) -> dict[str, bytes]:
+    """Every working-tree file under `base` as path -> bytes (INV-005: `--check` changes none of them).
+
+    `.git/` is excluded: INV-005 protects the working tree, and a git command may legitimately rewrite
+    the index without touching a single tracked file.
+    """
+    return {
+        path.relative_to(base).as_posix(): path.read_bytes()
+        for path in sorted(base.rglob("*"))
+        if path.is_file() and ".git" not in path.relative_to(base).parts
+    }
+
+
+def test_inv_001_render_is_deterministic() -> None:
+    """INV-001 (REQ-019): for any tree state, two generator runs with the same options produce
+    byte-identical output — and so does a run over the same tree whose files were created in the
+    opposite order (the render is sorted by `--root`-relative POSIX path, never by walk order)."""
+    if not _GENERATOR.is_file():
+        pytest.fail(f"{_GENERATOR} does not exist — T-002 Phase 4 has not implemented the generator")
+
+    @settings(max_examples=_MAX_EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @given(tree=_tree(), max_depth=st.integers(min_value=1, max_value=5))
+    def check(tree: tuple[str, ...], max_depth: int) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            files = {path: _source(path) for path in tree}
+            root = _git_tree(base / "tree", files)
+            _render(root, base / "first.md", max_depth)
+            _render(root, base / "second.md", max_depth)
+            first = (base / "first.md").read_bytes()
+            second = (base / "second.md").read_bytes()
+            assert first == second, f"INV-001: two runs over the same tree differ:\n{first!r}\n{second!r}"
+
+            reversed_root = _git_tree(base / "reversed", dict(reversed(list(files.items()))))
+            _render(reversed_root, base / "third.md", max_depth)
+            third = (base / "third.md").read_bytes()
+            assert third == first, f"INV-001/REQ-019: creation order changed the render for tree {sorted(tree)}"
+
+    check()
+
+
+def test_inv_004_check_matches_byte_equality() -> None:
+    """INV-004 (REQ-005): `--check` exits 0 if and only if the on-disk bytes equal a fresh render after
+    `\r\n` -> `\n` normalisation; every other difference — added, removed, reordered or whitespace-only
+    — exits 1."""
+    if not _GENERATOR.is_file():
+        pytest.fail(f"{_GENERATOR} does not exist — T-002 Phase 4 has not implemented the generator")
+
+    @settings(max_examples=_MAX_EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @given(tree=_tree(), max_depth=st.integers(min_value=1, max_value=5))
+    def check(tree: tuple[str, ...], max_depth: int) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            root = _git_tree(base / "tree", {path: _source(path) for path in tree})
+            out = base / "map.md"
+            rendered = _render(root, out, max_depth)
+            rendered_bytes = out.read_bytes()
+            lines = rendered.split("\n")
+
+            def code(content: bytes) -> int:
+                out.write_bytes(content)
+                return _check_run(root, out, max_depth).returncode
+
+            assert code(rendered_bytes) == 0, "INV-004: a byte-identical map must exit 0"
+            assert code(rendered_bytes.replace(b"\n", b"\r\n")) == 0, "INV-004/EDGE-016: a CRLF-only map must exit 0"
+
+            whitespace = "\n".join([f"{lines[0]} ", *lines[1:]]).encode("utf-8")
+            variants = {
+                "added": rendered_bytes + b"x",
+                "removed": "\n".join(lines[1:]).encode("utf-8"),
+                "reordered": "\n".join([lines[1], lines[0], *lines[2:]]).encode("utf-8"),
+                "whitespace-only": whitespace,
+            }
+            for label, content in variants.items():
+                assert content != rendered_bytes, f"INV-004 fixture: the {label} variant is not a real difference"
+                assert code(content) == 1, f"INV-004: a {label} difference must exit 1"
+
+    check()
+
+
+def test_inv_005_check_writes_nothing() -> None:
+    """INV-005: the generator writes no file other than `--out` and only in generate mode — `--check`
+    leaves every working-tree path and its bytes unchanged, and a missing `--out` is reported (exit 3),
+    never created."""
+    if not _GENERATOR.is_file():
+        pytest.fail(f"{_GENERATOR} does not exist — T-002 Phase 4 has not implemented the generator")
+
+    @settings(max_examples=_MAX_EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @given(tree=_tree(), max_depth=st.integers(min_value=1, max_value=5))
+    def check(tree: tuple[str, ...], max_depth: int) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            root = _git_tree(base / "tree", {path: _source(path) for path in tree})
+            out = base / "map.md"
+            _render(root, out, max_depth)
+            before = _snapshot(base)
+            assert "map.md" in before, "INV-005 fixture: generate mode wrote no --out"
+
+            fresh = _check_run(root, out, max_depth)
+            assert fresh.returncode == 0, f"INV-005 fixture: --check on a fresh map exits {fresh.returncode}"
+            after = _snapshot(base)
+            assert after == before, (
+                f"INV-005: --check modified the working tree: {sorted(set(before) ^ set(after)) or 'bytes changed'}"
+            )
+
+            out.unlink()
+            missing = _snapshot(base)
+            absent = _check_run(root, out, max_depth)
+            assert absent.returncode == _EXIT_MISSING, (
+                f"INV-005/REQ-004: --check with a missing --out exits {absent.returncode}, not 3"
+            )
+            assert not out.exists(), "INV-005: --check must not create the missing --out"
+            assert _snapshot(base) == missing, "INV-005: --check wrote a file other than --out"
+
+    check()
+
+
+def test_inv_006_output_is_hook_clean() -> None:
+    """INV-006 (REQ-019): for any generated map the active `trailing-whitespace` and `end-of-file-fixer`
+    hooks leave the file unchanged — no line carries trailing whitespace, the bytes end with exactly one
+    LF, and the two hook transforms are the identity on the render."""
+    if not _GENERATOR.is_file():
+        pytest.fail(f"{_GENERATOR} does not exist — T-002 Phase 4 has not implemented the generator")
+
+    @settings(max_examples=_MAX_EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @given(tree=_tree(), max_depth=st.integers(min_value=1, max_value=5))
+    def check(tree: tuple[str, ...], max_depth: int) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            root = _git_tree(base / "tree", {path: _source(path) for path in tree})
+            out = base / "map.md"
+            _render(root, out, max_depth)
+            data = out.read_bytes()
+            assert b"\r" not in data, "INV-006 fixture: generate mode wrote a CR"
+            assert data.endswith(b"\n") and not data.endswith(b"\n\n"), (
+                "INV-006: the map does not end with exactly one LF"
+            )
+            text = data.decode("utf-8")
+            assert _hook_clean(text) == text, (
+                "INV-006: the trailing-whitespace / end-of-file-fixer hooks change the map: "
+                f"{[ln for ln in text.split(chr(10)) if ln != ln.rstrip(' \t')][:3]!r}"
+            )
+
+    check()

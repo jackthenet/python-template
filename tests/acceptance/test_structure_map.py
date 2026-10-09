@@ -790,3 +790,273 @@ def test_edge_015_unlabelled_dir_counted_without_label(tmp_path: Path) -> None:
     if any(text.startswith("notes/deep/") for _, text in entries):
         failures.append("clause 2: notes/deep/ is rendered entry by entry although notes/ is not a code dir")
     assert not failures, "\n".join(failures)
+
+
+# --- T-005: the exit-code contract, --check semantics, determinism, hook-clean output -----------
+# (REQ-004/005/019, AC-004/005/019, EDGE-009/010/016)
+
+_EXIT_STALE = 1  # REQ-004: --check found a stale map
+_EXIT_MISSING = 3  # REQ-004: --check found no --out file
+_EXIT_UNPARSEABLE = 4  # REQ-004: a source file could not be read or parsed
+_RUN_COMMAND = "uv run python scripts/make_map.py"  # the pinned command text of both messages
+_PRE_COMMIT = _REPO_ROOT / ".pre-commit-config.yaml"
+
+
+def _generate(root: Path, out_arg: str, *extra: str) -> subprocess.CompletedProcess[str]:
+    """Generate mode for `root`: run from `root` so `out_arg` is the path **as given** (REQ-005)."""
+    return _run([str(_GENERATOR), "--root", str(root), "--out", out_arg, *extra], cwd=root)
+
+
+def _check(root: Path, out_arg: str, *extra: str) -> subprocess.CompletedProcess[str]:
+    """`--check` mode for `root`, with `out_arg` given exactly as the message must name it."""
+    return _run([str(_GENERATOR), "--root", str(root), "--out", out_arg, "--check", *extra], cwd=root)
+
+
+def _generate_fixed_point(root: Path, out_arg: str, *extra: str) -> bytes:
+    """Generate twice and return the map bytes: the fixed point at which the map file is itself part of
+    the file set (REQ-003), so a later `--check` difference is exactly the difference the test
+    introduced, not the map gaining its own entry."""
+    first, second = _generate(root, out_arg, *extra), _generate(root, out_arg, *extra)
+    assert first.returncode == 0 and second.returncode == 0, (
+        f"generate mode must exit 0: {first.returncode}/{second.returncode}: {first.stderr!r} {second.stderr!r}"
+    )
+    return (root / out_arg).read_bytes()
+
+
+def _stale_message(out_arg: str) -> str:
+    """The REQ-005 out-of-date line for an `--out` passed as `out_arg` (em dash, byte-for-byte)."""
+    return f"{out_arg} is out of date \u2014 run {_RUN_COMMAND}"
+
+
+def _missing_message(out_arg: str) -> str:
+    """The REQ-005 missing-file line for an `--out` passed as `out_arg` (em dash, byte-for-byte)."""
+    return f"{out_arg} is missing \u2014 run {_RUN_COMMAND}"
+
+
+def _one_line(proc: subprocess.CompletedProcess[str], expected: str, label: str) -> None:
+    """Assert REQ-005's 'exactly one line and nothing else': stdout is `expected` alone, stderr empty."""
+    assert proc.stdout.splitlines() == [expected], f"{label}: stdout is {proc.stdout!r}, expected exactly {expected!r}"
+    assert proc.stderr == "", f"{label}: stderr must be empty, got {proc.stderr!r}"
+
+
+def _hook_clean(text: str) -> str:
+    """The two active hooks' transforms (trailing-whitespace, end-of-file-fixer) applied to `text`.
+
+    Re-implemented here (not imported from pre-commit) because the witness is the byte-level effect of
+    the two hooks named in `.pre-commit-config.yaml`; `_active_hook_ids` anchors them to the config.
+    """
+    stripped = "\n".join(line.rstrip(" \t") for line in text.split("\n"))
+    return stripped.rstrip("\n") + "\n" if stripped.strip() else stripped
+
+
+def _active_hook_ids() -> set[str]:
+    """The hook ids active in `.pre-commit-config.yaml` (read-only: AC-019 names these two hooks)."""
+    text = _PRE_COMMIT.read_text(encoding="utf-8")
+    return set(re.findall(r"^\s*-\s*id:\s*([\w-]+)", text, re.MULTILINE))
+
+
+def test_ac_004_exit_code_contract(tmp_path: Path) -> None:
+    """AC-004 (REQ-004): every row of the exit-code table is exactly the stated code, `1` and `3`
+    never occur in generate mode, and when two conditions apply at once the precedence order
+    `2 -> 4 -> 3 -> 1 -> 0` decides (an unparseable file plus a stale map exits 4, not 1)."""
+    root = _git_tree(tmp_path / "tree", _TREE_FILES)
+    out = root / "map.md"
+
+    fresh = _generate(root, "map.md")
+    assert fresh.returncode == 0, f"table row 0: generate success exits {fresh.returncode}: {fresh.stderr!r}"
+
+    # Row 2 (usage) in both modes: --max-depth < 1 and an unknown option (argparse).
+    for args in (["--root", str(root), "--max-depth", "0"], ["--nope"]):
+        proc = _run([str(_GENERATOR), *args], cwd=root)
+        assert proc.returncode == _EXIT_USAGE, f"table row 2: {args} exits {proc.returncode}, not 2"
+
+    # Row 1 (stale) in --check mode only.
+    out.write_bytes(out.read_bytes() + b"x")
+    stale = _check(root, "map.md")
+    assert stale.returncode == _EXIT_STALE, f"table row 1: a stale map in --check exits {stale.returncode}, not 1"
+
+    # Row 3 (missing --out) in --check mode only.
+    out.unlink()
+    missing = _check(root, "map.md")
+    assert missing.returncode == _EXIT_MISSING, (
+        f"table row 3: a missing --out in --check exits {missing.returncode}, not 3"
+    )
+
+    # "1 and 3 never occur in generate mode": a stale map is rewritten (0), a missing map is created (0).
+    out.write_text("hand edited\n", encoding="utf-8")
+    rewrite = _generate(root, "map.md")
+    assert rewrite.returncode == 0, f"generate mode must not exit 1 on a stale map: got {rewrite.returncode}"
+    assert out.read_text(encoding="utf-8") != "hand edited\n", "generate mode must rewrite a stale map"
+    out.unlink()
+    created = _generate(root, "nested/map.md")
+    assert created.returncode == 0, f"generate mode must not exit 3 on a missing --out: got {created.returncode}"
+    assert (root / "nested" / "map.md").is_file(), "generate mode must create the missing --out"
+
+    # Row 4 (unreadable/unparseable source) in both modes, and the precedence 4 -> 3: an unparseable
+    # file outranks a missing --out, and 4 outranks staleness (4, not 1).
+    (root / "src" / "broken.py").write_text("def f(:\n    pass\n", encoding="utf-8")
+    unparseable_generate = _generate(root, "other.md")
+    assert unparseable_generate.returncode == _EXIT_UNPARSEABLE, (
+        f"table row 4: an unparseable source in generate mode exits {unparseable_generate.returncode}, not 4"
+    )
+    precedence_missing = _check(root, "map.md")
+    assert precedence_missing.returncode == _EXIT_UNPARSEABLE, (
+        f"precedence 4 -> 3: an unparseable source with a missing --out exits {precedence_missing.returncode}, not 3"
+    )
+    out.write_text("stale map\n", encoding="utf-8")
+    precedence_stale = _check(root, "map.md")
+    assert precedence_stale.returncode == _EXIT_UNPARSEABLE, (
+        f"precedence 4 -> 1: an unparseable source with a stale map exits {precedence_stale.returncode}, not 1"
+    )
+
+
+def test_ac_005_check_byte_exact_single_message_exit_3(tmp_path: Path) -> None:
+    """AC-005 (REQ-005): a single-byte difference exits 1 and prints exactly
+    `<out> is out of date — run uv run python scripts/make_map.py` and nothing else; a missing `--out`
+    exits 3 and prints exactly `<out> is missing — run uv run python scripts/make_map.py`; a
+    whitespace-only difference is still a difference; a CRLF-only difference exits 0."""
+    root = _git_tree(tmp_path / "tree", _TREE_FILES)
+    out = root / "map.md"
+    rendered = _generate_fixed_point(root, "map.md")
+
+    # A single extra byte: exit 1, the one pinned line naming --out as given, nothing else.
+    out.write_bytes(rendered + b"x")
+    _one_line(_check(root, "map.md"), _stale_message("map.md"), "AC-005 clause 1")
+
+    # A whitespace-only difference is a difference: no whitespace-insensitive diffing (REQ-005).
+    lines = rendered.decode("utf-8").split("\n")
+    out.write_text("\n".join([f"{lines[0]} ", *lines[1:]]), encoding="utf-8")
+    whitespace = _check(root, "map.md")
+    assert whitespace.returncode == _EXIT_STALE, (
+        f"AC-005/REQ-005: a trailing-space-only difference exits {whitespace.returncode}, not 1"
+    )
+
+    # The message names the --out path exactly as given, including a nested relative path.
+    nested_bytes = _generate_fixed_point(root, "nested/map.md")
+    nested = root / "nested" / "map.md"
+    nested.write_bytes(nested_bytes + b"x")
+    _one_line(_check(root, "nested/map.md"), _stale_message("nested/map.md"), "AC-005 --out as given")
+
+    # A missing --out: exit 3 and the one pinned missing line (explicit --out and the default).
+    out.unlink()
+    _one_line(_check(root, "map.md"), _missing_message("map.md"), "AC-005 clause 2")
+    default = _run([str(_GENERATOR), "--root", str(root), "--check"], cwd=root)
+    assert default.returncode == _EXIT_MISSING, (
+        f"AC-005 clause 2: the default --out missing exits {default.returncode}, not 3"
+    )
+    _one_line(default, _missing_message("STRUCTURE.md"), "AC-005 clause 2 (default --out)")
+
+    # The only difference is CRLF line endings: exit 0, and nothing printed (AC-005 clause 3).
+    out.write_bytes(_generate_fixed_point(root, "map.md").replace(b"\n", b"\r\n"))
+    crlf = _check(root, "map.md")
+    assert crlf.returncode == 0, f"AC-005 clause 3: a CRLF-only map exits {crlf.returncode}, not 0"
+    assert crlf.stdout == "", f"AC-005 clause 3: a fresh map prints nothing, got {crlf.stdout!r}"
+
+
+def test_ac_019_double_run_byte_identical_and_hook_clean(tmp_path: Path) -> None:
+    """AC-019 (REQ-019): two consecutive runs on an unchanged tree produce identical bytes, no line
+    has trailing whitespace, the file ends with exactly one LF newline, and the active
+    `trailing-whitespace` and `end-of-file-fixer` hooks leave the generated file unchanged."""
+    assert {"trailing-whitespace", "end-of-file-fixer"} <= _active_hook_ids(), (
+        "AC-019 names the two hooks; they are not active in .pre-commit-config.yaml"
+    )
+    root = _git_tree(tmp_path / "tree", _TREE_FILES)
+    first = _run([str(_GENERATOR), "--root", str(root), "--out", str(tmp_path / "first.md")], cwd=root)
+    second = _run([str(_GENERATOR), "--root", str(root), "--out", str(tmp_path / "second.md")], cwd=root)
+    assert first.returncode == 0 and second.returncode == 0, (
+        f"AC-019: generate runs exit {first.returncode}/{second.returncode}"
+    )
+    a = (tmp_path / "first.md").read_bytes()
+    b = (tmp_path / "second.md").read_bytes()
+    assert a == b, "AC-019 clause 1: two consecutive runs differ\n--- first ---\n" + a.decode("utf-8", "replace")[:400]
+    assert b"\r" not in a, "REQ-019: generate mode always writes LF"
+    trailing = [line for line in a.decode("utf-8").split("\n") if line != line.rstrip(" \t")]
+    assert not trailing, f"AC-019 clause 2: lines with trailing whitespace: {trailing!r}"
+    assert a.endswith(b"\n") and not a.endswith(b"\n\n"), "AC-019 clause 3: the file must end with exactly one LF"
+    text = a.decode("utf-8")
+    assert _hook_clean(text) == text, (
+        "AC-019 clause 4: the trailing-whitespace / end-of-file-fixer hooks change the map"
+    )
+
+
+def test_edge_009_untracked_file_listed_then_stale_on_clone(tmp_path: Path) -> None:
+    """EDGE-009: a file that is untracked and not ignored when the map is generated is listed in the
+    committed map; on a fresh clone — the same tracked tree without that file — `--check` exits 1
+    (stale) and regeneration removes it."""
+    root = _git_tree(tmp_path / "tree", _TREE_FILES)
+    (root / "src" / "scratch.py").write_text('"""Work in progress, never committed."""\n', encoding="utf-8")
+    status = _git(["status", "--porcelain", "src/scratch.py"], root)
+    assert status.stdout.strip() == "?? src/scratch.py", (
+        f"EDGE-009 fixture: src/scratch.py is not untracked-not-ignored: {status.stdout!r}"
+    )
+
+    generated = _generate(root, "STRUCTURE.md")
+    assert generated.returncode == 0, f"EDGE-009 fixture: generate exits {generated.returncode}: {generated.stderr!r}"
+    # The second run is the state the map is committed at: STRUCTURE.md is now itself in the file set,
+    # so the clone's only difference from a fresh render is the absent scratch.py.
+    map_text = _generate_fixed_point(root, "STRUCTURE.md").decode("utf-8")
+    assert "src/scratch.py" in map_text, "EDGE-009 clause 1 (REQ-003): the untracked file is not listed in the map"
+
+    # The clone: the tracked tree plus the committed map, and no scratch.py.
+    clone = _git_tree(tmp_path / "clone", {**_TREE_FILES, "STRUCTURE.md": map_text})
+    stale = _check(clone, "STRUCTURE.md")
+    assert stale.returncode == _EXIT_STALE, f"EDGE-009 clause 2: --check on the clone exits {stale.returncode}, not 1"
+    _one_line(stale, _stale_message("STRUCTURE.md"), "EDGE-009 clause 2")
+
+    regen = _generate(clone, "STRUCTURE.md")
+    regenerated = _map_text(clone / "STRUCTURE.md", regen)
+    assert "src/scratch.py" not in regenerated, "EDGE-009 clause 3: regeneration did not remove the untracked file"
+    assert _check(clone, "STRUCTURE.md").returncode == 0, (
+        "EDGE-009 clause 3: the regenerated map is still stale on the clone"
+    )
+
+
+def test_edge_010_hand_edited_map_is_stale(tmp_path: Path) -> None:
+    """EDGE-010: a hand-edited `STRUCTURE.md`, or one a merge left with conflict markers, is stale —
+    `--check` exits 1 with the pinned line, and the resolution is regeneration (exit 0, then fresh)."""
+    root = _git_tree(tmp_path / "tree", _TREE_FILES)
+    out = root / "STRUCTURE.md"
+    generated = _generate_fixed_point(root, "STRUCTURE.md").decode("utf-8")
+
+    out.write_text(f"{generated}\nA hand-written note.\n", encoding="utf-8")
+    hand = _check(root, "STRUCTURE.md")
+    assert hand.returncode == _EXIT_STALE, f"EDGE-010: a hand-edited map exits {hand.returncode}, not 1"
+    _one_line(hand, _stale_message("STRUCTURE.md"), "EDGE-010 hand edit")
+
+    markers = "\n<<<<<<< HEAD\n## Packages\n=======\n## Packages\n>>>>>>> other branch\n"
+    out.write_text(generated + markers, encoding="utf-8")
+    conflicted = _check(root, "STRUCTURE.md")
+    assert conflicted.returncode == _EXIT_STALE, (
+        f"EDGE-010: a map with conflict markers exits {conflicted.returncode}, not 1"
+    )
+
+    regen = _generate(root, "STRUCTURE.md")
+    assert _map_text(out, regen) == generated, "EDGE-010: regeneration must restore the generated bytes"
+    assert _check(root, "STRUCTURE.md").returncode == 0, "EDGE-010: after regeneration --check must exit 0"
+
+
+def test_edge_016_crlf_checkout_is_not_stale(tmp_path: Path) -> None:
+    """EDGE-016 (REQ-005): a checked-out map whose only difference from the render is CRLF line
+    endings is **not** stale — `--check` normalises `\r\n` -> `\n` and exits 0; the normalisation is
+    exactly that (a CRLF map with one extra byte is still stale), and generate mode rewrites LF."""
+    root = _git_tree(tmp_path / "tree", _TREE_FILES)
+    out = root / "STRUCTURE.md"
+    lf = _generate_fixed_point(root, "STRUCTURE.md")
+    assert b"\r" not in lf, "EDGE-016 fixture: generate mode did not write LF"
+
+    # Written as explicit CRLF bytes: a core.autocrlf=true checkout of the committed LF blob.
+    crlf = lf.replace(b"\n", b"\r\n")
+    assert crlf != lf and b"\r\n" in crlf, "EDGE-016 fixture: the map is not a CRLF checkout"
+    out.write_bytes(crlf)
+    check = _check(root, "STRUCTURE.md")
+    assert check.returncode == 0, f"EDGE-016: a CRLF-only checkout exits {check.returncode}, not 0: {check.stdout!r}"
+    assert check.stdout == "", f"EDGE-016: a fresh map prints nothing, got {check.stdout!r}"
+
+    out.write_bytes(crlf + b"x")
+    stale = _check(root, "STRUCTURE.md")
+    assert stale.returncode == _EXIT_STALE, (
+        f"REQ-005: the only normalisation is \r\n -> \n; a CRLF map with an extra byte exits {stale.returncode}, not 1"
+    )
+
+    regen = _generate(root, "STRUCTURE.md")
+    assert regen.returncode == 0 and out.read_bytes() == lf, "EDGE-016: generate mode must rewrite the file with LF"

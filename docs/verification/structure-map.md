@@ -1166,3 +1166,169 @@ line are T-003's and must not change — six other nodes assert them.
 - REQ-018 normalization now applies to the module summary line too: T-003's AC-013 witness asserts
   only that a summary line follows the header, so it stays GREEN under a normalized rendering —
   do not “fix” it by weakening it.
+
+
+## Phase 3 — S3.1 test derivation, T-005 (2026-10-09)
+
+Task **T-005** — `--check` semantics, the completed exit-code contract, determinism and hook-clean
+output (REQ-004/005/019 · AC-004/005/019 · EDGE-009/010/016 · INV-001/004/005/006). Tests derived
+from the merged spec (`docs/specs/structure-map.md` §5 REQ-004/005/019, §6 INV-001/004/005/006, §7
+AC-004/005/019, §9 EDGE-009/010/016, §10 Observability, §13 newline-normalisation note) and from
+ADR-085 Decision bullet 4. `scripts/make_map.py` is **not** implemented (Phase 4 owns it).
+
+### Files written (exactly T-005's `allowed_files` test paths)
+
+| File | Added |
+|---|---|
+| `tests/acceptance/test_structure_map.py` | 6 nodes + the T-005 helper block (`_generate`, `_check`, `_generate_fixed_point`, `_stale_message`, `_missing_message`, `_one_line`, `_hook_clean`, `_active_hook_ids`, `_EXIT_STALE/_EXIT_MISSING/_EXIT_UNPARSEABLE/_RUN_COMMAND/_PRE_COMMIT`) |
+| `tests/property/test_structure_map.py` | 4 Hypothesis nodes + `_check_run`, `_hook_clean`, `_snapshot`, `_EXIT_MISSING` |
+| `docs/verification/structure-map.md` | this section |
+
+No other file touched: `scripts/make_map.py`, `.pre-commit-config.yaml`, `tasks.json`, `docs/todo/`,
+`docs/questions/` and every other task's tests are unchanged. No `.gitattributes` was created.
+
+### Derived tests → spec clauses (10 nodes, all of T-005's `tests_to_create`)
+
+| Node | ID(s) | Witness |
+|---|---|---|
+| `test_ac_004_exit_code_contract` | AC-004 / REQ-004 | every table row (0/1/2/3/4) in its mode; `1`/`3` never in generate mode (a stale map is rewritten, a missing one is created); precedence `2→4→3→1→0` — unparseable+missing → 4, unparseable+stale → 4 not 1 |
+| `test_ac_005_check_byte_exact_single_message_exit_3` | AC-005 / REQ-005 | one extra byte → exit 1 and exactly `<out> is out of date — run uv run python scripts/make_map.py` on stdout, stderr empty; a whitespace-only difference is still stale; the message names `--out` as given (`map.md`, `nested/map.md`, the default `STRUCTURE.md`); missing `--out` → exit 3 + the pinned missing line; CRLF-only → exit 0 and silent |
+| `test_ac_019_double_run_byte_identical_and_hook_clean` | AC-019 / REQ-019 | two runs on an unchanged tree → identical bytes; no CR; no trailing whitespace on any line; exactly one final LF; the two hooks named in `.pre-commit-config.yaml` (asserted active) leave the bytes unchanged |
+| `test_edge_009_untracked_file_listed_then_stale_on_clone` | EDGE-009 | an untracked-not-ignored `src/scratch.py` (`git status` = `??`) is listed in the map; the same tracked tree without it (the clone) exits 1 with the pinned line; regeneration drops it and then exits 0 |
+| `test_edge_010_hand_edited_map_is_stale` | EDGE-010 | a hand-appended note → exit 1 + the pinned line; conflict markers appended → exit 1; regeneration restores the bytes and `--check` exits 0 |
+| `test_edge_016_crlf_checkout_is_not_stale` | EDGE-016 / REQ-005 | explicit CRLF bytes of the LF render → exit 0, silent; CRLF **+ one byte** → exit 1 (the normalisation is exactly `\r\n` → `\n`); generate rewrites LF |
+| `test_inv_001_render_is_deterministic` | INV-001 / REQ-019 | Hypothesis: two runs byte-identical; the same tree created in the opposite order renders identically |
+| `test_inv_004_check_matches_byte_equality` | INV-004 / REQ-005 | Hypothesis: exit 0 for the render and for its CRLF form; exit 1 for added / removed / reordered / whitespace-only variants (each asserted to be a real difference first) |
+| `test_inv_005_check_writes_nothing` | INV-005 | Hypothesis: the `{path: bytes}` snapshot of the whole working tree is identical before/after a fresh `--check`; a missing `--out` exits 3, is **not** created, and the snapshot is unchanged |
+| `test_inv_006_output_is_hook_clean` | INV-006 / REQ-019 | Hypothesis: no CR, exactly one final LF, and the trailing-whitespace / end-of-file-fixer transforms are the identity on the render |
+
+All four `INV-*` nodes use Hypothesis with the file's existing convention (`max_examples=12`,
+`deadline=None`, `suppress_health_check=[too_slow]`, a per-example `TemporaryDirectory`); every
+test's docstring cites its ID.
+
+### RED evidence (observed, not declared)
+
+`red_command` run verbatim (targeted, never the full suite), 2026-10-09:
+
+```text
+10 failed in 1.69s          # 0 collection errors, 0 setup errors
+```
+
+Failure mode per node — every one is `Failed`/`AssertionError` on the unimplemented behavior
+(`scripts/make_map.py` does not exist yet), never an import/fixture error:
+
+| Node | Failure (first line) |
+|---|---|
+| `test_ac_004_exit_code_contract` | `AssertionError: table row 0: generate success exits 2: "…can't open file '…scripts\make_map.py'"` |
+| `test_ac_005_…` / `test_edge_009/010/016` | `AssertionError: generate mode must exit 0: 2/2: "…No such file or directory"` (`_generate_fixed_point`) |
+| `test_ac_019_…` | `AssertionError: AC-019: generate runs exit 2/2` |
+| `test_inv_001/004/005/006` | `Failed: …scripts\make_map.py does not exist — T-002 Phase 4 has not implemented the generator` |
+
+Test-data validity: every fixture is a real `git init` + `git add -A` tree built from `_TREE_FILES`
+(in-domain, valid sources); all reads are `encoding="utf-8"` explicit (P-67); no `ValidationError` /
+`ValueError` / `AttributeError` appears anywhere in the RED output.
+
+### Test sensitivity (P-68)
+
+`stub_t005.py` (in `%LOCALAPPDATA%/Temp/sens_t005/`, outside the repository, extends the T-004 stub
+with `--check`, the exit-code precedence, REQ-006 hard failures and the LF/hook-clean output, and
+nothing else). `driver_t005.py` imports both test modules, rebinds `_GENERATOR`, and calls all 10
+nodes; it fails loudly when a mutation's anchor is not unique, is a no-op, or does not compile.
+
+- **Correct stub: 10/10 nodes pass** — the RED is missing behavior, not an unsatisfiable test.
+  Building the stub caught **three real defects in the derived tests** before they were trusted:
+  (1) the generator's own `--out` file is part of the file set once it exists (REQ-003), so a map
+  generated before its own file existed is *already* stale — fixed by `_generate_fixed_point`
+  (generate twice, then compare); (2) AC-019's two outputs must live **outside** the tree, or the
+  second run's tree contains the first run's output; (3) the pinned messages contain an **em dash**,
+  and a Windows child process writes cp1252 to a pipe, so the harness's UTF-8 decode raised
+  (`proc.stdout is None`) — the stub now reconfigures stdout to UTF-8, and the requirement is part
+  of the Phase-4 contract below. Without the all-pass run all three would have shipped as RED.
+- **Wrong-implementation matrix: 16/16 mutations caught**, each by the semantically right node:
+
+| Mutation (one broken clause) | Caught by |
+|---|---|
+| `--check` writes the `--out` file | INV-005 (+AC-004/005, EDGE-009/010/016, INV-004) |
+| `--check` compares whitespace-insensitively | AC-005, INV-004 |
+| missing `--out` exits 1 instead of 3 | AC-004, AC-005, INV-005 |
+| stale `--check` prints a second line | AC-005, EDGE-009, EDGE-010 |
+| no `\r\n` → `\n` normalisation | AC-005, EDGE-016, INV-004 |
+| render carries trailing whitespace | AC-019, INV-006 |
+| render ends with two newlines | AC-019, INV-006 |
+| Packages order is a set (non-deterministic) | INV-001, AC-019 (+8 collateral) |
+| tree order is a set (non-deterministic) | INV-001, AC-019 (+8 collateral) |
+| unparseable source is not a hard failure | AC-004 |
+| staleness outranks an unparseable source | AC-004 (+AC-005, EDGE-009/010) |
+| generate mode exits 1 on a stale map | AC-004 (+AC-005, EDGE-009/010/016) |
+| generate mode exits 3 on a missing `--out` | AC-004 (all 10) |
+| `--max-depth 0` is not a usage error | AC-004 |
+| a stale map is reported as fresh (exit 0) | AC-004, AC-005, EDGE-009/010/016, INV-004 |
+| message names the resolved path, not `--out` as given | AC-005, EDGE-009, EDGE-010 |
+
+### Quality gates (this step's changed paths only, P-6)
+
+```text
+uv run ruff check  tests/acceptance/test_structure_map.py tests/property/test_structure_map.py  -> All checks passed!
+uv run ruff format tests/acceptance/test_structure_map.py tests/property/test_structure_map.py  -> 2 files already formatted
+uv run pytest --collect-only tests/acceptance/test_structure_map.py tests/property/test_structure_map.py -> 29 collected, no errors
+```
+
+One lint finding was fixed in-step (PLR2004 on the bare `3` in INV-005 → `_EXIT_MISSING`). No
+repo-wide sweep (Phase 5).
+
+### Decisions and deviations
+
+- **`_hook_clean` is duplicated** in the acceptance and property files instead of shared: T-005's
+  `allowed_files` lists only the two test files, so no `*_test_helpers` module may be created. Both
+  copies are the two hooks' byte-level transforms; `_active_hook_ids()` anchors the pair to
+  `.pre-commit-config.yaml` (read-only — T-006 owns that file).
+- **The hooks are not executed.** Running `pre-commit` would rewrite files and needs the hook envs;
+  AC-019/INV-006 assert the transforms' effect on the generated bytes, which is what the hooks do.
+- **EDGE-009's "fresh clone"** is a second `git init` tree holding the tracked files plus the
+  committed map, not a `git clone` (a clone needs a commit and a committer identity; the staleness
+  clause is identical either way).
+- **`_snapshot` excludes `.git/`** — INV-005 protects the working tree, and a git command may
+  legitimately rewrite its own index without touching a tracked file.
+- **Deliberate under-assertions** (each owned elsewhere, so this task does not duplicate it): the
+  REQ-006 stderr path lines and their sorted order → AC-006 (T-002); the pinned `--help` text →
+  AC-002 (T-002); the absence of a trailing newline after the one-line message is *not* asserted
+  (the spec pins the line, not `print`'s terminator); `--check`'s silence on a fresh map is asserted
+  in AC-005/EDGE-016, not in INV-004 (INV-004 is about the exit code).
+- `uv.lock` was restored before the commit (F-9 / P-74).
+
+### What Phase 4 (T-005) must implement for these nodes
+
+1. `--check`: read the `--out` bytes, normalise `\r\n` → `\n` **only**, compare byte-for-byte with a
+   fresh render; no other normalisation, no whitespace-insensitive or section-level diffing (INV-004).
+2. Exactly one stdout line, and it must be **UTF-8**: on this host a child process writes cp1252 to a
+   pipe, so the em dash in the pinned message is undecodable for the UTF-8 harness (`proc.stdout`
+   becomes `None`). Reconfigure stdout (`sys.stdout.reconfigure(encoding="utf-8")`) or write bytes to
+   `sys.stdout.buffer`. This is a hard requirement of AC-005/EDGE-009/EDGE-010, not a test artifact.
+3. Message text pinned byte-for-byte, with `<out>` **exactly as given on the command line** — never
+   resolved, absolutised or normalised: `<out> is out of date — run uv run python scripts/make_map.py`
+   and `<out> is missing — run uv run python scripts/make_map.py`. Nothing else on stdout, stderr empty.
+4. Exit-code precedence `2 → 4 → 3 → 1 → 0`: an unparseable source outranks a missing `--out` and
+   staleness (both → 4); `1` and `3` never occur in generate mode (a stale map is rewritten, a missing
+   one is created, exit 0); `--max-depth < 1` and unknown options → 2.
+5. `--check` writes nothing at all: it must not create a missing `--out`, must not touch any other
+   path, and must leave every working-tree file byte-identical (INV-005).
+6. Determinism (INV-001, REQ-019): the render is a pure function of the file set — every collection
+   iterated in sorted `--root`-relative POSIX path order, never a `set` (set iteration order varies
+   across processes and breaks byte identity between two runs); creation order must not matter.
+7. Hook-clean output (INV-006, AC-019): LF only, no trailing whitespace on any line, exactly one
+   final newline, UTF-8.
+8. **Do not exclude `--out` from the file set.** The map file is itself listed once it exists
+   (REQ-003 has no exclusion, and AC-021 only holds because the committed `STRUCTURE.md` appears in
+   its own re-render). The tests therefore generate twice to reach that fixed point.
+9. No `.gitattributes` is added (spec §13) and `.pre-commit-config.yaml` is not modified (T-006).
+
+### Hand-off note for T-006 (skill, hook, AGENTS.md)
+
+- AC-019/INV-006 already prove the generated output passes the two active hooks, so T-006 needs no
+  hook change for the map; it only adds the `structure-map-check` local hook (AC-023).
+- `_active_hook_ids()` reads `.pre-commit-config.yaml` read-only; when T-006 adds the
+  `structure-map-check` hook that set grows and AC-019's subset assertion still holds — do not
+  tighten it to an equality.
+- The pinned message strings live once in `_stale_message`/`_missing_message` plus `_RUN_COMMAND`;
+  AC-021 (T-007, the committed `STRUCTURE.md`) reuses the same `--check` path and must not restate
+  them.
