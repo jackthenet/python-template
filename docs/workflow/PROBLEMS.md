@@ -561,3 +561,24 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 `git reset --soft` + 2 re-commits to rebuild `aeda963` (S2.1) and `f8c3cc1` (S2.2).
 - **Resolution:** history rebuilt; each step now commits exactly once, on its own, and **never amends a previous step's commit** — the verification record cites commit shas per step, so an amend invalidates the evidence trail. If a step needs to fix its own output, it adds a follow-up commit or amends **only its own** commit before the next step starts.
 - **Date:** 2026-10-07
+
+## P-73 — a ~10 KB bash here-doc append silently truncated the P.4 scope record mid-table (P.4)
+- **Problem:** the P.4 subagent appended the second half of `docs/verification/ruff-d-docstrings.md` with a `cat >> … <<'EOF'` here-doc of ~10 KB; the write landed **truncated in the middle of a table** with no error and no non-zero exit. Caught only because the step re-read the file and checked `wc -l`.
+- **Step / Phase:** P.4 Draft (change ruff-d-docstrings / DOCS-CHORE) — Phase P
+- **Duration / iterations:** 1 repair pass with the file-edit tool (~5 min).
+- **Resolution:** the missing rows were restored with an `edit` call and the file verified at 239 lines. **Sixth recurrence of P-50**, and now a rule for every launch brief the orchestrator writes: long markdown/JSON content is written with the **file-write / file-edit tool**, never here-doc'd through bash, and the step verifies the line count before and after. Bash here-docs are for short snippets only.
+- **Date:** 2026-10-08
+
+## P-74 — `uv.lock` on `main` is stale (records `python-template 0.6.1`, `pyproject.toml` says `1.0.0`), so every `uv run` in every worktree dirties the tree
+- **Problem:** `uv.lock:1653` still pins the project's own version at `0.6.1` while `pyproject.toml:4` is `1.0.0` (the `structlog-logging` `major` bump commit did not carry a lock refresh). Any `uv run` — including a read-only `ruff check` — rewrites `uv.lock` (1-line diff), so a freshly created worktree can never be `git status` clean, and an incidental `uv.lock` change can ride into an unrelated commit. Cost a revert cycle in the P.4 step and dirtied `main` itself when the step measured the `D` figures there.
+- **Step / Phase:** P.4 Draft (change ruff-d-docstrings / DOCS-CHORE) — Phase P; affects every worktree and every step that runs `uv run`
+- **Duration / iterations:** 1 revert cycle in the change worktree + 1 `git restore` on `main`.
+- **Resolution / decision (orchestrator, 2026-10-08):** the one-line lock refresh is folded into **`ruff-d-docstrings`' config commit** (that change already owns the config surface, and a separate one-line chore would cost a whole change cycle plus a human merge). Until it merges, every step brief states: **revert incidental `uv.lock` churn (`git restore uv.lock`) before committing** unless the task's `allowed_files` names it. Recorded as finding **F-9** in `docs/verification/ruff-d-docstrings.md`. **Durable lesson:** a version bump must refresh `uv.lock` in the same commit — add it to the S6.4 bump checklist.
+- **Date:** 2026-10-08
+
+## P-86 — the full-suite baseline is not byte-for-byte reproducible: `test_nfr_001_performance_budgets` failed under full-suite load, passed in isolation (S4.1)
+- **Problem:** the group-11 baseline run reported `1 failed, 760 passed, 1 skipped` — the failure was `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets`, whose measured median (306 ms) exceeded the 300 ms NFR-001 budget under full-suite load. The same node passes in isolation, so the delta is load-sensitive timing, not a behavior change from this branch (which touches no `src/` executable code — INV-D digest unchanged).
+- **Step / Phase:** S4.1 (change ruff-d-docstrings / DOCS-CHORE) — Phase 4 baseline
+- **Duration / iterations:** 1 isolated re-run to confirm the node is green alone.
+- **Resolution:** Phase 5 treats that node as the **known flake**: re-run it isolated (`uv run pytest tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets -q`) and record both results in the verification record. Any **other** delta from `1 failed, 760 passed, 1 skipped` is a regression and must be investigated, not excused. Related: P-35 (the same NFR-001 budget tripping under different load conditions) and P-36 (the budget's realism).
+- **Date:** 2026-10-09
