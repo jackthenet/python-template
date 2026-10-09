@@ -3319,5 +3319,198 @@ staged (P-74).
 failures, 0 invalid test data; root cause `scripts/make_map.py:513-515` (the `--check` stub).** Next
 atomic step: **S4.2 (T-005)** — implement in `scripts/make_map.py` only + confirm GREEN.
 
+## Phase 4 — T-005 GREEN (S4.2)
+
+**Objective:** make T-005's verbatim `green_command` witnesses pass by implementing `--check` — the
+REQ-004 exit-code precedence, the two pinned REQ-005 messages, the `\r\n` → `\n` normalisation, and
+the REQ-019 determinism / hook-clean output contract. **Changed file: `scripts/make_map.py` only**
+(the DAG's `allowed_files.source_files`); no test file was touched.
+
+### The `--check` path as implemented (REQ-004 / REQ-005 / INV-004 / INV-005)
+
+`main` is the REQ-004 precedence dispatcher, and its statement order **is** the precedence order
+`2 → 4 → 3 → 1 → 0`, so exactly one code is produced per run and 1/3 are unreachable in generate
+mode (that mode never reaches `_check`):
+
+| Precedence | Site | Code |
+|---|---|---|
+| 2 usage | `_parse_args` → `parser.error` / argparse (unchanged, T-002) | `2` |
+| 4 unreadable source | `if failures:` → the sorted REQ-006 report on stderr (unchanged, T-002) | `4` |
+| 3 `--out` missing | `_check`: `if not out.is_file()` → the missing line, **never created** | `3` |
+| 1 stale | `_check`: the byte comparison → the out-of-date line | `1` |
+| 0 | `_check` fresh map, or generate mode after the write | `0` |
+
+New module constants `_EXIT_STALE = 1` and `_EXIT_MISSING = 3` join `_EXIT_UNREADABLE = 4` /
+`_EXIT_OK = 0`; the `2 → 4 → 3 → 1 → 0` order is stated in the comment above them and in `main`'s
+docstring. The T-005 stub (`if args.check: return _EXIT_OK`) is replaced by
+`return _check(out, args.out, document)`.
+
+`_check(out, out_arg, document)`:
+
+```python
+if not out.is_file():                      # 3, reported and never created (INV-005)
+    _print_line(_CHECK_MISSING.format(out_arg))
+    return _EXIT_MISSING
+if _read_bytes(out).replace(b"\r\n", b"\n") != document.encode("utf-8"):
+    _print_line(_CHECK_STALE.format(out_arg))
+    return _EXIT_STALE  # 1
+return _EXIT_OK
+```
+
+- **The only normalisation is `\r\n` → `\n`** (REQ-005, INV-004, ADR-085 Alternatives): the on-disk
+  bytes are compared byte-for-byte against `document.encode("utf-8")` after that one `bytes.replace`.
+  No whitespace-insensitive diffing, no section-level comparison — the AC-005 whitespace-only clause,
+  the INV-004 added/removed/reordered/whitespace variants and the EDGE-016 "CRLF + one extra byte is
+  still stale" clause all exit 1. No `.gitattributes` was added.
+- **`--check` writes nothing** (INV-005): `_check` only reads; `out.parent.mkdir(...)` and
+  `out.write_text(...)` stay below the `if args.check: return` branch, so no directory and no file is
+  created or modified in check mode (INV-005's snapshot witness passes, including the missing-`--out`
+  case where the file must not appear).
+- **`out_arg` is the raw `--out` string**, not the resolved path, so the message names `--out` exactly
+  as given (`map.md`, `nested/map.md`, and the default `STRUCTURE.md`) — AC-005.
+- **stdout is UTF-8** (NFR-007): `_print_line` calls `sys.stdout.reconfigure(encoding="utf-8")` behind
+  the same `hasattr` guard `scripts/verify_spec.py:74` already uses, because the pinned messages carry
+  an em dash and a redirected Windows stdout defaults to cp1252. They remain the tool's only stdout
+  output (spec §10); the REQ-006 report and the EDGE-007 note stay on stderr.
+
+### The two pinned messages (byte-for-byte, em dash U+2014)
+
+```text
+{out} is out of date — run uv run python scripts/make_map.py
+{out} is missing — run uv run python scripts/make_map.py
+```
+
+Held as `_CHECK_STALE` / `_CHECK_MISSING` templates (`\u2014` escape, so the source stays ASCII-safe),
+printed with `print` — exactly one line, nothing else on stdout, stderr empty (`_one_line` asserts
+`proc.stdout.splitlines() == [expected]` and `proc.stderr == ""`).
+
+### REQ-019 / INV-001 / INV-006 (already GREEN from T-003/T-004 — unchanged here)
+
+Determinism and hook-clean output needed no new code: `_file_set` returns sorted `as_posix()` paths,
+the module loop is sorted by path, symbols keep source order, `_render` ends with
+`"\n".join(lines).rstrip("\n") + "\n"`, and generate mode writes with `newline="utf-8", newline="\n"`.
+All four witnesses (AC-019, INV-001, INV-006, and the LF/no-trailing-whitespace clauses) pass and were
+not regressed by this step.
+
+### Finding F-08: AC-001's single-read-site witness shapes how `--check` reads `--out`
+
+The first implementation read the map with `out.read_bytes()` inside `_check`, and
+`test_ac_001_stdlib_only_and_single_read` clause 3 then failed:
+`clause 3: 2 file-read call sites ['read_text', 'read_bytes'], expected exactly one`. The witness
+walks the **whole module** and requires exactly one `read_text`/`read_bytes` call site (and no bare
+read-mode `open`). The fix is not a second read path around the witness but one shared read site:
+`_read_bytes(path)` is now the module's only file-content read, used by `_read_modules` (as
+`_read_bytes(root / path).decode("utf-8")` — identical bytes, identical `UnicodeDecodeError` /
+`OSError` behavior, identical `len(source.splitlines())` line count) and by `_check`. REQ-001 requires
+each **source file** to be read exactly once and the witness is explicitly "a static witness of the
+read *site*, not a runtime count of reads", so the shared site satisfies the spec and the witness at
+once; the map file is not a source file, but it is read through the same one site. This touched
+T-002's `_read_modules`, which is inside T-005's only allowed source file, and its 15 witnesses stay
+GREEN. **No test was weakened, edited or deleted.**
+
+**No spec-vs-test conflict** was found for T-005's IDs: the spec §5 REQ-004/REQ-005, §6 INV-001/004/
+005/006, §7 AC-004/005/019 and §9 EDGE-009/010/016 wording matches the witnesses as written.
+EDGE-016 clause 1 (a CRLF-only map exits 0) is now real evidence — it passed at S4.1 only because of
+the stub; with the byte comparison in place it passes for the right reason.
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| T-005 verbatim `green_command` (`tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py -v`) | **47 passed, 8 failed** — all 10 T-005 witnesses pass; the 8 failures are T-006/T-007 nodes (AC-021, AC-022, AC-023, AC-024, AC-026, AC-027, NFR-002, NFR-005) |
+| The 8 failures are pre-existing | re-ran exactly those 8 nodes with `scripts/make_map.py` stashed at the S4.1 state → **8 failed in 1.00s** (AC-021/024 need a committed `STRUCTURE.md`, AC-022/023/026/027 the skill + hook + `AGENTS.md` — T-006; NFR-005 the six over-complex Phase-3 test functions — T-007, P-76) |
+| T-005's 10 witnesses (targeted) | **10 passed in 27.42s** — AC-004, AC-005, AC-019, EDGE-009, EDGE-010, EDGE-016, INV-001, INV-004, INV-005, INV-006 |
+| T-004 `green_command` (`tests/unit/test_make_map.py`) | **18 passed in 3.89s** |
+| T-003's 13 witnesses | **13 passed in 8.21s** |
+| T-001 + T-002's 17 witnesses | **17 passed in 6.16s** |
+| `uv run ruff check scripts/make_map.py` | `All checks passed!` |
+| `uv run ruff format --check scripts/make_map.py` | `1 file already formatted` |
+| `uv run mypy scripts/` | `Success: no issues found in 4 source files` |
+| `uv run complexipy scripts/make_map.py --max-complexity-allowed 15` | `All functions are within the allowed complexity` — **0 over**, max **12** (`_member_lines`, unchanged); `_check` 2, `main` 4, `_read_bytes` 0 |
+| Rendered map content unchanged | generated twice (fixed point) to a temp path before and after the edit and diffed: **one hunk**, `#### scripts/make_map.py (523 lines)` → `#### scripts/make_map.py (567 lines)` — the self-referential line count only (P-77). No committed `STRUCTURE.md` exists yet (T-006 commits it), so the baseline is the pre-change render of the same tree; both renders are 1937 lines |
+| `git status --short` | ` M scripts/make_map.py` (+ this record); `uv.lock` restored with `git restore uv.lock`, never staged (P-74) |
+
+### Scope of this step
+
+Files changed: **`scripts/make_map.py`** (the DAG's only `allowed_files.source_files`) and this record.
+No test file, no `docs/specs/`, no `docs/tasks/` or `.github/task-runner/tasks.json`, no `AGENTS.md` /
+`STRUCTURE.md` / `mkdocs.yml` / `.pre-commit-config.yaml` / `.github/` change; no `.gitattributes` was
+created (REQ-005 / ADR-085: the normalisation lives inside the generator). The full test suite was not
+run as a step gate (Phase 5); the targeted `green_command` plus the three earlier tasks' witness sets
+are the regression evidence. Nothing was committed — S4.4 commits and sets `"status": "VERIFIED"`.
+
+**S4.2 (T-005) gate: GREEN — 10/10 T-005 witnesses pass, 0 regressions across T-001/T-002/T-003/T-004
+witnesses, ruff + mypy + complexipy clean, map content byte-identical except the self-referential line
+count.** Next atomic step: **S4.3 (T-005)** — refactor (keep GREEN; the no-op fast-path applies if no
+structural change is needed).
+
+## Phase 4 — T-005 refactor (S4.3) (2026-10-09)
+
+**Objective:** judge whether the check path S4.2 just wrote needs restructuring, with no observable
+behavior change.
+
+**Decision: no-op fast-path — zero code changes.** `scripts/make_map.py` is byte-identical to the
+S4.2 state (`sha256 ff5bb4cf84a90eccfc6db7f2be936452fb6102733135f26848297d75ad1c83e0` before the step
+and after it). The only file this step touched is this record. The skill's zero-change rule ("if the
+step made zero file changes, the `green_command` re-run is skipped") would allow skipping the tests;
+they were re-run anyway, together with the byte-identity and `--check` fixtures, because the step's
+gate list asks for the evidence rather than the inference.
+
+### What was examined
+
+The check path as S4.2 left it — `main` (the REQ-004 precedence chain), `_check`, `_print_line`, the
+`_CHECK_STALE` / `_CHECK_MISSING` templates, the new `_read_bytes` read site — plus two sweeps over the
+whole file (dead code, read sites). `wc -l scripts/make_map.py` = 567.
+
+### Why each candidate was left alone
+
+1. **`main`'s precedence chain (2 → 4 → 3 → 1 → 0) stays inline.** The order of the function *is* the
+   precedence order, and it is stated twice where a reader meets it: the comment block above the
+   `_EXIT_*` constants and `main`'s docstring. Each branch carries its own code comment (`# 2:`
+   argparse, `# 4:` unreadable, `# 3 then 1:` `--check`, `# EDGE-006` write). A `_check_or_write(args,
+   out, document)` helper would move that order out of the one place it is visible, add a
+   four-argument pass-through, and split the exit-code table across two functions — indirection, not
+   clarity. `main`'s complexity is 4 (complexipy), so there is no complexity pressure to relieve.
+2. **`_CHECK_STALE` / `_CHECK_MISSING` do not duplicate `_print_line`.** The two constants hold only
+   the pinned REQ-005 message text, one `{}` slot each; `_print_line` owns the NFR-007 UTF-8
+   reconfigure and the `print`; `_check` formats once per branch. There is no shared formatting logic
+   to fold out. Merging the two messages into one template with a variable phrase would obscure the
+   byte-pinned strings (em dash, exact wording) that AC-005 and EDGE-010/016 witness.
+3. **`_read_bytes` is the one read site (AC-001 clause 3, finding F-08).**
+   `grep -n "read_bytes\|read_text\|open(" scripts/make_map.py` → 4 matches:
+   `187` the def, `195` the single `path.read_bytes()` (the read site), `211` the module-source call,
+   `533` the `--check` comparison call. Two call sites, one read site. Nothing else reads file content:
+   `out.write_text` in `main` is a write, `out.is_file()` in `_check` is a stat. S4.2 left no second
+   read path.
+4. **No dead code.** An AST sweep over the file's 34 module-level functions found every one with at
+   least one call site, and every module-level constant read — S4.2 removed nothing and left nothing
+   unreferenced (the old inline read in `_read_modules` was replaced by `_read_bytes`, not orphaned).
+
+### Gate results (all on the unchanged file)
+
+| # | Gate | Result |
+|---|---|---|
+| 1 | Fixed-tree byte identity (P-77) | Trivially satisfied — the code is byte-identical (sha256 above). Still run: 3 invocations × 2 runs each into a temp `--out` outside the repo, `cmp` clean — default (1937 lines), `--max-depth 2` (1546), `--include-private --max-depth 3` (2000); all exit 0 |
+| 2 | `--check` behavior, fixed fixture | fresh: exit **0**, stdout 0 bytes · stale (one `x\n` appended): exit **1**, `<out> is out of date — run uv run python scripts/make_map.py` · missing: exit **3**, `<out> is missing — run uv run python scripts/make_map.py`. Before/after are the same run of the same bytes; `--check` wrote nothing (fixture md5 unchanged across both checks: `45fbe417…` fresh, `e1b80daa…` stale) |
+| 3 | T-005's 10 witnesses | **10 passed** in 27.41s |
+| 4 | T-004 `green_command` (`tests/unit/test_make_map.py`) | **18 passed** · T-003's 13 witnesses → **13 passed** · T-001 + T-002's 17 witnesses → **17 passed** |
+| 5 | `uv run ruff check scripts/make_map.py` / `ruff format --check` | clean ("All checks passed!" / "1 file already formatted") |
+| 6 | `uv run mypy scripts/` | exit 0 — "Success: no issues found in 4 source files" |
+| 7 | `complexipy scripts/make_map.py --max-complexity-allowed 15` | **0 over**; max 12 (`_member_lines`), then 10 (`_packages_lines`), 9 (`_dunder_all`, `_imported_names`); `main` 4, `_check` 2 |
+| 8 | Exactly one read site | confirmed — see item 3 |
+
+### Scope and state
+
+Files changed: **`docs/verification/structure-map.md`** only (this record); `scripts/make_map.py`
+unchanged. No test file, no `docs/specs/`, no `docs/tasks/` or `.github/task-runner/tasks.json`, no
+`AGENTS.md` / `STRUCTURE.md` / `mkdocs.yml` / `.pre-commit-config.yaml` / `.github/` change. The full
+test suite was not run (Phase 5 gate). `uv.lock` was rewritten by the `uv run` calls and restored with
+`git restore uv.lock`; it is not staged. Nothing was committed — **S4.4 (T-005)** commits and sets
+`"status": "VERIFIED"`.
+
+**S4.3 (T-005) gate: no-op refactor accepted — structure judged adequate, GREEN maintained, all eight
+gates pass on an unchanged file.** Next atomic step: **S4.4 (T-005)** — commit + set `"status":
+"VERIFIED"`.
+
 
 

@@ -6,11 +6,11 @@ stdout (REQ-005, T-005) and the sorted path lines on stderr (REQ-006). Every sou
 read exactly once: the line count and the AST come from the same read (REQ-001, AC-001).
 
 T-002 owns the harness: the CLI (REQ-002), the file set (REQ-003), the exit-code contract
-(REQ-004, codes 2/4/0 here), the unreadable-source hard failure (REQ-006), the document shape
+(REQ-004, the whole table here), the unreadable-source hard failure (REQ-006), the document shape
 (REQ-008) and the `--out` parent-directory rule (EDGE-006). T-003 owns the Directory tree body
 (REQ-009/REQ-010), the Packages scope, group headers and module sections (REQ-011…REQ-013) and
 the path form (REQ-020). T-004 owns the symbol inventory of each module section (REQ-014…REQ-018).
-The `--check` comparison is T-005's.
+The `--check` comparison and its 3/1 codes are T-005's.
 """
 
 from __future__ import annotations
@@ -24,10 +24,19 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-# REQ-004 exit codes. 2 is raised by argparse itself (usage errors, EDGE-014); 3 and 1 belong
-# to --check (REQ-005) and are inserted by T-005 between the 4 check and the 0 below.
+# REQ-004 exit codes, and nothing else is ever produced. 2 is raised by argparse itself (usage
+# errors, EDGE-014); 4 is returned by the REQ-006 report; 3 and 1 belong to --check (REQ-005). The
+# order of `main` IS the REQ-004 precedence order 2 -> 4 -> 3 -> 1 -> 0, so an unparseable source
+# outranks a missing or stale map (AC-004).
+_EXIT_STALE = 1
+_EXIT_MISSING = 3
 _EXIT_UNREADABLE = 4
 _EXIT_OK = 0
+
+# REQ-005: the two --check lines, pinned byte-for-byte (em dash, not hyphen) and naming `--out`
+# exactly as it was given. They are the only stdout output of the whole tool (spec §10).
+_CHECK_STALE = "{} is out of date \u2014 run uv run python scripts/make_map.py"
+_CHECK_MISSING = "{} is missing \u2014 run uv run python scripts/make_map.py"
 
 # REQ-008 document chrome: this order and nothing else.
 _TITLE = "# Repository structure"
@@ -175,6 +184,17 @@ def _file_set(root: Path) -> list[str]:
     return sorted(name for name in candidates if (root / name).is_file())
 
 
+def _read_bytes(path: Path) -> bytes:
+    """The generator's one and only file-content read site (REQ-001 / AC-001 clause 3).
+
+    REQ-001 requires each source file to be read exactly once, and the AC-001 witness is a static
+    witness of the read *site*, so every file the tool reads — a `.py` source file and, in `--check`
+    mode, the existing map — goes through here. Bytes (not text) because the `--check` comparison is
+    byte-exact and needs the raw CRLF bytes (REQ-005); the caller decodes.
+    """
+    return path.read_bytes()
+
+
 def _read_modules(paths: Sequence[str], root: Path) -> tuple[list[Module], list[str]]:
     """Read and parse every file in the set exactly once (REQ-001, AC-001).
 
@@ -188,7 +208,7 @@ def _read_modules(paths: Sequence[str], root: Path) -> tuple[list[Module], list[
         try:
             # The module's only file-content read site (REQ-001 / AC-001): the AST and the line
             # count below both come from this string, so a later renderer must not read again.
-            source = (root / path).read_text(encoding="utf-8")
+            source = _read_bytes(root / path).decode("utf-8")
             tree = ast.parse(source, filename=path)
         except (SyntaxError, UnicodeDecodeError, OSError) as error:
             failures.append(f"{path}: {type(error).__name__}")
@@ -491,13 +511,38 @@ def _render(modules: Sequence[Module], paths: Sequence[str], max_depth: int, inc
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
+def _print_line(message: str) -> None:
+    """One line on stdout, always UTF-8 (NFR-007): the pinned REQ-005 messages carry an em dash, and
+    the default codec of a redirected Windows stdout is cp1252, which cannot encode it."""
+    if hasattr(sys.stdout, "reconfigure"):  # the same guard as scripts/verify_spec.py
+        sys.stdout.reconfigure(encoding="utf-8")
+    print(message)
+
+
+def _check(out: Path, out_arg: str, document: str) -> int:
+    """REQ-005 / INV-004: compare the whole `--out` file against `document` byte-for-byte, after the
+    single CRLF -> LF normalisation and nothing else (no whitespace-insensitive diffing, no
+    section-level comparison) — so a CRLF checkout of the committed LF blob is not stale (EDGE-016)
+    while a one-byte or whitespace-only difference is (EDGE-010). Exactly one pinned line on stdout,
+    nothing on stderr, and nothing is written (INV-005): `--out` is only ever read here.
+
+    `out_arg` is the `--out` value as given, which is what the message must name (AC-005)."""
+    if not out.is_file():  # 3: reported, never created
+        _print_line(_CHECK_MISSING.format(out_arg))
+        return _EXIT_MISSING
+    if _read_bytes(out).replace(b"\r\n", b"\n") != document.encode("utf-8"):
+        _print_line(_CHECK_STALE.format(out_arg))
+        return _EXIT_STALE
+    return _EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the generator and return its exit code.
 
     The REQ-004 precedence order 2 -> 4 -> 3 -> 1 -> 0 is the order of this function: argparse
     exits 2 before anything is read, an unreadable source returns 4 before any comparison or
-    write, and T-005 inserts the `--check` codes 3 (missing `--out`) then 1 (stale) at the
-    marked point, ahead of the 0.
+    write, `--check` then returns 3 (missing `--out`) or 1 (stale) ahead of the 0, and 1/3 are
+    unreachable in generate mode because that mode never reaches `_check`.
     """
     args = _parse_args(argv)  # 2: argparse raises SystemExit(2) on a usage error
     root = Path(args.root).resolve()
@@ -510,9 +555,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _EXIT_UNREADABLE
 
     document = _render(modules, paths, args.max_depth, args.include_private)
-    if args.check:
-        # T-005 (REQ-005): compare `document` against the `--out` bytes here and return 3 then 1.
-        return _EXIT_OK
+    if args.check:  # 3 then 1: the render is only compared, never written (INV-005)
+        return _check(out, args.out, document)
 
     out.parent.mkdir(parents=True, exist_ok=True)  # EDGE-006: create --out's parent when missing
     out.write_text(document, encoding="utf-8", newline="\n")  # generate mode always writes LF
