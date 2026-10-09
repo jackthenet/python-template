@@ -225,8 +225,11 @@ class SessionService:
         )
 
     def _order_with_current(self, valid: list[Session], current_session_id: UUID | None) -> list[Session]:
-        """Pin the current session first; the remainder is already created_at descending
-        from ``list_for_user`` (REQ-006, INV-005)."""
+        """Pin the current session first; the remainder keeps its incoming order.
+
+        The remainder is already ``created_at`` descending from
+        ``list_for_user`` (REQ-006, INV-005).
+        """
         if current_session_id is None:
             return valid
         current = [row for row in valid if row.id == current_session_id]
