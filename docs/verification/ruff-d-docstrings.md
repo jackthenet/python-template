@@ -237,3 +237,130 @@ Gate = the table in §"No-behavior-delta proof plan" (full suite unchanged, `ruf
 | F-9 | `uv.lock` on `main` is **stale**: it records `python-template 0.6.1` while `pyproject.toml:4` says `1.0.0` (the `structlog-logging` bump never re-locked) | Any `uv run` in a fresh worktree rewrites `uv.lock` (1-line diff), so the change worktree cannot stay `git status`-clean without a decision. **Recommendation for the orchestrator:** fold the one-line `uv.lock` refresh into this change's config commit (non-behavioral, forced by the tooling), or open a separate one-line chore TODO. Not decided in P.3; reverted here so the scope record stands alone |
 
 None of F-1 … F-9 changes what this change does: every figure is a count, and the one version number (F-6) follows its answer's own stated intent. **No item in the P.3 decision set alters externally observable behavior**, so the DOCS/CHORE classification stands and no `BLOCKED-USER` question is raised.
+
+## Phase 4 — S4.1 baseline (2026-10-09)
+
+Measured in this worktree at `8ec2edf` (P.4 scope record; `src/` byte-identical to `45aa61c` — **no implementation file edited yet**, by design). DOCS/CHORE has no RED gate; this section is the GREEN baseline Phase 5 (S5.1/S5.2) must reproduce. Toolchain at measurement: `ruff 0.16.10`, `mypy 2.4.0`, `Python 3.14.5`.
+
+### Gate baselines (what Phase 5 compares against)
+
+| Evidence | Command | S4.1 baseline (2026-10-09) |
+|---|---|---|
+| Suite unchanged | `uv run pytest tests/ -q` | **`1 failed, 760 passed, 1 skipped in 236.60s (0:03:56)`** — the single failure is the pre-existing timing flake in §Baseline flake; skip = `SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host` |
+| Types unchanged | `uv run mypy src/` | **`Success: no issues found in 84 source files`** |
+| Lint as the gate stands today (`D` not yet selected) | `uv run ruff check .` | **`All checks passed!`** (exit 0) |
+| Format gate | `uv run ruff format --check .` | **`339 files already formatted`** (exit 0) |
+| Executable code identical | AST digest, §method below | **`64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0`** — **MATCHES** the P.4 baseline; run twice, identical output |
+
+### AST digest reproduction (§method)
+
+The throwaway script is the one embedded verbatim in §No-behavior-delta proof plan — copied unchanged to a path **outside** the repo (`%LOCALAPPDATA%/Temp/s41_ast_digest.py`), never added to `scripts/` (Q-25). Run in this worktree with the **relative** `src` root:
+
+```text
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src
+→ 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0   (run 1)
+→ 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0   (run 2, stability check)
+```
+
+Phase 5 re-runs the same command at the final commit and requires the same digest (INV-D).
+
+### Baseline flake (pre-existing; recorded so Phase 5 does not misread it)
+
+`tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` failed in the full-suite run:
+`assert statistics.median(query_samples) < 0.3` → `0.30619730008766055 < 0.3` (NFR-001 local budget, 2% over, 10k-item SQLite source under the load of a 762-test run).
+
+- Isolated re-run at the same commit: **`1 passed in 8.44s`** → timing/load flake, not a defect and not caused by this change (no `src/` file edited at S4.1; INV-D keeps the code identical to `main`).
+- Same class as the history: `docs/workflow/PROBLEMS.md` **P-36** (the NFR-001 budget is tight against the current query path) and the flaky-failure classifications in `docs/verification/search.md` §S5.1.
+- **Consequence for the Phase 5 gate:** "identical counts" is not reproducible for this one test. If S5.1 shows exactly this failure, re-run it in isolation; pass ⇒ classify as the known flake and record it, exactly as `search.md` did. Any *other* delta from `1 failed, 760 passed, 1 skipped` is a regression. → Problem Log **P-73**.
+
+### Per-feature `D`-site work list (the gated set: `D` over `src/`, `convention = "google"`)
+
+Measured **without** editing `pyproject.toml` — one run per group, the convention supplied inline so the numbers are what the gate will see once `select += "D"` lands (group 11):
+
+```text
+uv run ruff check src/backend/<group> --select D --output-format=concise \
+  --config 'lint.pydocstyle.convention = "google"'
+```
+
+The inline `--config` also suppresses the two incompatible-rule warnings that bare `--select D` prints (as §Fresh measurement predicts), so the counts are directly comparable to the gate.
+
+| Commit order | Group | Files | `D` total | `D1xx` additions | format (`D205`/`D209`/`D403`/`D301`) | codes |
+|---|---|---|---|---|---|---|
+| 1 | eventbus | 1 | 3 | 3 | 0 | `D105`:2 `D107`:1 |
+| 2 | logging | 1 | 2 | 0 | 2 | `D205`:1 `D209`:1 |
+| 3 | mail | 4 | 6 | 6 | 0 | `D107`:5 `D102`:1 |
+| 4 | sessionmanagement | 3 | 16 | 2 | 14 | `D205`:7 `D209`:6 `D403`:1 `D102`:1 `D107`:1 |
+| 5 | settings | 2 | 16 | 14 | 2 | `D102`:10 `D107`:4 `D205`:1 `D301`:1 |
+| 6 | permissions | 6 | 45 | 33 | 12 | `D102`:22 `D107`:11 `D205`:5 `D209`:5 `D301`:2 |
+| 7 | authentication | 7 | 51 | 50 | 1 | `D102`:36 `D101`:7 `D107`:7 `D205`:1 |
+| 8 | filemanagement | 6 | 58 | 37 | 21 | `D102`:27 `D205`:11 `D107`:10 `D209`:9 `D403`:1 |
+| 9 | search | 4 | 61 | 6 | 55 | `D205`:28 `D209`:26 `D107`:5 `D102`:1 `D403`:1 |
+| 10 | usermanagement | 7 | 70 | 47 | 23 | `D102`:33 `D205`:12 `D209`:10 `D101`:7 `D107`:7 `D403`:1 |
+| 11 | config (`pyproject.toml` + `mkdocs.yml` + `.pre-commit-config.yaml` + `AGENTS.md`) | 4 | 0 | 0 | 0 | gate flips |
+| — | **Total (`src/`)** | **41** | **328** | **198** | **130** | `D102` 131 · `D205` 66 · `D209` 57 · `D107` 51 · `D101` 14 · `D403` 4 · `D301` 3 · `D105` 2 |
+
+Cross-check: the ten group runs sum to **328 findings in 41 files**, and `uv run ruff check src --select D --statistics --config 'lint.pydocstyle.convention = "google"'` reports the same per-code totals; `src/main.py` + `src/frontend/` → **0** sites. The §Fresh measurement table (measured at `45aa61c`) **holds at `8ec2edf`** — no figure needed correcting in this step.
+
+Mechanical vs manual split per group (derived from the code counts, per §Exact change scope item 1): `D209` + `D403` have safe fixes (61 repo-wide), `D301` (3: settings 1, permissions 2) needs an explicit `--unsafe-fixes` run on the changed paths, `D205` (66) has **no** fix and is hand-edited. Groups 1 and 3 have no format half; group 2 has no `D1xx` half — the pair collapses per feature as the commit plan says.
+
+File-level work list (per group, `D` = total sites, `D1xx` = additions, `fmt` = format sites):
+
+```text
+eventbus
+  src/backend/eventbus/eventbus.py                        D=3  D1xx=3  fmt=0   [D105x2 D107x1]
+logging
+  src/backend/logging/_decorator.py                       D=2  D1xx=0  fmt=2   [D205x1 D209x1]
+mail
+  src/backend/mail/errors.py                              D=3  D1xx=3  fmt=0   [D107x3]
+  src/backend/mail/models.py                              D=1  D1xx=1  fmt=0   [D102x1]
+  src/backend/mail/service.py                             D=1  D1xx=1  fmt=0   [D107x1]
+  src/backend/mail/transport.py                           D=1  D1xx=1  fmt=0   [D107x1]
+sessionmanagement
+  src/backend/sessionmanagement/events.py                 D=1  D1xx=1  fmt=0   [D102x1]
+  src/backend/sessionmanagement/search_source.py          D=12 D1xx=0  fmt=12  [D205x6 D209x5 D403x1]
+  src/backend/sessionmanagement/service.py                D=3  D1xx=1  fmt=2   [D107x1 D205x1 D209x1]
+settings
+  src/backend/settings/registry.py                        D=2  D1xx=1  fmt=1   [D107x1 D205x1]
+  src/backend/settings/repository.py                      D=14 D1xx=13 fmt=1   [D102x10 D107x3 D301x1]
+permissions
+  src/backend/permissions/catalog.py                      D=3  D1xx=1  fmt=2   [D301x2 D107x1]
+  src/backend/permissions/errors.py                       D=6  D1xx=6  fmt=0   [D107x6]
+  src/backend/permissions/events.py                       D=1  D1xx=1  fmt=0   [D102x1]
+  src/backend/permissions/models.py                       D=3  D1xx=1  fmt=2   [D102x1 D205x1 D209x1]
+  src/backend/permissions/repositories.py                 D=27 D1xx=23 fmt=4   [D102x20 D107x3 D205x2 D209x2]
+  src/backend/permissions/service.py                      D=5  D1xx=1  fmt=4   [D205x2 D209x2 D107x1]
+authentication
+  src/backend/authentication/errors.py                    D=1  D1xx=1  fmt=0   [D107x1]
+  src/backend/authentication/events.py                    D=7  D1xx=7  fmt=0   [D101x7]
+  src/backend/authentication/repositories.py              D=1  D1xx=0  fmt=1   [D205x1]
+  src/backend/authentication/repository.py                D=21 D1xx=21 fmt=0   [D102x18 D107x3]
+  src/backend/authentication/service.py                   D=12 D1xx=12 fmt=0   [D102x11 D107x1]
+  src/backend/authentication/tracker.py                   D=4  D1xx=4  fmt=0   [D102x3 D107x1]
+  src/backend/authentication/webauthn.py                  D=5  D1xx=5  fmt=0   [D102x4 D107x1]
+filemanagement
+  src/backend/filemanagement/errors.py                    D=6  D1xx=6  fmt=0   [D107x6]
+  src/backend/filemanagement/events.py                    D=1  D1xx=1  fmt=0   [D102x1]
+  src/backend/filemanagement/repository.py                D=21 D1xx=17 fmt=4   [D102x16 D107x1 D205x2 D209x2]
+  src/backend/filemanagement/search_source.py             D=12 D1xx=0  fmt=12  [D205x6 D209x5 D403x1]
+  src/backend/filemanagement/service.py                   D=6  D1xx=1  fmt=5   [D107x1 D205x3 D209x2]
+  src/backend/filemanagement/storage.py                   D=12 D1xx=12 fmt=0   [D102x10 D107x2]
+search
+  src/backend/search/errors.py                            D=5  D1xx=3  fmt=2   [D107x3 D205x1 D209x1]
+  src/backend/search/events.py                            D=3  D1xx=1  fmt=2   [D102x1 D205x1 D209x1]
+  src/backend/search/models.py                            D=14 D1xx=0  fmt=14  [D205x7 D209x7]
+  src/backend/search/service.py                           D=39 D1xx=2  fmt=37  [D205x19 D209x17 D107x2 D403x1]
+usermanagement
+  src/backend/usermanagement/errors.py                    D=4  D1xx=4  fmt=0   [D107x4]
+  src/backend/usermanagement/events.py                    D=8  D1xx=8  fmt=0   [D101x7 D102x1]
+  src/backend/usermanagement/models.py                    D=2  D1xx=2  fmt=0   [D102x2]
+  src/backend/usermanagement/repository.py                D=19 D1xx=15 fmt=4   [D102x14 D205x2 D209x2 D107x1]
+  src/backend/usermanagement/role_store.py                D=3  D1xx=3  fmt=0   [D102x2 D107x1]
+  src/backend/usermanagement/search_source.py             D=12 D1xx=0  fmt=12  [D205x6 D209x5 D403x1]
+  src/backend/usermanagement/service.py                   D=22 D1xx=15 fmt=7   [D102x14 D205x4 D209x3 D107x1]
+```
+
+### S4.1 exit state
+
+Nothing edited: `git status --porcelain` showed only `M uv.lock` (finding F-9 — rewritten by every `uv run`), restored before this commit and never staged. `src/`, `pyproject.toml`, `mkdocs.yml`, `.pre-commit-config.yaml`, `AGENTS.md` untouched.
+
+**Next (S4.2, group 1):** `eventbus` docstrings — 3 sites in 1 file (`src/backend/eventbus/eventbus.py`: `D105`×2 `__enter__`/`__exit__` per Q-13, `D107`×1), no format half (0 format sites → the pair collapses to one commit).
