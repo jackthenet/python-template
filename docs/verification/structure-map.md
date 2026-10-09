@@ -4285,3 +4285,136 @@ Repo defect F-9 again: `uv run` rewrote `uv.lock`; `git restore uv.lock` was run
 
 **S5.4 gate: verification report produced, spec coverage = 100%, `verify_spec.py` exit 0.**
 Next atomic step: **S6.1** — review vs. the approved spec.
+
+## Phase 6 — Review report (S6.3, 2026-10-09)
+
+**Objective:** produce the Phase 6 review report and confirm it is **clean** — every finding resolved or accepted
+(review skill, S6.3). Inputs: the S6.1 and S6.2 handoffs (their checks re-summarised below), the approved spec, the
+Phase 5 verification record, and the **final** code state.
+
+### Normative basis and what was reviewed
+
+- **Normative basis:** `docs/specs/structure-map.md` — HUMAN APPROVED (merged to `main`; 27 REQ, 27 AC, 6 INV,
+  16 EDGE, 7 NFR = 83 IDs), plus the Phase 5 record in this file (**VERIFIED**, spec coverage **100%**, commit
+  `a6e93c1`) and the 7 `VERIFIED` DAG tasks. ADR-085 and ADR-086 are the change's design decisions.
+- **Reviewed state (not the commit-by-commit diff, per P-27):** `git diff --name-status main...HEAD` — 18 paths:
+  `scripts/make_map.py` (**567 lines**, Added), `STRUCTURE.md` (**1 938 lines**, Added), the three test files
+  (all **Added**: acceptance 31 / property 6 / unit 18 = **55 nodes**), `scripts/verify_spec.py` (Modified),
+  `.pre-commit-config.yaml:33-39`, `.github/workflows/quality.yml`, `AGENTS.md`,
+  `.agents/skills/code-structure-map/SKILL.md` (Added), `docs/decisions/ADR-085`/`ADR-086`, the two
+  task-graph files, the two docs records, `docs/workflow/PROBLEMS.md`.
+- **Not re-run:** the full suite (S5.1 owns it — 816 passed / 1 skipped), lint/types (S5.2, all exit 0). Only
+  read-only checks were run here: `pytest --collect-only -q` on the three files (**55 tests collected**),
+  `git diff --name-only main...HEAD -- src/` (**empty**), `wc -l`, and targeted `grep`/`sed` on the spec, the
+  generator, the tests, `.pre-commit-config.yaml` and `.github/workflows/`.
+- **Not touched by this step:** no code, test, spec or `tasks.json` edit; no commit (S6.4 owns the version bump
+  and the PR). `uv.lock` was restored after the `uv run` collect and never staged (F-9).
+
+### S6.1 — review vs. normative basis: **CLEAN** (0 blockers, 2 minors, 7 notes, 4 carried)
+
+The change implements what the spec requires — no more, no less. Every specified surface (CLI options and defaults,
+exit-code contract 0/2/3/4, file set, tree block, package/module/symbol scope and visibility, determinism and
+byte-exact `--check`, the check-only pre-commit hook, the layout block, `scripts/` type checking) has a GREEN
+witness; nothing in the final state renders or behaves outside a spec ID. Findings: **R-11**, **R-12** (minors, both
+spec-wording, code conforms to the more specific requirement), **R-13…R-19** (notes on unspecified internals), plus
+the carried **F-06/F-07/F-08/F-10** and the **NFR-006** target miss. No unspecified behavior was introduced.
+
+### S6.2 — traceability + boundaries: **PASSED** (0 blockers, 0 minors, 5 notes)
+
+Traceability intact (manual per-ID coverage is the primary evidence, see below); feature boundaries and architecture
+rules respected; no test weakened. Findings: **R-20…R-24** (notes only).
+
+### Findings table — every finding with severity, evidence and disposition
+
+| ID | Sev. | Finding | Evidence | Disposition |
+|---|---|---|---|---|
+| **R-11** | minor | Spec-internal inconsistency: the **Definitions** "file set" entry and **REQ-003** scope the set to `.py`, while **REQ-009 cl. 3** and **AC-009** require directory count lines over *all* tracked file types. | spec:105, spec:136-138 vs spec:217, spec:419; `scripts/make_map.py:168-186` (`_file_set` returns every tracked file type; its docstring names the `--root` `.py`-only case) and `:552` (the *parse* scope filters to `.py`) | **Accepted.** The code satisfies the more specific requirement (REQ-009 cl. 3 / AC-009, witnessed by the AC-009 acceptance node). Wording-only **Spec Amendment** recommended at the next touch of this spec (Spec Amendment Workflow); no code change, no test change. |
+| **R-12** | minor | **INV-005** wording says the generator "creates `--out`'s parent directory … and no other directory", while the witness creates a two-level `deep/nested/` path; **EDGE-006** naturally requires all missing ancestors. | spec:447 (INV-005), spec:459 (EDGE-006); `tests/acceptance/test_structure_map.py:353-367` (`test_edge_006_out_parent_directory_created`) | **Accepted as under-specified.** The stricter behaviour is the correct one (a single-level `mkdir` would fail the same fixture); no code change, no test change. Wording folds into the same future Spec Amendment as R-11. |
+| **R-13** | note | `_public` treats a single-underscore name ending in `__` as public. | `scripts/make_map.py:426-428` | **Accepted.** No such name exists in the repository, so no witness can distinguish it; the rule matches the spec's Definitions (a dunder name is public). |
+| **R-14** | note | `_dunder_all(...) or _public_imports(...)` falls back to public imports when `__all__` is empty or computed. | `scripts/make_map.py:337-347`, `:494` | **Accepted.** All 11 `src/` packages define a literal non-empty `__all__`; the fallback is the spec's stated fallback path, not new behavior. |
+| **R-15** | note | `git ls-files -z` adds `-z` to the command the spec names. | `scripts/make_map.py:146` vs spec:105/spec:137 | **Accepted.** Same file set, byte-exact names (the REQ-020 determinism / NFR-007 portability requirement); no behavior delta. |
+| **R-16** | note | `_walk_paths` counts only `.py` in non-git `--root` mode, unlike git mode. | `scripts/make_map.py:158-166` + its docstring (`:176`); EDGE-007's fixture asserts no count line | **Accepted, documented limitation.** EDGE-007 specifies the fallback, not count parity; the fallback path is the degraded mode by design. |
+| **R-17** | note | A non-existent `--root` exits 0 with an empty map; an unwritable `--out` parent would raise an unhandled `OSError`. | EDGE table has "not a git repository" only (spec:460); no witness for either case | **Accepted as unspecified.** Neither case is a spec ID, so neither is a violation; both are recorded here as candidates for a future EDGE ID via the same Spec Amendment. Not a blocker: no specified behavior is wrong. |
+| **R-18** | note | `_print_line` reconfigures `sys.stdout` to UTF-8 — a process-level side effect the Observability table does not name. | `scripts/make_map.py:514-520` | **Accepted, required.** The pinned em-dash messages (REQ-005) cannot be encoded by a cp1252 Windows stdout (NFR-007); it mirrors the `scripts/verify_spec.py` precedent. |
+| **R-19** | note | `import inspect` is not in REQ-001's parenthetical module list. | `scripts/make_map.py:20`; AC-001 tests stdlib-ness via `sys.stdlib_module_names` | **Accepted.** The normative sentence is "stdlib only", and it holds; the parenthetical is illustrative, not a closed list. |
+| **R-20** | note | The NFR-001 node is `skipif`-guarded on a measured slow-host calibration. | `tests/acceptance/test_structure_map.py:447` | **Accepted — spec-sanctioned.** NFR-001 states the skip and that it is not a CI gate (spec:475). |
+| **R-21** | note | One unit node skips when running as root (`mode 000` cannot make a file unreadable). | `tests/unit/test_make_map.py:238` | **Accepted — environment fixture guard**, not a weakened assertion; the node runs in CI and on this host. |
+| **R-22** | note | The shared test tooling (polyfactory / respx / time-machine) is not exercised by this change. | `tests/unit/test_make_map.py` (hand-written source-text fixtures); AGENTS.md "Using the Test Tooling" | **Accepted.** There are no models to factory-build and no httpx calls, and `travel()` would invalidate the NFR-001 wall-clock budget; the fixture data *is* the subject under test (Python source text). |
+| **R-23** | note | `check_traceability.py`'s PASS cannot police this spec's REQ/AC rows (IDs live in one global namespace across specs). | `scripts/check_traceability.py` output (878 rows, 136 spec IDs, 801 test functions) | **Accepted — evidence rule.** The manual per-ID check below is the primary evidence for this change; the report cites it, with the script as secondary. Durable fix (per-spec ID namespace) already logged as **P-85**. |
+| **R-24** | note | The NFR-006 matrix row is `VERIFIED` with no witness. | spec:480 ("target, not a gate") and spec:567 (`record` row, *no test*) | **Accepted — legal by spec design** (the `record` category is defined in spec §11); the recorded value is the line count in the S5.4 Deviations table. |
+| **F-06** (carried) | note | Nested-class group order is not specified. | Phase 3/4 record; spec silent | **Accepted.** Spec is silent; the observed order is deterministic (INV-001/REQ-020 witnesses), so the map is byte-stable. |
+| **F-07** (carried) | note | Decorator rendering uses `ast.unparse` (mechanism, not specified wording). | Phase 3/4 record | **Accepted.** The spec fixes the rendered *form*; `ast.unparse` is the stdlib mechanism and the acceptance witness pins the output bytes. |
+| **F-08** (carried) | note | AC-001's "one read per file" is witnessed statically at a single read site. | Phase 3/4 record; AC-001 node | **Accepted.** Static single-read-site plus the NFR-001 wall-clock budget bound the claim; a runtime counter would add non-specified machinery. |
+| **F-10** (carried) | note | AC-021 needs the sequence generate → generate → `--check`. | Phase 3/4 record; AC-021 node | **Accepted.** The witness runs the full sequence against the committed `STRUCTURE.md`; `make_map.py --check` exits 0 (S5.2 gate). |
+| **NFR-006** | minor | `wc -l scripts/make_map.py` = **567** against the ≈250-line target. | spec:480 ("target, not a gate"), spec:567 (`record` row); S5.4 Deviations row 1 | **Accepted, recorded — not a gate.** 245 statement lines at the 419-line checkpoint (under target); the growth is REQ/AC/INV/EDGE citation prose the traceability rules require plus the helpers the complexipy ≤15 ceiling forced (P-83). Splitting the renderer was declined in S4.3 (it moves code, deletes nothing). |
+
+**Every finding has a disposition** — 3 accepted with a follow-up Spec Amendment (R-11, R-12, R-17, wording/EDGE-table
+only), the rest accepted as specified, spec-sanctioned, or out of the spec's scope. **No finding is open.**
+
+### Traceability verdict — **intact**
+
+- **Primary evidence (manual per-ID coverage, required by R-23):** the 56 Structure Map Matrix rows (S5.3) cover
+  **27 REQ / 27 AC / 6 INV / 16 EDGE / 7 NFR**; every REQ has ≥ 1 GREEN test (27/27), every AC (27/27), every INV
+  (6/6, all property witnesses), every EDGE (16/16); NFR-006 is the spec's own `record` row. **55 witnesses cited =
+  55 defined (1:1, no orphans, no missing link)**; spec §7 AC→REQ pairs match **27/27**; §11 witness placement is
+  correct **55/55** (category and file).
+- **Secondary evidence:** `uv run python scripts/check_traceability.py` → **PASS** (878 rows, 136 spec IDs, 801 test
+  functions — referential integrity: no missing row, no unknown ID, no dead test reference, no undeclared status),
+  and `uv run python scripts/verify_spec.py docs/specs/structure-map.md` → **PASS** (every REQ has an AC; every
+  AC-001…AC-027 has an executable test; every INV-001…INV-006 has a property test).
+
+### Boundaries & architecture verdict — **clean**
+
+- `git diff --name-only main...HEAD -- src/` is **empty** — no feature source file was touched; the generator lives
+  in `scripts/`, the right home for a repo-level tooling script (**ADR-086** makes `scripts/` type-checked, and
+  `mypy scripts/` is exit 0).
+- The generator is **stdlib-only** (NFR-003, `deptry` exit 0); **no cross-feature internal import** — the single
+  `from backend.logging import …` hit is inside a string fixture at `tests/unit/test_make_map.py:686`.
+- Nothing was added under `model/`, `services/` or `shared/` (the repository has none of those directories under
+  `src/`); no new dependency; no CI job runs `make_map.py --check` — `grep -rn make_map .github/workflows/` is
+  empty, as **AC-023** requires; the hook is the local `structure-map-check` at `.pre-commit-config.yaml:33-39`.
+- **Observability:** the generator's contract is the spec's Observability table (pinned stdout/stderr messages, exit
+  codes 0/2/3/4) — it is a repo tooling script, not a backend feature, so the shared logging feature does not apply
+  (and importing it would break REQ-001's stdlib-only rule). R-18 records the one side effect the table does not name.
+
+### Acceptance tests not weakened — **confirmed**
+
+All three test files are **Added** in the diff (`git diff --name-status main...HEAD`), so no pre-existing test was
+modified, deleted or weakened. **Node-count equality across the gates:** `uv run pytest --collect-only -q` on the
+three files → **55 tests collected** now, identical to the **55 nodes collected at the Phase 3 RED gate** (this file,
+S3.2 section) and to the 55 rows/witnesses of S5.1–S5.4. No `xfail` anywhere in the three files; the only skips are
+the spec-sanctioned NFR-001 `skipif` (`tests/acceptance/test_structure_map.py:447`) and the root-privilege fixture
+guard (`tests/unit/test_make_map.py:238`) — neither weakens an assertion, and neither is a structure-map node in the
+Phase 5 counts (the 1 suite-wide skip is the pre-existing file-management symlink skip).
+
+### AGENTS.md shared-capability note (S6.3 done-criterion) — **already satisfied**
+
+The change is a reusable shared capability, and its "how to use this" note is already in the branch: `AGENTS.md:65`
+(the **Structure Map** tooling entry: generate / `--check` / regenerate in the same commit / never hand-merge a
+conflict) and the skill-table row at `AGENTS.md:326` (`code-structure-map`, ambient, before exploring). No further
+`AGENTS.md` edit is needed, and none was made in this step.
+
+### Finding count (derived from the table above)
+
+| Tally | Blockers | Minors | Notes |
+|---|---|---|---|
+| Numbered findings **R-11 … R-24** | 0 | **2** (R-11, R-12) | **12** (R-13…R-19, R-20…R-24) |
+| Carried findings **F-06, F-07, F-08, F-10** + **NFR-006** | 0 | **1** (NFR-006 target miss) | **4** |
+| **Total** | **0** | **3** | **16** |
+
+The launch instruction's "4 minors … 12 notes" does not match its own enumeration: the minors it names are exactly
+three (R-11, R-12, NFR-006 — "and none other"), and the notes total 16 once the four carried notes are counted (12 if
+the carried notes are tallied separately, as in the middle row above). The counts stated here are the ones derived from
+the findings lists; the verdict is unaffected — **0 blockers, every finding dispositioned**.
+
+### Verdict
+
+**CLEAN — 0 blockers, 3 minors (R-11, R-12, NFR-006 target miss), 16 notes** (12 numbered R-13…R-24 plus the 4
+carried F-06/F-07/F-08/F-10). Normative-basis compliance confirmed; traceability intact (27/27 REQ and AC with a
+GREEN witness, 55/55 witnesses 1:1, no orphans); feature boundaries and architecture rules respected; no acceptance
+test weakened or deleted; every finding resolved or accepted, none open.
+
+Per the **Review Gate** in AGENTS.md (a clean Phase 6 review report), the change **structure-map** is **complete** and
+may proceed to **S6.4** — version bump (`minor`, FEATURE, `bump-my-version bump minor` with a clean working tree) and
+the PR to `main` for human merge (the agent does not merge).
+
