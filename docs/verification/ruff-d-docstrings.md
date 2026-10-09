@@ -1118,3 +1118,43 @@ Remaining `D` sites in `src/` after group 10: **0** — every feature group is d
 - **Not a finding.** `set_roles` / `add_role` / `remove_role` carry no `@requires_permission` and are absent from the 11-action `usermanagement` catalog — that matches user-roles-permissions REQ-026 (the assignment primitives) and REQ-012 (the permission service checks its own action, then delegates). Documented as such in the three docstrings so a reader does not mistake the gap for a missing check.
 
 **Next (S4.2, group 11):** the config commit — `pyproject.toml` (`select += "D"`, `lint.pydocstyle.convention = "google"`, the four `per-file-ignores` trees, the widened `fixable`), `mkdocs.yml`, `.pre-commit-config.yaml` rev, `AGENTS.md:743`. `src/` is `--select D` clean, so the gate flips green.
+
+## Phase 4 — group 11 config commit (S4.2, 2026-10-09)
+
+One commit, four files, exactly the §"Exact change scope" items 1–4 — the gate flips here (Q-7 a: docstrings first, config last). Base: `ba2867a` (group 10 evidence); `src/` was already `--select D` clean, so nothing outside the config/guidance surface needed to change.
+
+### Config diff summary
+
+| File | Change | Scope item |
+|---|---|---|
+| `pyproject.toml` | `lint.select` gains `"D"  # pydocstyle — docstrings (google convention; src/ only, see per-file-ignores)` | §1 |
+| `pyproject.toml` | `lint.fixable` gains `"D204", "D207", "D208", "D209", "D211", "D212", "D403"  # docstring layout, always-fixable (Q-12)` | §1 (Q-12) |
+| `pyproject.toml` | new `[tool.ruff.lint.pydocstyle]` → `convention = "google"          # Q-1 / Q-2` | §1 |
+| `pyproject.toml` | new `[tool.ruff.lint.per-file-ignores]` → `"tests/*" = ["D"]`, `"scripts/*" = ["D"]`, `"migrations/*" = ["D"]`, `".github/*" = ["D"]` (the record's exact glob spellings — ruff's per-file globs match across `/`, no `**` rewrite) | §1 (Q-3 / Q-23 / Q-29) |
+| `mkdocs.yml` | `mkdocstrings` → `handlers.python.options.docstring_style: google` (inert pin, F-8 — the handler already defaults to `google`; zero rendering delta from this line) | §2 (Q-18) |
+| `.pre-commit-config.yaml` | `astral-sh/ruff-pre-commit` `rev: v0.15.12` → **`rev: v0.16.10`** (one line, F-6 — matches the `ruff>=0.16.10` dev pin and the installed `ruff 0.16.10`) | §3 (Q-28) |
+| `AGENTS.md` | the single **Documentation** bullet in §"General Code & Style Conventions" extended: Google style, gated by ruff `D` over `src/` with the four exempt trees via `per-file-ignores`, and the no-filler rule (filler that restates the signature is rejected in review). Prose only; the `python-best-practices` skill untouched (Q-24) | §4 (Q-24) |
+
+Nothing else in `pyproject.toml` changed: `version = "1.0.0"` (line 4) and `[tool.bumpversion] current_version = "1.0.0"` (line 85) are untouched (**INV-E**, Q-27); `ruff>=0.16.10` (line 62) untouched (**INV-F**, no new/changed dependency); no `# noqa` anywhere on the branch (**INV-C** — the only `noqa` string in the branch diff is INV-C's own wording in this file); `per-file-ignores` gained **exactly** the four decided trees, no per-file exemption for a real `src/` gap.
+
+### Verification (flipped gate + invariants)
+
+| Evidence | Command | Result |
+|---|---|---|
+| **Flipped CI-parity sweep, `D` now selected** | `uv run ruff check .` | **All checks passed!** — the acceptance signal; `D` is live over `src/` and the four exempt trees are silenced by `per-file-ignores` (the 743 `tests/` and the 2 `.github/hooks/` sites do not fire) |
+| Targeted `D` re-check | `uv run ruff check src --select D --config 'lint.pydocstyle.convention = "google"'` | All checks passed! (0 of the original 328 sites remain) |
+| Formatting unchanged | `uv run ruff format --check .` | **339 files already formatted** — identical to the S4.1 baseline |
+| Types unchanged | `uv run mypy src/` | **Success: no issues found in 84 source files** — identical to baseline |
+| **INV-D** (executable code identical) | `uv run python %LOCALAPPDATA%/Temp/s41_ast_digest.py src` | `64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0` — byte-identical to the S4.1 baseline digest |
+| **INV-A** (traced wording, AC-009) | `uv run pytest tests/acceptance/logging_coverage -q -k docstring` → `tests/acceptance/logging_coverage/test_docstrings.py::test_traced_class_docstrings_mention_tracing` | **1 passed, 19 deselected** |
+| Docs site | `uv run --group docs mkdocs build --strict` | built in 3.27 s, **no `WARNING`/`ERROR` log lines** (the only "Warning" string in the output is the Material theme's upstream MkDocs-2.0 advisory banner, printed on every build, unrelated to this change) |
+| Dependencies | `uv run deptry .` | **Success! No dependency issues found.** (90 files scanned) |
+| **INV-B / INV-J** (diff surface) | `git diff --name-only` before commit | only `pyproject.toml`, `mkdocs.yml`, `.pre-commit-config.yaml`, `AGENTS.md` (+ this record) — no `tests/`, `scripts/`, `migrations/`, `userdocs/`, `docs/specs/`, `docs/decisions/`, `docs/tasks/` file touched |
+
+**All 328 `D` sites measured at P.4 (398 bare / 328 under google) are now gated**: the config commit makes `ruff check .` fail if any of them regresses or if a new undocumented public object appears in `src/`, and CI's `ruff` job (`.github/workflows/lint.yml`) plus the `ruff-check --fix` pre-commit hook now run the same rule set at the same version.
+
+### `uv.lock` decision (F-9) — deliberately NOT touched here
+
+`uv.lock` is dirtied by every `uv run` in this worktree (the stale `python-template 0.6.1` entry vs `pyproject.toml:4` `1.0.0`). It was **reverted with `git restore uv.lock` before committing and never staged**, so the config commit contains exactly the four files. Supersedes the P-74 note that folded the refresh into this change's config commit: **structure-map's PR #75 bump commit already carries the one-line lock refresh**, so duplicating it here would only create a merge conflict on a one-line file. Until #75 merges, every step on every branch keeps reverting the incidental churn.
+
+**Next (S5.1):** Phase 5 — full test suite (treating `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` as the known flake per P-86) + the DOCS/CHORE light gate, then INV-A…INV-J against the final diff.
