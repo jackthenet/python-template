@@ -139,6 +139,20 @@ class PermissionService:
         event_bus: EventPublisher | None = None,
         settings_registry: SettingsRegistry | None = None,
     ) -> None:
+        """Construction is the only wiring point (constructor DI, REQ-023, D19).
+
+        The four required collaborators are stored as given; the optional ones
+        select modes. ``session_lookup=None`` makes a check that carries a token
+        deny ``storage_error`` instead of validating it (fail-closed, EDGE-007),
+        while a check without a token skips session validation either way
+        (AC-021). ``catalog=None`` installs an empty catalog, so every check
+        denies ``unknown_permission`` until the features register their actions
+        (REQ-004). ``event_bus=None`` means no events and no ``SettingChanged``
+        subscription (AC-025). ``settings_registry=None`` defers to the shared
+        registry, resolved lazily on the next sync (REQ-019). The
+        ``SettingChanged`` subscription is taken here, so a constructed service
+        already reacts to registry writes of ``permissions.system_principal``.
+        """
         self._role_repository = role_repository
         self._grant_repository = grant_repository
         self._system_repository = system_repository

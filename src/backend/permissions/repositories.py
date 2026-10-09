@@ -36,6 +36,11 @@ _MEMORY_URL = "sqlite:///:memory:"
 
 
 def _utcnow() -> datetime:
+    """The single timestamp source for the ``created_at`` / ``granted_at`` columns.
+
+    Timestamps are stored timezone-aware UTC and never read back: every listing
+    is ordered by name, never by time.
+    """
     return datetime.now(UTC)
 
 
@@ -68,6 +73,13 @@ class _SqliteRepository:
     ``SQLModel.metadata.create_all``)."""
 
     def __init__(self, database_url: str) -> None:
+        """Engine bootstrap shared by the three SQLite repositories.
+
+        ``create_all`` runs on every construction and is idempotent, so the
+        repositories work on a fresh file without a migration; the alembic
+        migration is what seeds the built-in roles and the bootstrap system
+        set (REQ-022, AC-027).
+        """
         self._engine = _make_engine(database_url)
         SQLModel.metadata.create_all(self._engine)
 
@@ -141,6 +153,11 @@ class SqliteRoleRepository(_SqliteRepository, RoleRepository):
     """A SQLite/SQLModel implementation of :class:`RoleRepository`."""
 
     def add(self, role: str, description: str | None, is_builtin: bool) -> None:
+        """Insert the role row, translating the primary-key violation into :class:`RoleAlreadyExistsError`.
+
+        ``created_at`` is stamped here, not by the caller, and a rejected
+        insert is rolled back so the existing row stays untouched.
+        """
         with Session(self._engine) as session:
             try:
                 session.add(Role(role=role, description=description, is_builtin=is_builtin, created_at=_utcnow()))
@@ -150,14 +167,22 @@ class SqliteRoleRepository(_SqliteRepository, RoleRepository):
                 raise RoleAlreadyExistsError(role) from error
 
     def get(self, role: str) -> Role | None:
+        """Read one role in its own session; a missing role is ``None``, never an error."""
         with Session(self._engine) as session:
             return session.exec(select(Role).where(Role.role == role)).first()
 
     def list_all(self) -> Sequence[Role]:
+        """Every role row, ordered by role name (not by creation time)."""
         with Session(self._engine) as session:
             return session.exec(select(Role).order_by(Role.role)).all()
 
     def delete(self, role: str) -> None:
+        """Delete the role and its grant rows in one session.
+
+        The grant rows go first so no FK is left dangling; an unknown role is a
+        silent no-op here — the service raises :class:`RoleNotFoundError` before
+        calling (REQ-007).
+        """
         with Session(self._engine) as session:
             grants = session.exec(select(RolePermission).where(RolePermission.role == role)).all()
             for grant in grants:
@@ -181,12 +206,14 @@ class SqliteGrantRepository(_SqliteRepository, GrantRepository):
         ).first()
 
     def grant(self, role: str, permission: str) -> None:
+        """Insert the grant row only when it is absent, so a repeat grant keeps the original ``granted_at``."""
         with Session(self._engine) as session:
             if self._find_grant(session, role, permission) is None:
                 session.add(RolePermission(role=role, permission=permission, granted_at=_utcnow()))
                 session.commit()
 
     def revoke(self, role: str, permission: str) -> None:
+        """Delete the grant row when present; an absent grant is a no-op (REQ-008)."""
         with Session(self._engine) as session:
             existing = self._find_grant(session, role, permission)
             if existing is not None:
@@ -194,11 +221,18 @@ class SqliteGrantRepository(_SqliteRepository, GrantRepository):
                 session.commit()
 
     def get_role_permissions(self, role: str) -> frozenset[str]:
+        """The role's explicit grant keys.
+
+        A role with no grants and a role that does not exist are
+        indistinguishable here (both empty) — the service checks role existence
+        separately (REQ-008).
+        """
         with Session(self._engine) as session:
             rows = session.exec(select(RolePermission).where(RolePermission.role == role)).all()
             return frozenset(row.permission for row in rows)
 
     def list_all(self) -> Sequence[RolePermission]:
+        """Every grant row, ordered by ``(role, permission)``."""
         with Session(self._engine) as session:
             return session.exec(select(RolePermission).order_by(RolePermission.role, RolePermission.permission)).all()
 
@@ -207,6 +241,11 @@ class SqliteSystemPrincipalRepository(_SqliteRepository, SystemPrincipalReposito
     """A SQLite/SQLModel implementation of :class:`SystemPrincipalRepository`."""
 
     def set_permissions(self, permissions: Iterable[str]) -> None:
+        """Replace the whole system set inside one session, so no reader sees a half-written set (REQ-018).
+
+        Keys are validated in the service before this call, so an unknown key
+        never reaches the table (EDGE-020).
+        """
         # Atomic replace within one session (all-or-nothing).
         with Session(self._engine) as session:
             rows = session.exec(select(SystemPrincipalPermission)).all()
@@ -217,6 +256,7 @@ class SqliteSystemPrincipalRepository(_SqliteRepository, SystemPrincipalReposito
             session.commit()
 
     def get_permissions(self) -> frozenset[str]:
+        """Full table read on every call — the system set is live, never cached (REQ-018)."""
         with Session(self._engine) as session:
             rows = session.exec(select(SystemPrincipalPermission)).all()
             return frozenset(row.permission for row in rows)
@@ -226,20 +266,25 @@ class MemoryRoleRepository(RoleRepository):
     """An in-memory implementation (tests/DI); instances are isolated."""
 
     def __init__(self) -> None:
+        """A fresh store: no roles, and no state shared with any other instance."""
         self._roles: dict[str, Role] = {}
 
     def add(self, role: str, description: str | None, is_builtin: bool) -> None:
+        """Dict membership is the in-memory stand-in for the SQLite primary key (same error)."""
         if role in self._roles:
             raise RoleAlreadyExistsError(role)
         self._roles[role] = Role(role=role, description=description, is_builtin=is_builtin, created_at=_utcnow())
 
     def get(self, role: str) -> Role | None:
+        """Direct dict lookup; a missing role is ``None``."""
         return self._roles.get(role)
 
     def list_all(self) -> Sequence[Role]:
+        """Sorted by role name, matching the SQLite repository's ordering."""
         return [self._roles[key] for key in sorted(self._roles)]
 
     def delete(self, role: str) -> None:
+        """Silent no-op for an unknown role (``pop`` with a default)."""
         self._roles.pop(role, None)
 
 
@@ -247,20 +292,25 @@ class MemoryGrantRepository(GrantRepository):
     """An in-memory implementation (tests/DI); instances are isolated."""
 
     def __init__(self) -> None:
+        """A fresh store keyed by the ``(role, permission)`` pair — one row per pair."""
         self._grants: dict[tuple[str, str], RolePermission] = {}
 
     def grant(self, role: str, permission: str) -> None:
+        """Insert-only: an existing grant is left untouched (idempotent, REQ-008)."""
         key = (role, permission)
         if key not in self._grants:
             self._grants[key] = RolePermission(role=role, permission=permission, granted_at=_utcnow())
 
     def revoke(self, role: str, permission: str) -> None:
+        """Drop the pair when present; an absent grant is ignored."""
         self._grants.pop((role, permission), None)
 
     def get_role_permissions(self, role: str) -> frozenset[str]:
+        """Linear scan over the grant keys — fine at the fixture sizes this store is built for."""
         return frozenset(permission for (grant_role, permission) in self._grants if grant_role == role)
 
     def list_all(self) -> Sequence[RolePermission]:
+        """Grant rows ordered by their ``(role, permission)`` key, as the SQLite listing is."""
         return [self._grants[key] for key in sorted(self._grants)]
 
 
@@ -268,13 +318,16 @@ class MemorySystemPrincipalRepository(SystemPrincipalRepository):
     """An in-memory implementation (tests/DI); instances are isolated."""
 
     def __init__(self) -> None:
+        """A fresh store, empty — the bootstrap system set is seeded by the migration, not here (REQ-022)."""
         self._permissions: dict[str, SystemPrincipalPermission] = {}
 
     def set_permissions(self, permissions: Iterable[str]) -> None:
+        """Rebuild the whole mapping (a replacement, not a merge): keys not listed are dropped."""
         self._permissions = {
             permission: SystemPrincipalPermission(permission=permission, granted_at=_utcnow())
             for permission in permissions
         }
 
     def get_permissions(self) -> frozenset[str]:
+        """Snapshot copy: mutating the returned set cannot change the store."""
         return frozenset(self._permissions)

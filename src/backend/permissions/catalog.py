@@ -28,6 +28,12 @@ class PermissionCatalog:
     """
 
     def __init__(self) -> None:
+        """Both indexes start empty — nothing is seeded or loaded.
+
+        The catalog holds only what the features' startup declarations put in
+        it: an unregistered catalog denies every check with
+        ``unknown_permission`` (REQ-004, REQ-005).
+        """
         self._actions: dict[str, str] = {}  # permission key -> description
         self._features: dict[str, list[str]] = {}  # feature -> keys (insertion order)
 
