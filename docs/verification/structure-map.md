@@ -2364,3 +2364,95 @@ No test file, `pyproject.toml`, `uv.lock` (restored after `uv run` touched it), 
 **S4.3 (T-002) gate: PASSED — behaviour-identical refactor applied, GREEN kept (19 passed / 30 failed
 unchanged, 15/15 T-002 nodes GREEN with and without `-p no:randomly`), ruff + mypy + deptry clean.**
 
+## T-002 — S4.4 status VERIFIED (2026-10-09)
+
+**Objective:** set T-002 to `"status": "VERIFIED"` in the task DAG, sync the `docs/tasks/` copy, record
+the DAG state, commit. No implementation, test, script or spec file was touched by this step.
+
+### Status flip
+
+`T-002` `"status": "PENDING"` → `"status": "VERIFIED"` in both DAG copies:
+
+- `.github/task-runner/tasks.json:233` (active build environment)
+- `docs/tasks/structure-map.tasks.json:233` (planning copy)
+
+Both files were edited at the same place (`"dependencies": ["T-001"],` is the only such block in the
+DAG, so the anchor is unique) and the edit is the **only** change in either file — `git diff --numstat`
+reports `1 1` for each.
+
+### Both copies in sync (proven, not eyeballed)
+
+```
+$ diff .github/task-runner/tasks.json docs/tasks/structure-map.tasks.json
+(no output; exit 0 → the two files are byte-identical)
+```
+
+Programmatic cross-check (`json.load` of both files, per-task comparison):
+
+```
+task entries equal: True
+top-level keys equal (feature/spec/branch/change_type/adr/grouping/gate_interlock/id_coverage): True
+T-001 VERIFIED | VERIFIED OK    T-002 VERIFIED | VERIFIED OK
+T-003 PENDING  | PENDING OK     T-004 PENDING  | PENDING OK
+T-005 PENDING  | PENDING OK     T-006 PENDING  | PENDING OK
+T-007 PENDING  | PENDING OK
+VERIFIED: 2   PENDING: 5
+```
+
+The DAG validator's own `check_sync` (`scripts/validate_task_dag.py:77`, comparing the per-task
+`status` field between the two files) also ran and passed — see the gate below.
+
+### Gates (cheap, step-scoped; the full suite stays a Phase 5 gate)
+
+| Gate | Command | Result |
+|---|---|---|
+| Task DAG validator (docs copy → also runs `check_sync` against the runner copy) | `uv run python scripts/validate_task_dag.py docs/tasks/structure-map.tasks.json` | **PASSED** — `Task DAG validation PASSED: 7 tasks, acyclic, well-formed.` exit 0 |
+| Traceability referential integrity | `uv run python scripts/check_traceability.py` | **PASS** — `Traceability: PASS (822 matrix rows, 136 spec IDs, 801 test functions)` exit 0 |
+| T-002 `green_command` node set, re-run at close (the 15 nodes of the task's RED/GREEN set) | `uv run pytest tests/acceptance/test_structure_map.py::test_ac_001… tests/unit/test_make_map.py::test_edge_005… -q` | **15 passed in 4.77s** exit 0 (randomly seed active) |
+| ruff | n/a for this step — the step's changed paths are two JSON files and this Markdown record; no Python was written or modified. The S4.3 ruff result on the changed paths (`scripts/make_map.py`) stands. |
+
+Not re-run here (already recorded at S4.2/S4.3, inputs unchanged): `uv run mypy scripts/` (exit 0),
+`uv run deptry .` (exit 0), `uv run ruff format scripts/make_map.py` (left unchanged), and the
+`-p no:randomly` variant of the 15 nodes. The full suite was **not** run — it is a Phase 5 gate.
+
+### NFR-006 line budget — open note carried forward from S4.3
+
+`scripts/make_map.py` is **201 lines** against the NFR-006 ~250-line target: 49 lines of headroom
+left. T-003 (tree section, Packages scope, headers), T-004 (symbol inventory) and T-005 (`--check`,
+determinism) each add rendering code to the same module and are expected to cross the target. The
+**module-split decision belongs to whichever task crosses it** — it is not taken here, and no
+premature split was made at S4.3 (candidate 6, rejected). Recorded so the task that crosses it does
+not treat the target as silently met.
+
+### T-002 close-out
+
+T-002 (REQ-001/002/003/004/006/007/008 · AC-001/002/003/006/007/008 · EDGE-003/004/005/006/007/008/014
+· NFR-001/003/006) is **VERIFIED**: RED observed at S4.1 (`cbc9375`, 14 failed / 1 passed), GREEN at
+S4.2 (`b82d5ff`, 15/15 nodes, `mypy scripts/` exit 0, `deptry` clean, ruff clean), refactor applied at
+S4.3 (`2719a24`, 4 of 9 candidates, gates unchanged), status VERIFIED at S4.4 (this commit). All seven
+`completion_gates` are covered by the S4.1/S4.2/S4.3 records plus the three gates re-run above; the
+last gate ("No pyproject.toml, uv.lock, workflow, hook, AGENTS.md or skill change") holds — `uv.lock`
+was dirtied by `uv run` and restored with `git restore uv.lock`, and no other listed path was touched.
+
+### DAG state for the orchestrator (after this commit)
+
+| Task | Group | Dependencies | Status |
+|---|---|---|---|
+| T-001 | tooling — `scripts/` joins the type gate (ADR-086) | — | VERIFIED |
+| T-002 | `scripts/make_map.py` — generator harness (module, CLI, file set, exit codes, document shape) | T-001 ✅ | **VERIFIED** |
+| T-003 | `scripts/make_map.py` — Directory tree, Packages scope, group/module headers, path form | T-002 ✅ | PENDING ← **ready** |
+| T-004 | `scripts/make_map.py` — symbol inventory | T-003 | PENDING |
+| T-005 | `scripts/make_map.py` — `--check` semantics, determinism, hook-clean output | T-004 | PENDING |
+| T-006 | integration surface — the skill, the pre-commit hook, AGENTS.md, the advisory rule, the freshness policy | T-005 | PENDING |
+| T-007 | the committed artifact — `STRUCTURE.md` | T-006 | PENDING |
+
+- **VERIFIED: 2 of 7** (T-001, T-002). **PENDING: 5** (T-003, T-004, T-005, T-006, T-007).
+- The DAG is a single linear chain, so exactly **one** task is ready: **T-003** — no ordering choice
+  exists, and it is the natural next step (it renders the tree into the module T-002 created).
+- Next atomic step: **S4.1 (T-003)** — pick T-003 and confirm RED on its `red_command` set.
+
+**S4.4 (T-002) gate: PASSED — T-002 `VERIFIED` in both DAG copies (byte-identical `diff`, exit 0;
+per-task programmatic comparison OK; validator `check_sync` passed), DAG validator PASSED,
+traceability PASS, 15/15 T-002 nodes GREEN. Files changed by this step: the two DAG copies and this
+record.**
+

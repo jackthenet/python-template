@@ -230,7 +230,7 @@
         "No pyproject.toml, uv.lock, workflow, hook, AGENTS.md or skill change."
       ],
       "dependencies": ["T-001"],
-      "status": "PENDING"
+      "status": "VERIFIED"
     },
     {
       "task_id": "T-003",
