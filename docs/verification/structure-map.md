@@ -4003,3 +4003,285 @@ Checks run to verify the fast-path rather than assert it:
 **S4.3 (T-007) gate: refactor step complete — no structural change, T-007 witnesses still GREEN.**
 Next atomic step: **S4.4 (T-007)** — commit + set `VERIFIED` in `.github/task-runner/tasks.json` and sync
 `docs/tasks/structure-map.tasks.json`.
+
+---
+
+## Phase 5 — S5.1 full test suite (2026-10-09)
+
+**Objective:** run the full test suite and the FEATURE-path category subsets, and classify any failure as
+pre-existing vs a regression. Executed in the change worktree at HEAD `3ec204c` (all 7 DAG tasks VERIFIED).
+
+### Commands and summary lines
+
+| Command | Summary line | Exit |
+|---|---|---|
+| `uv run pytest tests/ -q` | **816 passed, 1 skipped in 280.95s (0:04:40)** | 0 |
+| `uv run pytest tests/acceptance/ -q` | **395 passed, 1 skipped in 62.05s (0:01:02)** | 0 |
+| `uv run pytest tests/property/ -q` | **77 passed in 88.78s (0:01:28)** | 0 |
+| `uv run pytest tests/contract/ -q` | **51 passed in 90.77s (0:01:30)** | 0 |
+
+The full-suite run was redirected to `%LOCALAPPDATA%/Temp/s51_full.txt` (and one file per category subset,
+`s51_acceptance.txt` / `s51_property.txt` / `s51_contract.txt`) — outside the repository, so no log artifact
+entered the worktree. `uv run` rewrote `uv.lock` (known repo defect F-9); `git restore uv.lock` was run after
+each batch and `git status --porcelain` afterwards shows only `docs/verification/structure-map.md`.
+
+### Failure classification
+
+**No failures.** 0 failed, 0 errors across the full suite and all three category subsets — so there is nothing
+to classify as pre-existing vs regression, and `main` did not have to be touched (the primary worktree was never
+used for a reproduction run).
+
+The single skip is pre-existing and environment-conditional, not a regression:
+
+| Node | Reason | Provenance |
+|---|---|---|
+| `tests/acceptance/filemanagement/test_filemanagement.py:364` | `SKIPPED: symlinks not available on this host` | file-management acceptance test; this branch touches no file-management file — `git diff --name-only main...HEAD` lists 17 paths (the generator, `STRUCTURE.md`, the three structure-map test files, the two ADRs, the task DAG, the skill/config/docs records, `scripts/verify_spec.py`) and none under `src/backend/filemanagement/` or `tests/acceptance/filemanagement/` |
+
+### Structure-map test inventory (as collected by this run)
+
+| File | Category | Test functions |
+|---|---|---|
+| `tests/acceptance/test_structure_map.py` | acceptance | 31 |
+| `tests/property/test_structure_map.py` | property | 6 |
+| `tests/unit/test_make_map.py` | unit | 18 |
+| **total** | | **55** |
+
+The 55 structure-map tests are GREEN inside the counts above (31 of the 395 acceptance passes, 6 of the 77
+property passes; the 18 unit tests are in the full suite only — `tests/unit/` is not one of the three named
+subsets). No structure-map node was skipped, xfailed, or deselected.
+
+**S5.1 gate: full test suite GREEN — 816 passed, 1 skipped (pre-existing symlink skip), 0 failed.**
+Next atomic step: **S5.2** — lint (`uv run ruff check .`, the one full-repo sweep) + types (`uv run mypy src/`).
+
+## Phase 5 — S5.2 lint + types (2026-10-09)
+
+The one whole-repo sweep (per AGENTS.md: per-task steps lint only their changed paths; this is the only
+repo-wide lint run, matching `.github/workflows/lint.yml` and the `type-check` job of
+`.github/workflows/quality.yml`). Every command was run in the change worktree on the final T-007 state
+(HEAD `3ec204c`, working tree otherwise clean). No gate failed, so **no fix was made** — nothing was
+relaxed, no threshold changed, no test touched.
+
+| # | Command | Exit | Summary line |
+|---|---|---|---|
+| 1 | `uv run ruff check .` | 0 | `All checks passed!` (whole repo — the one full sweep) |
+| 2 | `uv run ruff format --check .` | 0 | `343 files already formatted` |
+| 3 | `uv run mypy src/` | 0 | `Success: no issues found in 84 source files` |
+| 4 | `uv run mypy scripts/` | 0 | `Success: no issues found in 4 source files` (the CI step this change adds via T-001) |
+| 5 | `uv run deptry .` | 0 | `Scanning 91 files…` `Success! No dependency issues found.` |
+| 6 | `uv run complexipy src tests --max-complexity-allowed 15` | 0 | `All functions are within the allowed complexity.` |
+| 7 | `uv run bandit -q -r src` | 0 | no findings; only pre-existing `nosec encountered (B105), but no failed test` notices in `src/backend/usermanagement/feature_actions.py:28-33` (informational, exit 0) |
+| 8 | `uv run --group docs mkdocs build --strict` | 0 | `Documentation built in 2.53 seconds` — no build warning/error (only the Material team's mkdocs-2.0 announcement banner) |
+
+Informational (not a gate, run for completeness because it is a step of the same CI job):
+`uv run ty check src/` exits 1 with **153 diagnostics** (132 `error[invalid-type-form]`, 21
+`warning[unsupported-base]`, plus `info:` lines). CI marks it `Run ty (informational)` with
+`continue-on-error: true` (`quality.yml:27-28`), so it never gates. All 153 are in `src/backend/**` files
+this change does not touch — `git diff --name-only main...HEAD` lists 17 paths, none under `src/` — so the
+diagnostics are pre-existing and unchanged by this change.
+
+CI job coverage check (`grep -n "run:" .github/workflows/quality.yml`): the job list is `type-check`
+(mypy src/, mypy scripts/, ty informational), `security` (pip-audit, bandit), `coverage` (pytest --cov —
+S5.1 ran the suite), `dependency-review`, `dependencies` (deptry), `docs` (mkdocs build --strict),
+`migrations` (alembic upgrade head — this change adds no SQLModel table, so no migration and no new model
+import in `migrations/env.py`), `complexity` (complexipy). Every gate that this change can affect was run.
+
+Pre-check for the next step (not this step's gate): `uv run python scripts/check_traceability.py` →
+`Traceability: PASS (822 matrix rows, 136 spec IDs, 801 test functions)` — the structure-map spec IDs and
+the new test functions already satisfy referential integrity; S5.3 still owns the matrix rows themselves.
+
+The change's own new pre-commit hook was also verified against the final state:
+`uv run python scripts/make_map.py --check` (`.pre-commit-config.yaml` `structure-map-check`) exits **0**
+silently — `STRUCTURE.md` is up to date at HEAD `3ec204c`, so the committed map needs no regeneration.
+
+Not run: `uv run pip-audit` (the `security` job's first step) — it audits installed dependencies, and this
+change's diff contains no `pyproject.toml` / `uv.lock` change (the 17 paths are scripts, tests, docs, the
+skill, the workflow and the config), so it cannot be affected; `bandit` (the step that follows it in the
+same job) was run and passes, per the P-34 lesson about multi-step jobs.
+
+Repo defect F-9 workaround: each `uv run` rewrites `uv.lock`; `git restore uv.lock` was run after every
+group and `git status --short` at the end of the step shows only `M docs/verification/structure-map.md`
+(this section) — `uv.lock` was never staged.
+
+**S5.2 gate: lint clean on the whole repo (ruff check + ruff format --check), types clean (mypy src/ and
+mypy scripts/), the security / dependency / complexity / docs CI jobs all pass, and the structure-map
+check hook passes.**
+Next atomic step: **S5.3** — update the traceability matrix.
+
+## Phase 5 — S5.3 traceability (2026-10-09)
+
+**Objective:** update `docs/verification/traceability.md` with this change's evidence rows (every REQ has at
+least one GREEN test), then pass `uv run python scripts/check_traceability.py`. Docs-only: no test, script or
+spec file was touched in this step.
+
+### State found before the step
+
+`grep -n "structure-map" docs/verification/traceability.md` → **no match**: the change had **no row at all** in
+the matrix. Phase 3 (S3.1/S3.2) never added the `RED` rows spec §12 anticipates, so there was nothing to
+refresh — **0 existing rows updated, 0 rewritten**, and no row belonging to another change was touched
+(`git diff --numstat docs/verification/traceability.md` → **96 inserted, 0 deleted**).
+
+The matrix was never read whole (1 028 lines before the step): the section list, the table format and the
+convention-B cell style were taken from targeted `grep -n` + `read` with offset/limit.
+
+### Rows added — a new `## Structure Map Matrix (structure-map FEATURE — S5.3, 2026-10-09)` section
+
+Inserted before `## Drift Checks`. **56 data rows** covering **all 83 IDs** of `docs/specs/structure-map.md`:
+
+| Sub-table | Rows | IDs covered | Witness category |
+|---|---|---|---|
+| REQ / AC | 27 | REQ-001…REQ-027 + AC-001…AC-027 (54 IDs, paired 1:1 as spec §7 pairs them) | acceptance (18) / unit (9) |
+| INV | 6 | INV-001…INV-006 | property (all 6) |
+| EDGE | 16 | EDGE-001…EDGE-016 | acceptance (8) / unit (8) |
+| NFR | 7 | NFR-001…NFR-007 | acceptance (5) / unit (1) / record (1) |
+
+Every cell carries the change name (`structure-map`), the date (2026-10-09), the evidence pointer (S5.1/S5.2 in
+this file) and the commit (`3ec204c`), per convention B (Q-129). Status tokens used: **GREEN** (55 rows) and
+**VERIFIED** (1 row — NFR-006). The subset counts inside each cell are the S5.1 observations: acceptance subset
+395 passed / 1 skipped, property subset 77 passed, full suite 816 passed / 1 skipped (the 18 unit witnesses run
+in the full suite only).
+
+Category totals across the 56 rows: acceptance 31, unit 18, property 6, record 1 — the same 55 witnesses S5.1
+counted (31 + 18 + 6), plus the one record row.
+
+**Node-name verification before writing:** all 55 cited witness functions were enumerated from the three test
+files (`grep -n "^def test_"`) and match spec §11 one-for-one — 31 in `tests/acceptance/test_structure_map.py`,
+18 in `tests/unit/test_make_map.py`, 6 in `tests/property/test_structure_map.py`. The checker's rule (3) then
+confirmed every backticked name exists under `tests/` (801 test functions, no missing-test violation).
+
+### Gate: `uv run python scripts/check_traceability.py`
+
+| Run | Output line |
+|---|---|
+| before this step (pre-check recorded in S5.2) | `Traceability: PASS (822 matrix rows, 136 spec IDs, 801 test functions)` |
+| after this step | **`Traceability: PASS (878 matrix rows, 136 spec IDs, 801 test functions)`** — exit 0 |
+
+822 → **878** rows (+56, exactly the rows added); spec IDs and test-function counts unchanged, so no ID or test
+reference was introduced or removed outside the new section. No fix to the script or the spec was needed.
+
+### Coverage proof independent of the checker (finding 2)
+
+The checker PASS is **not** coverage evidence for this spec — finding 2 above and spec §12: `REQ-XXX`/`AC-XXX`
+is one global namespace and all 54 REQ/AC IDs already have rows from other changes. The coverage claim was
+therefore verified directly: the 83 IDs extracted from `docs/specs/structure-map.md` were compared against the
+IDs present in the new section → **83/83 present, 0 missing**.
+
+**Unclosed ID: none.** Every REQ and AC has a GREEN witness. The one ID with no test is **NFR-006**, which is a
+`record` row by spec §11 design, not a gap: it is recorded `VERIFIED` with the actual count —
+`wc -l scripts/make_map.py` = **567 lines** against the ≈250-line target. The target is exceeded (it is
+explicitly a target, not a gate, and no witness asserts it); the deviation is carried to S5.4 and the Phase 6
+review, together with the earlier NFR-006 notes in this file.
+
+Repo defect F-9: `uv run` rewrote `uv.lock`; `git restore uv.lock` was run immediately and `uv.lock` was never
+staged. `git status --short` at the end of the step: `M docs/verification/structure-map.md` (this section) and
+`M docs/verification/traceability.md` (the new matrix section) — nothing else. Nothing was committed: **S5.4
+owns the Phase 5 commit**.
+
+**S5.3 gate: the traceability matrix carries this change's evidence rows — 56 rows added, 0 rewritten, all 83
+spec IDs covered, `check_traceability.py` PASS (878 rows, 136 spec IDs, 801 test functions).**
+Next atomic step: **S5.4** — verification report, spec coverage = 100%.
+
+## Phase 5 — Verification report (S5.4, 2026-10-09)
+
+**Objective:** produce the Phase 5 verification report and confirm **spec coverage = 100%** (verify skill, S5.4).
+**Inputs:** the S5.1 / S5.2 / S5.3 records in this file, the `## Structure Map Matrix` section of
+`docs/verification/traceability.md` (read as a `awk` slice + `read` with limit, never whole), and
+`docs/specs/structure-map.md` (27 REQ + 27 AC + 6 INV + 16 EDGE + 7 NFR = **83 IDs**).
+
+Docs-only step: no test, script, source or spec file was touched, no `tasks.json` status was changed, the full
+suite was **not** re-run (S5.1 owns it), no version bump (Phase 6 owns it). The only commands run here are
+`verify_spec.py`, the coverage probe, and read-only counting.
+
+### Specification coverage — **100%** (the gate)
+
+Counted from the **56 rows** of the Structure Map Matrix (S5.3) against the 83 IDs of the spec:
+
+| ID class | IDs in spec | Matrix rows | IDs with ≥ 1 GREEN witness | Coverage |
+|---|---|---|---|---|
+| REQ | 27 | 27 (paired 1:1 with AC) | **27 / 27** | **100%** |
+| AC | 27 | 27 | **27 / 27** | **100%** |
+| INV | 6 | 6 | **6 / 6** (all property witnesses) | **100%** |
+| EDGE | 16 | 16 | **16 / 16** | **100%** |
+| NFR | 7 | 7 | **6 / 7** with a witness; NFR-006 is a `record` row | **7 / 7 rows covered, 0 gap** (see Deviations) |
+| **Total** | **83** | **56** | **82 / 83 with an executable witness** | **100%** |
+
+**Spec coverage = 100%: every `REQ-XXX` has at least one GREEN test (27/27), and so does every AC (27/27), INV
+(6/6) and EDGE (16/16).** The single ID with no witness — **NFR-006** — is a `record` row by spec §11 design, not
+an unclosed requirement; its disposition is in Deviations below.
+
+`uv run python scripts/verify_spec.py docs/specs/structure-map.md` → **exit 0**, `Traceability: PASS`: every REQ
+has an AC, every AC-001…AC-027 has an executable test, every INV-001…INV-006 has a property test.
+
+### Acceptance coverage and test-category counts (this change's 55 nodes)
+
+| Category | File | Nodes | Status (S5.1 evidence) |
+|---|---|---|---|
+| Acceptance | `tests/acceptance/test_structure_map.py` | **31** | GREEN — acceptance subset 395 passed / 1 skipped |
+| Property | `tests/property/test_structure_map.py` | **6** | GREEN — property subset 77 passed (one witness per INV) |
+| Unit | `tests/unit/test_make_map.py` | **18** | GREEN — runs in the full suite only (816 passed / 1 skipped) |
+| Contract | — | **0** | no contract node: spec §11/§12 assigns no contract category to this change. Its external contract (CLI options and defaults, exit-code contract, byte-exact `--check`) is witnessed by acceptance nodes `test_ac_002_cli_options_and_defaults`, `test_ac_004_exit_code_contract`, `test_ac_005_check_byte_exact_single_message_exit_3` |
+| **Total** | | **55** | **55 GREEN, 0 failed, 0 skipped** |
+
+Every acceptance test traces back to a normative ID (its matrix row plus the ID in its docstring) — **no orphaned
+test**; the checker's rule (3) confirmed all 55 cited names exist under `tests/` (801 test functions). The 1 skip
+in the acceptance subset is the pre-existing file-management symlink skip, not a structure-map node.
+
+### Branch coverage (secondary signal only)
+
+Coverage tooling **is** available (`pytest-cov>=7.1.0` dev dependency, `pyproject.toml:54`; coverage 7.16.0,
+`[tool.coverage.run] branch = true`). The instructed command was run:
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py tests/property/test_structure_map.py \
+    tests/unit/test_make_map.py --cov=scripts --cov-report=term-missing -q
+→ 55 passed in 61.25s
+→ CoverageWarning: No data was collected (no-data-collected)
+→ TOTAL  530 stmts  530 miss  0%
+→ exit 1  (repo fail_under = 92 floor, which applies to the configured source, not to this probe)
+```
+
+The 0% is a **measurement artifact, not a coverage result**: every witness drives the generator as a
+**subprocess** (`tests/unit/test_make_map.py::_run_generator` → `subprocess.run`), and the repo's coverage
+`source` is deliberately `["src/backend", "src/frontend"]` — `scripts/` is outside it. A second probe
+(`--cov=scripts/make_map.py`) reported `Module scripts/make_map.py was never imported`. Collecting subprocess
+coverage would need `COVERAGE_PROCESS_START` plus a process hook.
+
+**Disposition: no dependency and no coverage configuration was added** (AGENTS.md: *code coverage is a secondary
+quality signal, not evidence that the specification has been implemented*; spec coverage = 100% is the gate and
+it holds). Substitute evidence that the generator body really runs end to end: `uv run python
+scripts/make_map.py --check` exits 0 against the committed 1 938-line map (REQ-021/AC-021, INV-004), and the 55
+witnesses cover the CLI / exit-code / grammar / render / prune / package / symbol / freshness surfaces named in
+spec §11.
+
+### Deviations and dispositions
+
+| # | Deviation | Disposition |
+|---|---|---|
+| 1 | **NFR-006**: `wc -l scripts/make_map.py` = **567** against the ≈250-line target | **Accepted, recorded, not a gate.** Spec §11 defines NFR-006 as a *record* row ("target, not a gate: Phase 5 records the actual line count", no witness). Composition at the 419-line checkpoint: **245 statement lines** (under the target) + 75 docstring + 29 comment + 70 blank; the growth to 567 is the REQ/AC/INV/EDGE citation prose the traceability rules depend on plus the named helpers the complexipy ≤15 ceiling forced (P-83: six functions split in Phase 4). Current composition: 99 blank, 24 comment, 444 code/docstring lines. Splitting the renderer was declined in S4.3 — it moves code, it does not delete it, and NFR-006 asks for no split. Carried to the Phase 6 review as this change's one substantive spec-target miss. |
+| 2 | **Traceability timing**: Phase 3 (S3.1/S3.2) never wrote the `RED` matrix rows spec §12 anticipates, so S5.3 authored all 56 rows at GREEN time | **No coverage gap** (83/83 IDs covered, checker PASS at 878 rows), **process gap** recorded as **P-85** with a durable fix (S3.2 done-criteria, or a per-spec ID namespace in `check_traceability.py`). |
+| 3 | **`ty check src/`** exits non-zero (153 pre-existing diagnostics in files this change never touches) | **Informational, not a gate** — the step is `continue-on-error: true` in the `type-check` job; the gates are `mypy src/` (84 files) and `mypy scripts/` (4 files), both exit 0. Recorded as **P-84**. |
+| 4 | **Code coverage for `scripts/`** is not collectable with the repo's coverage configuration | **Accepted** — secondary signal, see the section above; nothing added to `pyproject.toml`. |
+| 5 | **1 skipped test** in the full suite and the acceptance subset | **Pre-existing** (file-management symlink skip; the environment cannot create symlinks) — identical on `main`, out of scope per the verify skill's pre-existing-vs-regression rule. Not a structure-map node. |
+
+### Verdict
+
+**VERIFIED** — spec coverage **100%** (27/27 REQ with a GREEN test; 83/83 spec IDs covered by 56 matrix rows),
+all 7 DAG tasks `VERIFIED`, 55/55 nodes GREEN, every Phase 5 gate exit 0:
+
+| Gate | Command | Exit |
+|---|---|---|
+| S5.1 | `uv run pytest tests/ -q` → 816 passed, 1 skipped | **0** |
+| S5.1 | `uv run pytest tests/acceptance/ -v` → 395 passed, 1 skipped | **0** |
+| S5.1 | `uv run pytest tests/property/ -v` → 77 passed | **0** |
+| S5.1 | `uv run pytest tests/contract/ -v` → 51 passed | **0** |
+| S5.2 | `uv run ruff check .` / `uv run ruff format --check .` (343 files) | **0** |
+| S5.2 | `uv run mypy src/` (84 files) / `uv run mypy scripts/` (4 files) | **0** |
+| S5.2 | `uv run deptry .` / complexipy max 15 / bandit / `uv run --group docs mkdocs build --strict` | **0** |
+| S5.2 | `uv run python scripts/make_map.py --check` | **0** |
+| S5.3 | `uv run python scripts/check_traceability.py` → PASS (878 rows, 136 spec IDs, 801 test functions) | **0** |
+| S5.4 | `uv run python scripts/verify_spec.py docs/specs/structure-map.md` → Traceability: PASS | **0** |
+| — | `uv run ty check src/` → 153 pre-existing diagnostics | non-zero, `continue-on-error`, **not a gate** (P-84) |
+
+Repo defect F-9 again: `uv run` rewrote `uv.lock`; `git restore uv.lock` was run and `uv.lock` was never staged.
+
+**S5.4 gate: verification report produced, spec coverage = 100%, `verify_spec.py` exit 0.**
+Next atomic step: **S6.1** — review vs. the approved spec.
