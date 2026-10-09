@@ -1565,3 +1565,108 @@ Phase 4 (T-007) splits those six functions inside this task; `max-complexity-all
 `uv run ruff format tests/acceptance/test_structure_map.py` → `1 file left unchanged` (changed path
 only, no repo-wide sweep, P-6).
 
+## Phase 3 — S3.2 gate (RED + ruff) (2026-10-09)
+
+**Objective:** ruff clean on the three derived test paths, RED confirmed for all 7 DAG tasks, no
+collection error, nothing previously GREEN broken. No implementation, no traceability update
+(S5.3), no `tasks.json` status change (S4.4).
+
+### Ruff gate (Phase 3 scope = the derived test paths)
+
+```text
+uv run ruff check tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py
+  -> All checks passed!                (exit 0)
+uv run ruff format --check tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py
+  -> 3 files already formatted         (exit 0)
+```
+
+No violation to fix, so no in-step fix-and-recheck was needed. No repo-wide `ruff check .` /
+`ruff format .` was run — that is the Phase 5 sweep (P-6).
+
+### Collection check (a collection error is not a RED)
+
+`uv run pytest --collect-only -q <the three files>` → **55 tests collected in 0.17s**, zero
+collection or import errors. 55 = the union of the 7 tasks' `tests_to_create` (2 + 15 + 13 + 7 +
+10 + 5 + 3), so every derived node is collected.
+
+### Per-task RED (each `red_command` from `.github/task-runner/tasks.json` run verbatim)
+
+| Task | Nodes | Result | RED reason (observed failure mode) |
+|---|---|---|---|
+| T-001 | 2 | **2 failed** / 0 passed, exit 1 | `clause 1: the type-check job of quality.yml does not run 'uv run mypy scripts/'` (AC-025); `mypy scripts/: exit 1: scripts\verify_spec.py:74: error: Item "TextIO" of "TextIO \| Any" has no attribute "reconfigure" [union-attr]` (NFR-004) |
+| T-002 | 15 | **14 failed** / 1 passed, exit 1 | `scripts\make_map.py does not exist — T-002 Phase 4 has not implemented the generator`; CLI runs exit 2; `no map file at <tmp>/…` for AC-002/003/008, EDGE-007/008; `generate run exits 2`; `--max-depth 0: no argparse usage error on stderr` |
+| T-003 | 13 | **13 failed** / 0 passed, exit 1 | generator missing (`scripts\make_map.py does not exist`), `no map file at <tmp>/…` for AC-009/010/011/012, EDGE-015 |
+| T-004 | 7 | **7 failed** / 0 passed, exit 1 | generator missing — every node fails on the same `scripts\make_map.py does not exist` fixture guard |
+| T-005 | 10 | **10 failed** / 0 passed, exit 1 | generator missing; `generate mode must exit 0: 2/2`, `AC-019: generate runs exit 2/2`, `EDGE-009 fixture: generate exits 2` |
+| T-006 | 5 | **5 failed** / 0 passed, exit 1 | `.agents\skills\code-structure-map\SKILL.md does not exist` (AC-022/027); `.pre-commit-config.yaml declares no hook with id 'structure-map-check'` (AC-023/026); `REQ-024: the layout block still shows ['model/', 'services/']`; `REQ-026: P.1 must carry exactly one advisory sentence about the map, got []` |
+| T-007 | 3 | **3 failed** / 0 passed, exit 1 | `REQ-021: no STRUCTURE.md is committed at the repository root` (AC-021, NFR-002); NFR-005 complexipy exit 1 — see the classification below |
+
+Every task shows at least one node failing **on behavior** (missing generator / missing
+`STRUCTURE.md` / missing skill + hook + `AGENTS.md` guidance / missing CI type-check of `scripts/` /
+over-complexity), **no node failed on a collection or import error, and no test-data
+`ValidationError`/`ValueError` appears** — the test-contract sanity check holds.
+
+### Whole-set result
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py -q
+  -> 54 failed, 1 passed in 5.99s
+```
+
+Failure-mode distribution over the 54 (from `--tb=line`, deduplicated): 25 × `scripts\make_map.py
+does not exist — T-002 Phase 4 has not implemented the generator`, 18 × `No such file or directory`
+(the generator invoked as a subprocess), 5 × `no map file at <tmp>/…`, 2 × skill file missing, 2 ×
+no committed `STRUCTURE.md`, 1 × no `structure-map-check` hook id, 1 × `mypy scripts/` exit 1,
+1 × quality.yml clause 1, 1 × REQ-024 layout block, 1 × REQ-026 P.1 sentence, 1 × AC-019 exit 2,
+1 × NFR-005 complexity.
+
+### Unchanged-GREEN check
+
+The single GREEN node in the set is **`test_nfr_003_deptry_clean`** (verified alone: `1 passed in
+1.02s`). It is expected GREEN: it asserts the repo's dependency hygiene, which this change does not
+touch, and it was GREEN before Phase 3. No other node in the set was GREEN before, so nothing that
+was GREEN has been broken; the three new files collect cleanly, so they introduce no
+collection-time side effects on the rest of the suite (full-suite regression is the Phase 5 gate).
+
+### NFR-005 RED classification (assigned to T-007 Phase 4)
+
+`test_nfr_005_complexipy_threshold_holds` is RED for a **different** reason than the other 54 nodes:
+not a missing artifact, but a real, in-scope violation introduced by **this change's own test code**.
+
+- Observed: `NFR-005: complexipy exits 1 at max-complexity-allowed 15: 6 of 1980 analysed functions
+  are over the limit`.
+- The tripwire assertion (`--max-complexity-allowed 0` must exit non-zero) passes, so the run is not
+  vacuous, and 1 980 functions were analysed, so the scan is not empty.
+- **Not a pre-existing repo failure — freshly measured on `main`** in the primary worktree
+  (`git rev-parse --abbrev-ref HEAD` → `main`):
+  `uv run complexipy src tests --max-complexity-allowed 15` → `All functions are within the allowed
+  complexity.`, **exit 0**, 0 functions over the limit. The six offenders exist only in this branch's
+  three new test files.
+- **T-007 Phase-4 work list** (functions to restructure, with their measured branch complexity):
+
+  | Function | File | Complexity |
+  |---|---|---|
+  | `test_ac_009_tree_code_dirs_full_other_dirs_counted` | `tests/acceptance/test_structure_map.py` | 34 |
+  | `test_ac_012_package_header_and_exports` | `tests/acceptance/test_structure_map.py` | 26 |
+  | `test_ac_016_private_symbols_and_dunders` | `tests/unit/test_make_map.py` | 25 |
+  | `_block_dir_paths` | `tests/unit/test_make_map.py` | 21 |
+  | `test_ac_026_map_hook_is_advisory` | `tests/acceptance/test_structure_map.py` | 17 |
+  | `test_inv_002_no_module_hidden_by_pruning` | `tests/property/test_structure_map.py` | 22 |
+
+  T-007's `allowed_files` already list the three test files as writable (the unit/property entries
+  are marked `READ-ONLY unless NFR-005 fails: complexipy scans src and tests, so a function over 15
+  is fixed here — listed per P-55`), so this is authorized Phase-4 work, not a Phase-3 re-derivation.
+- **MUST NOT** be resolved by relaxing the gate: `max-complexity-allowed` and `[tool.complexipy]
+  paths` stay exactly as the spec and CI define them (P-56). Splitting must keep every existing node
+  name and assertion intact (no test weakening, no deletion).
+
+### Phase 3 gate result
+
+**Phase 3's gate PASSES: RED is observed for all 7 tasks (7/7), with 55 nodes collected and zero
+collection errors, ruff clean on the derived paths, and the only previously-GREEN node
+(`test_nfr_003_deptry_clean`) still GREEN.** The state machine is at `RED_CONFIRMED` for the whole
+Phase 3 test set; **Phase 4 (IMPLEMENT) may start**, beginning with S4.1 (T-001).
+
+`tasks.json` statuses are left `PENDING` (status sync belongs to S4.4); the traceability matrix is
+not touched (S5.3).
+
