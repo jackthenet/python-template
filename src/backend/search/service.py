@@ -334,6 +334,17 @@ class SearchService:
         settings_registry: SettingsRegistry | None = None,
         permission_service: PermissionChecker | None = None,
     ) -> None:
+        """Store the collaborators without doing any eager work.
+
+        Nothing is resolved at construction time: the settings registry is
+        looked up again on each read (an injected ``None`` falls back to the
+        shared singleton, REQ-013), the permission checker is an optional
+        enforcement seam (``None`` = standalone mode, REQ-016), and the event
+        publisher is an optional sink (REQ-014). One re-entrant lock guards the
+        source dict for both registration and selection (REQ-018); the worker
+        pool exists from here on but its threads start on the first submit
+        (D12, REQ-019).
+        """
         self._event_bus = event_bus
         self._settings_registry = settings_registry
         self._permission_service = permission_service
@@ -514,6 +525,12 @@ class InMemorySource:
     """
 
     def __init__(self, name: str, fields: list[SourceField], items: list[SourceItem]) -> None:
+        """Snapshot the source definition for repeated in-memory queries.
+
+        ``fields`` and ``items`` are copied, so later mutation of the caller's
+        lists cannot change what this source queries, and the declared-field map
+        is built once for the query path (REQ-017).
+        """
         self._name = name
         self._fields = list(fields)
         self._items = list(items)
