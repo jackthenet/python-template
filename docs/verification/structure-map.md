@@ -1900,3 +1900,51 @@ spec's rows — finding 2).
 **S4.2 gate: PASSED — T-001 GREEN (2 passed, also with `-p no:randomly`), `mypy scripts/` exit 0,
 `mypy src/` exit 0, ruff clean on the changed path, the `verify_spec.py` witness unchanged.**
 
+## Phase 4 — S4.3 (T-001) Refactor (keep GREEN) (2026-10-09)
+
+**Objective:** improve structure of the T-001 diff (duplication, complexity, naming, boundaries)
+without changing behaviour. **Outcome: no-op — zero file changes** (the no-op fast-path, verified,
+not assumed).
+
+### Re-read of the changed regions
+
+- `.github/workflows/quality.yml:10-28` — the whole `type-check` job: checkout → Setup uv → Setup
+  Python → Sync tooling → `Run mypy (gate)` → **`Run mypy scripts/ (gate)`** → `Run ty (informational)`
+  (`continue-on-error: true`).
+- `scripts/verify_spec.py:1-100` — module header (stdlib-only imports: `contextlib`, `re`, `sys`,
+  `pathlib.Path`) and the `main()` prologue holding the `:74` narrowing.
+
+### Candidates considered
+
+| # | Candidate | Decision | Reason (one line) |
+|---|---|---|---|
+| 1 | Replace the `hasattr` guard with `sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]` (0 added lines instead of +2; precedent `src/main.py:108/111` uses exactly `# type: ignore[union-attr]` with a trailing reason) | **rejected** | It is the smaller diff and it removes the one real duplication (the guard and the enclosing `suppress(AttributeError, …)` cover the same case), but T-001's purpose is to *widen* type coverage: the ignore deletes the check on the only line in `scripts/` the new gate examines, while the guard keeps mypy checking the call. Runtime duplication is harmless — the suppress still covers the `ValueError`/`OSError` that `reconfigure` itself can raise. |
+| 2 | `isinstance(sys.stdout, io.TextIOBase)` | **rejected (not re-tried)** | Rejected at S4.2 by measurement: mypy then reports `"TextIOBase" has no attribute "reconfigure"`, and it would skip the call for a stream that does have `reconfigure`. |
+| 3 | `cast(...)` on `sys.stdout` | **rejected (not re-tried)** | An assumption, not a guard — same reasoning recorded at S4.2. |
+| 4 | Drop the now-overlapping `AttributeError` from `contextlib.suppress(AttributeError, ValueError, OSError)` | **rejected** | Touches pre-existing error handling for zero gain, and narrows the contract if `sys.stdout` is itself a proxy object whose attribute lookup raises. |
+| 5 | Merge the two mypy steps into one (`uv run mypy src/ scripts/`) — 1 changed line instead of 2 added | **rejected** | AC-025 clause 1 greps the job block for the literal `uv run mypy scripts/`, which the merged command does not contain (the node would fail), and a merged step loses per-target failure attribution. |
+| 6 | Extract a shared stdout-reconfiguration helper for `scripts/` | **rejected** | No second caller exists — see the grep evidence below; a helper for one call site is addition, not deletion. |
+| 7 | Workflow step naming / ordering | **no change needed** | `Run mypy scripts/ (gate)` matches the neighbours' `Run <tool> (<role>)` form and sits directly after the `src/` gate, before the informational `ty` step — the ordering the spec asks for ("next to `uv run mypy src/`", REQ-025). |
+| 8 | Anything else a reviewer would call noise | **none found** | The diff is 2 added lines in a workflow file and 2 added / 1 removed in the script; no new abstraction, import, comment or config key was introduced by S4.2. |
+
+### Grep evidence: no shared `reconfigure` pattern was missed
+
+`grep -rn "reconfigure" scripts/ src/` — the only `sys.stdout.reconfigure` in the repository is
+`scripts/verify_spec.py:74-75` (the T-001 line). Every other hit is unrelated:
+`src/backend/logging/_pipeline.py` (`_reconfigure` / `setup_logger` sink reconfiguration, REQ-001/INV-001
+of the logging feature) and logging/settings tests. The other two scripts
+(`scripts/check_traceability.py`, `scripts/validate_task_dag.py`) never touch `sys.stdout`; their
+non-ASCII content is em-dashes in docstrings/comments, never printed — so there is nothing to align
+with and no sibling script left un-fixed by this change.
+
+### Gates
+
+**No changes made → no gate re-run** (implement skill, S4.4/S4.3 done-criteria: a refactor step that
+made zero file changes skips the `green_command` re-run; the GREEN recorded at S4.2 stands, and the
+ruff result on the changed path is unchanged because the changed paths are unchanged). Full suite and
+repo-wide ruff remain Phase 5 gates (P-6).
+
+**S4.3 gate: no-op — the S4.2 implementation is already the smallest form that keeps mypy checking the
+call; the only smaller alternative (a `type: ignore`) trades the widened gate for a shorter diff and was
+rejected on purpose. Files changed by this step: none (this record only).**
+
