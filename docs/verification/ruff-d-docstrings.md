@@ -1497,3 +1497,91 @@ Objective (review skill, S6.2): traceability (every REQ → AC → executable te
 **Working tree.** `git restore uv.lock` before committing; `uv.lock` **not staged** (finding **F-9** — the lock refresh belongs to PR #75).
 
 **Next (S6.3):** the review report — resolve or accept **M-1**, disposition N-1…N-10, then the clean-report gate (no version bump for DOCS/CHORE, Q-27 / INV-E).
+
+## Phase 6 — Review report (S6.3, 2026-10-09)
+
+Objective (review skill, S6.3): resolve the one open finding (**M-1**), dispose of **every** note from S6.1 and S6.2, and close Phase 6 with the review report and its clean gate (AGENTS.md Review Gate, DOCS/CHORE row: *no behavior, test, or source-behavior change beyond the scoped non-behavior changes; no acceptance test weakened or deleted; feature boundaries and architecture rules respected*). Inputs: the S6.1 record (**0 BLOCKERS / 1 MINOR / 8 NOTES**) and the S6.2 record (**0 / 0 / 2 NOTES**, `check_traceability.py` **PASS**), plus the final code state. **The full test suite was not re-run** — Phase 5 owns that gate (P-27); the only new measurements are the changed-path gates for the M-1 fix and one targeted smoke run. No PR was opened (S6.4) and no version was bumped (DOCS/CHORE, Q-27 / INV-E).
+
+### 1. M-1 — RESOLVED
+
+**M-1** (S6.1 check 4): `src/backend/logging/_decorator.py:_is_private_method` — the docstring added by this change read "The second signal is a name containing ``...private``" while the code tests `"private" in name`; read literally it describes a check the code does not perform.
+
+Fix — docstring wording only, **no logic change** (the `return` line is byte-identical):
+
+```python
+    The second signal is the substring ``private`` anywhere in the name — the
+    re-derived suite's signal for a private method.
+```
+
+Commit **`32b9e2f`** — `fix(ruff-d-docstrings): M-1 _is_private_method docstring wording` — `src/backend/logging/_decorator.py | 4 ++--` (2 insertions, 2 deletions). The file is already scope item 2 (group 2 `logging`) in §"Exact change scope", so the fix stays inside the scoped set; it is a docstring line pair, not a new file or a new scope item.
+
+Gates re-checked on the changed path only (the whole-repo sweep is Phase 5's, already recorded at S5.2):
+
+| Gate | Command | Result |
+|---|---|---|
+| ruff `D` (google convention, as CI configures it) | `uv run ruff check src/backend/logging/_decorator.py --select D --output-format=concise --config "lint.pydocstyle.convention = \"google\""` | `All checks passed!` |
+| format | `uv run ruff format --check src/backend/logging/_decorator.py` | `1 file already formatted` |
+| types | `uv run mypy src/` | `Success: no issues found in 84 source files` — identical to the S4.1 baseline and S5.2 gate 3 |
+| **INV-D executable code identical** | `uv run --no-sync python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src` | `64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0` — **identical to the `45aa61c` baseline** (third independent measurement: P.4/S4.1, S5.2 gate 6, S6.1 check 2, and here after the M-1 edit). `--no-sync` per N-8: it keeps `uv.lock` untouched and uses the project interpreter (the system `python` 3.12 cannot parse `_decorator.py:46`'s PEP 758 syntax) |
+| targeted smoke (owning feature `logging`) | `uv run pytest tests/unit/logging tests/acceptance/logging tests/acceptance/logging_coverage tests/contract/logging -q` | **`69 passed in 8.13s`** — no new failure; includes the INV-A / AC-009 wording test |
+
+### 2. Every finding from S6.1 and S6.2, with its resolution
+
+| ID | Severity | Finding (one line) | Resolution / disposition |
+|---|---|---|---|
+| **M-1** | MINOR | `_is_private_method` docstring says "a name containing ``...private``"; the code tests `"private" in name` | **RESOLVED** — docstring reworded at commit **`32b9e2f`**; all five gates above re-checked clean on the changed path; digest unchanged. **0 unresolved MINORs** |
+| **N-1** | NOTE | The three record files (`docs/verification/ruff-d-docstrings.md`, `traceability.md`, `docs/workflow/PROBLEMS.md`) are outside the literal §"Exact change scope" heading ("nothing else is touched") | **Accepted, no action** — they are workflow-mandated (this record, the S5.3 matrix rows, the Problem Log), already disclosed at Phase 5 as "Record files (not scope items)"; the scope heading governs *behavioral* files. This report is the fourth write to the first of them |
+| **N-2** | NOTE | Pre-existing `# nosec B105` comments in `src/backend/usermanagement/feature_actions.py` | **No action** — Bandit suppressions, not ruff's; that file is not in this diff (INV-C unaffected) |
+| **N-3** | NOTE | F-15's disposition says "a separate change" without naming it | **Accepted, no new TODO** — F-15 is already covered by the in-flight `settings-public-registry-setter` (`docs/todo/settings-public-registry-setter.md`, `Status: IN-WORKFLOW`, spec merged via PR #73, specifies `set_search_service()`). Recorded in §4 so the orchestrator does not duplicate it |
+| **N-4** | NOTE | The AGENTS.md "Documentation" bullet scopes the coverage clause to "a **backend package**", while the `D` gate covers all of `src/` incl. `src/main.py` | **Deferred to a follow-up TODO** — Q-24 caps this change's guidance edit at that one bullet, so widening it here would exceed scope; folded into the guidance TODO in §4 (item 4), which edits the same section anyway |
+| **N-5** | NOTE | `src/backend/filemanagement/repository.py:246` docstring points at "the Q-26 finding in the change's verification record" with no path — unresolvable to an outside reader | **Deferred to a follow-up TODO** (§4 item 5) — a one-line docstring cleanup; S6.3's mandate was M-1 only, and a second `src/` edit in the same commit set would blur the M-1 evidence. Not an accuracy or behavior defect |
+| **N-6** | NOTE | `FileService._publish` / `SearchService._publish` docstrings state only the `None`-publisher case; the propagation claim lives in each feature's `EventPublisher.publish` protocol docstring | **No action** — exactly what F-13/F-14 record; the docstrings are true, and the mismatch is the F-11/F-13/F-14 ISSUE in §4 item 1 |
+| **N-7** | NOTE | Follow-ups are recorded but not scheduled — no `docs/todo/` file exists for F-11/F-13/F-14, F-12, F-9, F-16, F-17 | **Orchestrator action before S6.4** — §4 is the handoff list (file + function + observed vs. required for each), so each TODO can be written without re-investigation. A scheduling gap, not a defect in this change |
+| **N-8** | NOTE | Re-running the digest needs the project interpreter (`uv run --no-sync`); system `python` 3.12 raises `SyntaxError` on `_decorator.py:46` (PEP 758) | **Accepted as a tooling note** — applied in §1 of this report; no code finding, no action |
+| **N-9** | NOTE | `src/frontend/` does not exist in this repository — the frontend half of the boundary check is vacuously empty, though AGENTS.md's project-structure diagram shows one | **Accepted, no action** — recorded here so no later step or change assumes a frontend tree; creating one is not this change's business |
+| **N-10** | NOTE | `src/main.py` is inside the gate's reach but was already `D`-clean at the base, so the reach is real yet unexercised by this change (same understatement as N-4) | **Accepted, no action** — nothing to change; folded into the same guidance TODO as N-4 (§4 item 4) |
+
+**Totals: 0 BLOCKERS / 0 MINORs unresolved (M-1 resolved) / 10 NOTES, all disposed** (6 accepted-or-no-action, 2 deferred to §4, 1 orchestrator scheduling action, 1 tooling note).
+
+### 3. DOCS/CHORE completeness criteria (AGENTS.md Review Gate)
+
+| Criterion | Evidence (final state, `45aa61c..HEAD` at `32b9e2f`) | Verdict |
+|---|---|---|
+| **No behavior change beyond the scoped non-behavior changes** | The docstring-stripped AST digest is **identical to the `45aa61c` baseline** — `64fc1d6e…7bec0` — measured independently three times (S5.2 gate 6, S6.1 check 2, and after the M-1 fix in §1), with the non-vacuity control recorded in §"No-behavior-delta proof plan" (docstring addition → SAME digest; one-character code change → DIFFERENT digest). `uv run mypy src/` → `Success: no issues found in 84 source files`, identical to the S4.1 baseline. Config diff is exactly the prescribed content: `pyproject.toml` 3 hunks +11/−0 (`"D"` in `select`; the seven `fixable` codes; `convention = "google"`; `per-file-ignores` = exactly `tests/*`, `scripts/*`, `migrations/*`, `.github/*`), `mkdocs.yml` +4/−0, `.pre-commit-config.yaml` 1 line (`rev: v0.16.10`), `AGENTS.md` 1 line → 1 line | **MET** |
+| **No test touched; no source-behavior change** | `git diff --name-only 45aa61c..HEAD -- tests/` → **0 files** (S6.1 check 1, S6.2 check 5, re-confirmed here at `32b9e2f`: still 48 files, still 0 under `tests/`). `git diff --name-status --find-renames -- src/` → **41 `M`**, 0 `A`/`D`/`R`; 0 import statements added or removed (the 3 `^[+-]\s*from` hits are docstring prose); 0 `noqa` / `type: ignore` / `unsafe-fixes` (INV-B, INV-C, INV-J) | **MET** |
+| **No acceptance test weakened or deleted to achieve GREEN** | Zero test files added or changed, so no assertion could have been weakened, converted or deleted; `docs/verification/traceability.md` diff is **10 insertions(+), 0 deletions** — no other change's row or Status cell rewritten (Q-129, convention B); `check_traceability.py` → `PASS (825 matrix rows, 136 spec IDs, 746 test functions)`, exit 0, with the 746-function count unchanged from the S5.3 "before" run | **MET** |
+| **Feature boundaries respected** | Every `src/` change is a modification inside its own feature directory; no file moved, added or deleted; no cross-feature internal import introduced (0 import lines changed); no `__init__.py` in the diff, so no re-export surface changed (S6.1 check 5, S6.2 check 3) | **MET** |
+| **Architecture rules respected** (`model/` domain concepts, `services/` use cases, `shared/` deliberately small) | `git diff --name-only -- src/backend/shared/` → **0 lines**; no module was added anywhere in `src/`; the change adds no executable code at all (digest-identical), so no directory's role could shift. `src/frontend/` does not exist (N-9) — that half of the check is vacuous, stated rather than glossed (S6.2 check 4) | **MET** |
+| **Phase 5 gate set still standing (carried, not re-run)** | S5.1: full suite `761 passed, 1 skipped`, acceptance `364 passed, 1 skipped`, property `71 passed`, contract `51 passed` — no regression vs. the S4.1 baseline. S5.2: `ruff check .` PASS, `ruff format --check .` `339 files already formatted`, `mypy src/` Success, `mkdocs build --strict` PASS, INV-A/AC-009 test PASS, digest PASS, `deptry .` PASS. Re-confirmed for the M-1 path in §1 (ruff `D`, format, mypy, digest, 69-test `logging` smoke) | **MET (carried)** |
+| **Every finding has a disposition** | F-1…F-17 dispositioned in §Findings / S5.4 (S6.1 check 7); N-1…N-10 disposed in §2; M-1 resolved at `32b9e2f` | **MET** |
+
+### 4. Follow-up TODO list handed to the orchestrator (N-7)
+
+Each item is stated with file, function, observed vs. required, so a TODO can be written from it without re-investigation. Value triage is the orchestrator's at P.1.
+
+| # | Type | TODO candidate | Detail (file · function · observed vs. required) |
+|---|---|---|---|
+| 1 | **ISSUE** (one shared ask, F-11 + F-13 + F-14) | Publisher-failure guidance mismatch: `AGENTS.md` promises "a publisher failure never breaks the operation", the code propagates | `src/backend/authentication/service.py:166-173` `AuthService._publish`; `src/backend/filemanagement/service.py:234-237` `FileService._publish`; `src/backend/search/service.py:533-539` `SearchService._publish`; `src/backend/mail/service.py:125` `MailService._publish` (call sites `:80,83,86,89`). **Observed:** an exception raised by a non-`None` publisher propagates out of the business operation. **Required:** `AGENTS.md` (user-management / authentication / file-management / mail sections) says a publisher failure never breaks the mutation; the specs state only the `None`-bus case, and the three `EventPublisher.publish` protocol docstrings now state propagation as-is. **Fix is a choice, not a guess:** either catch in the four `_publish` implementations, or amend the guidance + the four specs. Cross-cutting if the implementations change (4 features) |
+| 2 | **ISSUE** (F-12) | SQL `LIKE` wildcard in the file-management namespace prefix match | `src/backend/filemanagement/repository.py:236-255` `SqliteFileRepository.list_by_namespace` interpolates the namespace into a `LIKE` pattern with **no escape character**; `src/backend/filemanagement/service.py:829-848` `FileService.list_files` validates only `limit`/`offset`, never `namespace`; `src/backend/filemanagement/models.py:95` `NAMESPACE_PATTERN = r"^[a-z0-9][a-z0-9._-]{0,63}$"` **allows `_`**. **Observed:** `_` acts as a single-character wildcard → over-matching namespaces. **Required:** `docs/specs/file-management.md` REQ-014 prefix match. Fix = escape the `LIKE` operand (with an `ESCAPE` clause) and/or validate `namespace` against `NAMESPACE_PATTERN` in `list_files` |
+| 3 | **CHORE** (F-9) | Stale `uv.lock` on `main` — **already assigned, do not duplicate** | `uv.lock` records `python-template 0.6.1` while `pyproject.toml:4` says `1.0.0` (the `structlog-logging` bump never re-locked). **Observed:** every `uv run` in a fresh worktree rewrites `uv.lock` (1-line diff), so worktrees cannot stay `git status`-clean — this branch has `git restore uv.lock` at every commit and the lock is **not** in the diff. **Required:** the lock matches the project version. **The refresh is carried by PR #75**; open the one-line chore TODO only if #75 does not land |
+| 4 | **DOCS** (F-16 + N-4 + N-10) | AGENTS.md guidance drift, two clauses in one small change | (a) `src/backend/usermanagement/service.py:283` `UserManager.remove_role` (and `_validate_roles`) raise a **bare `ValueError`**, outside the `UserManagerError` hierarchy `AGENTS.md` presents as the whole error surface — the code matches `user-roles-permissions` REQ-026, so the *guidance* is wrong. (b) The "Documentation" bullet scopes docstring coverage to "a backend package" while the `D` gate covers all of `src/` including `src/main.py` (N-4/N-10). **Required:** guidance describes the surface and the gate as they are |
+| 5 | **DOCS/CHORE** (N-5) | Path-less change-local pointer inside `src/` | `src/backend/filemanagement/repository.py:246` — "(see the Q-26 finding in the change's verification record)" names no file and will be unresolvable to a reader who does not know which change. Fix: name the file or drop the pointer (the sentence is complete without it) |
+| 6 | **DOCS** (F-17) | Spec drift: user-management spec + guidance vs. the user-roles-permissions amendment | `docs/specs/user-management.md` REQ-006 / AC-008 / AC-009 and the `AGENTS.md` user-management section are stale against the `user-roles-permissions` REQ-026 amendment. **Required:** Spec Amendment Workflow (new PR, changelog entry, re-run RED/GREEN for tasks citing the changed IDs) |
+| — | **Already covered — do not open** | F-15 (`set_search_service()` specified but absent from `src/`) | Covered by the in-flight **`settings-public-registry-setter`** change (`Status: IN-WORKFLOW`, spec merged via PR #73, specifies `set_search_service()` among the five singleton installers). The gap closes when that change lands |
+| — | **Already covered — do not open** | F-7 (`tests/` = 827 bare / 743 google `D` sites) | The sibling change **`docstrings-tests`** owns it; it must re-measure at its own P.4 (Q-29) |
+
+### 5. Verdict
+
+**REVIEW REPORT CLEAN**
+
+**0 unresolved BLOCKERS, 0 unresolved MINORs** (M-1 resolved at `32b9e2f`), **10 NOTES all disposed** — 6 accepted / no action, 2 deferred to the §4 follow-up list, 1 orchestrator scheduling action (§4), 1 tooling note. The change is exactly its scope: 41 `src/` files of docstrings and formatting (45/45 scoped items DONE), four config/guidance files matching the prescribed content line for line, and the change's own records. Zero `tests/` files, zero escape hatches, zero added/deleted/renamed files or imports, and the executable code is provably identical — the digest re-measured after the M-1 fix. INV-A…INV-J all hold; INV-G (no filler) and INV-H (private helpers documented), the two items Phase 5 could only claim provisionally, are confirmed by S6.1 check 6. Traceability is intact (`check_traceability.py` PASS, additive-only matrix diff). The §4 items are follow-up work for **other** changes, not open findings against this one.
+
+### 6. Version
+
+**No version bump.** DOCS/CHORE gets none per the Versioning table (REFACTOR / DOCS-CHORE → "none"), and INV-E pins it: `pyproject.toml:4` `version = "1.0.0"` and `[tool.bumpversion] current_version = "1.0.0"` (line 85) are **unchanged** — verified at `32b9e2f`, and the `pyproject.toml` diff contains no `version` line (S6.1 check 2). `bump-my-version` was not run; no tag was created (`tag = false`).
+
+### 7. Working tree and file sizes
+
+`git restore uv.lock` before committing; `uv.lock` **not staged** — the lock stays untouched on this branch (finding **F-9**; PR #75 carries the refresh). `git status --porcelain` is empty after the report commit. Written with the file-edit tool, never a bash here-doc (P-73). `docs/verification/ruff-d-docstrings.md` **1499 → 1587 lines (+88, this section)**; `docs/verification/traceability.md` unchanged at **1038 lines** (S6.3 wrote no matrix row).
+
+**Next (S6.4):** open the PR for `chore/ruff-d-docstrings` → `main` — **no version bump**, full regression suite as the pre-merge gate, then STOP for human merge (S7.1 cleanup after the merge).
