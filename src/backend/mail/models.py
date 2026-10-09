@@ -49,4 +49,10 @@ class EventPublisher(ABC):
     """
 
     @abstractmethod
-    def publish(self, event: object) -> None: ...
+    def publish(self, event: object) -> None:
+        """Hand ``event`` to the publisher's subscribers.
+
+        The mail service calls this once per send outcome and does not catch a
+        publisher exception, so a failing publisher surfaces to the caller.
+        """
+        ...

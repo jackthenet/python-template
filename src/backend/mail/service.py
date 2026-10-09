@@ -45,6 +45,13 @@ class MailService:
         event_bus: EventPublisher | None = None,
         permission_service: PermissionChecker | None = None,
     ) -> None:
+        """Wire the three optional seams.
+
+        A ``None`` ``transport`` builds an ``SmtpTransportImpl`` from the live
+        settings on every send; a ``None`` ``event_bus`` means no lifecycle
+        events; a ``None`` ``permission_service`` runs unenforced (standalone
+        mode, AC-031).
+        """
         self._transport = transport
         self._event_bus = event_bus
         # D13/ADR-071: the injected checker enforces mail.<method> at entry
