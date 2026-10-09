@@ -1158,3 +1158,50 @@ Nothing else in `pyproject.toml` changed: `version = "1.0.0"` (line 4) and `[too
 `uv.lock` is dirtied by every `uv run` in this worktree (the stale `python-template 0.6.1` entry vs `pyproject.toml:4` `1.0.0`). It was **reverted with `git restore uv.lock` before committing and never staged**, so the config commit contains exactly the four files. Supersedes the P-74 note that folded the refresh into this change's config commit: **structure-map's PR #75 bump commit already carries the one-line lock refresh**, so duplicating it here would only create a merge conflict on a one-line file. Until #75 merges, every step on every branch keeps reverting the incidental churn.
 
 **Next (S5.1):** Phase 5 — full test suite (treating `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` as the known flake per P-86) + the DOCS/CHORE light gate, then INV-A…INV-J against the final diff.
+
+## Phase 5 — S5.1 full test suite (2026-10-09)
+
+Objective: reproduce the S4.1 suite baseline at the final commit (`b603379`, all 11 commit groups landed). No source or test file was edited in this step; the only write is this section. Toolchain as at S4.1: `Python 3.14.5` (the `uv` env in this worktree).
+
+### Commands and exact summary lines
+
+| Command | S5.1 result (2026-10-09, `b603379`) |
+|---|---|
+| `uv run pytest tests/ -q` | **`761 passed, 1 skipped in 230.83s (0:03:50)`** |
+| `uv run pytest tests/acceptance/ -q` | **`364 passed, 1 skipped in 47.49s`** |
+| `uv run pytest tests/property/ -q` | **`71 passed in 57.30s`** |
+| `uv run pytest tests/contract/ -q` | **`51 passed in 85.91s (0:01:25)`** |
+| `uv run pytest tests/ -q --collect-only` | **`762 tests collected in 1.02s`** |
+
+The single skip is unchanged from the baseline, same node and same reason:
+`SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host`.
+
+### Baseline comparison — verdict: **DELTA-EXPLAINED** (no regression)
+
+| | S4.1 baseline (`84b25bd`) | S5.1 (`b603379`) |
+|---|---|---|
+| Full suite | `1 failed, 760 passed, 1 skipped in 236.60s (0:03:56)` | `761 passed, 1 skipped in 230.83s (0:03:50)` |
+| Collected | 762 | **762** |
+| Skipped | 1 (symlink host limit) | 1 (same node) |
+| Failed | 1 (the NFR-001 timing flake) | **0** |
+
+The only delta is the known pre-existing flake **passing** this run: `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` (`assert statistics.median(query_samples) < 0.3`) measured `0.306 s` under the S4.1 full-suite load and stayed inside the budget here. Collected count, skip set and every other test are identical, so the delta is the flake's load sensitivity (§Baseline flake, Problem Log **P-73** / **P-86**), not a behavior change — exactly the outcome §Baseline flake predicted: *"identical counts is not reproducible for this one test."*
+
+Flake evidence (isolated re-run at this same commit, i.e. both directions observed):
+
+```text
+uv run pytest "tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets" -q
+→ 1 passed in 8.36s
+```
+
+So the test is green in isolation at both `84b25bd` (S4.1: `1 passed in 8.44s`) and `b603379`, and green in the full suite here — no run at any commit shows a failure other than the load-dependent one already recorded at S4.1. **No other delta from the baseline: no new failure, no new skip, no test disappeared.**
+
+### INV-B (no test touched) — confirmed against the final diff
+
+`git diff --name-only 84b25bd..HEAD` lists **47 files**: 41 under `src/` (the ten feature groups) plus `pyproject.toml`, `mkdocs.yml`, `.pre-commit-config.yaml`, `AGENTS.md` (group 11) and the two record files (`docs/verification/ruff-d-docstrings.md`, `docs/workflow/PROBLEMS.md`). **Zero paths under `tests/`** — `git diff --stat 84b25bd..HEAD -- tests/` is empty. The 762-collected / 1-skip identity above is the executable cross-check.
+
+The AC-009 invariant test from the §No-behavior-delta proof plan (`tests/acceptance/logging_coverage/test_docstrings.py::test_traced_class_docstrings_mention_tracing`) ran green inside the acceptance run — its dedicated re-run is part of S5.2's gate set.
+
+**S5.1 gate: PASS.** Suite reproduced (762 collected, 1 skip, the single baseline failure classified as the known pre-existing flake with isolated evidence in both directions).
+
+**Next (S5.2):** `uv run ruff check .` (whole-repo sweep — the one full-repo run, with `D` now selected over `src/`) + `uv run ruff format --check .` + `uv run mypy src/` + `uv run --group docs mkdocs build --strict` + the docstring-stripped AST digest, each compared to its S4.1 baseline value.
