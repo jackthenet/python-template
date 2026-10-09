@@ -505,3 +505,639 @@ def test_nfr_007_output_identical_across_platforms(tmp_path: Path) -> None:
     if b"\r" in near_bytes:
         failures.append("clause 4: the render is not LF-only")
     assert not failures, "\n".join(failures)
+
+
+# --- T-004: symbol inventory, decorators, visibility, class fields, summaries ----------------
+# (REQ-014/REQ-015/REQ-016/REQ-017/REQ-018, EDGE-011/EDGE-012)
+
+# The constants REQ-017/REQ-018 hardcode, named here so every witness states the rule it pins.
+_FIELD_CAP = 15
+_SUMMARY_LIMIT = 100
+_ELLIPSIS = "…"
+_MEMBER = "  - "  # REQ-014: a class member line (field, method, nested class) is a 2-space bullet
+_NESTED = "    - "  # a nested class's own members sit at the next indent level
+
+
+def _field_source(count: int, first: int = 1) -> str:
+    """`count` annotated class-level assignments (`field_01 …`) at class-body indent: the REQ-017
+    fixture body. Unannotated assignments and defaults are added by the callers that need them."""
+    return "".join(f"    field_{index:02d}: str\n" for index in range(first, first + count))
+
+
+def _field_symbol_lines(count: int, first: int = 1) -> list[str]:
+    """The REQ-017 rendering of `_field_source`: one `name: annotation` line per field, no default."""
+    return [f"{_MEMBER}`field_{index:02d}: str`" for index in range(first, first + count)]
+
+
+def _t004_tree(tmp_path: Path, files: Mapping[str, str]) -> Path:
+    """A git tree of T-004 fixture modules, each checked to parse first (fixture validity: a
+    fixture the generator cannot parse would be an EDGE-003 hard failure, not a symbol witness)."""
+    for path, source in files.items():
+        try:
+            ast.parse(source)
+        except SyntaxError as error:
+            pytest.fail(f"the T-004 fixture {path} does not parse — invalid test data: {error}")
+    return _git_tree(tmp_path / "tree", files)
+
+
+def _module_body(map_text: str, path: str) -> list[str]:
+    """One module's rendered body: every line after its `#### ` header up to the next header,
+    exactly as rendered — unlike `_module_block`, the two-space member indent is preserved."""
+    lines = map_text.splitlines()
+    start = next((index for index, line in enumerate(lines) if line.startswith(f"#### {path} ")), None)
+    if start is None:
+        return []
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith(("## ", "### ", "#### ")):
+            break
+        if line.strip():
+            body.append(line)
+    return body
+
+
+def _symbol_lines(map_text: str, path: str) -> list[str]:
+    """The REQ-014 symbol lines of one module, in rendered order, indent preserved."""
+    return [line for line in _module_body(map_text, path) if line.lstrip().startswith("- ")]
+
+
+def _all_symbol_lines(map_text: str) -> list[str]:
+    """Every symbol line in the whole map — the scope of the "never rendered" clauses."""
+    return [line for line in map_text.splitlines() if line.lstrip().startswith("- ")]
+
+
+def _section_headers(map_text: str) -> list[str]:
+    """The package (`### `) and module (`#### `) headers of a map — the AC-016 third clause
+    compares these between two runs, so `--include-private` cannot add or hide a module."""
+    return [line for line in map_text.splitlines() if line.startswith(("### ", "#### "))]
+
+
+def _seq_failures(actual: list[str], expected: list[str], clause: str) -> list[str]:
+    """One readable failure for an exact rendered-line-sequence comparison."""
+    if actual == expected:
+        return []
+    rendered = "\n".join(repr(line) for line in actual)
+    wanted = "\n".join(repr(line) for line in expected)
+    return [f"clause {clause}: the rendered lines are\n{rendered}\nexpected\n{wanted}"]
+
+
+_AC014_MODULE = """
+import typing
+from base import Base, Mixin
+
+MODULE_VALUE = 1
+
+if typing.TYPE_CHECKING:
+    from collections.abc import Sequence
+
+
+def spaced(  a : int ,b : str = "xy" ) -> None:
+    'Spaced source formatting.'
+
+
+async def fetch() -> None:
+    'Fetch the remote map.'
+
+
+class Widget(Base, Mixin):
+    'A widget.'
+
+    name: str
+    size: int = 3
+    unannotated = "not a field"
+
+    def __init__(self, name: str) -> None:
+        'Create a widget.'
+
+    def resize(
+        self,
+        size: int,
+        *,
+        step: int = 4,
+        data: dict[str, int] = {"alpha": 1, "beta": 2},
+        exact: str = "0123456789abcdefgh",
+        over: str = "0123456789abcdefghi",
+    ) -> None:
+        'Resize the widget.'
+
+
+class Outer:
+    'An outer widget.'
+
+    class Inner:
+        'A nested widget.'
+
+        depth: int
+
+        def build(self) -> int:
+            'Build the inner widget.'
+
+
+def items(pool: list[int] = [1, 2, 3, 4, 5, 6, 7]) -> None:
+    'A long positional default.'
+
+
+def make_widget() -> Widget:
+    'Build a widget locally.'
+
+    class Local:
+        'A function-local class.'
+
+    return Local()
+"""
+
+# The exact REQ-014 rendering of `_AC014_MODULE`: classes first (source order), then functions
+# (source order) — so `spaced`/`fetch`, which come first in the source, render after the classes.
+# The signature text is the `ast.unparse` rendering (`b: str='xy'`, `step: int=4`), not the source
+# spacing, and the 21-character defaults of `data`/`over`/`pool` are omitted while the 20-character
+# default of `exact` is kept.
+_AC014_LINES = [
+    "- class `Widget(Base, Mixin)`: A widget.",
+    f"{_MEMBER}`name: str`",
+    f"{_MEMBER}`size: int`",
+    f"{_MEMBER}`__init__(self, name: str) -> None`: Create a widget.",
+    (
+        f"{_MEMBER}`resize(self, size: int, *, step: int=4, data: dict[str, int], "
+        "exact: str='0123456789abcdefgh', over: str) -> None`: Resize the widget."
+    ),
+    "- class `Outer`: An outer widget.",
+    f"{_MEMBER}class `Inner`: A nested widget.",
+    f"{_NESTED}`depth: int`",
+    f"{_NESTED}`build(self) -> int`: Build the inner widget.",
+    "- def `spaced(a: int, b: str='xy') -> None`: Spaced source formatting.",
+    "- def `async fetch() -> None`: Fetch the remote map.",
+    "- def `items(pool: list[int]) -> None`: A long positional default.",
+    "- def `make_widget() -> Widget`: Build a widget locally.",
+]
+
+# (needle, must-be-present) — the REQ-014 default rule at its boundary, spelled out so a wrong
+# implementation is attributed to the clause it breaks rather than only to the sequence check.
+_AC014_DEFAULTS: tuple[tuple[str, bool], ...] = (
+    ("step: int=4", True),  # 1 character: shown
+    ("b: str='xy'", True),  # 4 characters: shown
+    ("exact: str='0123456789abcdefgh'", True),  # exactly 20 characters: shown
+    ("{'alpha': 1, 'beta': 2}", False),  # 23 characters: omitted, annotation kept
+    ("'0123456789abcdefghi'", False),  # 21 characters: omitted, annotation kept
+    ("[1, 2, 3, 4, 5, 6, 7]", False),  # 21 characters, positional: omitted
+)
+
+_AC015_MODULE = """
+import pytest
+from backend.logging import logged, logged_class
+from functools import cache, lru_cache
+from typing import override
+
+
+@logged_class
+class Registry:
+    'A registry of entries.'
+
+    entries: int
+
+    @property
+    def count(self) -> int:
+        'Number of entries.'
+
+    @staticmethod
+    def build() -> None:
+        'Build nothing.'
+
+    @classmethod
+    def named(cls, name: str) -> None:
+        'Name nothing.'
+
+    @override
+    def to_text(self) -> str:
+        'Render it.'
+
+
+@logged
+def helper() -> None:
+    'A helper.'
+
+
+@logged
+@cache
+def stacked() -> None:
+    'Stacked decorators.'
+
+
+@pytest.fixture
+def backend_name() -> str:
+    'The backend name.'
+
+
+@lru_cache(maxsize=8)
+def cached(value: int) -> int:
+    'A cached value.'
+"""
+
+# A decorator that is not a plain name or attribute chain renders as its `ast.unparse` text.
+_AC015_CALL_DECORATOR = "@lru_cache(maxsize=8)"
+
+_AC015_LINES = [
+    "- @logged_class class `Registry`: A registry of entries.",
+    f"{_MEMBER}`entries: int`",
+    f"{_MEMBER}@property `count(self) -> int`: Number of entries.",
+    f"{_MEMBER}@staticmethod `build() -> None`: Build nothing.",
+    f"{_MEMBER}@classmethod `named(cls, name: str) -> None`: Name nothing.",
+    f"{_MEMBER}@override `to_text(self) -> str`: Render it.",
+    "- @logged def `helper() -> None`: A helper.",
+    "- @logged @cache def `stacked() -> None`: Stacked decorators.",
+    "- @pytest.fixture def `backend_name() -> str`: The backend name.",
+    f"- {_AC015_CALL_DECORATOR} def `cached(value: int) -> int`: A cached value.",
+]
+
+_AC016_MODULE = """
+class Widget:
+    'A widget.'
+
+    def __init__(self) -> None:
+        'Create a widget.'
+
+    def __repr__(self) -> str:
+        'Render the widget.'
+
+    def _internal(self) -> None:
+        'Internal work.'
+
+    def public(self) -> None:
+        'Public work.'
+
+
+class _Helper:
+    'A helper class.'
+
+    def go(self) -> None:
+        'Go.'
+
+
+def _private() -> None:
+    'A private function.'
+
+
+def public_fn() -> None:
+    'A public function.'
+"""
+
+_AC016_PRIVATE_MODULE = """
+def visible_in_private_module() -> None:
+    'Rendered with and without the flag.'
+"""
+
+_AC016_PACKAGE_INIT = """
+def package_init_symbol() -> None:
+    'Rendered with and without the flag.'
+"""
+
+_AC016_PACKAGE_MODULE = """
+def package_inner_symbol() -> None:
+    'Rendered with and without the flag.'
+"""
+
+_AC016_FILES: dict[str, str] = {
+    "src/vis.py": _AC016_MODULE,
+    "src/_hidden.py": _AC016_PRIVATE_MODULE,
+    "src/_pkg/__init__.py": _AC016_PACKAGE_INIT,
+    "src/_pkg/inner.py": _AC016_PACKAGE_MODULE,
+}
+
+_AC016_LINES_DEFAULT = [
+    "- class `Widget`: A widget.",
+    f"{_MEMBER}`__init__(self) -> None`: Create a widget.",
+    f"{_MEMBER}`__repr__(self) -> str`: Render the widget.",
+    f"{_MEMBER}`public(self) -> None`: Public work.",
+    "- def `public_fn() -> None`: A public function.",
+]
+
+_AC016_LINES_PRIVATE = [
+    "- class `Widget`: A widget.",
+    f"{_MEMBER}`__init__(self) -> None`: Create a widget.",
+    f"{_MEMBER}`__repr__(self) -> str`: Render the widget.",
+    f"{_MEMBER}`_internal(self) -> None`: Internal work.",
+    f"{_MEMBER}`public(self) -> None`: Public work.",
+    "- class `_Helper`: A helper class.",
+    f"{_MEMBER}`go(self) -> None`: Go.",
+    "- def `_private() -> None`: A private function.",
+    "- def `public_fn() -> None`: A public function.",
+]
+
+# The symbols the flag alone reveals — the difference between the two renderings of `src/vis.py`.
+_AC016_PRIVATE_ONLY = [line for line in _AC016_LINES_PRIVATE if line not in _AC016_LINES_DEFAULT]
+
+# The `_name` modules and packages the flag must never hide or add (REQ-016 third clause).
+_AC016_PRIVATE_PATHS = ("src/_hidden.py", "src/_pkg/__init__.py", "src/_pkg/inner.py")
+
+_AC017_MODULE = (
+    "from pydantic import Field\n"
+    "\n"
+    "\n"
+    "class Settings:\n"
+    "    'Settings model.'\n"
+    "\n"
+    '    alpha: str = Field(default="a")\n'
+    "    beta: int\n"
+    "    gamma: bool = True\n"
+    + _field_source(12, first=4)  # field_04 … field_15: the cap boundary
+    + '    unannotated = "not a field"\n'  # not a field, and not counted by the cap
+    + _field_source(2, first=16)  # field_16, field_17: elided by the cap
+)
+
+_AC017_FIELD_LINES = [
+    f"{_MEMBER}`alpha: str`",
+    f"{_MEMBER}`beta: int`",
+    f"{_MEMBER}`gamma: bool`",
+    *_field_symbol_lines(12, first=4),
+]
+
+_AC017_LINES = [
+    "- class `Settings`: Settings model.",
+    *_AC017_FIELD_LINES,
+    f"{_MEMBER}{_ELLIPSIS} +2 fields",
+]
+
+# (class name, annotated fields, elided count) — EDGE-011 at the cap and past it.
+_EDGE011_CLASSES: tuple[tuple[str, int, int], ...] = (
+    ("AtCap", _FIELD_CAP, 0),
+    ("OverByOne", _FIELD_CAP + 1, 1),
+    ("OverByFive", _FIELD_CAP + 5, 5),
+)
+
+_EDGE011_MODULE = "".join(
+    f"class {name}:\n    'The {name} model.'\n\n{_field_source(count)}\n" for name, count, _ in _EDGE011_CLASSES
+)
+
+_EDGE011_LINES = [
+    line
+    for name, count, elided in _EDGE011_CLASSES
+    for line in [
+        f"- class `{name}`: The {name} model.",
+        *_field_symbol_lines(min(count, _FIELD_CAP)),
+        *([f"{_MEMBER}{_ELLIPSIS} +{elided} fields"] if elided else []),
+    ]
+]
+
+_AC018_MODULE = """
+'Module summary with `backticks`   and   spaces.'
+
+
+def multi() -> None:
+    '''First   logical line
+    spanning   physical lines
+    with `backticks` inside.
+
+    Second paragraph, never rendered.
+    '''
+
+
+def empty_doc() -> None:
+    ''
+
+
+def no_doc() -> None:
+    pass
+
+
+class Undocumented:
+    pass
+"""
+
+_AC018_MODULE_SUMMARY = "Module summary with backticks and spaces."
+_AC018_LINES = [
+    "- class `Undocumented`",
+    "- def `multi() -> None`: First logical line spanning physical lines with backticks inside.",
+    "- def `empty_doc() -> None`",
+    "- def `no_doc() -> None`",
+]
+
+# EDGE-012: the raw docstring first line has backticks and doubled spaces inside the first 100
+# characters, so normalizing must happen before the truncation is measured.
+_EDGE012_RAW = (
+    "Normalizing `backticks` and   spaces   first, this summary keeps running well past "
+    "the one hundred character limit so the marker must appear."
+)
+_EDGE012_NORMALIZED = (
+    "Normalizing backticks and spaces first, this summary keeps running well past "
+    "the one hundred character limit so the marker must appear."
+)
+_EDGE012_AT_LIMIT = (
+    "Exactly one hundred characters of normalized summary text, no more and no less, so no marker appears"
+)
+
+_EDGE012_MODULE = (
+    f"def long_summary() -> None:\n    '{_EDGE012_RAW}'\n\ndef exactly_limit() -> None:\n    '{_EDGE012_AT_LIMIT}'\n"
+)
+
+_EDGE012_LINES = [
+    f"- def `long_summary() -> None`: {_EDGE012_NORMALIZED[:_SUMMARY_LIMIT]}{_ELLIPSIS}",
+    f"- def `exactly_limit() -> None`: {_EDGE012_AT_LIMIT}",
+]
+
+
+def test_ac_014_symbol_inventory_and_unparsed_signatures(tmp_path: Path) -> None:
+    """AC-014 (REQ-014): a module's classes render before its functions (each group in source
+    order), a class's fields before its methods, in the stated line form with `ast.unparse`
+    signatures — `async ` kept inside the backticks, a nested class as a member line with its own
+    members one level deeper, a parameter default shown only when its unparsed text is ≤ 20
+    characters — while a function-local class and the module's assignments and imports never
+    render."""
+    root = _t004_tree(tmp_path, {"src/inventory.py": _AC014_MODULE})
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    lines = _symbol_lines(text, "src/inventory.py")
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    failures += _seq_failures(lines, _AC014_LINES, "1")
+    joined = "\n".join(lines)
+    for needle, present in _AC014_DEFAULTS:
+        if (needle in joined) is not present:
+            failures.append(
+                f"clause 2: {needle!r} {'rendered' if present else 'omitted'}, expected the opposite: {joined!r}"
+            )
+    for never in ("Local", "A function-local class.", "MODULE_VALUE", "Sequence", "unannotated"):
+        if any(never in line for line in _all_symbol_lines(text)):
+            failures.append(f"clause 3: {never!r} is rendered — it is not a module- or class-level symbol")
+    if len(lines) != len(set(lines)):
+        failures.append(f"clause 4: a symbol is rendered more than once: {lines!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_015_decorators_render_as_prefix(tmp_path: Path) -> None:
+    """AC-015 (REQ-015): every decorator renders as a compact `@name` prefix before the
+    `class`/`def`/signature token in source order — `@logged_class`, `@property`, `@staticmethod`,
+    `@classmethod`, `@override`, `@pytest.fixture`, a stacked pair — and a decorator call renders
+    as its `ast.unparse` text."""
+    root = _t004_tree(tmp_path, {"src/deco.py": _AC015_MODULE})
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    lines = _symbol_lines(text, "src/deco.py")
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    failures += _seq_failures(lines, _AC015_LINES, "1")
+    for name in ("logged_class", "property", "staticmethod", "classmethod", "override", "pytest.fixture"):
+        if not any(line.lstrip().startswith(f"- @{name} ") for line in lines):
+            failures.append(f"clause 2: no line carries the @{name} decorator prefix: {lines!r}")
+    if not any(_AC015_CALL_DECORATOR in line for line in lines):
+        failures.append(f"clause 3: the decorator call is not rendered as its ast.unparse text: {lines!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_016_private_symbols_and_dunders(tmp_path: Path) -> None:
+    """AC-016 (REQ-016): the dunders `__init__` and `__repr__` render with or without
+    `--include-private`; `_helper`, `_Helper` and `_internal` render only with the flag; and the
+    set of rendered modules and packages — including the `_name` module and the `_name` package —
+    is identical with and without it."""
+    root = _t004_tree(tmp_path, _AC016_FILES)
+    out = tmp_path / "STRUCTURE.md"
+
+    default = _run_generator(root, out)
+    default_text = _map_text(out, default)
+    private = _run_generator(root, out, "--include-private")
+    private_text = _map_text(out, private)
+    failures: list[str] = []
+
+    if default.returncode != 0 or private.returncode != 0:
+        failures.append(f"clause 1: exit {default.returncode} / {private.returncode}")
+    failures += _seq_failures(_symbol_lines(default_text, "src/vis.py"), _AC016_LINES_DEFAULT, "1")
+    failures += _seq_failures(_symbol_lines(private_text, "src/vis.py"), _AC016_LINES_PRIVATE, "1")
+    for needle in ("__init__(self) -> None", "__repr__(self) -> str"):
+        for label, text in (("default", default_text), ("--include-private", private_text)):
+            if sum(needle in line for line in _symbol_lines(text, "src/vis.py")) != 1:
+                failures.append(f"clause 1: {needle!r} is not rendered exactly once {label}: {text!r}")
+    for needle in _AC016_PRIVATE_ONLY:
+        if any(needle == line for line in _all_symbol_lines(default_text)):
+            failures.append(f"clause 2: {needle!r} renders without --include-private")
+        if not any(needle == line for line in _all_symbol_lines(private_text)):
+            failures.append(f"clause 2: {needle!r} does not render with --include-private")
+    for header in _AC016_PRIVATE_PATHS:
+        for label, text in (("default", default_text), ("--include-private", private_text)):
+            if not any(line.startswith(f"#### {header} ") for line in text.splitlines()):
+                failures.append(f"clause 3: the module header for {header} is missing {label}")
+    if _section_headers(default_text) != _section_headers(private_text):
+        failures.append(
+            f"clause 3: --include-private changed the rendered modules/packages: "
+            f"{_section_headers(default_text)!r} vs {_section_headers(private_text)!r}"
+        )
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_017_class_fields_capped_untyped_omitted(tmp_path: Path) -> None:
+    """AC-017 (REQ-017): each annotated class field renders as `name: annotation` with no default
+    and no `Field(...)` payload, in source order; the unannotated assignment renders neither as a
+    field nor as part of the elided count; and the class with 17 annotated fields renders 15 field
+    lines plus `… +2 fields`."""
+    root = _t004_tree(tmp_path, {"src/fields.py": _AC017_MODULE})
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    lines = _symbol_lines(text, "src/fields.py")
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    failures += _seq_failures(lines, _AC017_LINES, "1")
+    for needle in ("Field(", "default=", "unannotated", "field_16", "field_17"):
+        if any(needle in line for line in lines):
+            failures.append(f"clause 2: {needle!r} is rendered in a field line")
+    rendered_fields = [line for line in lines if line in _AC017_FIELD_LINES]
+    if len(rendered_fields) != _FIELD_CAP:
+        failures.append(
+            f"clause 3: {len(rendered_fields)} field lines rendered, expected exactly {_FIELD_CAP} of the 17"
+        )
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_018_summary_normalization(tmp_path: Path) -> None:
+    """AC-018 (REQ-018): a docstring whose first logical line spans several physical lines and
+    contains backticks renders as that line with whitespace runs collapsed and backticks removed —
+    for the module summary line as well as for a symbol — while an empty docstring, no docstring at
+    all, and a second paragraph render no summary and no trailing `:`."""
+    root = _t004_tree(tmp_path, {"src/summ.py": _AC018_MODULE})
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    body = _module_body(text, "src/summ.py")
+    lines = _symbol_lines(text, "src/summ.py")
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    failures += _seq_failures(lines, _AC018_LINES, "1")
+    if not body or _AC018_MODULE_SUMMARY not in body[0]:
+        failures.append(f"clause 2: the module summary line is not normalized: {body[:1]!r}")
+    if any("`backticks`" in line or "   " in line for line in lines):
+        failures.append(f"clause 2: a summary keeps its backticks or its doubled spaces: {lines!r}")
+    for line in lines:
+        if line.endswith(":"):
+            failures.append(f"clause 3: {line!r} ends with a colon although it has no summary")
+    if "Second paragraph" in text:
+        failures.append("clause 3: a docstring paragraph after the first logical line is rendered")
+    assert not failures, "\n".join(failures)
+
+
+def test_edge_011_field_cap_marker(tmp_path: Path) -> None:
+    """EDGE-011 (REQ-017): a class with exactly 15 annotated fields renders 15 field lines and no
+    marker; a class with 16 renders 15 lines plus `  - … +1 fields`; a class with 20 renders 15
+    lines plus `  - … +5 fields`."""
+    root = _t004_tree(tmp_path, {"src/caps.py": _EDGE011_MODULE})
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    lines = _symbol_lines(text, "src/caps.py")
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    failures += _seq_failures(lines, _EDGE011_LINES, "1")
+    markers = [line for line in lines if _ELLIPSIS in line]
+    if len(markers) != sum(1 for _, _, elided in _EDGE011_CLASSES if elided):
+        failures.append(f"clause 2: {len(markers)} elision marker line(s) rendered, expected 2: {markers!r}")
+    for _, _, elided in _EDGE011_CLASSES:
+        if elided and not any(f"{_ELLIPSIS} +{elided} fields" in line for line in markers):
+            failures.append(f"clause 2: no marker line reporting +{elided} elided fields: {markers!r}")
+    at_cap = lines[: 1 + _FIELD_CAP]
+    if any(_ELLIPSIS in line for line in at_cap):
+        failures.append(f"clause 2: the class with exactly {_FIELD_CAP} fields renders an elision marker: {at_cap!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_edge_012_long_summary_truncated(tmp_path: Path) -> None:
+    """EDGE-012 (REQ-018): a docstring first logical line longer than 100 characters is truncated
+    at 100 characters of normalized text with a trailing `…`, and a summary of exactly 100
+    characters renders in full with no marker."""
+    if not len(_EDGE012_NORMALIZED) > _SUMMARY_LIMIT or len(_EDGE012_AT_LIMIT) != _SUMMARY_LIMIT:
+        pytest.fail("the EDGE-012 fixture is not over/at the 100-character limit — invalid test data")
+    root = _t004_tree(tmp_path, {"src/long.py": _EDGE012_MODULE})
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    lines = _symbol_lines(text, "src/long.py")
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    failures += _seq_failures(lines, _EDGE012_LINES, "1")
+    truncated = [line for line in lines if "long_summary" in line]
+    if truncated and _EDGE012_NORMALIZED[:_SUMMARY_LIMIT] not in truncated[0]:
+        failures.append(
+            f"clause 2: the summary is not truncated at {_SUMMARY_LIMIT} normalized characters: {truncated[0]!r}"
+        )
+    if truncated and not truncated[0].endswith(_ELLIPSIS):
+        failures.append(f"clause 3: the truncated summary has no trailing {_ELLIPSIS!r}: {truncated[0]!r}")
+    if _EDGE012_NORMALIZED[_SUMMARY_LIMIT:] in text:
+        failures.append("clause 2: the part past the limit is rendered")
+    if any(_ELLIPSIS in line and "exactly_limit" in line for line in lines):
+        failures.append(f"clause 4: a summary of exactly {_SUMMARY_LIMIT} characters carries the marker")
+    assert not failures, "\n".join(failures)

@@ -960,3 +960,209 @@ newlines, no timestamp/host/user/absolute path, and `--root` accepted in either 
 - The T-003 fixture `_T003_FILES` (unit) and `_TREE_FILES` (acceptance) are shared by the later
   tasks' nodes in the same files: adding a fixture entry changes `_EXPECTED_PACKAGE_COUNT` and the
   `_GROUP_DIRS` cross-check — extend them deliberately, not incidentally.
+
+## Phase 3 — S3.1 test derivation, T-004 (2026-10-09)
+
+**Step:** S3.1 Derive tests — DAG task **T-004** (symbol inventory: signatures, decorators,
+visibility, class fields, summaries), one file, 7 nodes. **Change:** `structure-map` (FEATURE, spec
+merged as PR #69, merge commit `570bfbc`).
+
+**Inputs read:** `docs/specs/structure-map.md` §REQ-014 (line 270, with its rendering block),
+§REQ-015/REQ-016/REQ-017/REQ-018 (297–325), §Acceptance Criteria AC-014…AC-018 (424–428), §Edge
+Cases EDGE-011/EDGE-012 (464–465) — section-scoped reads only (P-66); the T-004 entry of
+`.github/task-runner/tasks.json` in full; the T-003 section of this file (its Phase-4 contract and
+its hand-off note for T-004); the existing harness in `tests/unit/test_make_map.py`. No whole-file
+read of the spec or of this file (P-66).
+
+### Files written (exactly T-004's `allowed_files` test paths)
+
+| File | Change | Nodes |
+|---|---|---|
+| `tests/unit/test_make_map.py` | +636 (T-004 block appended) | 7 (11 → 18 collected) |
+
+Nothing else: `scripts/make_map.py` (T-004's `source_files`) is Phase 4 work, the shared fixtures
+`_T003_FILES` / `_TREE_FILES` were **not** touched (so `_EXPECTED_PACKAGE_COUNT` and `_GROUP_DIRS`
+are unchanged for T-005), and no other task's tests, `docs/todo/`, `docs/questions/` or
+`tasks.json` were modified (status sync is S4.4).
+
+New helpers in that file (all reuse the T-002/T-003 harness — `_git_tree`, `_map_text`,
+`_run_generator`, which already accepts `Path | str`): `_t004_tree` (fixture-parse guard),
+`_module_body` (body lines after a `#### ` header, **indent preserved** — T-003's `_module_block`
+strips it, so it cannot witness REQ-014's indents), `_symbol_lines`, `_all_symbol_lines`,
+`_section_headers`, `_seq_failures`, and the field-fixture generators `_field_source` /
+`_field_symbol_lines`. The module header form `#### <path> (<N> lines)` is unchanged (T-003
+constraint).
+
+### Derived tests → spec clauses (7 nodes, all of T-004's `tests_to_create`)
+
+| Node | IDs | Clauses pinned |
+|---|---|---|
+| `test_ac_014_symbol_inventory_and_unparsed_signatures` | AC-014 / REQ-014 | the exact 13-line symbol sequence of one module: classes first in source order (`Widget`, `Outer`), each class's annotated fields then its methods, a nested class as a `  - class \`Inner\`` member line with **its own members at 4 spaces**, module-level functions after the classes in source order (`spaced`/`fetch` render after the classes although they precede them in the source), `async ` kept inside the backticks, bases rendered ``Widget(Base, Mixin)``; the signature text is the `ast.unparse` rendering, not the source spacing (`def spaced(  a : int ,b : str = "xy" )` → ``spaced(a: int, b: str='xy')``); the ≤ 20-character default rule at its boundary (1-, 4- and 20-character defaults shown; 21-, 23-character ones omitted with their annotations kept); a function-local class, module-level assignments, imports and an `if TYPE_CHECKING` block never render; every symbol rendered exactly once |
+| `test_ac_015_decorators_render_as_prefix` | AC-015 / REQ-015 | the exact 10-line sequence with `@logged_class` on a class, `@property`/`@staticmethod`/`@classmethod`/`@override` on methods, `@logged` on a function, the stacked pair `@logged @cache` in source order, the attribute chain `@pytest.fixture`, and the decorator **call** rendered as its `ast.unparse` text `@lru_cache(maxsize=8)`; plus a per-decorator presence check so a missing prefix is attributed to the decorator that went missing |
+| `test_ac_016_private_symbols_and_dunders` | AC-016 / REQ-016 | `__init__` and `__repr__` rendered exactly once in **both** runs; the four `_name` symbols (`_internal`, `_Helper` and its method, `_private`) rendered only with `--include-private` (exact-line equality — a substring test would false-positive on the public name `visible_in_private_module`); the `#### ` headers of `src/_hidden.py`, `src/_pkg/__init__.py` and `src/_pkg/inner.py` present in both runs, and the whole `### `/`#### ` header list byte-identical between them |
+| `test_ac_017_class_fields_capped_untyped_omitted` | AC-017 / REQ-017 | a 17-field class (one `Field(default="a")`, one `= True`) renders each annotated field as `  - \`name: annotation\`` with **no default and no `Field(` payload**, in source order; the unannotated assignment renders neither as a field nor inside the elided count; exactly 15 field lines then `  - … +2 fields` |
+| `test_ac_018_summary_normalization` | AC-018 / REQ-018 | a docstring whose first logical line spans three physical lines with doubled spaces and backticks renders as one normalized summary; the module summary line (the line right after the `#### ` header) is normalized the same way; an empty docstring, no docstring, and a second paragraph render no summary and **no trailing `:`** |
+| `test_edge_011_field_cap_marker` | EDGE-011 / REQ-017 | 15 fields → 15 lines and no marker; 16 → 15 lines + `  - … +1 fields`; 20 → 15 lines + `  - … +5 fields`; exactly two marker lines in the module; the at-cap class's own 16 lines contain no `…` |
+| `test_edge_012_long_summary_truncated` | EDGE-012 / REQ-018 | a 135-character normalized summary renders as its first 100 characters + `…` and its tail never appears; a 100-character summary renders in full with no marker; the raw docstring carries backticks and doubled spaces **inside** the first 100 characters, so normalization must precede truncation |
+
+### RED evidence (observed, not declared)
+
+`uv run pytest --collect-only tests/unit/test_make_map.py -q` → **18 tests collected in 0.13s**
+(11 before the block, 7 added, no collection error — the generator is driven as a subprocess, never
+imported).
+
+T-004's `red_command`, run verbatim (targeted only — the full suite is the Phase 5 gate):
+
+```text
+uv run pytest tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures \
+  tests/unit/test_make_map.py::test_ac_015_decorators_render_as_prefix \
+  tests/unit/test_make_map.py::test_ac_016_private_symbols_and_dunders \
+  tests/unit/test_make_map.py::test_ac_017_class_fields_capped_untyped_omitted \
+  tests/unit/test_make_map.py::test_ac_018_summary_normalization \
+  tests/unit/test_make_map.py::test_edge_011_field_cap_marker \
+  tests/unit/test_make_map.py::test_edge_012_long_summary_truncated -v
+
+E  Failed: …\scripts\make_map.py does not exist — T-002 Phase 4 has not implemented the generator
+tests\unit\test_make_map.py:56: Failed
+============================== 7 failed in 1.05s ==============================
+```
+
+**Valid RED:** 7/7 fail on the missing behaviour, raised as a `pytest.fail` assertion inside the
+test body; no collection, import, fixture or setup error, and no `ValidationError`/`ValueError`
+from test data. Fixture data was validated before the gate: `_t004_tree` `ast.parse`s every fixture
+module and fails the test if it does not parse, and the EDGE-012 fixture asserts its own lengths
+(135 > 100, exactly 100 at the boundary).
+
+### Test sensitivity (P-68)
+
+A behaviour-correct stand-in generator (`stub_t004.py`, written **outside** the repository, in
+`%LOCALAPPDATA%/Temp/sens_t004/`, so it can never be committed) extends the T-003 stub with the
+symbol layer and nothing else (no `--check`). The driver imports this test module, rebinds
+`_GENERATOR` to the stub, and calls all 7 nodes.
+
+- **Correct stub: 7/7 nodes pass** — the tests are satisfiable, so the RED is missing behaviour,
+  not a broken test. Building the stub corrected four expectation errors **in the tests** before
+  they were trusted: the member bullet `  - ` was missing from the field/method expectations
+  (REQ-014/REQ-017 render every member as a bullet), the AC-018 expectation had functions before
+  classes (REQ-014 groups classes first), and the EDGE-011 expectation listed all 16/20 field lines
+  instead of 15 + marker.
+- **Wrong-implementation matrix: 32/32 mutations caught**, each by the semantically right node:
+
+| Mutation (one broken clause) | Caught by |
+|---|---|
+| fields not capped (all rendered) | AC-017, EDGE-011 |
+| field-cap elision marker missing | AC-017, EDGE-011 |
+| elision count off by one | AC-017, EDGE-011 |
+| unannotated class assignments rendered as fields | AC-014, AC-017 |
+| field default value rendered | AC-014, AC-017 |
+| positional defaults always included | AC-014 |
+| keyword-only defaults always included | AC-014 |
+| short positional default dropped (boundary too tight) | AC-014 |
+| short keyword-only default dropped (boundary too tight) | AC-014 |
+| decorators dropped | AC-015 |
+| decorator call rendered without its `@` | AC-015 |
+| function-local class rendered | AC-014 |
+| private symbols always rendered | AC-016 |
+| private symbols hidden even with `--include-private` | AC-016 |
+| dunder methods treated as private | AC-014, AC-016 |
+| `--include-private` also changes the module set | AC-016 |
+| summary not normalized (raw first physical line) | AC-018, EDGE-012 |
+| backticks kept in summaries | AC-018, EDGE-012 |
+| long summary not truncated | EDGE-012 |
+| summary truncated at 80 | EDGE-012 |
+| truncation marker missing | EDGE-012 |
+| marker also on an exactly-100-character summary | EDGE-012 |
+| module summary line dropped | AC-018 |
+| module-level functions rendered before classes | all 7 nodes |
+| methods rendered before fields | AC-014, AC-015, AC-017, EDGE-011 |
+| method line uses the `def` keyword | AC-014, AC-015, AC-016 |
+| method indent lost | AC-014, AC-015, AC-017, EDGE-011 |
+| nested class not rendered | AC-014 |
+| nested class members not indented deeper | AC-014 |
+| `async ` prefix dropped | AC-014 |
+| class bases dropped | AC-014 |
+| trailing `:` kept when there is no summary | all 7 nodes |
+
+The driver itself produced two false results on the first runs and both were fixed before the
+matrix above was trusted: its per-node handler caught `Exception` but `pytest.fail` raises
+`_pytest.outcomes.Failed` (a `BaseException`), so one mutation crashed the driver instead of being
+recorded; and two mutation search strings matched the **first** occurrence of an identical
+statement in another stub function (`_exports` vs `_symbol_lines`), so one mutation applied to
+nothing and was reported as “not caught by any test”. The re-run uses unique search strings and
+fails loudly when a mutation does not apply or does not compile.
+
+### Quality gates (this step's changed paths only, P-6)
+
+- `uv run ruff format tests/unit/test_make_map.py` → **1 file reformatted / already formatted**
+- `uv run ruff check tests/unit/test_make_map.py` → **All checks passed!** (one F541
+  f-string-without-placeholders was fixed by promoting the decorator-call rendering to the named
+  constant `_AC015_CALL_DECORATOR`, which the expectation and the clause check now share)
+- No whole-repo lint sweep (the Phase 5 gate); no `mypy`/`deptry`/docs build in this step.
+- `uv run python scripts/check_traceability.py` was **not** run and `docs/verification/traceability.md`
+  was **not** touched — as in T-001/T-002/T-003, the matrix rows for this spec are S3.2's work.
+- `uv.lock` restored before the commit (F-9 / P-74); `git status` clean afterwards.
+
+### Decisions and deviations
+
+- **Fixture module sources are embedded as `"""…"""` literals with single-quoted docstrings** —
+  ruff `flake8-quotes multiline-quotes="double"` (Q001) forbids `'''` for the outer literal, so the
+  inner docstrings use `'`; the one multi-line docstring (AC-018) uses `'''` **inside** the outer
+  `"""`, which is valid Python. The first draft used a single-quoted multi-line docstring — an
+  unterminated string literal — and `_t004_tree` surfaced it as invalid test data rather than as a
+  RED; that guard is why the RED gate was never contaminated.
+- **`_t004_tree` parses every fixture and `pytest.fail`s on a `SyntaxError`**: an unparseable fixture
+  would otherwise reach the generator and exit 4 (EDGE-003), which reads like a valid RED but
+  witnesses nothing.
+- **Exact rendered-line sequences, not per-line regexes.** Every node compares the module's symbol
+  lines as a list, so grouping order, indent, bullet form, decorator prefix order and the marker
+  line are all pinned at once; the extra per-clause checks only add attribution (which decorator
+  went missing, which default leaked) and the “never rendered” absence checks.
+- **Exact-sequence fixtures have no module docstring** (except AC-018's, which exists precisely to
+  witness module-summary normalization); the summary line is asserted separately there, so the
+  bullet sequence stays unambiguous.
+- **The nested class sits inside a class with no fields and no methods.** REQ-014 enumerates
+  “fields first, then methods” and does not fix where a nested class renders relative to them, so
+  the witness pins its **form and indent** without asserting an order the spec does not state.
+- **AC-017 interleaves the unannotated assignment between the 15th and 16th annotated field.** An
+  implementation that counts unannotated assignments toward the cap emits `+3 fields` instead of
+  `+2 fields`, so the interleaving is a mutation witness, not noise.
+- **Deliberate under-assertions** (not encoded rather than guessed): the position of a nested class
+  relative to its enclosing class's fields and methods (above); keyword bases
+  (`class C(metaclass=M)`) — REQ-014 writes `Name(Base, ...)` and the spec never states how a
+  keyword base renders; a decorator on a nested class, and a private nested class under
+  `--include-private`; and the truncation reading — the tests pin “100 characters of normalized
+  text, then `…`” (the AC-018/EDGE-012 wording), so an implementation that fits the marker **inside**
+  the 100-character budget fails; that reading is stated here rather than left implicit.
+
+### What Phase 4 (T-004) must implement for these nodes
+
+Symbol layer per module (`#### ` header, then the optional summary line, then the symbol lines):
+module-level classes in source order, then module-level functions in source order; a class line
+`- ` + decorators + `class ` + backticked ``Name(Base, ...)`` + `: ` + summary; a module function
+line `- ` + decorators + `def ` + backticked signature (`async ` stays inside the backticks) +
+`: ` + summary; a member line `  - ` + decorators + backticked signature + `: ` + summary, **no
+`def` keyword**; a nested class is a member line `  - class \`Inner\`: …` whose own members are one
+indent level deeper (4 spaces). Fields: `ast.AnnAssign` with a `Name` target only, rendered
+`  - \`name: annotation\`` with no default and no `Field(...)` payload, in source order, capped at
+**15**, then `  - … +N fields`; unannotated `Assign` statements are never rendered and never
+counted. Signatures, annotations, bases, decorator calls and field annotations come from
+`ast.unparse`; a parameter default is kept only when its unparsed text is ≤ **20** characters
+(keyword-only defaults follow the same rule). Summary: `ast.get_docstring`, first paragraph, whitespace
+runs collapsed, backticks removed, and if longer than **100** characters `text[:100] + "…"`; no or
+empty docstring → no summary and no trailing `:`. Visibility: public = not `_`-prefixed, plus every
+dunder; `--include-private` changes **only** which symbols render — never a module or package.
+Classes/functions inside a function body, module-level assignments, imports and
+`if TYPE_CHECKING` blocks are never rendered. The 20/15/100 constants stay hardcoded and
+non-configurable. The `#### <path> (<N> lines)` header form and the position of the module summary
+line are T-003's and must not change — six other nodes assert them.
+
+### Hand-off note for T-005 (`--check`, `--help`, determinism)
+
+- The T-004 block adds **no** entry to `_T003_FILES` / `_TREE_FILES` and changes no existing
+  expectation, so the shared-fixture counts T-005 depends on are untouched.
+- `_module_body` / `_symbol_lines` / `_all_symbol_lines` / `_section_headers` are the slicing
+  helpers for any later unit node that needs an indented body; `_module_block` (T-003) strips
+  indentation and must not be used for indent assertions.
+- REQ-018 normalization now applies to the module summary line too: T-003's AC-013 witness asserts
+  only that a summary line follows the header, so it stays GREEN under a normalized rendering —
+  do not “fix” it by weakening it.
