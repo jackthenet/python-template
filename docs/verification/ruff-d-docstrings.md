@@ -891,3 +891,107 @@ Remaining `D` sites in `src/` after group 8: **131** (`D205` 40, `D209` 36, `D10
 - Citation check (INV-I / Q-16): the new docstrings cite only IDs the citing file's own spec defines — `errors.py` / `repository.py` / `storage.py` / `service.py` → `docs/specs/file-management.md` (REQ-003/006/013/015/016/017/022/023/024, AC-031, EDGE-006/007/011/015/017, NFR-002/004). `search_source.py` cites **`docs/specs/search.md`** IDs (REQ-005/006/012/021) — verified as a different ID space (`file-management.md` REQ-021 is the avatar-variant requirement); the module docstring already names `docs/specs/search.md`, so the per-function citations resolve unambiguously and were left untouched.
 
 **Next (S4.2, group 9):** `search` (61 sites).
+
+## Phase 4 — group 9 (S4.2, 2026-10-09)
+
+`search` — 4 of the 7 modules carry `D` sites (`errors.py`, `events.py`, `models.py`, `service.py`; `__init__.py`, `feature_actions.py`, `feature_settings.py` are already clean), **61** sites: **6** `D1xx` additions (`D102` 1, `D107` 5) and **55** format sites (`D205` 28, `D209` 26, `D403` 1) — exactly the §Fresh measurement row. Two commits per Q-11: `f0a2fcc` (additions) → `b02eefc` (format).
+
+### Additions half — 6 gate sites (`f0a2fcc`)
+
+```text
+search  src/backend/search/errors.py
+  19  D107 UnknownSourceError.__init__       added (the feature name is an exact dict-key lookup, not a
+                                          normalized match; kept on the instance, REQ-010/EDGE-001)
+  33  D107 MalformedQueryError.__init__      added (the message is composed from exactly the context that
+                                          applies; a pagination problem carries no field/source, REQ-010/AC-024)
+  50  D107 SourceQueryFailedError.__init__   added (`error` is the exception type name → secret-free,
+                                          NFR-002; a global fan-out failure is a marker instead, REQ-011)
+search  src/backend/search/events.py
+  37  D102 EventPublisher.publish            added (nothing is caught: a raising publisher propagates; only a
+                                          `None` publisher is promised error-free, REQ-014 — F-14; the
+                                          `...` Protocol stub body is kept)
+search  src/backend/search/service.py
+ 331  D107 SearchService.__init__            added (nothing eager: the registry is resolved per read,
+                                          REQ-013; one RLock guards the source dict for registration and
+                                          selection, REQ-018; pool threads start on first submit, D12/REQ-019)
+ 516  D107 InMemorySource.__init__           added (`fields`/`items` are copied snapshots; the declared-field
+                                          map is built once for the query path, REQ-017)
+```
+
+Gate-site count: **1 `D102` + 5 `D107` = 6** — matches §Fresh measurement.
+
+- **INV-H / Q-14 (private helpers in the touched files).** An `ast` walk over all seven modules of the package reported **0** undocumented def/class after the additions — unlike groups 7 and 8, `search` had no undocumented private helper outside the gate sites (`_normalize`, `_find_field`, `_eval_*`, `_query`, … all already documented).
+- **Group-4 INV-D lesson applied:** the only `...`-bodied site touched was `events.EventPublisher.publish` (a `Protocol` stub) — the `...` is kept after the docstring, and the digest was checked **after the additions commit**, not only at the end.
+
+### Format half — 55 sites, all hand-edited (`b02eefc`)
+
+Line numbers are the step-1 site list (pre-additions); in the format commit the `service.py` sites sit later in the file because of the additions commit.
+
+```text
+search  src/backend/search/errors.py
+  46  D205+D209 SourceQueryFailedError              one-line summary + "Carries …" body
+search  src/backend/search/events.py
+  34  D205+D209 EventPublisher                      summary + the `None`-publisher promise as body
+search  src/backend/search/models.py
+  22  D205+D209 FieldType                           summary + "a list field …" body
+  41  D205+D209 SourceField                         summary + flags body
+  60  D205+D209 SourcePage                          summary + page/total body
+  85  D205+D209 FilterCondition                     summary + field/operator/value body
+ 157  D205+D209 SearchResultItem                    summary + item-shape body
+ 166  D205+D209 SourceFailure                       summary + marker-shape body
+ 176  D205+D209 SearchResult                        summary + result-shape body
+search  src/backend/search/service.py
+  74  D205+D209 _read_setting                       summary + the fallback-condition body
+  82  D205+D209 _validate_source_declaration        summary + checks / raises body
+  96  D205+D209 _is_identical_source                summary + criteria body ("compared by identity" made explicit)
+ 155  D205+D209 _value_matches_type                 summary + per-type list body
+ 169  D205+D209 _validate_pagination                summary + raise-condition body
+ 178  D205+D209 _validate_query_against_source      summary + filter/sort body
+ 200  D205+D209 _validate_filter_condition          summary + three-check body
+ 225  D205+D209 _free_text_matches                  imperative summary + match-rule body
+ 239  D205+D209 _eval_group                         folded to one line (94 < 120 chars)
+ 251  D205+D209 _eval_condition                     folded to one line (88 chars)
+ 283  D403      _apply_exact_operator               `number / boolean / datetime operators:` → `Operators of
+                                                  number / boolean / datetime fields:` (hand edit; the spec's
+                                                  lowercase type names kept, so D403 is satisfied without renaming)
+ 293  D205+D209 _apply_operator                     summary + per-type-semantics body
+ 306  D205+D209 _sort_key                           summary + ordering body
+ 320  D205      SearchService                       one-line summary; the REQ ids kept as the body's first line
+ 367  D205+D209 SearchService.unregister_source     folded to one line (90 chars)
+ 438  D205+D209 SearchService._select_sources       summary + selection-rule body
+ 464  D205+D209 SearchService._effective_limit      summary + default/clamp body
+ 474  D205      SearchService._query_source         one-line summary; `(D12, REQ-019, AC-033, EDGE-011)` moved
+                                                  into the body's first sentence (the summary would not fit 120)
+ 494  D205+D209 SearchService._publish              summary + `None`-publisher body
+ 556  D205+D209 get_search_service                  summary + singleton body ("ignores its arguments" made explicit)
+```
+
+29 docstrings → 28 `D205` + 26 `D209` + 1 `D403` = **55** sites (320 and 474 are `D205`-only; the three folded docstrings clear both codes on one line).
+
+F-10 re-confirmed on this group: `--fix --diff` over the `D205`/`D209`/`D403` sites produced an **empty diff** (probed once) — every one is a hand edit. No `D301` in this feature.
+
+### Gates & no-behavior-delta (INV-D)
+
+```text
+uv run ruff check src/backend/search --select D (google)   → All checks passed!   (0, was 61)
+uv run ruff check src/backend/search                       → All checks passed!
+uv run ruff format src/backend/search                      → 7 files left unchanged / already formatted
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src   → 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0
+                                                                      (after the additions commit AND after the format commit)
+uv run pytest tests/{acceptance,contract,integration,property,unit}/search -q → 87 passed in 13.44s
+git diff --stat f318713..f0a2fcc                           → 3 files, +46/−1 (additions)
+git diff --stat f318713..b02eefc                           → 4 files, +175/−74, all inside docstrings
+```
+
+- **Docstring-value check.** A one-off `ast.get_docstring` comparison of every docstring in the four files against the pre-group-9 commit `f318713` reports 6 `ADDED` + 29 `CHANGED`. Every `CHANGED` pair is identical once whitespace is collapsed, except for the wording a one-line summary requires (the summary's colon moved into a body sentence) and two deliberate clarifications: `_is_identical_source` ("compared by identity" — the code compares the query function with `is`) and `get_search_service` ("ignores its arguments" — the arguments are used only on the creating call). No docstring became signature-restating filler (INV-G).
+- **INV-I (citations kept).** Every `REQ`/`AC`/`EDGE`/`NFR`/`D` id present before is present after; `_query_source`'s `(D12, REQ-019, AC-033, EDGE-011)` moved from the summary to the body.
+
+Remaining `D` sites in `src/` after group 9: **70** (`D102` 33, `D205` 12, `D209` 10, `D101` 7, `D107` 7, `D403` 1) = `usermanagement` only.
+
+### Q-26 check (docstring vs. code — no code touched, no reclassification)
+
+- **F-14 (same family as F-11/F-13).** `SearchService._publish` catches nothing, so a publisher that raises propagates out of `register_source` / `unregister_source` / `search`. `AGENTS.md` calls the search events "best-effort"; `docs/specs/search.md` REQ-014 promises only that a `None` publisher means no events and no error — the code matches its spec, the guidance over-promises. Stated in the new `EventPublisher.publish` docstring; `_publish`'s own docstring keeps its original (true but narrower) claim.
+- **F-15 (pre-existing spec/implementation gap, untouched).** `docs/specs/search.md` v4 adds REQ-024 (`set_search_service()`, AC-038..AC-041, EDGE-022/EDGE-023) and names it in REQ-015's traced-module-function list and REQ-017's singleton surface — but no `set_search_service` exists anywhere in `src/` (only `get_search_service` / `reset_search_service`), and no test references it. Recorded as-is; no docstring claims it exists. A separate change (ISSUE or FEATURE), not this one.
+- Citation check (INV-I / Q-16): every id cited by the added/edited docstrings is defined by **`docs/specs/search.md`** — verified against its tables (REQ-001/002/003/005/007/010/011/013/014/016/017/018/019, AC-024/AC-026, EDGE-001/EDGE-013/EDGE-021, NFR-002). All four touched files belong to the search feature, so there is no second ID space to disambiguate (unlike group 8's `search_source.py`).
+
+**Next (S4.2, group 10):** `usermanagement` (70 sites) — the last feature group before the config commit.
