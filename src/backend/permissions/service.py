@@ -139,6 +139,20 @@ class PermissionService:
         event_bus: EventPublisher | None = None,
         settings_registry: SettingsRegistry | None = None,
     ) -> None:
+        """Construction is the only wiring point (constructor DI, REQ-023, D19).
+
+        The four required collaborators are stored as given; the optional ones
+        select modes. ``session_lookup=None`` makes a check that carries a token
+        deny ``storage_error`` instead of validating it (fail-closed, EDGE-007),
+        while a check without a token skips session validation either way
+        (AC-021). ``catalog=None`` installs an empty catalog, so every check
+        denies ``unknown_permission`` until the features register their actions
+        (REQ-004). ``event_bus=None`` means no events and no ``SettingChanged``
+        subscription (AC-025). ``settings_registry=None`` defers to the shared
+        registry, resolved lazily on the next sync (REQ-019). The
+        ``SettingChanged`` subscription is taken here, so a constructed service
+        already reacts to registry writes of ``permissions.system_principal``.
+        """
         self._role_repository = role_repository
         self._grant_repository = grant_repository
         self._system_repository = system_repository
@@ -263,8 +277,10 @@ class PermissionService:
             self._publish(RolePermissionsChanged(role=role, added=[], removed=[permission]))
 
     def get_role_permissions(self, role: str) -> frozenset[str]:
-        """The role's explicit grants (REQ-008); an unknown role raises
-        :class:`RoleNotFoundError`."""
+        """The role's explicit grants (REQ-008).
+
+        An unknown role raises :class:`RoleNotFoundError`.
+        """
         if not self._role_known(role):
             raise RoleNotFoundError(role)
         return self._grant_repository.get_role_permissions(role)
@@ -322,9 +338,12 @@ class PermissionService:
             raise RoleNotFoundError(role)
 
     def _validate_grant(self, role: str, permission: str) -> None:
-        """Validate a grant/revoke target (REQ-008): the permission must be a catalog action or
-        a feature wildcard (an unknown key raises :class:`UnknownPermissionError`); an unknown
-        role raises :class:`RoleNotFoundError`."""
+        """Validate a grant/revoke target (REQ-008).
+
+        The permission must be a catalog action or a feature wildcard (an
+        unknown key raises :class:`UnknownPermissionError`); an unknown role
+        raises :class:`RoleNotFoundError`.
+        """
         if not self._is_valid_grant_key(permission):
             raise UnknownPermissionError(permission)
         if not self._role_known(role):

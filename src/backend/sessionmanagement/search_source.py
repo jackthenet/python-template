@@ -92,8 +92,10 @@ def _session_fields(session: Session) -> dict[str, Any]:
 
 
 def _free_text_matches(fields: dict[str, Any], free_text: str) -> bool:
-    """A non-empty (normalized) free text matches if any searchable string
-    field contains it (REQ-005, D13)."""
+    """A non-empty (normalized) free text matches if any searchable string field contains it.
+
+    Matching is substring containment on the normalized value (REQ-005, D13).
+    """
     for name in _SEARCHABLE:
         value = fields.get(name)
         if isinstance(value, str) and free_text in _normalize(value):
@@ -102,8 +104,11 @@ def _free_text_matches(fields: dict[str, Any], free_text: str) -> bool:
 
 
 def _eval_group(group: FilterGroup, fields: dict[str, Any]) -> bool:
-    """Evaluate a (nestable) AND/OR filter group over the field values
-    (REQ-006, D4)."""
+    """Evaluate a (nestable) AND/OR filter group over the field values.
+
+    Nested groups recurse; the group's operator combines its conditions
+    (REQ-006, D4).
+    """
     results = [
         _eval_group(cond, fields) if isinstance(cond, FilterGroup) else _eval_condition(cond, fields)
         for cond in group.conditions
@@ -112,9 +117,11 @@ def _eval_group(group: FilterGroup, fields: dict[str, Any]) -> bool:
 
 
 def _eval_condition(cond: FilterCondition, fields: dict[str, Any]) -> bool:
-    """Evaluate a single filter condition over the field values (REQ-006, D4):
-    string matching is case-insensitive (normalized); boolean/datetime are
-    exact (REQ-012)."""
+    """Evaluate a single filter condition over the field values.
+
+    String matching is case-insensitive (normalized); boolean/datetime are
+    exact (REQ-006, D4, REQ-012).
+    """
     value = fields.get(cond.field)
     if cond.operator is FilterOperator.IS_NULL:
         return value is None
@@ -140,7 +147,7 @@ def _apply_string_operator(value: str, op: FilterOperator, fv: Any) -> bool:
 
 
 def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
-    """boolean / datetime operators: exact (REQ-012)."""
+    """Boolean / datetime operators: exact (REQ-012)."""
     if op is FilterOperator.EQUALS:
         return value == fv
     if op is FilterOperator.IN_LIST:
@@ -150,8 +157,11 @@ def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
 
 
 def _sort_key(value: Any) -> tuple:
-    """A sort key: ``None`` last, strings by their normalized value, others
-    exact (D8; deterministic)."""
+    """A sort key that orders ``None`` last and stays deterministic across types.
+
+    Strings sort by their normalized value, everything else by the value
+    itself (D8).
+    """
     if value is None:
         return (1, "")
     if isinstance(value, str):
@@ -160,11 +170,13 @@ def _sort_key(value: Any) -> tuple:
 
 
 def _query(repository: SessionRepository, ctx: SourceQueryContext) -> SourcePage:
-    """The source's query function (REQ-022): over the existing
-    ``SessionRepository.list_all`` (the additive method from T-004,
-    authentication — all sessions, any revocation state, no user filter);
-    applies free text, filters, sort, and pagination; the default ordering
-    is ``created_at`` descending."""
+    """The source's live query function: no index, no cache, no persistence (REQ-022).
+
+    Reads the existing ``SessionRepository.list_all`` (the additive method
+    from T-004, authentication — all sessions, any revocation state, no user
+    filter), then applies free text, filters, sort, and pagination; the
+    default ordering is ``created_at`` descending.
+    """
     sessions = repository.list_all()
     items = [SourceItem(item_id=str(session.id), fields=_session_fields(session)) for session in sessions]
     matched = [
@@ -186,9 +198,9 @@ def _query(repository: SessionRepository, ctx: SourceQueryContext) -> SourcePage
 
 
 def build_session_source(repository: SessionRepository) -> SearchSource:
-    """Build the session-management search source over ``repository``
-    (REQ-022, D19, ADR-077): name ``sessionmanagement``, the field schema,
-    and the sync query function over the existing
-    ``SessionRepository.list_all``.
+    """Build the session-management search source over ``repository``.
+
+    Name ``sessionmanagement``, the field schema, and the sync query function
+    over the existing ``SessionRepository.list_all`` (REQ-022, D19, ADR-077).
     """
     return SearchSource(name=_SOURCE_NAME, fields=list(_FIELDS), query=lambda ctx: _query(repository, ctx))

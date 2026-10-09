@@ -19,8 +19,10 @@ from pydantic import BaseModel
 
 
 class FieldType(StrEnum):
-    """The closed field-type set (REQ-002): a list field is not representable
-    and not exposed."""
+    """The closed field-type set (REQ-002).
+
+    A list field is not representable and not exposed.
+    """
 
     STRING = "string"
     NUMBER = "number"
@@ -38,8 +40,11 @@ FIELD_NAME_PATTERN: str = r"^[a-z0-9][a-z0-9._]{0,63}$"
 
 
 class SourceField(BaseModel):
-    """A declared source field (REQ-002): a name, a type from the closed set,
-    and the searchable/filterable/sortable/display flags."""
+    """A declared source field (REQ-002).
+
+    A name, a type from the closed set, and the
+    searchable/filterable/sortable/display flags.
+    """
 
     name: str
     type: FieldType
@@ -57,8 +62,11 @@ class SourceItem(BaseModel):
 
 
 class SourcePage(BaseModel):
-    """A source's query result page: at most ``limit`` items starting at
-    ``offset``, plus the total match count (ignoring pagination)."""
+    """A source's query result page.
+
+    At most ``limit`` items starting at ``offset``, plus the total match count
+    (ignoring pagination).
+    """
 
     items: list[SourceItem]
     total: int
@@ -82,8 +90,11 @@ class FilterOperator(StrEnum):
 
 
 class FilterCondition(BaseModel):
-    """A single filter condition (REQ-006): a field, an operator, and a value
-    (required for every operator except ``is_null``)."""
+    """A single filter condition (REQ-006).
+
+    A field, an operator, and a value (required for every operator except
+    ``is_null``).
+    """
 
     field: str
     operator: FilterOperator
@@ -154,8 +165,11 @@ class SearchQuery(BaseModel):
 
 
 class SearchResultItem(BaseModel):
-    """A result item: ``feature`` (the source name) + ``item_id`` + the
-    declared display field values (REQ-009)."""
+    """A result item (REQ-009).
+
+    ``feature`` (the source name) + ``item_id`` + the declared display field
+    values.
+    """
 
     feature: str
     item_id: str
@@ -163,9 +177,11 @@ class SearchResultItem(BaseModel):
 
 
 class SourceFailure(BaseModel):
-    """A per-source failure marker (resilient global fan-out, D11): the
-    feature, the reason (``query_failed``/``timeout``), and the error kind
-    (no sensitive data)."""
+    """A per-source failure marker (resilient global fan-out, D11).
+
+    The feature, the reason (``query_failed``/``timeout``), and the error kind
+    (no sensitive data).
+    """
 
     feature: str
     reason: str
@@ -173,9 +189,11 @@ class SourceFailure(BaseModel):
 
 
 class SearchResult(BaseModel):
-    """The query entry point's result (REQ-009): the result items, the page
-    metadata (total, offset, limit), and the per-source failure markers (empty
-    for single-source queries)."""
+    """The query entry point's result (REQ-009).
+
+    The result items, the page metadata (total, offset, limit), and the
+    per-source failure markers (empty for single-source queries).
+    """
 
     items: list[SearchResultItem]
     total: int

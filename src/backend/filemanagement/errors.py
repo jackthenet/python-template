@@ -17,6 +17,11 @@ class FileManagementNotFoundError(FileManagementError):
     """No file exists for the requested key (REQ-010, REQ-011, REQ-014)."""
 
     def __init__(self, key: str) -> None:
+        """``key`` is the looked-up key, echoed verbatim into the message.
+
+        Every read and delete path raises this same error, so a caller cannot
+        tell "never stored" from "already deleted" (REQ-023).
+        """
         self.key = key
         super().__init__(f"file not found: {key}")
 
@@ -29,6 +34,11 @@ class FileTooLargeError(FileManagementError):
     """
 
     def __init__(self, key: str | None, size: int, limit: int) -> None:
+        """Both sizes are bytes; ``limit`` is the effective limit at check time.
+
+        The limit is read live per namespace, so it need not match any
+        configured default (REQ-003).
+        """
         self.key = key
         self.size = size
         self.limit = limit
@@ -43,6 +53,11 @@ class FileTypeNotAllowedError(FileManagementError):
     """
 
     def __init__(self, key: str | None, detected: str, allowed: frozenset[str]) -> None:
+        """``allowed`` is the effective set at check time, snapshotted into the error.
+
+        For the ``avatars`` namespace that set is the fixed image set, so the
+        ``filemanagement.allowed_types`` setting never appears in it (REQ-006).
+        """
         self.key = key
         self.detected = detected
         self.allowed = allowed
@@ -70,6 +85,12 @@ class FileValidationError(FileManagementError):
         width: int | None = None,
         height: int | None = None,
     ) -> None:
+        """Only the context matching ``reason`` is populated; the rest stays ``None``.
+
+        For ``type_conflict`` a filename-extension conflict arrives as
+        ``declared`` even though the caller declared nothing, so ``declared``
+        means "the implied type", not "the caller's argument".
+        """
         self.key = key
         self.reason = reason
         self.declared = declared
@@ -87,6 +108,12 @@ class StorageError(FileManagementError):
     """
 
     def __init__(self, key: str | None, reason: str) -> None:
+        """``reason`` is the stable classification callers branch on (REQ-023).
+
+        For ``io`` and ``variant_generation`` the failing ``OSError`` is chained
+        as ``__cause__``: the filesystem detail stays available to a debugger
+        without reaching the message (NFR-002).
+        """
         self.key = key
         self.reason = reason
         super().__init__(f"storage error: {reason}")
@@ -100,6 +127,11 @@ class AvatarError(FileManagementError):
     """
 
     def __init__(self, user_id: str, operation: str) -> None:
+        """One class covers both causes; the caller branches on ``operation``.
+
+        ``"upload"`` means the user already has an avatar, ``"replace"`` means
+        the user has none (REQ-017).
+        """
         self.user_id = user_id
         self.operation = operation
         super().__init__(f"avatar error: {operation} for user {user_id!r}")

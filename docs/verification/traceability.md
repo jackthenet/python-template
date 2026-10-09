@@ -994,6 +994,16 @@ extended.
 | EDGE-013, EDGE-014 (`session-management.md` v2) | — | — | PENDING (settings-public-registry-setter P.4, 2026-10-06) |
 | REQ-001 (`logging-coverage.md` v3 — inventory rows only, no new ID) | — | — | N/A (inventory-only amendment; covered by the change spec's AC-015) |
 
+## Chore: ruff-d-docstrings (docstring gate — Phase 5 S5.3, 2026-10-09)
+
+Chore `ruff-d-docstrings` (type **DOCS/CHORE**; scope, invariants and gate evidence: `docs/verification/ruff-d-docstrings.md` §"Exact change scope", §"Invariants that MUST hold" (INV-A…INV-J), §"Phase 4 — group 11 config commit", §"Phase 5 — S5.1", §"Phase 5 — S5.2"). The change defines **no normative IDs of its own** — DOCS/CHORE produces no spec — so the rows below cover only the spec IDs its Phase 5 evidence actually reaches, plus its own gate as no-spec-ID rows. **No existing row is rewritten or refreshed** (decision Q-129, convention B): the pre-existing `logging-coverage` row `REQ-009 | AC-009 | test_traced_class_docstrings_mention_tracing | GREEN` stays exactly as the change that observed it wrote it — it was re-run GREEN at S5.2 gate 5, but not edited.
+
+| Item | Spec | ID | Test / evidence | Status | Commit |
+|---|---|---|---|---|---|
+| Traced-class docstring wording intact (INV-A) | logging-coverage.md | REQ-009, AC-009 | `test_traced_class_docstrings_mention_tracing` (`tests/acceptance/logging_coverage/test_docstrings.py`) — the only test in the suite that reads docstrings; the change added docstrings to traced classes (14 `D101` of the 198 additions) and INV-A requires the "traced" + "logged" wording to survive | GREEN (ruff-d-docstrings S5.2 2026-10-09: `uv run pytest tests/acceptance/logging_coverage/test_docstrings.py::test_traced_class_docstrings_mention_tracing -q` → `1 passed in 0.42s`; also green inside the S5.1 acceptance run `364 passed, 1 skipped`; code state `16332dc`) |
+| The new docstring lint gate itself | — (chore, no spec ID) | — | `uv run ruff check .` with `D` in `[tool.ruff.lint] select` (google convention) over `src/`, `per-file-ignores` = exactly `tests/*`, `scripts/*`, `migrations/*`, `.github/*`, no `# noqa` anywhere (INV-C) — the 328 `D` sites measured at P.4 are now gated by CI (`lint.yml`) at the same rule set and version | GREEN (ruff-d-docstrings S5.2 2026-10-09: `uv run ruff check .` → `All checks passed!`; targeted `uv run ruff check src --select D --config 'lint.pydocstyle.convention = "google"'` → All checks passed!, 0 of the 328 sites remain; commit `16332dc`) |
+| No-behavior-delta of the whole change (INV-D) | — (chore, no spec ID) | — | docstring-stripped AST digest of `src/` identical to the `45aa61c` baseline, with its non-vacuity control run (blind to a docstring, different on a one-character code change); 84 files / 43 587 docstring-stripped AST nodes and 903 docstring hosts in **both** states, docstrings 628 → 859 — no definition added or removed | GREEN (ruff-d-docstrings S5.2 2026-10-09: digest `64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0` == baseline; control `+ docstring on EventBus.__enter__` SAME, `+ max_queue_size 1000 → 1001` DIFFERENT; full suite `761 passed, 1 skipped` at S5.1, evidence commit `903339c`) |
+
 ## Drift Checks
 
 Run these checks at CI time to detect spec drift:

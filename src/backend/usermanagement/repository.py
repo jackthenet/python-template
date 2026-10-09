@@ -73,32 +73,54 @@ class UserRepository(ABC):
 
     @abstractmethod
     def add(self, user: User) -> User:
-        """Insert ``user``; raise :class:`UserAlreadyExistsError` on a
-        uniqueness-constraint violation (race guard)."""
+        """Insert ``user``; raise :class:`UserAlreadyExistsError` on a uniqueness-constraint violation (race guard)."""
         ...
 
     @abstractmethod
-    def get_by_id(self, user_id: UUID) -> User | None: ...
+    def get_by_id(self, user_id: UUID) -> User | None:
+        """The row for ``user_id``, or ``None`` when no such user exists.
+
+        Implementations return tz-aware UTC timestamps (the service contract,
+        REQ-013).
+        """
+        ...
 
     @abstractmethod
-    def get_by_username(self, username: str) -> User | None: ...
+    def get_by_username(self, username: str) -> User | None:
+        """Exact, case-sensitive match — usernames are stored as typed (REQ-003)."""
+        ...
 
     @abstractmethod
-    def get_by_email(self, email: str) -> User | None: ...
+    def get_by_email(self, email: str) -> User | None:
+        """Case-insensitive lookup (REQ-003).
+
+        Emails are stored lowercased, so implementations match a lowercased
+        argument against the lowercased column.
+        """
+        ...
 
     @abstractmethod
-    def update(self, user: User) -> User: ...
+    def update(self, user: User) -> User:
+        """Write the given instance back (merge semantics).
+
+        Raises :class:`UserAlreadyExistsError` when the change collides with
+        another user's unique column.
+        """
+        ...
 
     @abstractmethod
-    def delete(self, user_id: UUID) -> None: ...
+    def delete(self, user_id: UUID) -> None:
+        """Hard delete by id; an unknown id is a no-op (REQ-012)."""
+        ...
 
     @abstractmethod
-    def list_all(self, include_inactive: bool = False) -> Sequence[User]: ...
+    def list_all(self, include_inactive: bool = False) -> Sequence[User]:
+        """All users, inactive ones only when ``include_inactive`` (REQ-010); ordering is unspecified."""
+        ...
 
     @abstractmethod
     def count_active_by_role(self, role: str) -> int:
-        """Count active users whose ``roles`` include ``role`` (multi-role,
-        REQ-026)."""
+        """Count active users whose ``roles`` include ``role`` (multi-role, user-roles-permissions REQ-026)."""
         ...
 
 
@@ -110,6 +132,12 @@ class SqliteUserRepository(UserRepository):
     """
 
     def __init__(self, database_url: str) -> None:
+        """Create the engine and bootstrap the schema.
+
+        A file-based URL's parent directory is created first (EDGE-007); a
+        ``:memory:`` URL gets a static pool so one instance sees exactly one
+        in-memory database (EDGE-008).
+        """
         self._database_url = database_url
         file_path = _sqlite_file_path(database_url)
         if file_path is not None:
@@ -130,17 +158,26 @@ class SqliteUserRepository(UserRepository):
 
     @staticmethod
     def _map_integrity_error(error: IntegrityError) -> UserAlreadyExistsError:
+        """Map a driver integrity error to the colliding field.
+
+        The driver message is matched against the unique-index names; an
+        unrecognized violation is reported as ``username``.
+        """
         detail = str(error.orig) if error.orig is not None else str(error)
         if "uq_users_email" in detail or "users.email" in detail:
             return UserAlreadyExistsError(field="email")
         return UserAlreadyExistsError(field="username")
 
     def _session(self) -> Session:
-        # expire_on_commit=False keeps attributes loaded after commit so
-        # detached instances stay readable (the service reads them after add/update).
+        """One session per operation, with ``expire_on_commit=False``.
+
+        Attributes stay loaded after commit, so the detached instances the
+        service reads back after ``add``/``update`` remain readable.
+        """
         return Session(self._engine, expire_on_commit=False)
 
     def add(self, user: User) -> User:
+        """Insert in one session; a unique-constraint violation maps to the colliding field (EDGE-015)."""
         try:
             with self._session() as session:
                 session.add(user)
@@ -150,20 +187,27 @@ class SqliteUserRepository(UserRepository):
         return user
 
     def get_by_id(self, user_id: UUID) -> User | None:
+        """Primary-key lookup; naive stored timestamps get UTC attached."""
         with self._session() as session:
             return _attach_utc(session.get(User, user_id))
 
     def get_by_username(self, username: str) -> User | None:
+        """Single-row match with no normalization of the argument (case-sensitive)."""
         with self._session() as session:
             statement = select(User).where(User.username == username)
             return _attach_utc(session.exec(statement).first())
 
     def get_by_email(self, email: str) -> User | None:
+        """Matches the lowercased argument against the lowercased stored column (D5)."""
         with self._session() as session:
             statement = select(User).where(User.email == email.lower())
             return _attach_utc(session.exec(statement).first())
 
     def update(self, user: User) -> User:
+        """``session.merge`` plus commit, so a detached instance read earlier is written back whole.
+
+        Integrity errors map exactly as in :meth:`add`.
+        """
         try:
             with self._session() as session:
                 merged = session.merge(user)
@@ -173,6 +217,7 @@ class SqliteUserRepository(UserRepository):
             raise self._map_integrity_error(error) from error
 
     def delete(self, user_id: UUID) -> None:
+        """Fetch-then-delete: an unknown id simply commits nothing."""
         with self._session() as session:
             user = session.get(User, user_id)
             if user is not None:
@@ -180,6 +225,7 @@ class SqliteUserRepository(UserRepository):
                 session.commit()
 
     def list_all(self, include_inactive: bool = False) -> Sequence[User]:
+        """One SELECT; the inactive filter is applied in SQL, never in Python."""
         with self._session() as session:
             statement = select(User)
             if not include_inactive:
@@ -187,6 +233,7 @@ class SqliteUserRepository(UserRepository):
             return [_attach_utc(user) for user in session.exec(statement).all()]
 
     def count_active_by_role(self, role: str) -> int:
+        """Count the users the last-admin guard counts: active, and holding ``role`` (REQ-008)."""
         # The roles column stores a JSON array (RoleListType); a role value
         # appears quoted ("admin"), so the quoted pattern matches exactly
         # that role (role names are ^[a-z0-9_-]{1,32}$ — no LIKE metachars).

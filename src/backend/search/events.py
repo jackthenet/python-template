@@ -31,7 +31,16 @@ class SourceQueryFailed(BaseModel):
 
 
 class EventPublisher(Protocol):
-    """Structural publisher protocol (the real event bus satisfies it; a
-    ``None`` publisher means no events and no error, REQ-014)."""
+    """Structural publisher protocol (the real event bus satisfies it).
 
-    def publish(self, event: object) -> None: ...
+    A ``None`` publisher means no events and no error (REQ-014).
+    """
+
+    def publish(self, event: object) -> None:
+        """Deliver one search lifecycle/failure event to the publisher (D15).
+
+        Nothing is caught here: a publisher that raises propagates to the
+        registration or query call that published it — REQ-014 promises only
+        that a ``None`` publisher means no events and no error.
+        """
+        ...

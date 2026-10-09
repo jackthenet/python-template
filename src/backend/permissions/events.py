@@ -53,4 +53,11 @@ class RolePermissionsChanged(PermissionEvent):
 class EventPublisher(Protocol):
     """Structural publisher protocol satisfied by the shared event bus."""
 
-    def publish(self, event: object) -> None: ...
+    def publish(self, event: object) -> None:
+        """Hand ``event`` to the bus (the shared event bus only enqueues it).
+
+        The permissions feature adds no isolation around the call: a publisher
+        that raises propagates to the calling service method. REQ-020 only
+        promises that ``None`` means no events and no errors (AC-025).
+        """
+        ...
