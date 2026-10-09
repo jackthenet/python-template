@@ -25,7 +25,7 @@ _ROLE_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 
 
 class RoleListType(TypeDecorator):
-    """Persist a role list as JSON text in a ``VARCHAR`` column (REQ-026).
+    """Persist a role list as JSON text in a ``VARCHAR`` column (user-roles-permissions REQ-026).
 
     The role list is the user's self-contained set of roles (ADR-072); the
     column stores a JSON array (e.g. ``["admin", "user"]``) so the multi-role

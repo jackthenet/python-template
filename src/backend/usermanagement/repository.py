@@ -73,8 +73,7 @@ class UserRepository(ABC):
 
     @abstractmethod
     def add(self, user: User) -> User:
-        """Insert ``user``; raise :class:`UserAlreadyExistsError` on a
-        uniqueness-constraint violation (race guard)."""
+        """Insert ``user``; raise :class:`UserAlreadyExistsError` on a uniqueness-constraint violation (race guard)."""
         ...
 
     @abstractmethod
@@ -121,8 +120,7 @@ class UserRepository(ABC):
 
     @abstractmethod
     def count_active_by_role(self, role: str) -> int:
-        """Count active users whose ``roles`` include ``role`` (multi-role,
-        REQ-026)."""
+        """Count active users whose ``roles`` include ``role`` (multi-role, user-roles-permissions REQ-026)."""
         ...
 
 
