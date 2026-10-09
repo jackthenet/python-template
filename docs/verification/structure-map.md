@@ -3794,5 +3794,107 @@ what it contains. No rule, command, exit code or limitation line was touched.
 **S4.3 (T-006) gate: GREEN maintained — one doc-wording fix, zero behavior change, recorded above.**
 Next atomic step: **S4.4 (T-006)** — commit + set `"status": "VERIFIED"`.
 
+---
+
+## Phase 4 — T-007 RED (S4.1)
+
+**Date:** 2026-10-09. **Task:** T-007 (the DAG's last `PENDING` task; T-001…T-006 are `VERIFIED`),
+taken from the **active** DAG `.github/task-runner/tasks.json` (key `task_id`, per P-75), feature group
+*the committed artifact - STRUCTURE.md*, covering **REQ-021** / **AC-021** with **NFR-002** and **NFR-005**.
+Worktree `python-template_kopie-worktrees/feature/structure-map`, branch `feature/structure-map`, HEAD
+`c7a14fa`, clean tree at entry. S4.1 implements nothing and commits no source.
+
+### The verbatim `red_command` (from the active DAG, not assumed)
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget tests/acceptance/test_structure_map.py::test_nfr_005_complexipy_threshold_holds -v
+```
+
+Summary line: **`3 failed in 0.82s`** — 3 failed, 0 passed, 0 errors, 0 skipped. `green_command` is
+identical to `red_command` in this task (the artifact's existence is the implementation).
+
+### Per-node RED evidence
+
+| node | failing assert (file:line) | exact failing clause (one line) |
+|---|---|---|
+| `test_ac_021_committed_map_matches_fresh_render` | `tests/acceptance/test_structure_map.py:1368` | `AssertionError: REQ-021: no STRUCTURE.md is committed at the repository root` / `assert False` `where False = is_file()` on `WindowsPath('…/structure-map/STRUCTURE.md')` |
+| `test_nfr_002_map_line_budget` | `tests/acceptance/test_structure_map.py:1384` | `AssertionError: REQ-021: no STRUCTURE.md is committed at the repository root` / `assert False` `where False = is_file()` |
+| `test_nfr_005_complexipy_threshold_holds` | `tests/acceptance/test_structure_map.py:1401` | `AssertionError: NFR-005: complexipy exits 1 at max-complexity-allowed 15: 6 of 1980 analysed functions are over the limit: ['test_ac_026_map_hook_is_advisory 17', '_block_dir_paths 21', 'test_ac_012_package_header_and_exports 26', 'test_ac_009_tree_code_dirs_full_other_dirs_counted 34', 'test_inv_002_no_module_hidden_by_pruning 22', 'test_ac_016_private_symbols_and_dunders 25']` / `assert 1 == 0` |
+
+### Failure classification
+
+- **behavior failures: 3** — every node fails on a real product-state assertion, not on collection,
+  import, fixture or environment. All three tests collected and ran (0 collection errors).
+- **collection / import / fixture / environment failures: 0.**
+- **invalid test data: 0** — the tests read the repository itself; nothing constructs a model instance.
+- The NFR-005 failure is caused by **this change's own Phase-3/4 test code**, not by `main` (P-76):
+  `main` measures 0 functions over the ceiling, and the 6 offenders are all in the three new test files.
+  The test's own tripwire (`_complexipy("0")`, line 1394) passed, so the complexipy run is not vacuous.
+
+### The three measured facts the GREEN gate needs
+
+**(a) NFR-002 line budget.** A fresh render of the current tree —
+`uv run python scripts/make_map.py --out <temp>/STRUCTURE.md` — is **1937 lines** (`wc -l` and
+`len(splitlines())` agree; the file ends with a newline). The generator has **no self-exclusion**
+(`grep -n "STRUCTURE" scripts/make_map.py` → only the `--out` default at line 116; the only filter is
+`_IGNORED_DIRS` applied to directory parts at line 163), so once committed, the map lists **itself** as
+an extra depth-1 tree entry (root files are rendered unindented, alphabetically: `.editorconfig`,
+`.gitignore`, `.pre-commit-config.yaml`, `AGENTS.md`, `README.md`, `alembic.ini`, `mkdocs.yml`,
+`pyproject.toml`, `uv.lock`). Expected committed count **1938** — margin **62** under the 2 000 ceiling.
+`--include-private` renders **2244** lines, which is **not** the budgeted form. S4.2 MUST record the
+actual committed line count, not this projection (the spec's ~1 875 projection is already stale).
+
+**(b) NFR-005 complexipy state.** `uv run complexipy src tests --max-complexity-allowed 15` → **exit 1**,
+**6 of 1980** analysed functions over the ceiling:
+
+| function | file:line | score |
+|---|---|---|
+| `test_ac_009_tree_code_dirs_full_other_dirs_counted` | `tests/acceptance/test_structure_map.py:648` | 34 |
+| `test_ac_012_package_header_and_exports` | `tests/acceptance/test_structure_map.py:736` | 26 |
+| `test_ac_016_private_symbols_and_dunders` | `tests/unit/test_make_map.py:993` | 25 |
+| `test_inv_002_no_module_hidden_by_pruning` | `tests/property/test_structure_map.py:179` | 22 |
+| `_block_dir_paths` (test helper) | `tests/acceptance/test_structure_map.py:925` | 21 |
+| `test_ac_026_map_hook_is_advisory` | `tests/acceptance/test_structure_map.py:1280` | 17 |
+
+`max-complexity-allowed = 15` and the `[tool.complexipy]` paths (`src`, `tests`, asserted as
+`_COMPLEXIPY_MAX` / `_COMPLEXIPY_PATHS` at lines 1324-1325) MUST NOT be relaxed.
+
+**(c) STRUCTURE.md / `--check`.** `STRUCTURE.md` **does not exist** in the worktree (`ls` → no such
+file). `uv run python scripts/make_map.py --check` → **exit 3**, stderr `STRUCTURE.md is missing — run
+uv run python scripts/make_map.py`.
+
+### Anti-vacuity: what a wrong-but-plausible implementation would produce, and the assertion that catches it
+
+| node | wrong-but-plausible implementation | catching assertion (verbatim) |
+|---|---|---|
+| `test_ac_021_committed_map_matches_fresh_render` | a `STRUCTURE.md` generated **before** the last change files were committed (stale), or hand-edited after generation, or generated with a non-default option (`--include-private`, `--max-depth`) | `assert committed == fresh, (f"REQ-021: the committed map is not a fresh render — {_map_line_difference(committed, fresh)}")` (line 1375-1377) and `assert check.returncode == 0, f"AC-021: --check exits {check.returncode}, expected 0: {_output(check)!r}"` (line 1379) |
+| `test_ac_021_committed_map_matches_fresh_render` | a generator that writes an empty/truncated file — a byte comparison against an empty render would then be meaningless | `assert fresh, "the fresh render is empty: a byte comparison against an empty render proves nothing"` (line 1373) |
+| `test_nfr_002_map_line_budget` | an empty or truncated map (a partial render, a narrowed scope) trivially satisfies `≤ 2000` | `assert any(line.strip() for line in lines), "the committed map is empty: the line budget would pass vacuously"` (line 1386) |
+| `test_nfr_002_map_line_budget` | the map rendered in the un-budgeted form (`--include-private`, 2 244 lines) or with the per-class field cap raised to keep detail | `assert len(lines) <= _NFR_002_LINE_BUDGET, (f"NFR-002: the committed map is {len(lines)} lines, over the {_NFR_002_LINE_BUDGET}-line ceiling")` (line 1387-1389) |
+| `test_nfr_005_complexipy_threshold_holds` | a subprocess call that resolves no complexipy binary or scans no paths and exits 0 vacuously | `assert tripwire_code != 0, "the complexipy run is vacuous: it exits 0 even with a limit of 0 branches"` (line 1396) and `assert analysed, f"NFR-005: complexipy analysed nothing (exit {code}): {proc.stderr.strip()!r}"` (line 1400) |
+| `test_nfr_005_complexipy_threshold_holds` | deleting/splitting tests until the count drops while dropping assertions, or raising the ceiling | `assert code == 0, (f"NFR-005: complexipy exits {code} at max-complexity-allowed {_COMPLEXIPY_MAX}: " f"{len(over)} of {len(analysed)} analysed functions are over the limit: {over}")` (line 1401-1403) — the ceiling and paths are the module constants at lines 1324-1325, and the AC-009/012/016/INV-002/AC-026 assertions themselves are still asserted by their own nodes in the Phase 5 suite |
+
+### Test functions S4.2 must restructure for NFR-005 (allowed by `allowed_files.test_files`)
+
+`test_ac_009_tree_code_dirs_full_other_dirs_counted` (34), `test_ac_012_package_header_and_exports` (26),
+`test_ac_016_private_symbols_and_dunders` (25), `test_inv_002_no_module_hidden_by_pruning` (22),
+`_block_dir_paths` (21), `test_ac_026_map_hook_is_advisory` (17) — all in the three files listed in
+`allowed_files.test_files` (`tests/acceptance/test_structure_map.py`, `tests/unit/test_make_map.py`,
+`tests/property/test_structure_map.py`, marked READ-ONLY unless NFR-005 fails — it does fail).
+The restructuring MUST preserve **every node name and every assertion** (no test may be weakened or
+deleted); only extraction of helpers / early returns / table-driven bodies is in scope.
+
+### Scope of this step
+
+Only `docs/verification/structure-map.md` was modified. No `STRUCTURE.md` was generated (the render used
+for the line count was written to a temp directory outside the worktree), no test was restructured, and
+`AGENTS.md`, `mkdocs.yml`, `.pre-commit-config.yaml`, `.github/`, `scripts/`, `docs/specs/` and
+`.github/task-runner/tasks.json` were untouched. The full test suite was not run (Phase 5 gate).
+`uv.lock` was rewritten by the `uv run` calls (P-74) and restored with `git restore uv.lock`; not staged.
+
+**S4.1 (T-007) gate: RED observed — 3/3 nodes fail on behavior, recorded above.**
+Next atomic step: **S4.2 (T-007)** — generate + commit `STRUCTURE.md`, restructure the six test functions
+for NFR-005, confirm GREEN.
+
 
 
