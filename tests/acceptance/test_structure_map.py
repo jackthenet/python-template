@@ -1315,3 +1315,90 @@ def test_ac_027_freshness_policy_documented_twice() -> None:
         missing = [rule for rule, pattern in _FRESHNESS_RULES if not pattern.search(text)]
         assert not missing, f"{label} does not state: {missing}"
         assert _HAND_MERGE_RULE.search(text), f"{label} does not say the generated map is never hand-merged"
+
+
+# --- T-007: the committed artifact — STRUCTURE.md (REQ-021, AC-021, NFR-002, NFR-005) -----------
+
+_MAP_FILE = _REPO_ROOT / "STRUCTURE.md"
+_NFR_002_LINE_BUDGET = 2_000  # NFR-002: the committed map is ≤ 2 000 lines
+_COMPLEXIPY_MAX = "15"  # NFR-005: [tool.complexipy] max-complexity-allowed
+_COMPLEXIPY_PATHS: tuple[str, ...] = ("src", "tests")  # NFR-005: [tool.complexipy] paths
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _complexipy(max_allowed: str) -> subprocess.CompletedProcess[str]:
+    """The CI complexity gate (`complexipy src tests --max-complexity-allowed <n>`) run from the repo root.
+
+    `sys.executable -m complexipy` is impossible — the package ships no `__main__` — so the console
+    script next to the interpreter is the same binary `uv run complexipy` resolves in CI (quality.yml).
+    """
+    script = Path(sys.executable).parent / ("complexipy.exe" if sys.platform == "win32" else "complexipy")
+    assert script.is_file(), f"complexipy is not installed in the test venv: {script}"
+    return subprocess.run(
+        [str(script), *_COMPLEXIPY_PATHS, "--max-complexity-allowed", max_allowed],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=_REPO_ROOT,
+        check=False,
+    )
+
+
+def _complexipy_report(stdout: str) -> tuple[list[str], list[str]]:
+    """(every analysed function line, the ones over the limit) of a complexipy run, ANSI codes stripped."""
+    analysed = [
+        line
+        for line in (_ANSI.sub("", raw).strip() for raw in stdout.splitlines())
+        if "PASSED" in line or "FAILED" in line
+    ]
+    return analysed, [line for line in analysed if "FAILED" in line]
+
+
+def _map_line_difference(committed: bytes, fresh: bytes) -> str:
+    """The first difference between the committed map and a fresh render, as a readable message."""
+    old, new = committed.decode("utf-8").splitlines(), fresh.decode("utf-8").splitlines()
+    for number, (before, after) in enumerate(zip(old, new, strict=False), start=1):
+        if before != after:
+            return f"line {number} differs:\n  committed: {before!r}\n  fresh:     {after!r}"
+    return f"line count differs: committed {len(old)} lines, fresh {len(new)} lines"
+
+
+def test_ac_021_committed_map_matches_fresh_render(tmp_path: Path) -> None:
+    """AC-021 (REQ-021): the committed STRUCTURE.md is a fresh render of this tree and `--check` exits 0."""
+    assert _MAP_FILE.is_file(), "REQ-021: no STRUCTURE.md is committed at the repository root"
+    out = tmp_path / "STRUCTURE.md"
+    proc = _generate(_REPO_ROOT, str(out))
+    assert proc.returncode == 0, f"generate mode must exit 0 for the repository root: {_output(proc)!r}"
+    fresh = out.read_bytes()
+    assert fresh, "the fresh render is empty: a byte comparison against an empty render proves nothing"
+    committed = _MAP_FILE.read_bytes()
+    assert committed == fresh, (
+        f"REQ-021: the committed map is not a fresh render — {_map_line_difference(committed, fresh)}"
+    )
+    check = _check(_REPO_ROOT, str(_MAP_FILE))
+    assert check.returncode == 0, f"AC-021: --check exits {check.returncode}, expected 0: {_output(check)!r}"
+
+
+def test_nfr_002_map_line_budget() -> None:
+    """NFR-002: the committed STRUCTURE.md is non-empty and within the ≤ 2 000 line ceiling."""
+    assert _MAP_FILE.is_file(), "REQ-021: no STRUCTURE.md is committed at the repository root"
+    lines = _MAP_FILE.read_text(encoding="utf-8").splitlines()
+    assert any(line.strip() for line in lines), "the committed map is empty: the line budget would pass vacuously"
+    assert len(lines) <= _NFR_002_LINE_BUDGET, (
+        f"NFR-002: the committed map is {len(lines)} lines, over the {_NFR_002_LINE_BUDGET}-line ceiling"
+    )
+
+
+def test_nfr_005_complexipy_threshold_holds() -> None:
+    """NFR-005: the CI complexity gate `complexipy src tests --max-complexity-allowed 15` exits 0."""
+    tripwire = _complexipy("0")
+    tripwire_code = tripwire.returncode
+    assert tripwire_code != 0, "the complexipy run is vacuous: it exits 0 even with a limit of 0 branches"
+    proc = _complexipy(_COMPLEXIPY_MAX)
+    code = proc.returncode
+    analysed, over = _complexipy_report(proc.stdout)
+    assert analysed, f"NFR-005: complexipy analysed nothing (exit {code}): {proc.stderr.strip()!r}"
+    assert code == 0, (
+        f"NFR-005: complexipy exits {code} at max-complexity-allowed {_COMPLEXIPY_MAX}: "
+        f"{len(over)} of {len(analysed)} analysed functions are over the limit: {over}"
+    )

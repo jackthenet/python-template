@@ -1468,3 +1468,100 @@ commit — T-007 lands the committed map.
 `uv run ruff format tests/acceptance/test_structure_map.py` → clean (changed path only, no repo-wide
 sweep, P-6).
 
+## Phase 3 — S3.1 test derivation, T-007 (2026-10-09)
+
+Task: *the committed artifact — `STRUCTURE.md`* (REQ-021 · AC-021 · NFR-002 · NFR-005). Derived into
+`tests/acceptance/test_structure_map.py` (appended after the T-006 section, lines 1320–1402). No
+other file was written: `STRUCTURE.md` and `scripts/make_map.py` are Phase 4 artifacts.
+
+### Node → ID map
+
+| Node | Witnesses | What it asserts |
+|---|---|---|
+| `test_ac_021_committed_map_matches_fresh_render` | AC-021 / REQ-021 | `STRUCTURE.md` exists at the repo root; a render of the current tree into `tmp_path` is non-empty and **byte-identical** to the committed file; `--check` against the committed file exits `0` |
+| `test_nfr_002_map_line_budget` | NFR-002 | the committed map has at least one non-blank line and `len(lines) <= 2_000` |
+| `test_nfr_005_complexipy_threshold_holds` | NFR-005 | the CI gate invocation `complexipy src tests --max-complexity-allowed 15` analyses ≥ 1 function and exits `0` |
+
+Helpers reused, none re-invented: `_REPO_ROOT` (resolved from the test file's own path, so it works
+from any worktree), `_run`, `_output`, `_generate`, `_check`, `_GENERATOR`. New T-007-only helpers:
+`_complexipy(max_allowed)` (the venv console script next to `sys.executable` — `sys.executable -m
+complexipy` is impossible, the package ships no `__main__`; the script is the binary `uv run
+complexipy` resolves in `quality.yml:144`), `_complexipy_report` (ANSI-stripped `(analysed, over)`
+split), `_map_line_difference` (first differing line / line-count difference as the failure message).
+All file reads are `encoding="utf-8"` and both subprocess runs pass `encoding="utf-8"` (P-67, and the
+T-005 em-dash finding).
+
+### RED gate (red_command, verbatim)
+
+`uv run pytest tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render
+tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget
+tests/acceptance/test_structure_map.py::test_nfr_005_complexipy_threshold_holds -v`
+
+→ `3 failed in 0.85s`, every failure an `AssertionError` (no collection error —
+`uv run pytest --collect-only tests/acceptance/test_structure_map.py` → `31 tests collected`).
+
+- `test_ac_021_…` — `AssertionError: REQ-021: no STRUCTURE.md is committed at the repository root`.
+- `test_nfr_002_…` — same missing-file assertion.
+- `test_nfr_005_…` — `AssertionError: NFR-005: complexipy exits 1 at max-complexity-allowed 15: 6 of
+  1980 analysed functions are over the limit: test_ac_026_map_hook_is_advisory 17, _block_dir_paths
+  21, test_ac_012_package_header_and_exports 26, test_ac_009_tree_code_dirs_full_other_dirs_counted
+  34, test_inv_002_no_module_hidden_by_pruning 22, test_ac_016_private_symbols_and_dunders 25`.
+
+**NFR-005 is RED, but not for the expected reason.** The prompt expected it might be GREEN (the gate
+passes on `main` — re-measured here: `complexipy src tests --max-complexity-allowed 15` on the
+primary worktree exits `0` with `0` FAILED lines, 2026-10-09). It is RED because **this change's own
+Phase 3 derivations broke the gate**: all six over-limit functions live in `tests/acceptance/
+test_structure_map.py`, `tests/property/test_structure_map.py` and `tests/unit/test_make_map.py` —
+the three files T-007 lists as read-only *unless NFR-005 fails*. It fails, so DAG step 5 applies:
+Phase 4 (T-007) splits those six functions inside this task; `max-complexity-allowed` and
+`[tool.complexipy] paths` stay untouched (P-56). The witness is non-vacuous by construction: the
+`_complexipy("0")` tripwire asserts the same invocation exits non-zero at a limit of 0, and
+`analysed` (1 980 functions) is asserted non-empty before the exit code.
+
+### Anti-vacuity (P-68, adapted)
+
+| Node | Wrong-but-plausible implementation | Assertion that catches it |
+|---|---|---|
+| AC-021 | `STRUCTURE.md` hand-edited / stale by one line | `committed == fresh` byte compare, message pinpoints the line (`_map_line_difference`); verified against synthetic inputs: an edit → `line 2 differs: committed 'b' / fresh 'X'`, a truncation → `line count differs: committed 3 lines, fresh 2 lines`, and `--check` exit `0` catches it independently |
+| AC-021 | generator emits an empty/stub map that matches an equally empty committed file | `assert fresh, …` before the compare (an empty render can never match a real committed map, and an empty render is refused outright) |
+| NFR-002 | an empty `STRUCTURE.md` trivially satisfies `0 ≤ 2 000` | `assert any(line.strip() for line in lines)` |
+| NFR-002 | a map truncated to a few lines | not NFR-002's contract (an upper bound); AC-021's byte comparison is the witness that catches truncation — recorded as a deliberate split, not a gap |
+| NFR-005 | the exit code is ignored / complexipy never runs | `assert code == 0` on the real run, `assert analysed` (1 980 analysed functions) before it, and the `_complexipy("0")` tripwire `assert tripwire_code != 0` |
+| NFR-005 | threshold or paths read from the wrong place | `_COMPLEXIPY_MAX = "15"` and `_COMPLEXIPY_PATHS = ("src", "tests")` are the literals of `quality.yml:144` and `[tool.complexipy]` (pyproject.toml:97-99), passed as the CI command passes them |
+
+### Deliberate under-assertions
+
+- NFR-002 asserts only the normative ceiling (≤ 2 000) plus non-emptiness; the spec's ≈1 875
+  projection is a projection, not a requirement — the actual line count is recorded by Phase 4.
+- AC-021 does not re-assert the map's document shape or section content — AC-008/AC-009…AC-016
+  (T-002/T-003/T-004) own those; AC-021 witnesses *freshness of the committed artifact* only.
+- NFR-005 does not assert `[tool.complexipy]` config equality, only the CI invocation's exit code —
+  the config is the gate's own input, and `scripts/` staying out of scope is NFR-005's own text.
+
+### Phase 4 contract for T-007
+
+1. Commit every other file of the change first (clean `git status`), then run
+   `uv run python scripts/make_map.py` at the repository root with defaults → `./STRUCTURE.md` for
+   the post-change tree; commit it as its own commit, never hand-edited (EDGE-010).
+2. AC-021 renders the tree into `tmp_path` and compares bytes against the committed file, so the
+   committed bytes must be the **fixed point** render (REQ-003: the map's own `STRUCTURE.md` entry is
+   in the file set) and the working tree must carry **no stray untracked file** in a mapped directory
+   when the test runs (REQ-003 includes untracked files) — clean up scratch files before verifying.
+3. `--check` is invoked with an **absolute** `--out` (`_check(_REPO_ROOT, str(_MAP_FILE))`); the hook
+   uses the default relative path — both must exit `0`.
+4. NFR-002: record the actual line count (spec projection ≈1 875, margin ≈125). Do not raise the
+   ceiling and do not narrow Packages scope.
+5. NFR-005: split the six over-limit functions named above (three files, all in this change) until
+   `complexipy src tests --max-complexity-allowed 15` exits `0`; never touch `max-complexity-allowed`
+   or `[tool.complexipy] paths` (P-56). Re-derive nothing: splitting must keep every existing node
+   name and assertion intact.
+6. Re-check after landing: the map is hook-clean (INV-006, proven in T-005), no `.gitattributes` was
+   added, and the AC-024 cross-check (every directory path of the corrected `AGENTS.md` Project
+   Structure block appears in the committed map's tree) now runs against the real artifact.
+
+### Ruff gate
+
+`uv run ruff check tests/acceptance/test_structure_map.py` → `All checks passed!`;
+`uv run ruff format tests/acceptance/test_structure_map.py` → `1 file left unchanged` (changed path
+only, no repo-wide sweep, P-6).
+
