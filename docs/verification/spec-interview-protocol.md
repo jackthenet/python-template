@@ -466,3 +466,110 @@ docs/questions/template.md       Recommended:2  CategoryCoverage:1  nongoals:0
 ## VERDICT: PASS (light gate set)
 
 Lint clean, formatter clean, types clean, traceability referential integrity PASS, the guidance-reading guard at its base result with the single failure proved pre-existing on `main` in the primary worktree, the scope proof exact (four guidance files + this record + the Problem Log this step writes; no `src/`, `tests/`, `scripts/`, `migrations/`, `pyproject.toml`, `.github/`, `userdocs/`, `STRUCTURE.md`, `docs/todo/` or per-change question record), the gate set strictly strengthened with no gate text deleted, and the docs-site build verified as a legitimate skip (no `userdocs/` path in the diff). **Spec coverage `n/a` — a DOCS/CHORE change has no spec. No test file was touched and no test was weakened, skipped or deleted.** Ready for Phase 6 (light review + PR; no version bump).
+
+---
+
+## Phase 6 — review report (DOCS/CHORE light review, S6.1 → S6.3)
+
+**Reviewed:** 2026-10-09 in the change worktree at `HEAD = 7dc2d66` (`main = 3ad83a0`), working tree clean. **Normative basis:** the Scope section above (the recorded no-behavior scope) — no spec, no task DAG, no triage. **Inputs:** the scope record, the Phase 5 report, and the **final state** of the four guidance files. Per the review skill's bounded-scope rule (P-27) the change was reviewed as a final state, **not** commit-by-commit, and the full test suite was **not** re-run.
+
+### Check 1 — every change is within the recorded scope: PASS
+
+```text
+$ git diff --name-status main...HEAD
+M	.agents/skills/specify/SKILL.md
+M	AGENTS.md
+M	docs/questions/template.md
+M	docs/specs/template.md
+A	docs/verification/spec-interview-protocol.md
+M	docs/workflow/PROBLEMS.md
+
+$ git diff --name-only main...HEAD | grep -E '^(src/|tests/|scripts/|migrations/|pyproject\.toml|\.github/|userdocs/|STRUCTURE\.md|docs/todo/|docs/questions/)' | grep -v '^docs/questions/template\.md$'
+(no match, grep exit 1)
+```
+
+Exactly the four guidance files the scope names, plus the verification record and the Problem Log entries Phase 5 owes. No `src/`, `tests/`, `scripts/`, `migrations/`, `pyproject.toml`, `.github/`, `userdocs/`, `STRUCTURE.md`, `docs/todo/` or per-change question record. Diffstat of the guidance files (`4 files changed, 13 insertions(+), 5 deletions(-)`) and the hunk locations match the seven planned edits exactly — **nothing beyond the scope, nothing of the scope missing** (all seven edits are present in the final state: 1a, 1b, 2a, 2b, 2c, 3a, 3c, 3d; 3b is a recorded no-edit).
+
+### Check 2 — no behavior delta: PASS
+
+All four changed files are Markdown process guidance and fill-in templates. No code, config, dependency, CI, build/coverage/type or migration path is in the diff (Check 1). The published site is unaffected: `mkdocs.yml:6` is `docs_dir: userdocs`, and `grep -rn "AGENTS\.md|\.agents/skills|docs/specs/template|docs/questions/template|docs/workflow" userdocs` → **no match (exit 1)**, so none of the changed files is referenced by, or part of, the published pages. The change alters only what a future **agent** is required to write during P.2 — that is process guidance, the DOCS/CHORE contract, not externally observable program behavior.
+
+### Check 3 — no gate weakened: PASS
+
+The ≥ 20-question floor survives at **all five** sites, verified by `grep -n` at HEAD: `AGENTS.md:143`, `AGENTS.md:712`, `specify/SKILL.md:75`, `:175`, `:220`. Two of them (`:175`, `:220`) are byte-identical to `main`.
+
+The five deleted lines were compared to their replacements with a character-level diff (`difflib` opcodes, `main` vs HEAD). **No substantive text was dropped from any of them** — the only dropped fragments are connective punctuation attached to a token (`batch;` → `batch,`, `FEATURE/CROSS-CUTTING,` → `FEATURE/CROSS-CUTTING —`, `FEATURE/CROSS-CUTTING>` → `FEATURE/CROSS-CUTTING;`), and every line grew (`411→903`, `296→591`, `413→467`, `382→609`, `75→124`). Each replacement is therefore a **strict superset** of its predecessor: the floor wording, the batching parenthetical, the overlap check, the feature-brief clause, the value-triage clause and the entry-field list all survive verbatim. Nothing was deleted from any gate, done-criterion, rule, obligation or template line; the three new MUSTs only narrow P.2 (its done-criteria go from 3 clauses to 6). The batching rule, the Spec Approval Gate, the P.5 checklist, the READY gate and the Phase 5/6 gates are untouched.
+
+### Check 4 — normative (`AGENTS.md`) ↔ operational (specify skill) agreement: PASS
+
+All three new MUSTs appear in **both** documents, with the same applicability and the same additive relation to the floor:
+
+| MUST | `AGENTS.md` (normative) | `specify/SKILL.md` (operational) |
+|---|---|---|
+| a `Recommended:` answer on **every** P.2 entry, with a one-line reason | `:143`, `:712` | `:75`, `:176`, `:217` |
+| a `### Category coverage` table (`covered (Q-nn / E-nn)` / `skipped — <reason>`) | `:143`, `:712` | `:75`, `:176`, `:217` |
+| a non-goals / scope-boundary question asked and recorded | `:143`, `:712` | `:75`, `:176`, `:217` |
+| floor stays FEATURE/CROSS-CUTTING, new rules on top of it | `:143` "(on top of the floor, never instead of it)", `:712` "plus, **for every type** … (all three **on top of** the floor, never instead of it)" | `:176` "These sit **on top of** the ≥ 20-question floor — they never replace it (the coverage table applies to every change type; the floor stays FEATURE/CROSS-CUTTING)", `:217` "**in addition to** the ≥ 20-question floor for FEATURE/CROSS-CUTTING, never instead of it" |
+
+Applicability agrees: the skill's new Definition-of-Done bullet sits at **top level** under `**Phase P — the READY gate (all types):**` (verified in the final state, immediately after the "change type is classified and recorded" bullet and **before** the `FEATURE/CROSS-CUTTING:` sub-list), so the coverage table is an all-types obligation while the untouched ≥ 20 sub-bullet stays FEATURE/CROSS-CUTTING — exactly what `AGENTS.md:712` ("for every type") and `docs/questions/template.md:35` ("Required for every change type") say.
+
+Two asymmetries were examined and **accepted, not flagged**: (a) `specify/SKILL.md:75` names seven example categories and marks them a "**starting checklist, not a closed set**", which `AGENTS.md:143` omits — the normative doc states the obligation, the operational doc adds non-binding examples, and the "not a closed set" wording prevents the examples from reading as a different (closed) obligation; (b) `AGENTS.md:143` does not restate "applies to every change type" — the P.2 row is itself unqualified by type and `AGENTS.md:712` carries the explicit "for every type", so the pair cannot be read as a narrower rule. No site states the rule in words that could be read as a different obligation.
+
+### Check 5 — internal consistency of the new rule across the four places: PASS
+
+Byte-level census over `AGENTS.md`, `.agents/skills/specify/SKILL.md`, `docs/questions/template.md`:
+
+| Token | Occurrences | Sites |
+|---|---|---|
+| `Recommended:` (the field label) | **7** | template `:22` (the literal entry line `- **Recommended:** <the step's proposed answer + one-line reason>`), template `:31`, skill `:75`, `:176`, `:217`, `AGENTS.md:143`, `:712` |
+| `### Category coverage` (heading, incl. the `###` level) | **6** | template `:33`, skill `:75`, `:176`, `:217`, `AGENTS.md:143`, `:712` |
+| `covered (Q-nn / E-nn)` | **5** (1 / 3 / 1) | identical byte-for-byte, spacing included |
+| `skipped — <reason>` | **5** (1 / 3 / 1) | identical; em dash (`—`) at every site, no hyphen/en-dash variant exists (`grep -o 'skipped - <reason>'` / `'skipped – <reason>'` → no match) |
+
+The field **label** is identical at every site, so the gate is greppable and enforceable. The `- **…**` wrapper appears only where the literal entry line is quoted — the template (`:22`, the single normative definition of the line form) and the two skill sites that impose it on the entry (`:75`, `:176`); `AGENTS.md:143`/`:712` and the skill's Definition-of-Done bullet (`:217`) name the field by its label, and `AGENTS.md:390` describes it in prose ("the step's recommended answer with a one-line reason"). **Accepted observation, not a finding:** one definition site for the literal form plus label-only references elsewhere is the same artifact, and no competing spelling of the label exists anywhere in the tree.
+
+### Check 6 — the `docs/specs/template.md` non-goals bullet is ID-free: PASS
+
+`docs/specs/template.md:7` is a **bullet** (`- **Out of Scope / Non-goals:** [what this feature explicitly does NOT do — keep this bullet ID-free: …]`) inside §1 (before `## 2.` at `:9`) — not a numbered section, so it does not renumber the template. It introduces **no normative ID**: `scripts/check_traceability.py:14` is `ID_RE = re.compile(r"\b(?:REQ|AC|INV|EDGE|NFR)-\d+\b")` — digits are required, so the `REQ-XXX`/`AC-XXX` inside the bracketed *instruction* are placeholders, not IDs. The template is additionally excluded from ID extraction (`check_traceability.py:42`) and from the CI spec job (`.github/workflows/spec-validation.yml:45`, `basename == "template.md"`). Phase 5 evidence is read, not re-run: `uv run python scripts/check_traceability.py` → **`Traceability: PASS (881 matrix rows, 136 spec IDs, 801 test functions)`**, exit 0.
+
+**Extra evidence found during review (strengthens the result).** `tests/acceptance/test_structure_map.py::test_ac_025…` clause 3 (`:112`) runs `scripts/verify_spec.py docs/specs/template.md` and asserts the report is **byte-identical to a frozen expected report** (`_VERIFY_SPEC_REPORT_BEFORE_FIX`, `:33-40`) — so the edited template is covered by an executable guard, and it was inside the Phase 5 targeted run (31 test functions in that file; `1 failed, 30 passed`, the single failure being `test_ac_021`). The new bullet therefore provably does not change `verify_spec.py`'s report.
+
+### Check 7 — feature boundaries and architecture rules: PASS (trivially)
+
+No code exists in the diff, so there is nothing to place: no feature directory is entered or left, no cross-feature internal import is possible, and the `model/` / `services/` / `shared/` rules are not addressed by the change. The edited files are repository-root and `.agents/` guidance plus `docs/` templates — the same locations the pre-existing guidance occupies. No new dependency, no new interface, no architecture element.
+
+### Check 8 — no test weakened, deleted or touched: PASS
+
+`tests/` appears nowhere in `git diff --name-status main...HEAD` (Check 1, mechanical grep). No test file, fixture, expected value or skip marker was added, removed or relaxed anywhere on the branch. The pre-existing failing node `test_ac_021_committed_map_matches_fresh_render` was **not** modified, skipped or weakened — it was classified pre-existing by running the same command in the primary worktree on `main` (Phase 5, Check 5).
+
+### Check 9 — Problem Log entries P-92…P-95: PASS
+
+`docs/workflow/PROBLEMS.md` gained four entries, `## P-92` … `## P-95`, numbered consecutively after the previous last entry `## P-91`. Each follows the file's declared entry format and the shape of its immediate neighbours (P-90/P-91): `## P-<n> — <short title>`, then `- **Problem:**`, `- **Step / Phase:** <step ID + phase> (change <name> / <type>)`, `- **Duration / iterations:**`, `- **Resolution…**`, `- **Date:** 2026-10-09`. Two established variants are used, both already present in the file: `- **Resolution / durable rule:**` (5 existing entries use it) and folding the change name into the `Step / Phase:` cell instead of a separate `- **Change:**` field (as P-90/P-91 do; 39 of 91 entries omit it). Each entry names a real friction point with a durable rule, which is the file's stated purpose (the after-workflow-optimization reads it).
+
+**Pre-existing, out of scope:** the file already contains a duplicated `## P-50` heading on `main` (not introduced by this change — the diff adds only P-92…P-95). Not fixed here: it is outside the recorded scope and would be a separate DOCS/CHORE change.
+
+### Review finding on the record's premise (resolved here, no re-entry)
+
+The Phase 4/5 premise that `tests/acceptance/test_structure_map.py` is "**the only** executable check that can observe this change" is **incomplete**, and the review found it by grepping `tests/` for the edited paths:
+
+- `tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points` also reads `AGENTS.md` (`_GUIDANCE_FILES`, `:106-111`) — it asserts the guidance never names the removed logging backend or the removed decorator parameters, does show the feature's entry points, and keeps every shown `setup_logger(` call keyword-argument-shaped. It was **not** in the Phase 5 targeted set.
+- `tests/acceptance/test_structure_map.py::test_ac_025…` also reads `docs/specs/template.md` (above) — this one **was** covered.
+
+**Resolution (evidence adequate, no Phase 4 re-entry).** The single uncovered test was run once at HEAD, because the review specifically doubted that premise: `uv run pytest tests/contract/logging/test_dependency_contract.py::test_ac_019_guidance_names_feature_entry_points -q` → **`1 passed in 0.64s`**. The three `AGENTS.md` edits (`:143`, `:390`, `:712`) add no logging vocabulary, so none of AC-019's clauses can be tripped. The premise should read "the guidance-reading acceptance and contract tests that read the edited files" — `test_structure_map.py` (AGENTS.md, specify skill, specs template) **and** `test_dependency_contract.py::test_ac_019` (AGENTS.md). This is a wording correction to the record, not a defect in the change: the change's own evidence set is complete and both readers now pass at HEAD. Logged for the orchestrator as a Problem Log candidate (same class as P-93: a "nothing machine-reads this file" premise that is not permanent).
+
+### Review checks from the review skill that do not apply
+
+| Check | Why it does not apply |
+|---|---|
+| Traceability (REQ → AC → executable test), orphaned tests, missing links | DOCS/CHORE produces no spec and no requirement IDs; `docs/verification/traceability.md` is not in the diff and no row was made stale (Check 6: `check_traceability.py` PASS, 881 rows / 136 IDs / 801 tests) |
+| "No behavior introduced that is not represented in the specification" | no specification exists for this type; the normative basis is the scope record, and Check 1/2 confirm the change equals it |
+| Observability (logging of entry points, errors, lifecycle) | no runtime code exists in the diff |
+| Implementation style / quality review | no implementation to style; lint, format and type gates were run at Phase 5 (all clean, identical to base) |
+| `AGENTS.md` "how to use this" note for a reusable shared capability | the change is not a runtime shared capability; it already edits `AGENTS.md` itself where the rule belongs |
+| Version bump | `AGENTS.md` → Versioning → `REFACTOR / DOCS-CHORE → none` (S6.4 must not bump) |
+
+---
+
+## REVIEW REPORT: CLEAN
+
+Every change is within the recorded scope (four guidance files + the verification record + the Problem Log; nothing else), no behavior delta (Markdown guidance and templates only, published site untouched), no gate weakened (the ≥ 20 floor survives at all five sites and every deleted line was replaced by a strict superset — only connective punctuation changed), the normative and operational texts state the same three MUSTs with the same all-types applicability and the same "on top of the floor, never instead of it" semantics, the new field label (`Recommended:`), heading (`### Category coverage`) and markers (`covered (Q-nn / E-nn)` / `skipped — <reason>`) are byte-identical across all four places, the specs-template bullet is an ID-free bullet inside §1 with `check_traceability.py` PASS and the frozen `verify_spec.py` report unchanged, feature boundaries and architecture rules are trivially respected, no test was touched, weakened or deleted, and the four Problem Log entries follow the file's format and numbering. **One record-wording imprecision was found and resolved inside this report** (the "only executable check" premise — the uncovered reader `test_ac_019` was run and passes). No open finding. Ready for **S6.4**: open the PR, **no version bump**.
