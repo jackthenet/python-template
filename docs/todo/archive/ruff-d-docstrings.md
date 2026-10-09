@@ -4,7 +4,8 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** MERGED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+  <!-- MERGED 2026-10-09: merged via PR #76 (https://github.com/jackthenet/python-template/pull/76), merge commit 2ab0461; worktree removed, local + remote branches deleted, both planning records archived -->
   <!-- IN-WORKFLOW 2026-10-09: entered Phase 4 (S4.1 baseline recorded at 84b25bd), 11 commit groups landed on branch chore/ruff-d-docstrings -->
   <!-- WAITING 2026-10-09: Phase 4 complete (41 src/ files + 4 config files, 37 commits), Phase 5 VERIFIED (full suite 761 passed / 1 skipped vs baseline 1 failed / 760 passed / 1 skipped — only delta is the known pre-existing search timing flake; ruff check . clean with D selected; ruff format --check . 339 files; mypy src/ Success 84 files; mkdocs build --strict ok; deptry clean; check_traceability.py PASS 825 rows; docstring-stripped AST digest 64fc1d6e… byte-identical to base with a non-vacuity control; scope 45/45 DONE, invariants INV-A…INV-J 10/10 HELD), Phase 6 review report CLEAN (0 blockers / 1 minor M-1 fixed at 32b9e2f / 10 notes), no version bump (DOCS/CHORE, stays 1.0.0), change PR #76 opened (https://github.com/jackthenet/python-template/pull/76) -> waiting for the human merge (S6.4 gate) -->
   <!-- READY gate 2026-10-08: all 29 questions ANSWERED + the P.4 artifact (docs/verification/ruff-d-docstrings.md, commit 8ec2edf) verified. DOCS/CHORE has no P.5, so the P.4 artifact is the READY gate. -->
