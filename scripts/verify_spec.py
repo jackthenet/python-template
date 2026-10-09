@@ -71,7 +71,8 @@ def main() -> int:
     # Windows (the Windows console defaults to cp1252, which can't encode them,
     # crashing the verify phase with a UnicodeEncodeError).
     with contextlib.suppress(AttributeError, ValueError, OSError):
-        sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
 
     spec_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("docs/specs/template.md")
     if not spec_path.exists():

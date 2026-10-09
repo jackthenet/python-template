@@ -1793,3 +1793,110 @@ error appeared, so `allowed_files` needs no DAG correction.
 witnesses non-vacuous.** No source, test, `tasks.json`, todo/question or traceability file was
 modified by this step.
 
+## Phase 4 — S4.2 (T-001) Implement + confirm GREEN (2026-10-09)
+
+**Objective:** minimum change for T-001 — `scripts/` joins the mypy type gate (AC-025 clauses 1–2,
+NFR-004) — no refactor (S4.3), no task-status flip (S4.4).
+
+### Exact diff (2 files, +4 / −1)
+
+`.github/workflows/quality.yml` — one step added to the `type-check` job, immediately after the
+existing `uv run mypy src/` gate step (`quality.yml:22-23` at the S4.1 head):
+
+```diff
+       - name: Run mypy (gate)
+         run: uv run mypy src/
++      - name: Run mypy scripts/ (gate)
++        run: uv run mypy scripts/
+       - name: Run ty (informational)
+```
+
+No new job, no other job touched, the informational `ty` step untouched, and **no step mentions
+`make_map.py`** (AC-023 / ADR-085). `pyproject.toml` untouched — no mypy/coverage/complexipy/bandit/ty
+key changed, `fail_under = 92` unmoved (P-56: the gate is widened by the workflow step, not by config).
+
+`scripts/verify_spec.py` — the single `union-attr` error at `:74`, narrowed inside the existing
+`contextlib.suppress(AttributeError, ValueError, OSError)`:
+
+```diff
+     with contextlib.suppress(AttributeError, ValueError, OSError):
+-        sys.stdout.reconfigure(encoding="utf-8")
++        if hasattr(sys.stdout, "reconfigure"):
++            sys.stdout.reconfigure(encoding="utf-8")
+```
+
+**Why the narrowing is behaviour-preserving.** The call stays on the same object (`sys.stdout`), now
+*guarded* rather than assumed. Before the change, an object without `reconfigure` raised `AttributeError`,
+which the enclosing `contextlib.suppress` swallowed; after the change the same case simply skips the call.
+Both paths leave stdout untouched and continue to `spec_path = ...`, so no exit code, report text,
+stdout format or argument handling can differ. Forms rejected as larger or behaviour-changing:
+`isinstance(sys.stdout, io.TextIOBase)` — mypy then reports `"TextIOBase" has no attribute "reconfigure"`
+(measured) and it would skip the call for a non-`TextIOBase` stream that does have it; `cast(...)` —
+still an assumption, not a guard (the task requires guarded/asserted).
+
+### GREEN gate (green_command, same node ids as red_command)
+
+`uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean -v`
+
+```text
+tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean PASSED [ 50%]
+tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts PASSED [100%]
+============================== 2 passed in 1.15s ==============================
+EXIT:0
+```
+
+Re-run with `-p no:randomly` (order-independence): `2 passed in 1.21s`, EXIT 0 (both nodes PASSED).
+
+### NFR-004 gates + ruff gate on the changed path
+
+| Command | Result | Exit |
+|---|---|---|
+| `uv run mypy scripts/` | `Success: no issues found in 3 source files` | 0 |
+| `uv run mypy src/` | `Success: no issues found in 84 source files` | 0 |
+| `uv run ruff check scripts/verify_spec.py` | `All checks passed!` | 0 |
+| `uv run ruff format scripts/verify_spec.py` | `1 file left unchanged` | 0 |
+
+No repo-wide `ruff check .` / `ruff format .` was run in this step (Phase 5 sweep, P-6). NFR-004's
+`ruff check .` and `ruff format --check .` clauses are covered by the passing `test_nfr_004_mypy_and_ruff_clean`
+node, which runs all four gates as subprocesses.
+
+### verify_spec.py witness (AC-025 clause 3) — output unchanged
+
+`uv run python scripts/verify_spec.py docs/specs/template.md` → **exit 0**, 11-line report identical
+to `_VERIFY_SPEC_REPORT_BEFORE_FIX` (the constant the AC-025 node compares against):
+
+```text
+Specification validation
+─────────────────────────
+✓ REQ-001 has acceptance criteria
+✓ REQ-002 has acceptance criteria
+✓ REQ-003 has acceptance criteria
+✓ AC-001 has executable test
+✓ AC-002 has executable test
+✓ AC-003 has executable test
+✓ INV-001 has property test
+
+Traceability: PASS
+WITNESS_EXIT:0
+```
+
+### No regression in the touched area
+
+`uv run pytest tests/acceptance/test_structure_map.py -q` → **28 failed, 3 passed** (5.65s). The 3
+passed are the two T-001 nodes plus `test_nfr_003_deptry_clean` (already GREEN at the base, per the
+S4.1 record); the other 28 nodes stay RED — expected, they belong to T-002..T-007. No previously
+passing node turned failing.
+
+`uv run python scripts/check_traceability.py` → exit 0 (still passes; its PASS is not evidence of this
+spec's rows — finding 2).
+
+### Files changed (T-001, within `allowed_files`)
+
+- `.github/workflows/quality.yml` (+2) — the `type-check` job only.
+- `scripts/verify_spec.py` (+2 / −1) — the `:74` narrowing only.
+- `uv.lock` restored before the commit (`git restore uv.lock`, F-9 / P-74); no test, spec, DAG,
+  `pyproject.toml` or traceability file touched by this step.
+
+**S4.2 gate: PASSED — T-001 GREEN (2 passed, also with `-p no:randomly`), `mypy scripts/` exit 0,
+`mypy src/` exit 0, ruff clean on the changed path, the `verify_spec.py` witness unchanged.**
+
