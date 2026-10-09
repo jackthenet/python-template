@@ -4418,3 +4418,74 @@ Per the **Review Gate** in AGENTS.md (a clean Phase 6 review report), the change
 may proceed to **S6.4** — version bump (`minor`, FEATURE, `bump-my-version bump minor` with a clean working tree) and
 the PR to `main` for human merge (the agent does not merge).
 
+## Phase 6 — S6.5 refresh onto post-#76 main (2026-10-09)
+
+**Objective:** the sibling change `ruff-d-docstrings` merged into `main` (PR **#76**, merge commit `2ab0461`, 41
+`src/` files given docstrings, ruff rule `D` enabled) **after** this branch's committed `STRUCTURE.md` was rendered,
+so the open PR #75 was behind `main` with a stale map. This step refreshes it: merge `origin/main`, regenerate the
+map, re-run the Phase 6 pre-merge gates, push. **No phase was re-run, no implementation logic was changed, no new PR
+was opened, the PR was not merged** (human governance). Phases 1–6 stay COMPLETE (7/7 tasks `VERIFIED`, spec coverage
+100%, review report CLEAN, version `1.0.0 → 1.1.0`).
+
+### Merge
+
+`git fetch origin` → `git merge origin/main` (a **merge commit**, not a rebase — the open PR's history is never
+rewritten). Merge commit **`3673e28`**, parents `744eea1` (branch tip, the S6.4 version bump) and `16e9158`
+(`origin/main` tip). 86 files from `main` came in; `git merge-base --is-ancestor origin/main HEAD` now holds.
+
+**Conflicts — 2, neither of the two predicted.** `AGENTS.md` and `uv.lock` merged **cleanly**:
+
+| Path | Outcome | Resolution |
+|---|---|---|
+| `AGENTS.md` | **auto-merged, both sides kept** | Re-read the merged region and confirmed all four branch edits survived — `AGENTS.md:65` (Structure Map tooling entry naming both generator commands), `:56` (`uv run mypy scripts/`), `:326`+`:327` (the two `(ambient)` Skill-to-Phase rows), `:1123`+ (Project Structure intro + layout block) — **and** #76's rewritten `:746` "Documentation" bullet (Google style, ruff `D` over `src/`, `per-file-ignores`). Nothing dropped. |
+| `uv.lock` | **no conflict** — main never touched it (unchanged from the merge base at `python-template 0.6.1`, defect **F-9** / **P-74**), the branch changed it to `1.1.0`, so git took the branch's side | Kept the branch's **`1.1.0`** lock (matches `pyproject.toml:4`); verified `git show 3673e28:uv.lock` → `version = "1.1.0"`. This PR is the one that fixes F-9. `git restore uv.lock` was run before the commit; every `uv run` below left it clean, and it was never staged as a modification. |
+| `docs/verification/traceability.md` | **CONFLICT** (both changes appended a section at the same spot, end of file) | **Both kept**, in order: this branch's `## Structure Map Matrix` (56 rows, S5.3) then main's `## Chore: ruff-d-docstrings` (3 rows, S5.3), blank-separated, `## Drift Checks` untouched. No row of any change rewritten or refreshed (decision Q-129, convention B). |
+| `docs/workflow/PROBLEMS.md` | **CONFLICT** (same shape — both appended entries after P-62) | **Both kept**: this branch's **P-65…P-68, P-75…P-85**, then main's **P-73, P-74, P-86, P-87, P-88**. Git had folded the shared trailing `- **Date:** 2026-10-09` out of the conflict, so P-85's own `Date:` line was restored explicitly; **no entry was renumbered** (the file is not in numeric order and stays that way). |
+| `pyproject.toml`, `.pre-commit-config.yaml`, `mkdocs.yml` | auto-merged | Verified both sides present: `version = "1.1.0"` + `current_version = "1.1.0"` **and** `"D"` in `[tool.ruff.lint] select` with the four `per-file-ignores`; the `structure-map-check` hook (`:33`) and main's hooks coexist. |
+
+No conflict was ambiguous; nothing was resolved by guessing, so no `BLOCKED-HUMAN`.
+
+### Regenerated map (F-10 / P-82 two-render fixed point)
+
+`uv run python scripts/make_map.py` **twice**, then a third render byte-compared to the second (identical → fixed
+point), then `uv run python scripts/make_map.py --check` → **exit 0**. The generator was **not** changed.
+
+- **Line count: 1 938 / 2 000 (NFR-002)** — unchanged from the pre-merge map, margin **62 lines**.
+- **Content did change:** `git diff --stat STRUCTURE.md` → **263 insertions / 263 deletions** — the module and symbol
+  summaries #76's new docstrings render into the Packages block. A same-length map is not a same map, which is exactly
+  why the regeneration is the point of this step and `--check` the gate that proves it.
+
+### Gate results (Phase 6 pre-merge gate — `main` changed under the branch)
+
+| Gate | Command | Result |
+|---|---|---|
+| Map freshness | `uv run python scripts/make_map.py --check` | **exit 0** |
+| structure-map tests | `uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py -q` | **55 passed in 43.49s** (identical to the S5.1/S6.3 node count — no node lost to the merge) |
+| Types | `uv run mypy scripts/` | **Success: no issues found in 4 source files** |
+| Types | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| Lint | `uv run ruff check .` | **All checks passed!** (with `D` now enabled over `src/`) |
+| Format | `uv run ruff format --check .` | **343 files already formatted** |
+| Complexity | `uv run complexipy src tests --max-complexity-allowed 15` | **exit 0** — "All functions are within the allowed complexity" (ceiling and `[tool.complexipy]` paths unchanged) |
+| Traceability | `uv run python scripts/check_traceability.py` | **PASS — 881 matrix rows, 136 spec IDs, 801 test functions** (was 878 rows; +3 = main's `ruff-d-docstrings` rows) |
+| **Full suite** | `uv run pytest tests/ -q` | **816 passed, 1 skipped in 248.63s** |
+
+**Full-suite delta — explained, not a regression.** The instructed expectation (761 passed, 1 skipped) is **`main`'s**
+post-#76 baseline as recorded by ruff-d-docstrings S5.1; this branch adds its **55** structure-map nodes, so the
+branch's expected shape is **761 + 55 = 816 passed, 1 skipped** — exactly what ran, and identical to this change's own
+S5.1 number (816/1) from before the merge. The 1 skip is the pre-existing file-management symlink skip (same on
+`main`). The known timing flake `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets`
+**passed** under the full-suite load, so no isolated re-run was needed (**P-86** remains the record of that flake).
+No other delta: **0 failed, 0 new skips, 0 test changed or deleted by the merge**.
+
+### Commits & PR
+
+- `3673e28` `chore(structure-map): merge main (PR #76) + regenerate STRUCTURE.md` — the merge commit, the two conflict
+  resolutions, and the regenerated 1 938-line map (one commit, per the AGENTS.md rule that a generated map is
+  regenerated **in the same commit** as the change that makes it stale; `AGENTS.md:65`).
+- This record: a follow-up commit (never an amend — **P-62**).
+- `git push origin feature/structure-map` → PR **#75** updated (no new PR; the agent does not merge).
+
+**S6.5 gate: PR #75 refreshed onto post-#76 `main`, map regenerated and `--check` exit 0, every Phase 6 pre-merge gate
+exit 0, full suite 816 passed / 1 skipped with the delta fully accounted for.**
+Next: **waiting for the human merge of PR #75**, then **S7.1** post-merge cleanup.
+
