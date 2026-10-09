@@ -52,4 +52,12 @@ class SessionsListed(_FrozenEvent):
 class EventPublisher(Protocol):
     """Structural publisher protocol; the real event bus satisfies it."""
 
-    def publish(self, event: object) -> None: ...
+    def publish(self, event: object) -> None:
+        """Hand a finished event object to the bus (synchronous, fire-and-forget).
+
+        The real event bus only enqueues the event and dispatches it on its
+        worker, so an implementation must not block here; the session feature
+        does not catch a publisher exception, so a failing publisher
+        propagates to the calling session method (REQ-018).
+        """
+        ...
