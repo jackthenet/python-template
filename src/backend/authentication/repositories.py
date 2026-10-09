@@ -68,9 +68,9 @@ class SessionRepository(ABC):
 
     @abstractmethod
     def delete_expired(self, limit: int | None = None) -> int:
-        """Delete up to ``limit`` expired sessions (``None`` = all, the previous behavior)
-        and return the count.
+        """Delete up to ``limit`` expired sessions and return the count deleted.
 
+        A ``limit`` of ``None`` means all of them (the pre-extension behavior).
         Backward-compatible signature extension for the session-management feature
         (REQ-017, ADR-061).
         """
