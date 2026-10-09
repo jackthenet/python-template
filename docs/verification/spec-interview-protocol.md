@@ -266,3 +266,69 @@ This change must merge **before `security-changelog-license`** (`docs/todo/secur
 | No implementation code, no tests, no scoped doc edit made in Phase P | confirmed — the only file this step writes is this record; `git status` in the worktree shows exactly this file |
 | Planning records untouched by this branch | confirmed — `docs/todo/` and `docs/questions/` are not written here |
 | Commit | `chore(spec-interview-protocol): scope` |
+
+---
+
+## Phase 4 — implementation (DOCS/CHORE path, implement skill item 12: "make the scoped non-behavior changes")
+
+All **seven** edits of the scope above were applied verbatim, in the change worktree, and nothing else. No RED/GREEN gate applies to this type; the Phase 4 evidence is the **scope proof**, the **floor-wording check**, and the **C-1…C-4** confirmation.
+
+### Scope proof — `git diff --name-status main...HEAD` (before the Phase 4 commit)
+
+```text
+M	.agents/skills/specify/SKILL.md
+M	AGENTS.md
+M	docs/questions/template.md
+M	docs/specs/template.md
+```
+
+(plus this record itself). Exactly the four files the scope names — **no** `src/`, `tests/`, `scripts/`, `migrations/`, `pyproject.toml`, `.github/`, `userdocs/`, `STRUCTURE.md`, `docs/todo/`, `docs/questions/<name>.md` path, no version bump. Diffstat for the four guidance files: `4 files changed, 13 insertions(+), 5 deletions(-)`; the 5 deletions are the 5 lines rewritten to a **strict superset** of their previous content (skill `:75`, `AGENTS.md:143`, `:390`, `:712`, and the `docs/questions/template.md` placeholder line) — nothing was removed from any gate, rule, obligation or template line. Hunk locations (`git diff -U0 | grep '^@@'`): skill `@@ -75 +75 @@`, `@@ -175,0 +176 @@`, `@@ -215,0 +217 @@`; `AGENTS.md` `@@ -143 +143 @@`, `@@ -390 +390 @@`, `@@ -712 +712 @@` — i.e. exactly the seven planned targets, no drift from the P.4 line map.
+
+### Floor-wording check (done criterion 2 — the ≥ 20 floor survives at all five sites)
+
+`grep -n` on the five sites at HEAD:
+
+```text
+.agents/skills/specify/SKILL.md:75   - **Done-criteria:** at least 20 questions asked and recorded in …   ← site 1 (clauses appended after the batching parenthetical)
+.agents/skills/specify/SKILL.md:175  - Ask at least 20 questions during interrogation (FEATURE/CROSS-CUTTING). …  ← site 2 (byte-identical to main)
+.agents/skills/specify/SKILL.md:220    - At least 20 questions were asked during interrogation and …      ← site 3 (byte-identical to main; moved 218 → 220 by the insert above it)
+AGENTS.md:143                        | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch, …  ← site 4
+AGENTS.md:712                        17. … ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING — plus, …  ← site 5
+```
+
+`grep -ci "20 questions\|20 interrogation"` — **HEAD 3 / main 3** in `specify/SKILL.md`, **HEAD 2 / main 2** in `AGENTS.md`: the same number of floor-bearing lines, none deleted. A line-by-line `diff` of the floor lines (`main` vs HEAD) shows only the two `AGENTS.md` lines and the two skill lines that the scope plans to rewrite, each rewritten to a superset that still contains the original floor wording verbatim; the Rules bullet (`:175`) and the Definition-of-Done bullet (`:220`) are **unchanged**. Net gate strength: P.2's done-criteria go from 3 clauses to 6 — strictly stronger, never weaker.
+
+### AGENTS.md ↔ skill agreement (done criterion 3)
+
+Both files now carry the same three MUSTs in the same words — (1) a `Recommended:` answer on **every** question entry with a one-line reason, (2) a `### Category coverage` table with each category `covered (Q-nn / E-nn)` or `skipped — <reason>`, (3) a non-goals / scope-boundary question asked and recorded — and both state the additive relation to the floor in the same terms: `AGENTS.md:143` "(on top of the floor, never instead of it)", `AGENTS.md:712` "(all three **on top of** the floor, never instead of it)", `specify/SKILL.md:176` "These sit **on top of** the ≥ 20-question floor — they never replace it", `specify/SKILL.md:217` "**in addition to** the ≥ 20-question floor for FEATURE/CROSS-CUTTING, never instead of it". `grep -c 'Recommended:'` → **2** in `AGENTS.md` (the P.2 row, Obligation 17), **3** in `specify/SKILL.md` (P.2 done-criteria, the new Rules bullet, the new Definition-of-Done bullet), **2** in `docs/questions/template.md` (the entry format + the P.2 placeholder line); `grep -c 'Category coverage'` → **2 / 3 / 1**; `grep -c 'non-goals'` → **2 / 3 / 0** (the two `AGENTS.md` sites and the three skill sites carry all three rules; the templates carry the field, not the rule). No site loosens a gate.
+
+### Constraints C-1…C-4 (the `tests/acceptance/test_structure_map.py` guards)
+
+| # | Check run | Result |
+|---|---|---|
+| C-1 | `git diff -U0 -- AGENTS.md .agents/skills/specify/SKILL.md \| grep '^+' \| grep -i "STRUCTURE.md\|make_map\|code-structure-map"` | **no match (grep exit 1)** — no added line mentions the map, so no map×machinery line exists |
+| C-2 | `git diff -U0 -- .agents/skills/specify/SKILL.md \| grep -c Advisory` | **0** — `### P.1 Frame (orchestrator)`'s advisory sentence is untouched; the skill hunks are at `:75`, `:176`, `:217` only, and no map mention was added |
+| C-3 | `grep -rn "tests/architecture" AGENTS.md .agents/skills/` | **no match (grep exit 1)** — the forbidden string is absent |
+| C-4 | `diff <(git show main:AGENTS.md \| grep -n '^## Tooling…\|^### Skill-to-Phase Mapping\|^## Project Structure') <(grep -n … AGENTS.md)` | **identical, same line numbers** (`:52`, `:314`, `:1123`) — and the `AGENTS.md` hunks (`143`, `390`, `712`) fall outside all three sections |
+
+### Gates run in Phase 4
+
+| Gate | Command | Result |
+|---|---|---|
+| Lint | `uv run ruff check .` | **`All checks passed!`** — identical to base (no Python touched) |
+| Spec referential integrity (required: `docs/specs/template.md` touched) | `uv run python scripts/check_traceability.py` | **`Traceability: PASS (881 matrix rows, 136 spec IDs, 801 test functions)`**, exit 0 — the new §1 bullet is ID-free, so check (1) cannot trip |
+| Guidance-reading guard | `uv run pytest tests/acceptance/test_structure_map.py -q` | **`1 failed, 30 passed`** — exactly the base guard result. The single failure is `test_ac_021_committed_map_matches_fresh_render` (committed `STRUCTURE.md` says `docs/ — 220 files`, a fresh render says `223`), **pre-existing on `main`**: `uv run python scripts/make_map.py --check` exits **1** here, as recorded at the base commit `3ad83a0`. No other test failed, so C-1…C-4 hold. No test was touched |
+| Markdown hygiene (the live local gate) | `git diff --check` → exit **0**; `git diff \| awk '/^\+/ && /[ \t]$/ {n++}'` → **0** added lines with trailing space/tab; `tail -c 1` on all four files → `\n` | clean: no trailing whitespace, no whitespace errors, every file ends with a newline (pre-commit `trailing-whitespace` / `end-of-file-fixer`) |
+| Map regeneration | `uv run python scripts/make_map.py` (generate mode) | **not run** — this change adds/renames/moves **no** `.py` file, so no regeneration is owed, and `STRUCTURE.md` is out of scope (only `--check` was run, which does not write) |
+| Types / docs site / full suite | `mypy src/`, `mkdocs build --strict`, `pytest tests/` | Phase 5 items — see the "Phase 5 checks" table above (docs site stays **skipped**: no `userdocs/` path entered the diff) |
+
+### Deliberate decisions recorded in Phase 4 (not omissions)
+
+- **Edit 2c placement.** The new Definition-of-Done bullet is inserted at **top level after the "change type is classified and recorded" bullet** (`:216`), exactly as the scope's Edit 2c specifies ("one new top-level bullet after `:215`"), **not** inside the `FEATURE/CROSS-CUTTING:` sub-list. A top-level bullet is required because the three MUSTs apply to every change type (Q-2), and inserting it inside the sub-list would sit under the FEATURE/CROSS-CUTTING heading and contradict it; the existing ≥ 20 sub-bullet is byte-identical to `main`.
+- **`docs/questions/template.md:9` (`Status:` comment) and the batching paragraph** were not touched (owned by the merged `workflow-docs-nits`; batching is out of scope).
+- **No `### Category coverage` text was added to `AGENTS.md:390`** (the Question-files subsection) — per Edit 3c, its gate is the P.2 row (3a) and the skill's P.2 done-criteria (2a); the subsection describes an **entry**, and the coverage table is not an entry.
+- **`AGENTS.md:144` (the P.3 Answer row) has no edit** — Q-5 = (C) dropped the recap line (Edit 3b).
+
+### Phase 4 commit
+
+`chore(spec-interview-protocol): interview-protocol guidance edits` — the four scoped Markdown files plus this record. No code, no test, no version bump, no PR (Phase 6 opens it).

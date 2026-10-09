@@ -4,6 +4,7 @@
 - **Feature Name:** [e.g., Redis Rate Limiter]
 - **Target Component:** [e.g., `src/middleware/rate_limit.py`]
 - **Goal:** [1-2 sentences on what this feature achieves and why it is needed]
+- **Out of Scope / Non-goals:** [what this feature explicitly does NOT do — keep this bullet ID-free: a `REQ-XXX`/`AC-XXX` ID here would make `scripts/check_traceability.py` demand a traceability matrix row for it]
 
 ## 2. Architecture & Design Decisions
 - **Design Pattern:** [e.g., Sliding Window Counter via Redis, Middleware Interceptor]
