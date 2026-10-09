@@ -114,9 +114,13 @@ _EXTENSION_MIME: dict[str, str] = {
 
 
 def _detect_mime_type(data: bytes) -> str:
-    """Magic-byte detection (source of truth). filetype detects binary types;
-    text fallback: text content -> text/plain, unidentified binary ->
-    application/octet-stream. Preserves the spec's behavior."""
+    """Detect the content's MIME type from magic bytes (the source of truth).
+
+    ``filetype`` recognizes binary types only; the fallback calls content with
+    no NUL byte in its first 8 KiB ``text/plain`` and unidentified binary
+    ``application/octet-stream`` — an unknown extension never influences the
+    result.
+    """
     mime = filetype.guess_mime(data)
     if mime is not None:
         return mime
@@ -216,8 +220,12 @@ class FileService:
         return frozenset(self._read_setting(registry, "filemanagement.allowed_types", DEFAULT_ALLOWED_TYPES))
 
     def _backend_for(self, registry: SettingsRegistry) -> StorageBackend:
-        """The storage backend: the injected one, or local disk from the live
-        ``filemanagement.storage_root`` setting (constructed per operation)."""
+        """The storage backend: the injected one, or local disk built on demand.
+
+        Without an injected backend a ``LocalDiskStorageBackend`` is constructed
+        from the live ``filemanagement.storage_root`` setting for every
+        operation, so a settings change takes effect on the next call (REQ-015).
+        """
         if self._backend is not None:
             return self._backend
         root = self._read_setting(registry, "filemanagement.storage_root", DEFAULT_STORAGE_ROOT)
@@ -358,12 +366,12 @@ class FileService:
         uploader: str | None = None,
         principal: Principal = _SYSTEM_PRINCIPAL,
     ) -> FileRead:
-        """Upload ``source`` (a filesystem path, raw bytes, or a file-like
-        binary stream) and return the stored file's ``FileRead``.
+        """Upload ``source`` and return the stored file's ``FileRead``.
 
-        Validation: key/namespace patterns, zero-byte, the live size limit,
-        magic-byte type detection, declared/filename type conflicts, and the
-        live allowed-type set. The write is atomic with mutual rollback
+        ``source`` may be a filesystem path, raw bytes, or a file-like binary
+        stream. Validation: key/namespace patterns, zero-byte, the live size
+        limit, magic-byte type detection, declared/filename type conflicts, and
+        the live allowed-type set. The write is atomic with mutual rollback
         between the storage content and the metadata record (REQ-008).
         """
         registry = self._registry()

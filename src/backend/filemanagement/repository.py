@@ -69,9 +69,10 @@ class FileRepository(ABC):
 
     @abstractmethod
     def add(self, record: FileRecord) -> FileRecord:
-        """Insert ``record``; if a record with the same key exists it is
-        atomically replaced (last-write-wins, D5) and the replaced record is
-        deleted."""
+        """Insert ``record``, atomically replacing any record with the same key.
+
+        Last-write-wins (D5): the replaced record is deleted.
+        """
         ...
 
     @abstractmethod
@@ -117,8 +118,11 @@ class FileRepository(ABC):
         limit: int = 100,
         offset: int = 0,
     ) -> Sequence[FileRecord]:
-        """Return records whose namespace starts with ``namespace``
-        (None → all), ordered by created_at, with limit/offset pagination."""
+        """Return records whose namespace starts with ``namespace``.
+
+        ``None`` means all records; results are ordered by created_at, with
+        limit/offset pagination.
+        """
         ...
 
     @abstractmethod
