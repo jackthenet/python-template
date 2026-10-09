@@ -13,6 +13,13 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 - Ruff now gates docstrings (`D` rules, Google style) over `src/`, and every missing or
   malformed docstring in the backend packages was added or fixed (PR #76).
+- `LICENSE` (MIT, `Copyright (c) 2026 jackthenet`), `SECURITY.md` (reporting channel,
+  supported versions, response, template scope) and this `CHANGELOG.md`, backfilled over the
+  14 releases so far; `pyproject.toml` gained `license` and `authors` metadata
+  (`security-changelog-license`).
+- The changelog-entry rule: every change adds an entry under `## [Unreleased]`, and a version
+  bump moves those entries into a dated release section (`AGENTS.md` Phase 6 +
+  `## Versioning`, and the `implement`, `verify` and `review` skills).
 
 ## [1.1.0] - 2026-10-09
 

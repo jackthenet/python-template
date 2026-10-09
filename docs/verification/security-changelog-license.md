@@ -407,3 +407,177 @@ RED on `main` into GREEN here. No test was edited or deleted.
   exactly the two planned keys.
 - No other worktree or branch was touched.
 - **next:** Phase 5 (S5.1–S5.4) with the §8 check set.
+
+## Phase 5 — verification report (S5.x, DOCS/CHORE light gate set)
+
+Run in the change worktree at branch head `8ec73ee`, working tree clean before and after
+every check. DOCS/CHORE owes the light gate set (AGENTS.md Phase Matrix, Phase 5 item 16,
+§8 of this record): lint/types where applicable + confirmation that no test file or behavior
+was touched. There is **no spec**, so there is no spec-coverage check, no `verify_spec.py`
+run, and no traceability row owed.
+
+### 1. Tool gates (§8)
+
+| # | Check | Command | Result |
+|---|---|---|---|
+| 1 | Lint (whole-repo sweep = the Phase 5 gate, matches CI `lint.yml`) | `uv run ruff check .` | **PASS** — `All checks passed!`, exit 0 |
+| 2 | Formatting | `uv run ruff format --check .` | **PASS** — `343 files already formatted`, exit 0 |
+| 3 | Types | `uv run mypy src/` | **PASS** — `Success: no issues found in 84 source files`, exit 0 |
+| 4 | Traceability referential integrity (no row added by this change) | `uv run python scripts/check_traceability.py` | **PASS** — `Traceability: PASS (881 matrix rows, 136 spec IDs, 801 test functions)`, exit 0 |
+| 5 | Docs site (required: `pyproject.toml` is touched and the docs build reads project metadata; also proves the three new root files are not referenced from `userdocs/`) | `uv run --group docs mkdocs build --strict` | **PASS** — `Documentation built in 3.18 seconds`, exit 0, no strict-mode warning (the only banner is the upstream MkDocs-2.0 notice, unrelated) |
+| 6 | Dependency check (the `deptry` pre-commit hook fires on `pyproject.toml`) | `uv run deptry .` | **PASS** — `Success! No dependency issues found.` (91 files), exit 0 |
+| 7 | The two named guards (§5) | `uv run pytest tests/acceptance/test_structure_map.py tests/contract/logging/test_dependency_contract.py -q` | **PASS** — **33 passed** (31 + 2), exit 0 — matches the orchestrator's independent run; includes `test_ac_021_committed_map_matches_fresh_render`, RED on `main` (F-6), GREEN here |
+| 8 | Structure map freshness (after the F-1 regeneration) | `uv run python scripts/make_map.py --check` | **PASS** — exit 0, no output (check-only mode; generate mode was **not** run in this step, per P-94) |
+| 9 | Security scan (`src/` unchanged in effect) | `uv run bandit -q -r src/` | **PASS** — exit 0, no issue found; the `nosec … no failed test` WARNING lines on the four `feature_actions.py` files are pre-existing `src/` noise, untouched by this change (check 10 proves `src/` is not in the diff) |
+
+### 2. Scope proofs
+
+**10. `git diff --name-status main...HEAD` — PASS.** Exactly 11 paths at the Phase 4 head
+`8ec73ee`, all authorised:
+
+```text
+M .agents/skills/implement/SKILL.md   M AGENTS.md      A CHANGELOG.md
+M .agents/skills/review/SKILL.md      A LICENSE        M README.md
+M .agents/skills/verify/SKILL.md      A SECURITY.md    M STRUCTURE.md
+A docs/verification/security-changelog-license.md      M pyproject.toml
+```
+
+§2's 8 scoped items (item 6 = the three skill files) + `STRUCTURE.md` (§3.8 / F-1) + this
+record. **Nothing** from §4: no `src/`, `tests/`, `scripts/`, `migrations/`, `docs/specs/`,
+`docs/decisions/`, `docs/tasks/`, `docs/verification/traceability.md`, `mkdocs.yml`,
+`userdocs/`, `.github/`, `.pre-commit-config.yaml`, `docs/todo/`, `docs/questions/`. No test
+file is created, modified, weakened or deleted → the DOCS/CHORE "no test files or behavior
+were touched" confirmation holds.
+
+After this Phase 5 commit the diff has **one more** path, `docs/workflow/PROBLEMS.md` (P-97,
+the friction the Phase 4 step reported). It is the workflow-mandated Problem Log
+(AGENTS.md "Problem Log" — the orchestrator's obligation, discharged here on its behalf), it
+is **not** in §4's forbidden list, and it carries no behavior. Everything else is unchanged.
+
+**11. `git diff main...HEAD -- pyproject.toml` — PASS.** One hunk, two added lines in
+`[project]` after `description`:
+
+```toml
++license = "MIT"
++authors = [{ name = "jackthenet" }]
+```
+
+`version = "1.1.0"` unchanged, no `classifiers` key, no `[build-system]`, no
+`[tool.bumpversion]` change, no dependency change.
+
+### 3. Content spot-checks (this change's risk is factual, not mechanical)
+
+**`LICENSE` — PASS.** The canonical MIT text, word for word (permission grant, the
+"above copyright notice and this permission notice" condition, the all-caps warranty
+disclaimer and liability limitation), and the copyright line is exactly
+`Copyright (c) 2026 jackthenet` — the user's handle, single year, no range (Q-2).
+
+**`SECURITY.md` — PASS on every factual claim, one wording nit (F-8).**
+
+| Claim | Verified against |
+|---|---|
+| the `security` job of `.github/workflows/quality.yml` runs `uv run pip-audit` and `uv run bandit -r src/` | job `security` at `quality.yml:30`; `uv run pip-audit` at `:43`; `uv run bandit -r src/` at `:45` |
+| the `dependency-review` job runs `actions/dependency-review-action@v5` on pull requests only | job `dependency-review` at `:63`, `if: github.event_name != 'push'` at `:67`, action at `:81` |
+| `.github/dependabot.yml` opens weekly PRs for the `uv` and `github-actions` ecosystems | `:4`/`:7` and `:39`/`:42`, both `interval: "weekly"` |
+| a real dependency CVE was fixed through this process (PR #48) | `docs/verification/anyio-cve-fix.md` exists; `10066d5 Merge pull request #48 from jackthenet/issue/anyio-cve-fix` |
+| private-vulnerability-reporting channel described as requiring the user to enable it | "The form works only once private vulnerability reporting is enabled in the repository's settings on GitHub … if the *Report a vulnerability* button is missing, the setting has not been enabled yet" — F-2 stated, not papered over |
+| no email address published | the only `@` hits in the file are the sentence "No email address is published" and the action reference `dependency-review-action@v5`; no `mailto:` |
+| supported-versions row uses the snapshot form | `\| latest release (currently \`1.1.0\`) \| ✅ \|` + "The version in parentheses is a snapshot of the current release, not part of the rule" (F-7 handled as planned) |
+| 14-day acknowledgement, no fix SLA | "We aim to **acknowledge** a report within **14 days**. There is **no fix SLA** …" |
+| template-scope paragraph | the `## Scope: this is a template, not a service` section — forks / vendored code / the `src/main.py` example wiring / downstream deployments out of scope; `src/backend/` and the committed default configuration in scope |
+
+**`CHANGELOG.md` — PASS.** 15 `##` sections: `## [Unreleased]` + **14 release sections
+`0.1.0 … 1.1.0`, newest-first**. All 14 dates match their marker commit exactly
+(`git log -1 --format=%ad --date=short`): `744eea1` 2026-10-09, `137b7e9` 2026-10-07,
+`df81d8b` 2026-10-04, `3c90e6f`/`c6fd876` 2026-10-02, `6d6f120` 2026-09-24, `78475af`/`1646862`
+2026-09-21, `8ae9978` 2026-09-20, `7290f94` 2026-09-19, `8a2f931` 2026-09-15, `50344bc`
+2026-09-14, `31d2a1a` 2026-09-12, `e9fd8c1` 2026-08-16. Sub-headings are only
+`Added`/`Changed`/`Fixed`/`Removed`. The `see <range>` pointer was never used (§3.3 predicted
+all 14 ranges traceable — confirmed).
+
+Five releases spot-checked against `git log` (not the record):
+
+| Release | Range read | Entries confirmed against history |
+|---|---|---|
+| `1.1.0` (newest) | `137b7e9..744eea1` | `b82d5ff feat(T-002)` stdlib-only generator, `28a24be feat(T-005)` `--check`, `725e7ca feat(T-007)` commit `STRUCTURE.md`, `8d6334e feat(T-006)` skill + hook, `b1c6116 feat(T-001)` `scripts/` in the mypy gate, `c7a9119 Merge pull request #74` (structlog delivery merge credited under 1.0.0 exactly as the entry says) |
+| `1.0.0` | `df81d8b..137b7e9` | merges #63, #65, #66, #67, #68 in range; #69/#70/#71/#72/#73 are ancestors of the marker — every cited PR resolves |
+| `0.5.1` | `6d6f120..c6fd876` | `f9cfe45 fix(settings): … U+0085 (NEL)`, `4d9514e fix(logging): reconfigure removes only managed sinks`, `dd27702 chore(ci): run dependency-review only on pull_request events`, merges #53/#55/#56/#57 in range, and #58 (the `main-ci-green` delivery merge) in the **0.6.0** range — precisely the split the entry states |
+| `0.3.1` | `50344bc..8a2f931` | `d0c99e1 spec(file-management): … (#24)`, `c38e7b2 Merge pull request #25`, the `settings-test-isolation` P1→P6 chain, `d5f0a94 fix: sync uv.lock version to 0.3.0 (missed by bump PR #25)` |
+| `0.1.0` (earliest) | `git ls-tree -r e9fd8c1` | 20 tracked files: `src/main.py`, `src/core/logging/{__init__,_decorator,_setup}.py`, `loguru>=0.7.3` in `pyproject.toml`, `.pre-commit-config.yaml` with ruff + complexipy + file-hygiene hooks, `.github/workflows/lint.yml`, `.vscode/launch.json` + `settings.json`, the `.github/` prompt and `ruff-post-edit` hook files — the entry describes the **2026-08-16** tree, not the later template shape (§11.3's correction stands) |
+
+**No invented citation anywhere in the file:** every `PR #NN` mentioned in `CHANGELOG.md`
+resolves to a real merge commit (`git log --all --grep="pull request #NN"`), the single
+exception being **#24**, which is squash-merged as `d0c99e1 … specification (#24)` — a real PR,
+a different merge style. No entry could not be traced to a commit in its range.
+
+**`README.md` — PASS.** Exactly one added line after the `pre-commit` badge:
+`[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)` — the link
+target `LICENSE` exists at the repository root (created by this same change), so the
+`update-readme` "badges only for things that really exist" rule is satisfied. No other
+README edit.
+
+### 4. Self-consistency of the new rule (check 13)
+
+The obligation is stated in five places. The three substantive elements are **identical**
+everywhere:
+
+| Element | AGENTS.md Phase 6 item 10 | AGENTS.md `## Versioning` **Changelog:** | `implement` S4.5 + Process 7 | `verify` MUST/All types | `review` MUST + S6.4 |
+|---|---|---|---|---|---|
+| entry goes under `## [Unreleased]` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| a bump moves it to `## [<version>] - <YYYY-MM-DD>` in the bump commit | ✓ (item 11) | ✓ | — (not that step's job) | — | ✓ (S6.4 done-criteria) |
+| **every** change type owes one (REFACTOR / DOCS/CHORE included) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| hand-maintained, `bump-my-version` does not touch it | ✓ (item 11) | ✓ (no `[[tool.bumpversion.files]]` entry) | — | — | — |
+
+The Phase 6 renumbering is clean: item 10 inserted, old 10 → 11, old 11 → 12, and no text
+anywhere in the repository references a Phase 6 item by number, so nothing went stale.
+
+**One drift, recorded as finding F-9 (not fixed here — out of this step's write set):** the
+*when* differs. `AGENTS.md` puts the entry in **Phase 6** (item 10 "when the review report is
+clean"; the Versioning bullet says "in Phase 6"), while the `implement` skill commits it at
+**S4.5 / Process step 7 (Phase 4)**. The `verify` skill's Phase 5 check ("confirm the entry
+exists") is only satisfiable under the `implement`-skill timing — under the AGENTS.md timing
+the entry does not exist yet when Phase 5 runs. The content of the obligation is consistent;
+the step that writes it is not. Phase 6 should pick one (the Phase 4 timing is the one that
+makes the Phase 5 check meaningful, and is what this change itself needed — see F-10).
+
+### 5. The change obeying its own rule (check 14)
+
+**Finding F-10 — the rule was not yet satisfied by this change at Phase 5, and this step
+fixed it.** Phase 4 created `CHANGELOG.md` with `## [Unreleased]` seeded only with PR #76 (the
+ruff `D` docstring gate) and added the rule to `AGENTS.md` and the three skills, but shipped
+**no entry for `security-changelog-license` itself** — the change the rule is about. Per check
+14 this step added it under `### Added` (two bullets: the three new root files + the
+`pyproject.toml` metadata, and the changelog-entry rule itself), factual, no PR number
+invented — the change name is cited instead, since the change PR does not exist yet. The
+`verify` skill's new "All types" check now passes for this change on its own terms.
+
+### 6. Checks skipped, with reasons
+
+| Check | Why skipped |
+|---|---|
+| Spec coverage = 100% / `verify_spec.py` | **n/a** — DOCS/CHORE produces no specification (Phase Matrix); there are no REQ/AC IDs to cover |
+| Traceability row for this change (S5.3) | **n/a** — no spec mentions `LICENSE`, `SECURITY.md`, `CHANGELOG.md` or copyright, so no matrix row is owed (§4); the referential-integrity script was still run and passes (check 4) |
+| Full test suite (`uv run pytest tests/`) | **Deferred to the S6.4 pre-merge gate** per §8's recommendation — `pyproject.toml` is touched, so one full run before the PR opens is the blanket proof the metadata edit changed nothing; the result belongs in the review report. The two tests that could possibly react to the edit are the 33 that were run (check 7) |
+| Coverage threshold, architecture-rule inspection, `red`/`green` gates | n/a for DOCS/CHORE — no behavior, no source, no task DAG |
+| Version bump | n/a — DOCS/CHORE → `none` in the bump mapping; `1.1.0` is untouched (proof 11) |
+
+### 7. Findings from Phase 5
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-8** | `SECURITY.md` says the `security` job runs "on every push and pull request"; `quality.yml:3-7` triggers on `push: branches: [main]` and `pull_request`, i.e. pushes **to main**, not every push. | Wording nit, not a false promise — the job and both scans exist and run on the mainline and on PRs. Phase 6 may tighten it to "on pushes to `main` and on pull requests". Not fixed here (out of this step's write set). |
+| **F-9** | Rule-timing drift: `AGENTS.md` says the changelog entry is added in Phase 6; the `implement` skill adds it at S4.5 (Phase 4); the `verify` skill's Phase 5 check only works under the Phase 4 timing. | Flagged for Phase 6 (S6.1/S6.3): pick one timing. Content of the rule is consistent across all five places. |
+| **F-10** | This change shipped without a `CHANGELOG.md` entry for itself — the rule it introduces was unmet by the change that introduces it. | **Fixed by this step** (check 14): the entry is added under `### Added` in `## [Unreleased]` and committed with this report. |
+
+### 8. Verdict
+
+All nine tool gates pass; both scope proofs pass; every factual claim in the three new root
+files and the README badge checks out against the repository; the new rule is consistent in
+content across all five places it is stated (one timing drift flagged, F-9); the missing
+self-entry is fixed (F-10). No test, source, script, migration, spec, CI or planning-record
+file was touched.
+
+**VERDICT: PASS (light gate set)**
+
+- **next:** S6.x Phase 6 (light review + PR). The full test suite must run and pass at S6.4
+  before the PR opens (§8 recommendation), and the review should resolve F-8 and F-9.
