@@ -771,3 +771,192 @@ slow runner while still asserting the budget on a normal one.
 - Nothing in T-002 asserts tree indentation, depth rendering, docstring first lines, count lines
   or `__init__.py` collapsing — those are T-003's nodes (REQ-009/010/011, AC-009/010/011,
   EDGE-009/010/011 and the tree invariants).
+
+## Phase 3 — S3.1 test derivation, T-003 (2026-10-09)
+
+**Step:** S3.1 Derive tests — DAG task **T-003** (Directory tree body, Packages scope and headers,
+`--root`-relative path form). **Change:** `structure-map` (FEATURE, spec merged as PR #69).
+
+**Inputs read:** `docs/specs/structure-map.md` §REQ-009/REQ-010/REQ-011/REQ-012/REQ-013/REQ-020,
+§Acceptance Criteria (AC-009/010/011/012/013/020), §Invariants (INV-002/INV-003), §Edge Cases
+(EDGE-001/002/013/015), §Non-Functional Requirements (NFR-007) — section-scoped reads only (P-66);
+the T-003 entry of `.github/task-runner/tasks.json` in full (`requirements`,
+`acceptance_criteria`, `invariants`, `edge_cases`, `non_functional`, `tests_to_create`,
+`red_command`, `green_command`, `allowed_files`, `implementation_steps`, `design_constraints`,
+`completion_gates`, `dependencies`); the T-001/T-002 sections of this file; the existing harness in
+`tests/acceptance/test_structure_map.py` and `tests/unit/test_make_map.py`. `docs/tasks/structure-map.tasks.json`
+was **not** read (P-66).
+
+**Recovered work.** A previous S3.1 (T-003) execution was interrupted mid-step and left
+`tests/acceptance/test_structure_map.py` modified (+288 lines: the `_TREE_FILES` fixture, helpers
+and the five acceptance nodes) and `uv.lock` dirty, with no commit and no handoff. `uv.lock` was
+restored first (F-9 / P-74). The uncommitted block was reviewed clause by clause against the spec,
+not trusted: it was kept (fixture shape, `_tree_entries`, `_section_lines`, `_group_body`) and
+corrected — the prune-marker witness was rewritten to `_prune_marker_in_branch` (a branch-scoped
+scan, so a marker from another top-level branch can never be attributed to `src/backend/`), the
+code-dir entry assertions were extracted to `_code_dir_entry_failures` (PLR0912, 14 branches), an
+unused local was removed (F841), the missing `tests/README.md` fixture entry was added (REQ-009
+clause 2 renders non-`.py` entries under a code dir), and the sorting/order clauses were added.
+
+### Files written (exactly T-003's `allowed_files` test paths)
+
+| File | Change | Nodes |
+|---|---|---|
+| `tests/acceptance/test_structure_map.py` | +324 (T-003 block appended) | 5 |
+| `tests/unit/test_make_map.py` | +257 / −1 (T-003 block appended; `_run_generator` widened to `root: Path | str`) | 6 |
+| `tests/property/test_structure_map.py` | new, 256 lines | 2 |
+
+No source file was created or edited: `scripts/make_map.py` (T-003's `source_files`) is Phase 4 work.
+
+### Derived tests → spec clauses (13 nodes, all of T-003's `tests_to_create`)
+
+| Node | IDs | Clauses pinned |
+|---|---|---|
+| `acceptance::test_ac_009_tree_code_dirs_full_other_dirs_counted` | AC-009 / REQ-009 / EDGE-015 | clause 1 top-level files listed by name, sorted, **before** the code dirs; clause 2 every entry under a code dir — **of any file type** — on its own line, indented `2 × (segments − 1)`, sorted, plus a line for each code dir and for `src/backend/`, `src/backend/settings/`, `tests/unit/`; clause 3 exactly one count line per other top-level dir, carrying the file count and the role label (`docs/ — 3 files (process record)`, `.github/ — 2 files (CI and tooling)`), and nothing from a count-only dir rendered entry by entry |
+| `acceptance::test_ac_010_max_depth_prunes_tree_only` | AC-010 / REQ-010 | `--max-depth 2` renders no `src/backend/*` entry but still `src/backend/`; that branch carries a `(+N dirs, M files not shown)` marker; the `scripts/` branch carries **no** marker (all its entries are at depth 2); the Packages module set is identical at `--max-depth 2` and at the default 4 and equals every `src/` fixture module |
+| `acceptance::test_ac_011_packages_scope` | AC-011 / REQ-011 | Packages lists exactly the 15 in-scope fixture modules — every `.py` under `src/`, `scripts/`, `migrations/`, plus `tests/conftest.py`, `tests/settings_test_helpers.py`, `tests/unit/conftest.py` (the `tests/` rule matches the **file name at any depth**) — and not `tests/unit/test_deep_behaviour.py` / `tests/plain_helpers.py` |
+| `acceptance::test_ac_012_package_header_and_exports` | AC-012 / REQ-012 | exactly one `### ` header shows `` `backend.settings` `` and `src/backend/settings/`; one `exports:` line in that group listing the `__init__.py` `__all__` names sorted (`Alpha` before `Zeta`) and **not** the merely imported `Registry`/`Model`; every header ends with a directory path, no duplicates, and the header set equals the set of containing directories of Packages-scope modules |
+| `acceptance::test_edge_015_unlabelled_dir_counted_without_label` | EDGE-015 / REQ-009 clause 3 | `notes/` gets exactly one indent-0 count line, counts all 3 files, contains no `(` (no role label), and `notes/deep/` is not rendered entry by entry |
+| `unit::test_ac_013_module_header_and_summary` | AC-013 / REQ-013 | header `#### src/with_doc.py (4 lines)` — the file's own `splitlines()` count, not its non-blank count — followed by the docstring's first line; `src/no_doc.py` renders `#### src/no_doc.py (2 lines)` and **no** summary line |
+| `unit::test_edge_001_missing_docstring_renders_no_summary` | EDGE-001 (module half) / REQ-013 | the header still renders for `src/no_doc.py` and `src/comment_only.py`, carries no summary line, and does not end with `:` |
+| `unit::test_edge_002_empty_file_renders_header_only` | EDGE-002 / REQ-013 | `src/empty.py` renders `#### src/empty.py (0 lines)` and nothing else, exit 0, nothing on stderr |
+| `unit::test_edge_013_package_without_exports` | EDGE-013 / REQ-012 | `src/nopub_pkg/` (`from ._internal import _helper`, no `__all__`) renders **no** `exports:` line; `src/pub_pkg/` (public imports, no `__all__`) renders one line with those names sorted |
+| `unit::test_ac_020_paths_are_relative_posix` | AC-020 / REQ-020 | no backslash, drive letter/UNC, or absolute POSIX path anywhere; none of `str(root)`, `root.as_posix()`, `str(root.parent)` appears; the module-header set equals the fixture's `--root`-relative paths with their line counts |
+| `unit::test_nfr_007_output_identical_across_platforms` | NFR-007 / REQ-020 | the same tree at two different absolute locations renders byte-identical output; `--root` spelled as `str(root)` vs `root.as_posix()` renders byte-identical output; the bytes are LF-only |
+| `property::test_inv_002_no_module_hidden_by_pruning` | INV-002 (hypothesis, 12 examples) | for any generated tree (3–10 module paths, 1–4 segments deep, under the four code dirs) and any `--max-depth` 1–5: every `.py` under a code dir at depth ≤ max-depth is in the tree and none deeper is; the Packages set equals the REQ-011 scope; the fixed `.github/hooks/ruff-post-edit.py` + `.github/workflows/ci.yml` appear in neither section and `.github/` has one count line for 2 files |
+| `property::test_inv_003_no_absolute_path_or_timestamp` | INV-003 (hypothesis, 12 examples) | no timestamp, drive letter/UNC, backslash or absolute POSIX path; no `platform.node()` / `getpass.getuser()` value; none of `str(root)`, `root.as_posix()`, `str(base)` |
+
+### RED evidence (observed, not declared)
+
+Pre-flight `uv run pytest --collect-only` over the three files: **30 tests collected, no import or
+collection errors** (13 T-003 nodes present).
+
+T-003's `red_command` (the 13 nodes, verbatim from the DAG) — **13 failed, 0 passed in 2.07s**.
+Every failure is the same assertion failure on unimplemented behaviour, e.g.
+
+```text
+E  Failed: C:\workspace\...\feature\structure-map\scripts\make_map.py does not exist
+   — T-002 Phase 4 has not implemented the generator
+```
+
+That is a valid RED: a `pytest.fail` assertion raised inside the test body, not a collection error,
+not a fixture setup error, and not a `ValidationError` from out-of-domain test data (the property
+strategies emit in-domain paths only: `pkg`/`sub`/`deep` segments, `mod.py`/`conftest.py`/
+`helpers_test_helpers.py`/`a.py`/`b.py` names).
+
+No previously green test was broken: the three touched files run as a whole give **29 failed,
+1 passed** = the 16 pre-existing REDs (T-001 `test_ac_025…`/`test_nfr_004…`, T-002's 14) + the 13
+new T-003 REDs, with `test_nfr_003_deptry_clean` the only GREEN node in them. The full suite is a
+Phase 5 gate and was not run here.
+
+### Test sensitivity (P-68)
+
+A behaviour-correct stand-in generator (`stub_v2.py`, written **outside** the repository, in
+`%LOCALAPPDATA%/Temp/sens_t003/`, so it can never be committed) implements exactly T-003's clauses
+and nothing else (no symbols, no `--check`). The driver imports the three test modules, rebinds
+their `_GENERATOR` constant to the stub and calls all 13 nodes.
+
+- **Correct stub: 13/13 nodes pass** — the tests are satisfiable, so the RED is missing behaviour,
+  not a broken test.
+- **Wrong-implementation matrix: 25/25 mutations caught**, each by the semantically right node:
+
+| Mutation (one broken clause) | Caught by |
+|---|---|
+| tree skips non-`.py` entries under a code dir | AC-009 |
+| a code dir rendered as a count line instead of in full | AC-009, AC-010, INV-002 |
+| count line counts only top-level files | AC-009, EDGE-015, INV-002 |
+| an unlabelled dir gets a role label | EDGE-015 |
+| tree renders base names instead of paths | AC-009, AC-010, INV-002 |
+| `--max-depth` ignored | AC-010, INV-002 |
+| pruned one level too early | AC-009, AC-010, INV-002 |
+| a prune marker emitted when nothing is hidden | AC-010 |
+| hidden files counted as dirs (marker form) | AC-010 |
+| Packages ignores a nested `conftest.py` | AC-011, AC-012, INV-002 |
+| Packages ignores `*_test_helpers.py` | AC-011, INV-002 |
+| one group header per module, not per directory | AC-012 |
+| package header without its import name | AC-012 |
+| an `exports:` line always rendered | EDGE-013 |
+| `exports:` lists imports instead of `__all__` | AC-012 |
+| module header without the line count | AC-010, AC-011, AC-013, AC-020, EDGE-001, EDGE-002, INV-002 |
+| header counts non-blank lines | AC-013, AC-020 |
+| module header ends with a colon | AC-013, AC-020, EDGE-001, EDGE-002 |
+| a summary line rendered for an undocumented module | AC-013, EDGE-001, EDGE-002 |
+| paths rendered absolute | 12 of 13 nodes |
+| paths rendered with backslashes | AC-009, AC-010, AC-020, INV-002, INV-003 |
+| a timestamp in the generated-by line | INV-003 |
+| output written with CRLF | NFR-007 |
+| top-level files not sorted first | AC-009 |
+| code-dir entries not sorted | AC-009 |
+
+The driver also exposed two defects **in the artifacts themselves** (not in the tests), both fixed
+and re-run: the stub never collected public imports for the `exports:` fallback (EDGE-013 clause 3
+caught it — the witness works in both directions), and the first matrix run resolved its relative
+paths against the **primary** worktree, so 22 of its 25 mutations never applied and were counted as
+caught; the re-run with absolute paths is the evidence above. A mutation whose replacement text was
+a `SyntaxError` (`sorted(<genexpr>, reverse=True)`) was rewritten to valid syntax so it witnesses
+the ordering clause rather than the parse failure.
+
+### Quality gates (this step's changed paths only, P-6)
+
+- `uv run ruff check tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py` → **All checks passed!**
+- `uv run ruff format --check` on the same three paths → **3 files already formatted**
+- No whole-repo lint sweep (the Phase 5 gate), no `mypy`/`deptry`/docs build in this step.
+- `uv.lock` restored before the commit (F-9 / P-74).
+
+### Decisions and deviations
+
+- **Depth = path segments** (`src/` = 1, `src/backend/` = 2, `src/backend/utils.py` = 3), and tree
+  indent = `2 × (segments − 1)`, derived from AC-010's `--max-depth 2` example (src/backend/ renders,
+  nothing under it). REQ-009's "indented two spaces per level" is read with that example.
+- **Deliberate under-assertions** (not encoded rather than guessed): the prune marker's **numbers**
+  — REQ-010 defines three marker forms (`(+N dirs not shown)`, `(+N files not shown)`,
+  `(+N dirs, M files not shown)`) but not whether N/M count direct children or the whole hidden
+  subtree, so AC-010 asserts the combined *form* and the absence of a marker where nothing is
+  hidden, never the values; the relative order of the four code dirs (determinism is T-005/INV-001);
+  the docstring-summary normalization (REQ-018 is T-004's gate, so AC-013 asserts only that the
+  summary line follows the header); and any NFR-002 file count (those are base-commit numbers).
+- **`tests/README.md` in the fixture** — REQ-009 clause 2 renders every tracked file under a code dir
+  regardless of extension (this repository has 9 such files), so a `.py`-only tree implementation fails.
+- **`.github/hooks/post_edit.py` + `docs/sub/c.md` + `notes/deep/three.md` in the fixture** — the
+  count-only directories must not be rendered entry by entry, and INV-002's last clause (a `.py`
+  outside a code dir appears only in its count line) needs a second file in that directory.
+- **Property tests carry their own harness copy** (`_git_tree`, `_render`, `_GENERATOR`) rather than
+  importing the acceptance file or adding a shared module: T-003's `allowed_files` lists only the
+  three test files, and Q-10 forbids a third shared module (the acceptance and unit files already
+  each carry their own copy for the same reason).
+- **Hypothesis RED hygiene**: each node `pytest.fail`s when `scripts/make_map.py` is absent *before*
+  the inner `@given` check runs, so the RED is one clean assertion failure rather than 12 shrunk
+  example failures; each example builds its tree in a fresh `TemporaryDirectory` because Hypothesis
+  reuses the function-scoped `tmp_path`. `@settings(max_examples=12, deadline=None,
+  suppress_health_check=[HealthCheck.too_slow])` per the repo convention.
+- **`_EXPECTED_PACKAGE_COUNT = 15`** is a hand-counted cross-check of the derived scope set, so a
+  bug in the test's own `_in_packages_scope` cannot silently agree with itself.
+- **PLR0912** (max 12 branches, only PLR0913 is ignored) forced the clause loops of AC-009 into
+  `_code_dir_entry_failures(entries) -> list[str]`; **PLR2004** forced the `_SUMMARY_LINE` constant.
+
+### What Phase 4 (T-003) must implement for these nodes
+
+Tree: top-level files sorted first, then the four code dirs in full (one line per directory and per
+entry, any extension, sorted, indent `2 × (segments − 1)`), every other top-level dir as one
+`<name>/ — <N> files[ (label)]` line from the fixed role table; `--max-depth` prunes the tree only,
+emitting the REQ-010 marker form that matches what is hidden. Packages: one group header per
+containing directory — ``### `import.name` — dir/`` for a package (the path relative to `src/`,
+`/`→`.`; outside `src/` the whole path), `### dir/` for a plain directory — then
+`#### <relpath> (<N> lines)` per module (N = `splitlines()`), the docstring first line only when the
+module has one, and one `exports:` line for a package `__init__.py` (`__all__` if defined, else the
+public names it imports, sorted, neither → no line). Output: `--root`-relative POSIX paths only, LF
+newlines, no timestamp/host/user/absolute path, and `--root` accepted in either host spelling.
+
+### Hand-off note for T-004 (symbols, docstring summaries)
+
+- Reuse `unit::_module_block(map_text, path)` (a module's header plus its body lines) and
+  `unit::_group_block(map_text, dir_path)`; the acceptance file's `_group_body(map_text, needle)`
+  slices one group.
+- T-003 pins the module header form `#### <path> (<N> lines>` and that a docstring summary is the
+  line immediately after it; it does **not** pin REQ-018's summary normalization — T-004 may
+  normalize that line, it may not change the header form or add a line before it.
+- `test_ac_020_paths_are_relative_posix` asserts the **complete** module-header set for its fixture,
+  so T-004's symbol lines must appear *below* the header, never replace it.
+- The T-003 fixture `_T003_FILES` (unit) and `_TREE_FILES` (acceptance) are shared by the later
+  tasks' nodes in the same files: adding a fixture entry changes `_EXPECTED_PACKAGE_COUNT` and the
+  `_GROUP_DIRS` cross-check — extend them deliberately, not incidentally.

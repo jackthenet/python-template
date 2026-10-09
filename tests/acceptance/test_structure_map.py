@@ -466,3 +466,327 @@ def test_nfr_003_deptry_clean() -> None:
     generator is stdlib-only and adds none."""
     proc = _run(("-m", "deptry", "."))
     assert proc.returncode == 0, f"deptry exits {proc.returncode}: {_output(proc)}"
+
+
+# --- T-003: the Directory tree section, Packages scope, headers, path form ---------------------
+# (REQ-009/010/011/012/020, AC-009/010/011/012, EDGE-015)
+
+_CODE_DIRS: tuple[str, ...] = ("src", "tests", "scripts", "migrations")
+_PACKAGES_DIRS: tuple[str, ...] = ("src", "scripts", "migrations")
+_INDENT_WIDTH = 2  # REQ-009: the tree is indented two spaces per level
+_EXPECTED_PACKAGE_COUNT = 15  # the fixture's REQ-011 scope, counted by hand as a cross-check
+
+_SETTINGS_INIT = (
+    '"""The settings package."""\n'
+    "\n"
+    "from .models import Model\n"
+    "from .registry import Registry\n"
+    "\n"
+    '__all__ = ["Zeta", "Alpha"]\n'
+)
+
+# One fixture tree for the whole T-003 acceptance set: top-level files, the four code dirs with a
+# 4-segment-deep package chain (so --max-depth 2 prunes something), a labelled non-code dir, an
+# unlabelled one (EDGE-015), and a .py outside every code dir (REQ-010 / INV-002).
+_TREE_FILES: dict[str, str] = {
+    "README.md": "# Demo\n",
+    "pyproject.toml": '[project]\nname = "demo"\n',
+    "src/top.py": '"""A top-level module."""\n',
+    "src/empty.py": "",
+    "src/backend/__init__.py": '"""The backend package."""\n',
+    "src/backend/utils.py": '"""Utilities."""\n',
+    "src/backend/settings/__init__.py": _SETTINGS_INIT,
+    "src/backend/settings/models.py": '"""The settings models."""\n',
+    "src/backend/settings/registry.py": '"""The settings registry."""\n',
+    "src/backend/settings/no_doc.py": "VALUE = 1\nOTHER = 2\n",
+    "src/nopub/__init__.py": '"""A package with neither __all__ nor public imports."""\n',
+    "scripts/build.py": '"""The build tool."""\n',
+    "migrations/env.py": '"""The migration environment."""\n',
+    "migrations/0001_initial.py": '"""Initial migration."""\n',
+    "tests/conftest.py": '"""Shared fixtures."""\n',
+    "tests/settings_test_helpers.py": '"""Settings test helpers."""\n',
+    "tests/unit/conftest.py": '"""Unit fixtures."""\n',
+    "tests/unit/test_deep_behaviour.py": '"""Out of Packages scope."""\n',
+    "tests/plain_helpers.py": '"""Out of Packages scope."""\n',
+    "tests/README.md": "# Tests\n",  # a non-.py entry under a code dir: REQ-009 renders it too
+    "docs/a.md": "# A\n",
+    "docs/b.md": "# B\n",
+    "docs/sub/c.md": "# C\n",
+    "notes/one.md": "# One\n",
+    "notes/two.md": "# Two\n",
+    "notes/deep/three.md": "# Three\n",
+    ".github/workflows/ci.yml": "name: ci\n",
+    ".github/hooks/post_edit.py": '"""A hook outside the code dirs."""\n',
+}
+
+# REQ-009 clause 3: the built-in role-label table entries the fixture exercises.
+_COUNT_LINES: tuple[tuple[str, int, str], ...] = (
+    ("docs/", 3, "(process record)"),
+    (".github/", 2, "(CI and tooling)"),
+)
+
+# The code-dir directories (not only files) REQ-009 clause 2 renders one line for.
+_CODE_DIR_DIRS: tuple[str, ...] = ("src/backend/", "src/backend/settings/", "tests/unit/")
+
+_ENTRY_PATH = re.compile(r"[\w./-]+/?")  # a bare tree entry line: a path, dirs with a trailing /
+_PRUNE_MARKER = re.compile(r"\(\+\d+ (?:dirs|files)(?:, \d+ (?:dirs|files))? not shown\)")
+_COMBINED_MARKER = re.compile(r"\(\+\d+ dirs, \d+ files not shown\)")
+
+
+def _file_name(path: str) -> str:
+    """The last segment of a `/`-separated fixture path (the file name, whatever its depth)."""
+    return path.rsplit("/", 1)[-1]
+
+
+def _in_packages_scope(path: str) -> bool:
+    """REQ-011: every module under src/, scripts/ and migrations/, plus tests/ conftest/test-helpers.
+
+    The tests/ rule matches the *file name* at any depth, so `tests/unit/conftest.py` is in scope.
+    """
+    top = path.split("/", 1)[0]
+    name = _file_name(path)
+    return path.endswith(".py") and (
+        top in _PACKAGES_DIRS or name == "conftest.py" or name.endswith("_test_helpers.py")
+    )
+
+
+_PACKAGES_SCOPE: frozenset[str] = frozenset(p for p in _TREE_FILES if _in_packages_scope(p))
+
+# REQ-009 clause 2 renders one line per tracked entry under a code dir — of ANY file type (this
+# repository has 9 non-.py files under code dirs), not one line per parsed module.
+_CODE_DIR_ENTRIES: frozenset[str] = frozenset(p for p in _TREE_FILES if p.split("/", 1)[0] in _CODE_DIRS)
+
+# REQ-012: one group header per containing directory of a Packages-scope module, never one per module.
+_GROUP_DIRS: frozenset[str] = frozenset(f"{p.rsplit('/', 1)[0]}/" for p in _PACKAGES_SCOPE)
+
+
+def _tree_map(base: Path, *extra: str) -> str:
+    """Render `_TREE_FILES` as a throwaway git tree and return the generated map text."""
+    root = _git_tree(base / "tree", _TREE_FILES)
+    out = base / "map.md"
+    proc = _run([str(_GENERATOR), "--root", str(root), "--out", str(out), *extra], cwd=root)
+    return _map_text(out, proc)
+
+
+def _section_lines(map_text: str, heading: str) -> list[str]:
+    """The non-blank lines of one `## ` section, up to the next `## ` heading."""
+    lines: list[str] = []
+    inside = False
+    for line in map_text.splitlines():
+        if line.startswith("## "):
+            inside = line == heading
+        elif inside and line.strip():
+            lines.append(line)
+    return lines
+
+
+def _tree_entries(map_text: str) -> list[tuple[int, str]]:
+    """(indent, text) for every non-blank Directory tree line."""
+    return [(len(line) - len(line.lstrip(" ")), line.strip()) for line in _section_lines(map_text, "## Directory tree")]
+
+
+def _tree_paths(map_text: str) -> set[str]:
+    """The paths named by tree entry lines; count lines and prune markers are not entry lines."""
+    return {text.rstrip("/") for _, text in _tree_entries(map_text) if _ENTRY_PATH.fullmatch(text)}
+
+
+def _module_paths(map_text: str) -> set[str]:
+    """The module paths named by the Packages section's `####` headers (REQ-013's header form)."""
+    headers = (re.match(r"#### (\S+) \(\d+ lines\)", line) for line in _section_lines(map_text, "## Packages"))
+    return {match.group(1) for match in headers if match}
+
+
+def _prune_marker_in_branch(map_text: str, path: str) -> str:
+    """The REQ-010 `(+N … not shown)` marker rendered inside the branch rooted at `path`, else ''.
+
+    The scan stops at the branch's next sibling entry, so a marker belonging to another top-level
+    branch is never attributed to this one; the marker itself is accepted at either indent.
+    """
+    entries = _tree_entries(map_text)
+    for index, (indent, text) in enumerate(entries):
+        if text.rstrip("/") != path:
+            continue
+        for deeper_indent, deeper in entries[index + 1 :]:
+            if _PRUNE_MARKER.fullmatch(deeper):
+                return deeper
+            if deeper_indent <= indent and _ENTRY_PATH.fullmatch(deeper):
+                break
+    return ""
+
+
+def _group_body(map_text: str, needle: str) -> list[str]:
+    """The lines of the group whose `### ` header contains `needle` (up to the next group header)."""
+    lines = _section_lines(map_text, "## Packages")
+    start = next((i for i, line in enumerate(lines) if line.startswith("### ") and needle in line), None)
+    if start is None:
+        return []
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith("### "):
+            break
+        body.append(line.strip())
+    return body
+
+
+def _code_dir_entry_failures(entries: list[tuple[int, str]]) -> list[str]:
+    """REQ-009 clause 2: every entry under a code dir — of **any** file type — gets its own tree
+    line, indented two spaces per path segment, and every code dir gets a directory line."""
+    failures: list[str] = []
+    for path in sorted(_CODE_DIR_ENTRIES):
+        expected_indent = _INDENT_WIDTH * (len(Path(path).parts) - 1)
+        found = [indent for indent, text in entries if text.rstrip("/") == path]
+        if not found:
+            failures.append(f"clause 2: no tree line renders the code-dir entry {path}")
+        elif found[0] != expected_indent:
+            failures.append(f"clause 2: {path} is indented {found[0]}, expected {expected_indent}")
+    for directory in (*_CODE_DIRS, *_CODE_DIR_DIRS):
+        if not any(text.rstrip("/") == directory.rstrip("/") for _, text in entries):
+            failures.append(f"clause 2: no tree line renders the code dir {directory}")
+    return failures
+
+
+def test_ac_009_tree_code_dirs_full_other_dirs_counted(tmp_path: Path) -> None:
+    """AC-009 (REQ-009): the tree lists the top-level files by name, renders src/, tests/, scripts/
+    and migrations/ entry by entry (one line per directory and per entry, sorted, indented two
+    spaces per level), and renders every other top-level directory as one count line carrying its
+    role label."""
+    map_text = _tree_map(tmp_path)
+    entries = _tree_entries(map_text)
+    failures: list[str] = []
+
+    top_files = [text for _, text in entries if text in {"README.md", "pyproject.toml"}]
+    if top_files != ["README.md", "pyproject.toml"]:
+        failures.append(f"clause 1: the top-level files are not listed by name, sorted: {top_files!r}")
+    file_rows = [i for i, (_, text) in enumerate(entries) if text in {"README.md", "pyproject.toml"}]
+    dir_rows = [i for i, (_, text) in enumerate(entries) if text.split("/")[0] in _CODE_DIRS]
+    if file_rows and dir_rows and max(file_rows) > min(dir_rows):
+        failures.append("clause 1: the top-level files must be listed before the code dirs (REQ-009 order)")
+
+    failures += _code_dir_entry_failures(entries)
+
+    under_src = [text for indent, text in entries if indent == _INDENT_WIDTH and text.startswith("src/")]
+    src_dirs = [text for text in under_src if text.endswith("/")]
+    src_files = [text for text in under_src if not text.endswith("/")]
+    if src_dirs != sorted(src_dirs) or src_files != sorted(src_files):
+        failures.append(f"clause 2: the entries under src/ are not sorted (dirs {src_dirs!r}, files {src_files!r})")
+
+    for directory, count, label in _COUNT_LINES:
+        lines = [text for indent, text in entries if indent == 0 and text.startswith(directory)]
+        if len(lines) != 1:
+            failures.append(f"clause 3: {len(lines)} tree lines for {directory}, expected one count line: {lines!r}")
+            continue
+        if f"{count} files" not in lines[0]:
+            failures.append(f"clause 3: {lines[0]!r} does not count all {count} files under {directory}")
+        if label not in lines[0]:
+            failures.append(f"clause 3: {lines[0]!r} carries no {label!r} role label")
+    for path in (".github/hooks/post_edit.py", "docs/sub/c.md", "notes/deep/three.md"):
+        if any(text.startswith(path) for _, text in entries):
+            failures.append(f"clause 3: {path} is rendered entry by entry in a count-only directory")
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_010_max_depth_prunes_tree_only(tmp_path: Path) -> None:
+    """AC-010 (REQ-010): --max-depth 2 renders no entry under src/backend/ and marks that branch with
+    a `(+N … not shown)` line, while the Packages section still lists every src/ module — the same
+    modules as the default --max-depth 4."""
+    pruned = _tree_map(tmp_path / "pruned", "--max-depth", "2")
+    full = _tree_map(tmp_path / "full")
+    failures: list[str] = []
+
+    paths = _tree_paths(pruned)
+    deep = sorted(p for p in paths if p.startswith("src/backend/"))
+    if deep:
+        failures.append(f"clause 1: --max-depth 2 still renders {deep}")
+    if "src/backend" not in paths:
+        failures.append(f"clause 1: src/backend/ itself is not rendered at --max-depth 2: {sorted(paths)!r}")
+    marker = _prune_marker_in_branch(pruned, "src/backend")
+    if not marker:
+        failures.append(f"clause 2: no `(+N … not shown)` marker in the src/backend/ branch: {sorted(paths)!r}")
+    elif not _COMBINED_MARKER.fullmatch(marker):
+        failures.append(f"clause 2: {marker!r} is not the combined `(+N dirs, M files not shown)` form")
+    if hidden := _prune_marker_in_branch(pruned, "scripts"):
+        failures.append(f"clause 2: {hidden!r} prunes the scripts/ branch, whose every entry is at depth 2")
+
+    pruned_modules, full_modules = _module_paths(pruned), _module_paths(full)
+    if pruned_modules != full_modules:
+        failures.append(f"clause 3: Packages differs at --max-depth 2 vs 4: {sorted(pruned_modules ^ full_modules)}")
+    src_modules = {p for p in pruned_modules if p.startswith("src/")}
+    expected_src = {p for p in _TREE_FILES if p.startswith("src/")}
+    if src_modules != expected_src:
+        failures.append(f"clause 3: the Packages section misses/added {sorted(src_modules ^ expected_src)} under src/")
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_011_packages_scope(tmp_path: Path) -> None:
+    """AC-011 (REQ-011): the Packages section has an entry for every .py under src/, scripts/ and
+    migrations/, and for each tests/conftest.py and *_test_helpers.py — and for no other tests/
+    module."""
+    map_text = _tree_map(tmp_path)
+    listed = _module_paths(map_text)
+    failures: list[str] = []
+    if missing := sorted(_PACKAGES_SCOPE - listed):
+        failures.append(f"clause 1/2: no Packages entry for {missing}")
+    if extra := sorted(listed - _PACKAGES_SCOPE):
+        failures.append(f"clause 3: Packages entry for an out-of-scope module: {extra}")
+    if len(listed) != _EXPECTED_PACKAGE_COUNT:
+        failures.append(f"the Packages section lists {len(listed)} modules, expected {_EXPECTED_PACKAGE_COUNT}")
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_012_package_header_and_exports(tmp_path: Path) -> None:
+    """AC-012 (REQ-012): the backend.settings package has exactly one group header showing
+    `backend.settings` and src/backend/settings/, one exports: line listing its __init__.py __all__
+    names sorted, and no per-module import line."""
+    map_text = _tree_map(tmp_path)
+    lines = _section_lines(map_text, "## Packages")
+    headers = [line for line in lines if line.startswith("### ")]
+    group = [line for line in headers if "backend.settings" in line or "backend/settings" in line]
+    failures: list[str] = []
+    if len(group) != 1:
+        failures.append(f"clause 1: {len(group)} group headers mention backend.settings: {group!r}")
+        assert not failures, "\n".join(failures)
+    header = group[0]
+    if "`backend.settings`" not in header or "src/backend/settings/" not in header:
+        failures.append(f"clause 1: {header!r} shows neither the import name nor the directory path")
+
+    body = _group_body(map_text, "src/backend/settings/")
+    exports = [line for line in body if "exports:" in line]
+    if len(exports) != 1:
+        failures.append(f"clause 2: {len(exports)} exports: lines in the group: {body!r}")
+    else:
+        if "Alpha" not in exports[0] or "Zeta" not in exports[0]:
+            failures.append(f"clause 2: {exports[0]!r} does not list the __all__ names")
+        elif exports[0].index("Alpha") > exports[0].index("Zeta"):
+            failures.append(f"clause 2: {exports[0]!r} is not sorted")
+        for imported in ("Registry", "Model"):
+            if imported in exports[0]:
+                failures.append(f"clause 2: {exports[0]!r} lists the imported name {imported}, not __all__")
+    header_paths = [match.group(1) for line in headers if (match := re.search(r"(\S+/)$", line))]
+    if len(header_paths) != len(headers):
+        failures.append(f"clause 3: a group header names no directory path: {headers!r}")
+    if len(header_paths) != len(set(header_paths)):
+        failures.append(f"clause 3: duplicate group headers: {header_paths!r}")
+    if set(header_paths) != _GROUP_DIRS:
+        failures.append(
+            f"clause 3: {sorted(set(header_paths))!r} are not one header per containing directory {_GROUP_DIRS!r}"
+        )
+    assert not failures, "\n".join(failures)
+
+
+def test_edge_015_unlabelled_dir_counted_without_label(tmp_path: Path) -> None:
+    """EDGE-015 (REQ-009): a top-level directory with no entry in the role-label table still gets one
+    count line — `<name>/ — <N> files` with no label — and its files are still counted."""
+    map_text = _tree_map(tmp_path)
+    entries = _tree_entries(map_text)
+    lines = [text for indent, text in entries if indent == 0 and text.startswith("notes/")]
+    failures: list[str] = []
+    if len(lines) != 1:
+        failures.append(f"clause 1: {len(lines)} tree lines for notes/, expected one count line: {lines!r}")
+    else:
+        if "3 files" not in lines[0]:
+            failures.append(f"clause 2: {lines[0]!r} does not count all 3 files under notes/")
+        if "(" in lines[0]:
+            failures.append(f"clause 3: {lines[0]!r} carries a role label")
+    if any(text.startswith("notes/deep/") for _, text in entries):
+        failures.append("clause 2: notes/deep/ is rendered entry by entry although notes/ is not a code dir")
+    assert not failures, "\n".join(failures)

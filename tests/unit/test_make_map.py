@@ -16,6 +16,7 @@ import ast
 import contextlib
 import importlib
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Iterator, Mapping, Sequence
@@ -41,8 +42,11 @@ _EXIT_UNREADABLE = 4
 _OSError_FAMILY: frozenset[str] = frozenset({"OSError", "PermissionError", "IsADirectoryError", "BlockingIOError"})
 
 
-def _run_generator(root: Path, out: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+def _run_generator(root: Path | str, out: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     """Run the generator over `root`, writing/checking `out`.
+
+    `root` may be a `Path` or a path string, so NFR-007 can pass the same tree through two
+    spellings of `--root`.
 
     `pytest.fail` on a missing module: the unimplemented generator is the behavior under test, so
     it must surface as a test failure, never as a collection/import error. `encoding="utf-8"` is
@@ -248,4 +252,256 @@ def test_edge_005_unopenable_file_is_hard_failure(tmp_path: Path) -> None:
         failures.append(f"the line for src/locked.py names no OSError-family type: {reported[0]!r}")
     if out.exists():
         failures.append("clause 3: no output file may be written")
+    assert not failures, "\n".join(failures)
+
+
+# --- T-003: module header + summary, exports line, path form ---------------------------------
+# (REQ-012/REQ-013/REQ-020, EDGE-001/EDGE-002/EDGE-013, NFR-007)
+
+# One fixture tree for the T-003 unit set: a module with a docstring (4 lines, of which 3 are
+# non-blank, so the header count cannot be a non-blank/node count), one with no docstring, one with
+# only a comment, an empty file, and two packages covering both exports branches of REQ-012.
+_T003_FILES: dict[str, str] = {
+    "src/all_pkg/__init__.py": '__all__ = ["Zeta", "Alpha"]\n\nfrom .alpha import Alpha\nfrom .zeta import Zeta\n',
+    "src/all_pkg/alpha.py": '"""The alpha module."""\n',
+    "src/all_pkg/zeta.py": '"""The zeta module."""\n',
+    "src/pub_pkg/__init__.py": '"""Public imports, no __all__."""\n\nfrom .beta import Beta\nfrom .gamma import Gamma\n',
+    "src/pub_pkg/beta.py": '"""Beta."""\n',
+    "src/pub_pkg/gamma.py": '"""Gamma."""\n',
+    "src/nopub_pkg/__init__.py": '"""Neither __all__ nor public imports."""\n\nfrom ._internal import _helper\n',
+    "src/nopub_pkg/_internal.py": '"""Internal helper."""\n\n_helper = 1\n',
+    "src/with_doc.py": '"""A module with a docstring."""\n\nVALUE = 1\nOTHER = 2\n',
+    "src/no_doc.py": "VALUE = 1\nOTHER = 2\n",
+    "src/comment_only.py": "# A comment, not a docstring.\nVALUE = 1\nOTHER = 2\n",
+    "src/empty.py": "",
+}
+
+# REQ-020: the path forms that must never appear in a map rendered from a --root-relative file set.
+_NOT_PATH_FORM: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("a Windows path separator", re.compile(r"\\")),
+    ("a drive letter or UNC path", re.compile(r"[A-Za-z]:[\\/]")),
+    ("an absolute POSIX path", re.compile(r"(^|\s)/[A-Za-z0-9_.]")),
+)
+
+# The index of the summary line inside a module block (block[0] is the REQ-013 header).
+_SUMMARY_LINE = 1
+
+
+def _line_count(source: str) -> int:
+    """The number of lines in a fixture source — the count REQ-013's module header carries."""
+    return len(source.splitlines())
+
+
+def _map_text(out: Path, proc: subprocess.CompletedProcess[str]) -> str:
+    """The generated map's text, or a failure naming the run that produced no file."""
+    if not out.is_file():
+        pytest.fail(f"no map file at {out} (exit {proc.returncode}): {proc.stdout!r} {proc.stderr!r}")
+    return out.read_text(encoding="utf-8")
+
+
+def _module_block(map_text: str, path: str) -> list[str]:
+    """One module's section: its `#### ` header plus its body lines, up to the next header."""
+    lines = map_text.splitlines()
+    start = next((index for index, line in enumerate(lines) if line.startswith(f"#### {path} ")), None)
+    if start is None:
+        return []
+    block = [lines[start]]
+    for line in lines[start + 1 :]:
+        if line.startswith(("## ", "### ", "#### ")):
+            break
+        if line.strip():
+            block.append(line.strip())
+    return block
+
+
+def _group_block(map_text: str, dir_path: str) -> list[str]:
+    """The lines of the group whose `### ` header ends with `dir_path`, up to the next group header."""
+    lines = map_text.splitlines()
+    start = next(
+        (index for index, line in enumerate(lines) if line.startswith("### ") and line.rstrip().endswith(dir_path)),
+        None,
+    )
+    if start is None:
+        return []
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith(("## ", "### ")):
+            break
+        if line.strip():
+            body.append(line.strip())
+    return body
+
+
+def _first_diff(left: bytes, right: bytes) -> str:
+    """The first line pair in which two renders differ — a readable NFR-007 failure message."""
+    a_lines, b_lines = left.decode("utf-8").splitlines(), right.decode("utf-8").splitlines()
+    for index in range(max(len(a_lines), len(b_lines))):
+        a_line = a_lines[index] if index < len(a_lines) else "<end of file>"
+        b_line = b_lines[index] if index < len(b_lines) else "<end of file>"
+        if a_line != b_line:
+            return f"line {index + 1}: {a_line!r} vs {b_line!r}"
+    return f"identical lines, different byte counts ({len(left)} vs {len(right)})"
+
+
+def test_ac_013_module_header_and_summary(tmp_path: Path) -> None:
+    """AC-013 (REQ-013): a module with a docstring renders `#### <path> (<N> lines)` carrying the
+    file's own line count, followed by its summary line; a module without a docstring renders the
+    header and no summary line."""
+    root = _git_tree(tmp_path / "tree", _T003_FILES)
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    documented = _module_block(text, "src/with_doc.py")
+    expected_header = f"#### src/with_doc.py ({_line_count(_T003_FILES['src/with_doc.py'])} lines)"
+    if documented[:1] != [expected_header]:
+        failures.append(
+            f"clause 1: the header is {documented[:1]!r}, expected {expected_header!r} — the file's line count"
+        )
+    if len(documented) <= _SUMMARY_LINE or "A module with a docstring." not in documented[_SUMMARY_LINE]:
+        failures.append(f"clause 1: no summary line after the header: {documented!r}")
+
+    undocumented = _module_block(text, "src/no_doc.py")
+    if undocumented[:1] != ["#### src/no_doc.py (2 lines)"]:
+        failures.append(f"clause 2: the header is {undocumented[:1]!r}, expected '#### src/no_doc.py (2 lines)'")
+    if len(undocumented) > 1:
+        failures.append(f"clause 2: a module with no docstring renders a summary line: {undocumented[1:]!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_edge_001_missing_docstring_renders_no_summary(tmp_path: Path) -> None:
+    """EDGE-001 (REQ-013, module half): a module with no docstring still renders its header — and
+    renders no summary line, and the header carries no trailing colon."""
+    root = _git_tree(tmp_path / "tree", _T003_FILES)
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    for path, count in (("src/no_doc.py", 2), ("src/comment_only.py", 3)):
+        block = _module_block(text, path)
+        if block[:1] != [f"#### {path} ({count} lines)"]:
+            failures.append(f"clause 2: {path} renders {block[:1]!r}, expected its header line")
+        elif block[0].endswith(":"):
+            failures.append(f"clause 3: {block[0]!r} ends with a colon")
+        if len(block) > 1:
+            failures.append(f"clause 2: {path} renders a summary line: {block[1:]!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_edge_002_empty_file_renders_header_only(tmp_path: Path) -> None:
+    """EDGE-002 (REQ-013): an empty file renders `#### src/empty.py (0 lines)` and no symbol line,
+    and is not an error — exit 0, nothing reported about it."""
+    root = _git_tree(tmp_path / "tree", _T003_FILES)
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}, an empty file is not an error: {proc.stderr!r}")
+    block = _module_block(text, "src/empty.py")
+    if block != ["#### src/empty.py (0 lines)"]:
+        failures.append(f"clause 2: the empty module renders {block!r}, expected only its header with (0 lines)")
+    if "empty.py" in proc.stderr:
+        failures.append(f"clause 3: the empty file is reported on stderr: {proc.stderr!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_edge_013_package_without_exports(tmp_path: Path) -> None:
+    """EDGE-013 (REQ-012): a package `__init__.py` with neither `__all__` nor public imports renders
+    no `exports:` line; a package with public imports but no `__all__` renders those names, sorted."""
+    root = _git_tree(tmp_path / "tree", _T003_FILES)
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    for group in ("src/nopub_pkg/", "src/pub_pkg/"):
+        if not _group_block(text, group):
+            failures.append(f"clause 2: no group section for the package {group}")
+    nopub = _group_block(text, "src/nopub_pkg/")
+    if exports := [line for line in nopub if "exports:" in line]:
+        failures.append(
+            f"clause 2: {exports!r} — a package with neither __all__ nor public imports renders no exports line"
+        )
+    pub_exports = [line for line in _group_block(text, "src/pub_pkg/") if "exports:" in line]
+    if len(pub_exports) != 1:
+        failures.append(
+            f"clause 3: {len(pub_exports)} exports line(s) for src/pub_pkg/: {_group_block(text, 'src/pub_pkg/')!r}"
+        )
+    elif "Beta" not in pub_exports[0] or "Gamma" not in pub_exports[0]:
+        failures.append(f"clause 3: {pub_exports[0]!r} does not list the public names the package imports")
+    elif pub_exports[0].index("Beta") > pub_exports[0].index("Gamma"):
+        failures.append(f"clause 3: {pub_exports[0]!r} is not sorted")
+    assert not failures, "\n".join(failures)
+
+
+def test_ac_020_paths_are_relative_posix(tmp_path: Path) -> None:
+    """AC-020 (REQ-020): every path in the map is --root-relative with '/' separators — no
+    backslash, drive letter, UNC path or absolute path — whatever spelling `--root` had on this
+    host, and every module header names the fixture's relative path."""
+    root = _git_tree(tmp_path / "tree", _T003_FILES)
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    failures: list[str] = []
+
+    for label, pattern in _NOT_PATH_FORM:
+        if hit := pattern.search(text):
+            failures.append(f"clause 1: the map contains {label}: {hit.group(0)!r}")
+    for absolute in (str(root), root.as_posix(), str(root.parent)):
+        if absolute in text:
+            failures.append(f"clause 2: the absolute host path {absolute!r} appears in the map")
+    headers = {line for line in text.splitlines() if line.startswith("#### ")}
+    expected = {f"#### {path} ({_line_count(source)} lines)" for path, source in _T003_FILES.items()}
+    if headers != expected:
+        failures.append(
+            f"clause 3: module headers are not the --root-relative posix paths: "
+            f"missing {sorted(expected - headers)!r}, unexpected {sorted(headers - expected)!r}"
+        )
+    assert not failures, "\n".join(failures)
+
+
+def test_nfr_007_output_identical_across_platforms(tmp_path: Path) -> None:
+    """NFR-007 (REQ-020): the render is byte-identical for the same tree regardless of the host path
+    it was rendered from — two trees at different absolute locations, and one tree reached through
+    two spellings of `--root`, produce the same bytes, with LF newlines."""
+    near = _git_tree(tmp_path / "one" / "tree", _T003_FILES)
+    far = _git_tree(tmp_path / "a" / "b" / "c" / "d" / "elsewhere" / "tree", _T003_FILES)
+    out_near, out_far, out_spelled = tmp_path / "near.md", tmp_path / "far.md", tmp_path / "spelled.md"
+
+    runs = (
+        ("same location", _run_generator(near, out_near)),
+        ("other absolute location", _run_generator(far, out_far)),
+        ("posix-spelled --root", _run_generator(near.as_posix(), out_spelled)),
+    )
+    near_bytes = out_near.read_bytes() if out_near.is_file() else b""
+    failures: list[str] = []
+
+    for label, proc in runs:
+        if proc.returncode != 0:
+            failures.append(f"clause 1: the {label} run exits {proc.returncode}: {proc.stderr!r}")
+    if out_far.is_file() and near_bytes != out_far.read_bytes():
+        failures.append(
+            f"clause 2: the same tree at two absolute locations renders different bytes: {_first_diff(near_bytes, out_far.read_bytes())}"
+        )
+    if out_spelled.is_file() and near_bytes != out_spelled.read_bytes():
+        failures.append(
+            f"clause 3: --root spelled with host separators vs posix separators renders different bytes: {_first_diff(near_bytes, out_spelled.read_bytes())}"
+        )
+    if b"\r" in near_bytes:
+        failures.append("clause 4: the render is not LF-only")
     assert not failures, "\n".join(failures)
