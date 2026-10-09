@@ -763,3 +763,131 @@ No docstring was written that contradicts the code; each point below is stated *
 - Citation check (INV-I / Q-16): every ID the new docstrings cite is defined in `docs/specs/authentication.md` (REQ-001…REQ-022, AC-008/014/016/022/023/024/025/027/028/031/032, EDGE-004/005/006/007/011/013/014/016, INV-002/INV-003, NFR-002/003/005), except the deliberately qualified cross-feature ones — `session-management` REQ-017 (ADR-061), `search` REQ-022 (ADR-080), and `user-roles-permissions` REQ-024 / AC-031 for the enforcement wiring (authentication.md stops at REQ-022). The pre-existing `service.py` module-docstring citations to REQ-024 and EDGE-022 (also user-roles-permissions) were left untouched.
 
 **Next (S4.2, group 8):** `filemanagement` (58 sites).
+
+## Phase 4 — group 8 (S4.2, 2026-10-09)
+
+`filemanagement` — 6 files, **58** sites: **37** `D1xx` additions (`D102` 27, `D107` 10) and **21** format sites (`D205` 11, `D209` 9, `D403` 1) — exactly the §Fresh measurement row. Two commits per Q-11: `dd8bbd5` (additions) → `c46a07e` (format). `search_source.py` has 0 `D1xx` sites, so it appears only in the format commit.
+
+### Additions half — 37 gate sites (`dd8bbd5`)
+
+```text
+filemanagement  src/backend/filemanagement/errors.py
+  19  D107 FileManagementNotFoundError.__init__   added (key echoed verbatim; the same error for
+                                               "never stored" and "already deleted", REQ-023)
+  31  D107 FileTooLargeError.__init__             added (both sizes in bytes; `limit` is the effective
+                                               live-read limit at check time, not a default, REQ-003)
+  45  D107 FileTypeNotAllowedError.__init__       added (`allowed` is a snapshot; for `avatars` it is the
+                                               fixed image set, never the `allowed_types` setting, REQ-006)
+  63  D107 FileValidationError.__init__           added (only the context matching `reason` is set; a
+                                               filename-extension conflict arrives as `declared`)
+  89  D107 StorageError.__init__                  added (`reason` is the branch point; `io` /
+                                               `variant_generation` chain the OSError as __cause__, NFR-002)
+ 102  D107 AvatarError.__init__                   added (one class, two causes; the caller branches on
+                                               `operation`, REQ-017)
+filemanagement  src/backend/filemanagement/events.py
+  87  D102 EventPublisher.publish                 added (no return value inspected, nothing caught → a
+                                               failing publisher propagates; the `...` stub body is kept)
+filemanagement  src/backend/filemanagement/repository.py
+  78  D102 FileRepository.get_by_key              added (exact match; prefix matching is list_by_namespace)
+  81  D102 .get_by_id                             added (ids are internal: delete + avatar mapping only)
+  84  D102 .update                                added (the stored instance is returned, not the argument)
+  87  D102 .delete                                added (silent no-op on an unknown id; metadata only —
+                                               content is the caller's)
+ 101  D102 .set_user_avatar                       added (the previously referenced file is left alone, REQ-017)
+ 104  D102 .get_user_avatar                       added (a dangling id is returned as stored, EDGE-011)
+ 107  D102 .clear_user_avatar                      added (mapping row only; file + variants untouched)
+ 117  D107 SqliteFileRepository.__init__          added (parent dir created, EDGE-015; 30 s busy timeout for
+                                               concurrent writers, NFR-004; StaticPool only for :memory:;
+                                               tables created here — no migrations)
+ 141  D102 .add                                  added (same-key replace in one transaction, D5/ADR-054;
+                                               attributes stay loaded)
+ 152  D102 .get_by_key                             added (tz-aware UTC reconciliation at the repository)
+ 156  D102 .get_by_id                              added
+ 160  D102 .update                                 added (merge: an unknown id is inserted, not rejected)
+ 166  D102 .delete                                 added (an unknown id commits nothing)
+ 173  D102 .list_by_namespace                      added (SQL-side LIKE prefix match, unescaped → F-12)
+ 188  D102 .set_user_avatar                        added (insert or update, `updated_at` stamped either way)
+ 199  D102 .get_user_avatar                        added (no existence check on the referenced file)
+ 204  D102 .clear_user_avatar                       added
+filemanagement  src/backend/filemanagement/service.py
+ 165  D107 FileService.__init__                   added (nothing eager: `backend=None` builds a local-disk
+                                               backend per operation from the live setting, REQ-024;
+                                               registry resolved lazily; `permission_service=None` = no
+                                               enforcement, AC-031)
+filemanagement  src/backend/filemanagement/storage.py
+  93  D107 LocalDiskStorageBackend.__init__       added (root resolved per operation; the directory is made
+                                               by `put`, so a missing root is accepted here)
+ 114  D102 .put                                  added (temp file in root + os.replace; the temp file is
+                                               unlinked on failure, previous content untouched)
+ 133  D102 .get                                  added (caller closes the stream; check-then-open race
+                                               surfaces as reason 'io', not 'not_found')
+ 142  D102 .delete                                added (missing_ok; a non-file target raises reason 'io')
+ 149  D102 .exists                                added (an escaping key reports False — the rejection is
+                                               swallowed here)
+ 156  D102 .stat                                  added (mtime as UTC; invalid key / non-file → None)
+ 175  D107 InMemoryStorageBackend.__init__        added (the two dicts are the whole state; `_updated_at`
+                                               exists because there is no filesystem mtime)
+ 179  D102 .put                                  added (one assignment; a stream is consumed first, so a
+                                               concurrent reader never sees a partial value, EDGE-017)
+ 184  D102 .get                                  added (a fresh independent BytesIO per call)
+ 189  D102 .delete                                added (value + timestamp; missing key is a no-op)
+ 193  D102 .exists                                added (dict membership — no key validation at all, unlike
+                                               the local backend)
+ 196  D102 .stat                                  added (size from the bytes, timestamp from the last write)
+```
+
+Gate-site count: **27 `D102` + 10 `D107` = 37** — matches §Fresh measurement.
+
+- **INV-H / Q-14 (private helpers in the touched files).** An `ast` walk over the six files reported exactly one undocumented def besides the gate sites: `repository.SqliteFileRepository._session` — documented in the same commit (the pre-existing `expire_on_commit=False` comment is kept as a comment). The walk now reports **0** undocumented def/class in all six files.
+- **Group-4 INV-D lesson applied:** the only `...`-bodied site touched was `events.EventPublisher.publish` (a `Protocol` stub) — the `...` is kept after the docstring, and the digest was checked **after the additions commit**, not only at the end.
+
+### Format half — 21 sites, all hand-edited (`c46a07e`)
+
+Line numbers are the §Phase 4 baseline numbers (the ones the step-1 site list reports); in the format commit the `repository.py`/`service.py` sites sit later in the file because of the additions commit.
+
+```text
+filemanagement  src/backend/filemanagement/repository.py
+  72  D205+D209 FileRepository.add                 summary folded to one line + blank line + description
+  96  D205+D209 FileRepository.list_by_namespace    same shape (the "None → all" note moved to the body)
+filemanagement  src/backend/filemanagement/search_source.py
+ 113  D205+D209 _free_text_matches                 summary + body; corrected to what the code does (an empty
+                                               free text is a substring of any string field; the None case is
+                                               short-circuited by the caller)
+ 123  D205+D209 _eval_group                        summary + body
+ 133  D205+D209 _eval_condition                    summary + body (normalization split out)
+ 161  D403      _apply_exact_operator              `number` → `Number` (hand edit, no fixer)
+ 171  D205+D209 _sort_key                          summary + body
+ 181  D205+D209 _query                             summary + body (the full-fetch explanation moved down)
+ 207  D205      build_file_source                  summary + body
+filemanagement  src/backend/filemanagement/service.py
+ 117  D205+D209 _detect_mime_type                  summary + body; the vague "Preserves the spec's behavior"
+                                               replaced by the actual fallback rule (no NUL in the first 8 KiB)
+ 211  D205+D209 _backend_for                       summary + body
+ 353  D205      FileService.upload                 one-line summary; the input shapes moved into the body
+```
+
+F-10 re-confirmed on this group: `ruff check --select D205,D209,D403 --fix --diff` over these 21 sites produced an **empty diff** — every one is a hand edit. No `D301` in this feature.
+
+### Gates & no-behavior-delta (INV-D)
+
+```text
+uv run ruff check src/backend/filemanagement --select D (google)   → All checks passed!   (0, was 58)
+uv run ruff check src/backend/filemanagement                       → All checks passed!
+uv run ruff format src/backend/filemanagement                      → 10 files left unchanged
+uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src           → 64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0
+                                                                      (after the additions commit AND after the format commit)
+uv run pytest tests/{acceptance,contract,integration,property,unit}/filemanagement -q → 91 passed, 1 skipped in 27.12s
+                                                                      (the skip is the pre-existing "symlinks not available on this host")
+git diff --stat dd8bbd5~1..c46a07e                                 → 6 files, +231/−41, all inside docstrings
+```
+
+Remaining `D` sites in `src/` after group 8: **131** (`D205` 40, `D209` 36, `D102` 34, `D107` 12, `D101` 7, `D403` 2) = search 61 + usermanagement 70.
+
+### Q-26 check (docstring vs. code — no code touched, no reclassification)
+
+- **F-12 (new finding).** `SqliteFileRepository.list_by_namespace` interpolates the namespace into a SQL `LIKE` pattern with no escape character, and `FileService.list_files` never validates its `namespace` argument. `_` is legal in a namespace (`NAMESPACE_PATTERN`, `models.py:95`), so it acts as a single-character wildcard: `list_files(namespace="a_b")` can return records stored under `axb`. REQ-014 requires a *prefix* match, so this is a defect candidate — an ISSUE for a separate change, not this one. Documented as-is at the method.
+- **F-13 (same family as F-11).** `FileService._publish` catches nothing, so a raising publisher propagates out of `upload` / `download` / the avatar operations. `AGENTS.md` promises "a publisher failure never breaks the operation" for file-management; `docs/specs/file-management.md` REQ-022 promises only that a `None` publisher means no events and no error — the code matches its spec, the guidance is what is wrong. Stated in the `EventPublisher.publish` docstring.
+- `InMemoryStorageBackend` performs no key-pattern/containment check (unlike the local backend). Not a defect — REQ-016 scopes the containment and symlink defenses to the local backend — documented at `exists` so the asymmetry is visible.
+- Citation check (INV-I / Q-16): the new docstrings cite only IDs the citing file's own spec defines — `errors.py` / `repository.py` / `storage.py` / `service.py` → `docs/specs/file-management.md` (REQ-003/006/013/015/016/017/022/023/024, AC-031, EDGE-006/007/011/015/017, NFR-002/004). `search_source.py` cites **`docs/specs/search.md`** IDs (REQ-005/006/012/021) — verified as a different ID space (`file-management.md` REQ-021 is the avatar-variant requirement); the module docstring already names `docs/specs/search.md`, so the per-function citations resolve unambiguously and were left untouched.
+
+**Next (S4.2, group 9):** `search` (61 sites).
