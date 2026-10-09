@@ -3193,5 +3193,131 @@ invocations, 18/18 T-004 witnesses GREEN, 13/13 T-003 and 17/17 T-001+T-002 witn
 format + mypy clean, complexipy 0 over (max 12), 531 → 523 lines.** Next atomic step: **S4.4
 (T-004)** — commit + set `"status": "VERIFIED"`.
 
+---
+
+## Phase 4 — T-005 RED (S4.1) (2026-10-09)
+
+**Task: T-005** (`feature_group`: `scripts/make_map.py` — `--check` semantics, determinism,
+hook-clean output). REQ-004 / REQ-005 / REQ-019 · AC-004 / AC-005 / AC-019 · INV-001 / INV-004 /
+INV-005 / INV-006 · EDGE-009 / EDGE-010 / EDGE-016. Status in the active DAG
+(`.github/task-runner/tasks.json`): `PENDING` (T-001…T-004 `VERIFIED`). The task definition —
+including the verbatim `red_command` / `green_command`, `allowed_files` and `completion_gates` — was
+taken from the **active** DAG, not from the launch brief (P-75).
+
+### Verbatim red_command
+
+```text
+uv run pytest tests/acceptance/test_structure_map.py::test_ac_004_exit_code_contract tests/acceptance/test_structure_map.py::test_ac_005_check_byte_exact_single_message_exit_3 tests/acceptance/test_structure_map.py::test_ac_019_double_run_byte_identical_and_hook_clean tests/acceptance/test_structure_map.py::test_edge_009_untracked_file_listed_then_stale_on_clone tests/acceptance/test_structure_map.py::test_edge_010_hand_edited_map_is_stale tests/acceptance/test_structure_map.py::test_edge_016_crlf_checkout_is_not_stale tests/property/test_structure_map.py::test_inv_001_render_is_deterministic tests/property/test_structure_map.py::test_inv_004_check_matches_byte_equality tests/property/test_structure_map.py::test_inv_005_check_writes_nothing tests/property/test_structure_map.py::test_inv_006_output_is_hook_clean -v
+```
+
+Summary line (run with `--tb=line` for the per-node messages, then `--tb=no` for the status list):
+
+```text
+======================== 7 failed, 3 passed in 13.06s =========================
+```
+
+### Per-node state
+
+| node | state | one-line reason |
+|---|---|---|
+| `test_ac_004_exit_code_contract` | **RED** | `test_structure_map.py:1005: AssertionError: table row 1: a stale map in --check exits 0, not 1` (`assert 0 == 1`) |
+| `test_ac_005_check_byte_exact_single_message_exit_3` | **RED** | `test_structure_map.py:838: AssertionError: AC-005 clause 1: stdout is '', expected exactly 'map.md is out of date — run uv run python scripts/make_map.py'` (`assert [] == [...]`, right contains one more item) |
+| `test_ac_019_double_run_byte_identical_and_hook_clean` | **GREEN** | all four clauses already hold: two runs byte-identical, no `\r`, no trailing-whitespace line, exactly one final LF, `_hook_clean(text) == text` |
+| `test_edge_009_untracked_file_listed_then_stale_on_clone` | **RED** | `test_structure_map.py:1132: AssertionError: EDGE-009 clause 2: --check on the clone exits 0, not 1` (clause 1 — the untracked file is listed — already passes) |
+| `test_edge_010_hand_edited_map_is_stale` | **RED** | `test_structure_map.py:1152: AssertionError: EDGE-010: a hand-edited map exits 0, not 1` |
+| `test_edge_016_crlf_checkout_is_not_stale` | **RED** | `test_structure_map.py:1186: AssertionError: REQ-005: the only normalisation is \r\n -> \n; a CRLF map with an extra byte exits 0, not 1` |
+| `test_inv_001_render_is_deterministic` | **GREEN** | 12 examples: two runs byte-identical **and** creation-order-independent (`third == first`) over the complete document |
+| `test_inv_004_check_matches_byte_equality` | **RED** | `test_structure_map.py:374: AssertionError: INV-004: a added difference must exit 1` (`assert 0 == 1`; falsifying example reported: 5-file tree, `max_depth=1`) |
+| `test_inv_005_check_writes_nothing` | **RED** | `test_structure_map.py:407: AssertionError: INV-005/REQ-004: --check with a missing --out exits 0, not 3` |
+| `test_inv_006_output_is_hook_clean` | **GREEN** | 12 examples: no CR, exactly one final LF, the two hook transforms are the identity on the render |
+
+### Counts and classification
+
+- **7 RED, 3 GREEN** (10 nodes).
+- Failure classification: **7 behavior failures**, **0** collection / import / fixture / environment
+  failures, **0** invalid-test-data failures (no `ValidationError` / `ValueError` anywhere; every
+  failure is an `AssertionError` on an observed exit code or on observed stdout).
+- Single root cause, identical across all 7: `scripts/make_map.py:513-515` is the T-005 stub —
+  `if args.check:` → `# T-005 (REQ-005): compare `document` against the `--out` bytes here and return
+  3 then 1.` → `return _EXIT_OK`. `--check` parses, renders, compares nothing and exits 0, so no
+  stale (1), missing (3) or pinned-message behaviour exists yet.
+- A partially-passing task is a legal RED gate: at least one witness fails on real behavior, and here
+  seven do, one per requirement family (REQ-004 exit codes, REQ-005 messages/normalisation,
+  INV-004/INV-005).
+
+### Non-vacuity of the RED nodes (the assertion that pins the required behavior)
+
+- `tests/acceptance/test_structure_map.py:1005` (AC-004 row 1):
+  `assert stale.returncode == _EXIT_STALE, f"table row 1: a stale map in --check exits {stale.returncode}, not 1"`
+  — with `_EXIT_STALE = 1` (`:798`) reached after `out.write_bytes(out.read_bytes() + b"x")`, i.e. a
+  one-byte difference against the fixed-point render.
+- `tests/acceptance/test_structure_map.py:838-839` (`_one_line`, AC-005):
+  `assert proc.stdout.splitlines() == [expected], f"{label}: stdout is {proc.stdout!r}, expected exactly {expected!r}"`
+  then `assert proc.stderr == ""` — and `_stale_message` (`:826`) is
+  `f"{out_arg} is out of date \u2014 run {_RUN_COMMAND}"`, the em-dash line pinned byte-for-byte.
+- `tests/acceptance/test_structure_map.py:1132` (EDGE-009 clause 2):
+  `assert stale.returncode == _EXIT_STALE, f"EDGE-009 clause 2: --check on the clone exits {stale.returncode}, not 1"`
+  — the clone is a separate `_git_tree` carrying the committed map and **not** `src/scratch.py`.
+- `tests/acceptance/test_structure_map.py:1152` (EDGE-010):
+  `assert hand.returncode == _EXIT_STALE, f"EDGE-010: a hand-edited map exits {hand.returncode}, not 1"`
+  — the edit is `f"{generated}\nA hand-written note.\n"` over the fixed-point bytes; the node then
+  also pins the conflict-marker case and the regeneration round-trip.
+- `tests/acceptance/test_structure_map.py:1186` (EDGE-016 / REQ-005 normalisation is exactly
+  `\r\n -> \n`): `assert stale.returncode == _EXIT_STALE, f"REQ-005: the only normalisation is \r\n -> \n; a CRLF map with an extra byte exits {stale.returncode}, not 1"`.
+- `tests/property/test_structure_map.py:374` (INV-004):
+  `assert code(content) == 1, f"INV-004: a {label} difference must exit 1"` over the four variants
+  `added` / `removed` / `reordered` / `whitespace-only`, each first pinned to be a real difference by
+  `assert content != rendered_bytes, f"INV-004 fixture: the {label} variant is not a real difference"`.
+- `tests/property/test_structure_map.py:407` (INV-005 / REQ-004):
+  `assert absent.returncode == _EXIT_MISSING, f"INV-005/REQ-004: --check with a missing --out exits {absent.returncode}, not 3"`
+  with `_EXIT_MISSING = 3` (`:262`), plus `assert not out.exists()` and `_snapshot(base) == missing`
+  (the whole working tree, path-set **and** bytes, from `_snapshot`, `:299`).
+
+### The GREEN nodes / sub-clauses: non-vacuous, and which existing helper covers them
+
+None of the three GREEN nodes asserts a tautology; each asserts byte-level content.
+
+- **`test_ac_019`** — `assert a == b`, `assert b"\r" not in a`,
+  `assert not trailing` (built from `line != line.rstrip(" \t")`),
+  `assert a.endswith(b"\n") and not a.endswith(b"\n\n")`, `assert _hook_clean(text) == text`, and the
+  config anchor `assert {"trailing-whitespace", "end-of-file-fixer"} <= _active_hook_ids()`.
+  Covered by existing helpers: `out.write_text(document, encoding="utf-8", newline="\n")`
+  (`make_map.py:517`, REQ-019 LF), `_file_set` (`:159`, `sorted(...)` over `relative.as_posix()` at
+  `:155`/`:175`, sorted `--root`-relative POSIX paths), and `_render`'s tail
+  `"\n".join(lines).rstrip("\n") + "\n"` (`:491`, exactly one final LF, no trailing whitespace) — all
+  from T-002/T-003/T-004. `_hook_clean` (`test_structure_map.py:842`) re-implements the two hooks'
+  byte-level transform and `_active_hook_ids` (`:852`) anchors them to `.pre-commit-config.yaml`
+  read-only, so the clause is not a self-fulfilling definition.
+- **`test_inv_001`** — `assert first == second` and `assert third == first` where `third` is rendered
+  from a tree whose files were **created in the opposite order** (`dict(reversed(list(files.items())))`).
+  Non-vacuous: it fails if any layer of the render ever walks in filesystem order. Covered by
+  `_file_set` (`:159`) plus the sorted module loop `for module in sorted(..., key=lambda m: m.path)`
+  (`:468`) — the T-002/T-003/T-004 ordering, asserted over the **complete** document (the reason
+  T-005 depends on T-004).
+- **`test_inv_006`** — `assert b"\r" not in data`, `assert data.endswith(b"\n") and not data.endswith(b"\n\n")`,
+  `assert _hook_clean(text) == text` over 12 generated trees — the same `newline="\n"` write and
+  `_render` tail as above.
+- GREEN **sub-clauses inside RED nodes** (already satisfied by T-002/T-003/T-004, and the reason each
+  node fails only at the assertion listed above): AC-004 rows 0 / 2 / 4 and the generate-mode clauses
+  (argparse `SystemExit(2)` in `_parse_args`, `sorted(failures)` at `:197` and `return
+  _EXIT_UNREADABLE` at `:510`, generate mode rewriting a stale map and creating a missing `--out`);
+  EDGE-009 clause 1 (the untracked-not-ignored `src/scratch.py` **is** listed — `_file_set`, REQ-003,
+  already gated in T-002 by AC-003/EDGE-008, per the DAG's narrowed-gate note); EDGE-016 clause 1 (a
+  CRLF-only map exits 0) — **flagged as not yet a real witness**: it currently passes only because the
+  stub returns 0 unconditionally, and it becomes meaningful exactly when the byte comparison exists
+  (the node's own extra-byte assertion at `:1186` is the failing witness that pins it).
+
+### Scope of this step
+
+Files changed: **this record only**. No test file, no `scripts/`, no `docs/specs/`, no `docs/tasks/`
+or `.github/task-runner/tasks.json`, no `AGENTS.md` / `STRUCTURE.md` / `mkdocs.yml` /
+`.pre-commit-config.yaml` / `.github/` change. The full test suite was **not** run (a Phase 5 gate);
+only the 10 T-005 nodes. `uv.lock` restored with `git restore uv.lock` after the `uv run`s and never
+staged (P-74).
+
+**S4.1 (T-005) gate: RED OBSERVED — 7 failed / 3 passed, 7 behavior failures, 0 collection/fixture
+failures, 0 invalid test data; root cause `scripts/make_map.py:513-515` (the `--check` stub).** Next
+atomic step: **S4.2 (T-005)** — implement in `scripts/make_map.py` only + confirm GREEN.
+
 
 
