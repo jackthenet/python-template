@@ -2822,3 +2822,112 @@ staged (P-74).
 17/17 T-001+T-002 witnesses GREEN, ruff + format + mypy clean, complexipy 0 over (max 10).** Next
 atomic step: **S4.4 (T-003)** — commit + set `"status": "VERIFIED"`.
 
+## Phase 4 — T-004 RED (S4.1)
+
+**Task: T-004** (CROSS-CUTTING `structure-map`) — render each in-scope module's symbol inventory
+(signatures, decorators, visibility, class fields, summaries). Picked from the **active** DAG
+`.github/task-runner/tasks.json` (`task_id == "T-004"`, `status: PENDING`; T-001/T-002/T-003 are
+`VERIFIED`) — extracted with the one-task `uv run python -c` read, never a whole-file read (P-75).
+Requirements REQ-014/015/016/017/018, AC-014/015/016/017/018, EDGE-011/EDGE-012. Dependency T-003
+(`VERIFIED`). `allowed_files`: `scripts/make_map.py` (source) / `tests/unit/test_make_map.py`
+(tests).
+
+### The verbatim `red_command` (from the DAG, unchanged)
+
+```text
+uv run pytest tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures tests/unit/test_make_map.py::test_ac_015_decorators_render_as_prefix tests/unit/test_make_map.py::test_ac_016_private_symbols_and_dunders tests/unit/test_make_map.py::test_ac_017_class_fields_capped_untyped_omitted tests/unit/test_make_map.py::test_ac_018_summary_normalization tests/unit/test_make_map.py::test_edge_011_field_cap_marker tests/unit/test_make_map.py::test_edge_012_long_summary_truncated -v
+```
+
+Summary line: **`7 failed in 1.43s`** (re-run with `--tb=line`: `7 failed in 1.62s`). 7 collected,
+7 ran, 0 skipped, 0 errors.
+
+### Per-node state
+
+| Node | State | One-line reason (first failing clause) |
+|---|---|---|
+| `test_ac_014_symbol_inventory_and_unparsed_signatures` | **RED** | clause 1: **0** symbol lines rendered vs 12 expected (`- class \`Widget(Base, Mixin)\`: A widget.` …); clause 2: the three `ast.unparse` default-rule needles (`step: int=4`, `b: str='xy'`, `exact: str='0123456789abcdefgh'`) absent |
+| `test_ac_015_decorators_render_as_prefix` | **RED** | clause 1: 0 lines vs 8 expected; clause 2: no line carries the `@logged_class` / `@property` / `@staticmethod` / `@classmethod` / `@override` / `@pytest.fixture` prefix (`[]`) |
+| `test_ac_016_private_symbols_and_dunders` | **RED** | clause 1: `__init__(self) -> None` and `__repr__(self) -> str` not rendered exactly once in **either** run; clause 2: `  - \`_internal(self) -> None\``, `- class \`_Helper\``, `  - \`go(self) -> None\``, `- def \`_private() -> None\`` do not render with `--include-private` |
+| `test_ac_017_class_fields_capped_untyped_omitted` | **RED** | clause 1: 0 lines vs 18 expected; clause 3: `0 field lines rendered, expected exactly 15 of the 17` |
+| `test_ac_018_summary_normalization` | **RED** | clause 1 only: 0 symbol lines vs 4 (`- class \`Undocumented\``, `- def \`multi() -> None\`: First logical line spanning physical lines with backticks inside.`, `- def \`empty_doc() -> None\``, `- def \`no_doc() -> None\``) |
+| `test_edge_011_field_cap_marker` | **RED** | clause 1: 0 lines vs 34 expected; clause 2: `0 elision marker line(s) rendered, expected 2` — no `… +1 fields`, no `… +5 fields` |
+| `test_edge_012_long_summary_truncated` | **RED** | clause 1: 0 lines vs 2 expected (`- def \`long_summary() -> None\`: <100 normalized chars>…` and the un-truncated `exactly_limit` line) |
+
+### Failure classification (counts)
+
+- **Behavior failures: 7 / 7** — every one is an `AssertionError` from `assert not failures` on the
+  rendered map text (`tests/unit/test_make_map.py:966, 990, 1029, 1056, 1085, 1112, 1143`).
+- **Collection / import / fixture / environment failures: 0** — all 7 nodes collected and ran
+  (`FFFFFFF [100%]`); the generator subprocess exits 0 in every fixture (no `clause 1: exit …`
+  message), so the RED is content, not a crash.
+- **Invalid test data: 0** — the `_t004_tree` guard (`tests/unit/test_make_map.py:532`, every fixture
+  module is `ast.parse`-checked before the run, `pytest.fail(… — invalid test data …)` on a
+  `SyntaxError`) never fired, and EDGE-012's own data guard (`:1120`, `pytest.fail("the EDGE-012
+  fixture is not over/at the 100-character limit — invalid test data")`) never fired either. No
+  `ValidationError` / `ValueError` anywhere.
+
+The common defect: `scripts/make_map.py` (419 lines, T-001…T-003 state) renders the tree, the
+Packages scope, group headers and `#### <module> (N lines)` module sections, but **no symbol lines at
+all** — `_symbol_lines()` returns `[]` for every fixture module. That is the unimplemented REQ-014…
+REQ-018 layer, i.e. a real RED, not a harness artifact.
+
+### Non-vacuity — the assertions that pin the required rendering
+
+Every node compares the rendered line sequence **exactly** against a literal expected list
+(`_seq_failures`, `tests/unit/test_make_map.py:575`: `if actual == expected: return []`, else one
+failure carrying both sequences), so no node can pass on `True`.
+
+- AC-014 (`:654`) — group order + line form + `ast.unparse` signatures:
+  `"- class \`Widget(Base, Mixin)\`: A widget."`, `f"{_MEMBER}\`name: str\`"`,
+  `f"{_MEMBER}\`__init__(self, name: str) -> None\`: Create a widget."`, and the long
+  `resize(self, size: int, *, step: int=4, data: dict[str, int], …` line (the ≤ 20-character default
+  rule); `_MEMBER = "  - "` (`:517`) pins the two-space member indent.
+- AC-015 (`:738`) — `"- @logged_class class \`Registry\`: A registry of entries."`,
+  `f"{_MEMBER}@property \`count(self) -> int\`: Number of entries."`,
+  `f"{_MEMBER}@staticmethod \`build() -> None\`…"`, `@classmethod`, `@override` — plus the
+  `clause 2` loop at `:986`, `if not any(line.lstrip().startswith(f"- @{name} ") for line in lines)`.
+- AC-016 (`:805`) — `f"{_MEMBER}\`__init__(self) -> None\`: Create a widget."` (dunders always
+  public) and the `_AC016_PRIVATE_ONLY` pair of loops (`:1015`) asserting a private symbol is
+  absent from `_all_symbol_lines(default_text)` **and** present in `_all_symbol_lines(private_text)`.
+- AC-017 (`:853`) — `"- class \`Settings\`: Settings model."`, `*_AC017_FIELD_LINES` (15 lines),
+  `f"{_MEMBER}{_ELLIPSIS} +2 fields"`; plus `clause 3` `if len(rendered_fields) != _FIELD_CAP` with
+  `_FIELD_CAP = 15` (`:514`) and the check at `:1052`.
+- AC-018 (`:906`) — `"- class \`Undocumented\`"` (no summary, **no trailing colon**),
+  `"- def \`multi() -> None\`: First logical line spanning physical lines with backticks inside."`,
+  `"- def \`empty_doc() -> None\`"`, `"- def \`no_doc() -> None\`"`.
+- EDGE-011 (`:870`) — built from `_EDGE011_CLASSES` with
+  `*([f"{_MEMBER}{_ELLIPSIS} +{elided} fields"] if elided else [])`, and `clause 2`
+  `if elided and not any(f"{_ELLIPSIS} +{elided} fields" in line for line in markers)`; the
+  at-cap class is asserted to carry **no** marker.
+- EDGE-012 (`:931`) — `f"- def \`long_summary() -> None\`: {_EDGE012_NORMALIZED[:_SUMMARY_LIMIT]}{_ELLIPSIS}"`
+  with `_SUMMARY_LIMIT = 100` (`:515`), i.e. normalize **then** truncate, and
+  `f"- def \`exactly_limit() -> None\`: {_EDGE012_AT_LIMIT}"` with no marker.
+
+### Clauses already GREEN from T-003 (no node is fully GREEN)
+
+No T-004 witness passes as a whole, but two sub-clauses are already satisfied by the T-003 delivery,
+and they are non-vacuous:
+
+| GREEN clause | Requirement clause it covers | T-003 helper that already covers it |
+|---|---|---|
+| `test_ac_016` clause 3 — `_section_headers(default_text) == _section_headers(private_text)`, and the `#### src/_hidden.py` / `#### src/vis.py` / `### \`_pkg\`` headers present in **both** runs | **AC-016 third clause / REQ-016 third clause** — `--include-private` changes only *which symbols* render; the set of rendered modules and packages is identical, and no `_name` module is ever hidden or added | The T-003 Packages/module-scope layer: the flag is parsed at `scripts/make_map.py:103` and the module/package set is computed independently of it (`_packages_lines`, T-003 S4.3) |
+| `test_ac_018` clause 2 — `_AC018_MODULE_SUMMARY in body[0]` and no line keeps `\`backticks\`` or doubled spaces | **REQ-018 normalization** (first logical line, whitespace runs collapsed, backticks removed) as applied to the **module** summary line | `_summary()` at `scripts/make_map.py:282` with `_SUMMARY_LIMIT = 100` (`:61`) and the trailing-marker rule — delivered by T-003 for module headers; T-004 must reuse it per symbol |
+
+Sub-clauses that pass only **vacuously** (because nothing renders) are *not* counted as coverage:
+`test_ac_017` clause 2 (`Field(` / `default=` / `unannotated` / `field_16` / `field_17` absent),
+`test_ac_018` clause 3 (no line ends with `:`), `test_edge_012` clauses 2–4 (guarded by
+`if truncated`), and `test_ac_014` clause 3 (function-local class / `MODULE_VALUE` / `Sequence` /
+`unannotated` never rendered).
+
+### Scope of this step
+
+Files changed: **this record only**. No test file, no `scripts/make_map.py`, no `docs/specs/`, no
+`docs/tasks/` or `.github/task-runner/tasks.json`, no `AGENTS.md` / `STRUCTURE.md` / `mkdocs.yml` /
+`.pre-commit-config.yaml` / `.github/` change. The full test suite was **not** run (Phase 5 gate);
+only T-004's 7 witnesses. `uv.lock` restored with `git restore uv.lock` after the `uv run`s and never
+staged (P-74).
+
+**S4.1 (T-004) gate: RED OBSERVED — 7/7 witnesses fail on real rendering behavior (0 collection
+errors, 0 invalid-test-data failures), recorded above.** Next atomic step: **S4.2 (T-004)** —
+implement the symbol layer in `scripts/make_map.py` + confirm GREEN.
+
