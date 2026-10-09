@@ -201,7 +201,7 @@ before (copy of src)          : 461499a8902c944e…
 + max_queue_size 1000 → 1001      : fc5635607e934ee3…   DIFFERENT (digest catches a code change)
 ```
 
-Run it with the **relative** `src` root in each worktree (the digest includes the file paths, so an absolute root would make the two sides incomparable).
+Run it with the **relative** `src` root in each worktree (the digest includes the file paths, so an absolute root would make the two sides incomparable). **Control-run rule (amended at S5.4, Problem Log P-88):** the docstring mutation MUST target a host that has **no** docstring (e.g. `EventBus.__enter__`) — the script strips only the *first* docstring `Expr` of a host, so adding a second string constant to a host that already has a docstring legitimately changes the digest and looks like a false failure — and the run MUST state **both** expectations: SAME for the added docstring, DIFFERENT for the one-character code change.
 
 ## Invariants that MUST hold
 
@@ -1288,3 +1288,143 @@ Exit code 0 both runs. Row count +3, spec-ID and test-function counts unchanged 
 **Working tree.** `git restore uv.lock` before committing; `uv.lock` not staged (finding **F-9**).
 
 **Next (S5.4):** the Phase 5 verification report (spec coverage for a DOCS/CHORE change = the scope items and INV-A…INV-J against the final diff).
+
+## Phase 5 — Verification report (S5.4, 2026-10-09)
+
+Objective: close Phase 5 with the DOCS/CHORE verification report. **No source or test file was edited in this step** — the writes are this section, one clarifying sentence in §No-behavior-delta proof plan (P-88), and two `docs/workflow/PROBLEMS.md` entries (P-87, P-88). The Phase 5 gates themselves are **not re-run here**: S5.1 (suite), S5.2 (seven quality gates) and S5.3 (traceability) recorded them; the only new measurements below are cheap `git diff` facts read off the final state, needed to prove the scope and invariant claims.
+
+### Coverage basis: **scope coverage**, not spec coverage
+
+`ruff-d-docstrings` is **DOCS/CHORE**, a type that produces **no specification** (AGENTS.md Phase Matrix) and therefore **defines no `REQ`/`AC`/`INV`/`EDGE`/`NFR` IDs of its own** — there is no spec file for it in `docs/specs/` and none is expected (see the §Phase 5 — S5.3 normative-basis correction). The `INV-A … INV-J` labels used below are **this record's own invariant labels**, not spec IDs, and no ID is invented to fill a coverage column.
+
+So the S5.4 done-criterion "spec coverage = 100%" (verify skill) is **n/a for this type**. Its DOCS/CHORE equivalents are: (a) *every scoped item of §"Exact change scope" landed, and nothing outside the scope was touched*; (b) *every invariant of §"Invariants that MUST hold" holds*; (c) *no test file or behavior was touched* (AGENTS.md Phase 5, DOCS/CHORE item 16). The ID-level referential-integrity gate that does apply — `uv run python scripts/check_traceability.py` → **PASS (825 matrix rows, 136 spec IDs, 746 test functions)**, exit 0 — is recorded at S5.3.
+
+### Diff reality check (final state vs. base `45aa61c`)
+
+| Measurement | Result |
+|---|---|
+| `git diff --name-only 45aa61c..HEAD \| wc -l` | **48 files**: 41 under `src/` + 4 config/guidance files + 3 record files |
+| Record files (not scope items) | `docs/verification/ruff-d-docstrings.md`, `docs/verification/traceability.md`, `docs/workflow/PROBLEMS.md` — the change's own Phase 4/5 artifacts (normative basis, the S5.3 matrix rows, the Problem Log) |
+| `git diff --name-only 45aa61c..HEAD -- tests/` | **empty** — zero files under `tests/` (INV-B) |
+| `git diff --shortstat 45aa61c..HEAD -- src/` | **41 files changed, 1264 insertions(+), 217 deletions(-)** |
+| `git diff --name-status --find-renames 45aa61c..HEAD -- src/` | **no `A`/`D`/`R` entries** — 0 files added, deleted or moved (INV-J) |
+| `git diff 45aa61c..HEAD -- src/ \| grep -E "^[+-][[:space:]]*(import \|from … import)"` | **0 added or removed import statements** (INV-J) |
+| `git diff 45aa61c..HEAD -- src/ \| grep -c noqa` | **0** (INV-C) |
+| **Out-of-scope files touched** | **none** |
+
+### Scoped items — **45 / 45 DONE**
+
+Every file of §"Exact change scope" items 1–5, with the commit that landed it (`add` = docstring additions, `fmt` = the separate formatting commit, Q-11):
+
+| Group | Scoped item | Commit(s) | Status |
+|---|---|---|---|
+| 1 `eventbus` | `src/backend/eventbus/eventbus.py` | `1560bfc` (add: D105 ×2, D107 ×1) | **DONE** |
+| 2 `logging` | `src/backend/logging/_decorator.py` | `a7894c8` (fmt: D205, D209) | **DONE** |
+| 3 `mail` | `src/backend/mail/errors.py` | `b96ad16` (add) | **DONE** |
+| 3 `mail` | `src/backend/mail/models.py` | `b96ad16` (add) | **DONE** |
+| 3 `mail` | `src/backend/mail/service.py` | `b96ad16` (add) | **DONE** |
+| 3 `mail` | `src/backend/mail/transport.py` | `b96ad16` (add) | **DONE** |
+| 4 `sessionmanagement` | `src/backend/sessionmanagement/events.py` | `e3f95c6` (add) | **DONE** |
+| 4 `sessionmanagement` | `src/backend/sessionmanagement/search_source.py` | `df45d17` (fmt) | **DONE** |
+| 4 `sessionmanagement` | `src/backend/sessionmanagement/service.py` | `e3f95c6` + `df45d17` | **DONE** |
+| 5 `settings` | `src/backend/settings/registry.py` | `899c027` + `2284b71` | **DONE** |
+| 5 `settings` | `src/backend/settings/repository.py` | `899c027` + `2284b71` | **DONE** |
+| 6 `permissions` | `src/backend/permissions/catalog.py` | `9bd979a` + `5d5a18f` | **DONE** |
+| 6 `permissions` | `src/backend/permissions/errors.py` | `9bd979a` | **DONE** |
+| 6 `permissions` | `src/backend/permissions/events.py` | `9bd979a` | **DONE** |
+| 6 `permissions` | `src/backend/permissions/models.py` | `9bd979a` + `5d5a18f` | **DONE** |
+| 6 `permissions` | `src/backend/permissions/repositories.py` | `9bd979a` + `5d5a18f` | **DONE** |
+| 6 `permissions` | `src/backend/permissions/service.py` | `9bd979a` + `5d5a18f` | **DONE** |
+| 7 `authentication` | `src/backend/authentication/errors.py` | `98b5dbc` | **DONE** |
+| 7 `authentication` | `src/backend/authentication/events.py` | `98b5dbc` | **DONE** |
+| 7 `authentication` | `src/backend/authentication/repositories.py` | `cb45758` (fmt: D205) | **DONE** |
+| 7 `authentication` | `src/backend/authentication/repository.py` | `98b5dbc` | **DONE** |
+| 7 `authentication` | `src/backend/authentication/service.py` | `98b5dbc` | **DONE** |
+| 7 `authentication` | `src/backend/authentication/tracker.py` | `98b5dbc` | **DONE** |
+| 7 `authentication` | `src/backend/authentication/webauthn.py` | `98b5dbc` | **DONE** |
+| 8 `filemanagement` | `src/backend/filemanagement/errors.py` | `dd8bbd5` | **DONE** |
+| 8 `filemanagement` | `src/backend/filemanagement/events.py` | `dd8bbd5` | **DONE** |
+| 8 `filemanagement` | `src/backend/filemanagement/repository.py` | `dd8bbd5` + `c46a07e` | **DONE** |
+| 8 `filemanagement` | `src/backend/filemanagement/search_source.py` | `c46a07e` (fmt) | **DONE** |
+| 8 `filemanagement` | `src/backend/filemanagement/service.py` | `dd8bbd5` + `c46a07e` | **DONE** |
+| 8 `filemanagement` | `src/backend/filemanagement/storage.py` | `dd8bbd5` | **DONE** |
+| 9 `search` | `src/backend/search/errors.py` | `f0a2fcc` + `b02eefc` | **DONE** |
+| 9 `search` | `src/backend/search/events.py` | `f0a2fcc` + `b02eefc` | **DONE** |
+| 9 `search` | `src/backend/search/models.py` | `b02eefc` (fmt) | **DONE** |
+| 9 `search` | `src/backend/search/service.py` | `f0a2fcc` + `b02eefc` | **DONE** |
+| 10 `usermanagement` | `src/backend/usermanagement/errors.py` | `1040a76` | **DONE** |
+| 10 `usermanagement` | `src/backend/usermanagement/events.py` | `1040a76` | **DONE** |
+| 10 `usermanagement` | `src/backend/usermanagement/models.py` | `1040a76` + `39e4904` | **DONE** |
+| 10 `usermanagement` | `src/backend/usermanagement/repository.py` | `1040a76` + `39e4904` | **DONE** |
+| 10 `usermanagement` | `src/backend/usermanagement/role_store.py` | `1040a76` | **DONE** |
+| 10 `usermanagement` | `src/backend/usermanagement/search_source.py` | `39e4904` (fmt) | **DONE** |
+| 10 `usermanagement` | `src/backend/usermanagement/service.py` | `1040a76` + `39e4904` | **DONE** |
+| 11 config | `pyproject.toml` — `select += "D"`, `fixable` widening, `[tool.ruff.lint.pydocstyle] convention = "google"`, `per-file-ignores` for exactly the four decided trees | `16332dc` | **DONE** |
+| 11 config | `mkdocs.yml` — explicit `docstring_style: google` pin (inert, F-8) | `16332dc` | **DONE** |
+| 11 config | `.pre-commit-config.yaml` — `rev: v0.15.12` → `v0.16.10` (F-6) | `16332dc` | **DONE** |
+| 11 guidance | `AGENTS.md` §General Code & Style Conventions — the single "Documentation" bullet extended with the Google-style / ruff-`D` / no-filler convention (1 line replaced by 1 line, prose only, Q-24) | `16332dc` | **DONE** |
+
+§"Explicitly **not** touched" is confirmed by the diff reality check above: no `userdocs/` path, no `tests/`/`scripts/`/`migrations/`/`.github/hooks/` path, no spec/ADR/DAG file, no `pyproject.toml` version line, no `python-best-practices` skill file appears in `git diff --name-only 45aa61c..HEAD`.
+
+### Invariants — **10 / 10 HELD**
+
+| INV | Statement (abridged) | Verdict | Gate / evidence |
+|---|---|---|---|
+| INV-A | traced-class docstrings keep the "traced"/"logged" wording | **HELD** | S5.2 gate 5 `test_traced_class_docstrings_mention_tracing` → `1 passed in 0.42s`; green inside the S5.1 acceptance run (`364 passed, 1 skipped`) |
+| INV-B | no test file added/removed/weakened; diff touches no `tests/` path | **HELD** | `git diff --name-only 45aa61c..HEAD -- tests/` empty (this step); collected count identical at 762 and the skip set identical (S5.1) |
+| INV-C | no `# noqa`; `per-file-ignores` gains exactly the four decided trees | **HELD** | `grep -c noqa` over the `src/` diff → 0; `pyproject.toml:220-224` lists `tests/*`, `scripts/*`, `migrations/*`, `.github/*` and nothing else (S5.2 gate 1) |
+| INV-D | executable code identical | **HELD** | AST digest `64fc1d6ee758…57d7bec0` unchanged at the final commit, with the non-vacuity control run (docstring SAME / one-character code change DIFFERENT) and the 84 files / 43 587 stripped nodes / 903 hosts counts equal in both states (S5.2 gate 6) |
+| INV-E | no version bump | **HELD** | `git diff 45aa61c..HEAD -- pyproject.toml` contains **no** `version` line — `[project] version` and `[tool.bumpversion] current_version` untouched (`1.0.0`) |
+| INV-F | no new dependency, no dependency-range change | **HELD** | the same diff contains no dependency line; the only version move is the pre-commit hook `rev: v0.15.12` → `v0.16.10`; `deptry .` → `Success! No dependency issues found.` (S5.2 gate 7) |
+| INV-G | no-filler rule (no docstring restating its signature) | **HELD** (review item) | Not gate-checkable (Q-15 b rejected). Every Phase 4 group record states the fact each new docstring adds beyond its signature; **Phase 6 review is the confirming check** |
+| INV-H | private helpers in touched files documented | **HELD** (review item) | Beyond `ruff check --select D src`; recorded per group in the Phase 4 sections (e.g. groups 1–3: `_handler_name`, `_ensure_worker_unlocked`, `_worker_loop`, `_dispatch`, `_get_transport`, `_publish`); **Phase 6 review is the confirming check** |
+| INV-I | spec IDs stay cited inside docstrings | **HELD** | Measured on the final diff: unique spec IDs cited in `src/` **91 at `45aa61c` → 100 at HEAD**, and `comm -23` of the two sets is **empty** — no citation was lost |
+| INV-J | feature boundaries / architecture rules unchanged | **HELD** | 0 added/deleted/renamed files, 0 added or removed import statements in the `src/` diff; the digest's 84 files / 903 docstring hosts are identical in both states |
+
+### Gate summary (Phase 5, DOCS/CHORE light gate)
+
+| # | Gate | Command | Result | Verdict |
+|---|---|---|---|---|
+| 1 | Full suite reproduced | `uv run pytest tests/ -q` | `761 passed, 1 skipped in 230.83s` (762 collected; the single S4.1 failure = the known NFR-001 load flake, green in isolation at both commits) | **PASS** (S5.1) |
+| 2 | Acceptance | `uv run pytest tests/acceptance/ -q` | `364 passed, 1 skipped` | **PASS** (S5.1) |
+| 3 | Property | `uv run pytest tests/property/ -q` | `71 passed` | **PASS** (S5.1) |
+| 4 | Contract | `uv run pytest tests/contract/ -q` | `51 passed` | **PASS** (S5.1) |
+| 5 | Lint **with the new gate** (CI parity) | `uv run ruff check .` | `All checks passed!` (exit 0) — `D` selected over `src/`, 0 findings | **PASS** (S5.2) |
+| 6 | Format | `uv run ruff format --check .` | `339 files already formatted` | **PASS** (S5.2) |
+| 7 | Types | `uv run mypy src/` | `Success: no issues found in 84 source files` | **PASS** (S5.2) |
+| 8 | Published site builds | `uv run --group docs mkdocs build --strict` | `Documentation built in 2.05 seconds` (exit 0) | **PASS** (S5.2) |
+| 9 | INV-A / AC-009 wording | `uv run pytest tests/acceptance/logging_coverage/test_docstrings.py::test_traced_class_docstrings_mention_tracing -q` | `1 passed in 0.42s` | **PASS** (S5.2) |
+| 10 | INV-D executable code identical | `uv run python "$LOCALAPPDATA/Temp/s41_ast_digest.py" src` | `64fc1d6ee758bf6ac572d58b100eff95d4bbd1205c993f7d9e2e126657d7bec0` == baseline, control run non-vacuous | **PASS** (S5.2) |
+| 11 | Dependencies (config commit edited `pyproject.toml`) | `uv run deptry .` | `Success! No dependency issues found.` | **PASS** (S5.2) |
+| 12 | Traceability referential integrity | `uv run python scripts/check_traceability.py` | `PASS (825 matrix rows, 136 spec IDs, 746 test functions)`, exit 0 | **PASS** (S5.3) |
+| 13 | Worktree clean | `git status --porcelain` | empty after `git restore uv.lock` (the F-9 churn is never staged) | **PASS** |
+
+### Findings disposition (F-1 … F-17)
+
+| # | Disposition |
+|---|---|
+| F-1 | **Recorded.** The TODO's "379 errors" is superseded by the fresh measurement (398 bare / **328** under google); Phase 4 worked from the fresh table. TODO text left as the historical record. |
+| F-2 | **Recorded, no action.** The "156 of 515 public defs" claim (from `pyproject-tooling-gaps`) is not reproducible under any `D` rule; the governing figure here is the 198-site missing-docstring family. Belongs to that other record, not this change. |
+| F-3 | **Recorded.** 41 `@logged_class` classes (not 45), 19 asserted by AC-009; INV-A measured and gated on the true figures (gate 9). |
+| F-4 | **Recorded.** The per-feature `D1xx` split is corrected (usermanagement 47, permissions 33); the Phase 4 commits match the corrected table (`1040a76` D1xx ×47, `9bd979a` ×33). |
+| F-5 | **Recorded, then superseded by F-10.** The format family is 130 sites, not 123 — and none of them turned out to be auto-fixable. |
+| F-6 | **Fixed.** `.pre-commit-config.yaml` `rev: v0.16.10` — Q-28's stated intent ("match the dev pin") applied to the measured pin, not its stale number. Landed in `16332dc`. |
+| F-7 | **Recorded, out of scope.** `tests/` = 827 bare / 743 google; the sibling change `docstrings-tests` must re-measure at its own P.4. |
+| F-8 | **Recorded; the pin landed as measured.** `mkdocs.yml` gains the explicit `docstring_style: google` (4 lines) and is inert by definition — the rendering delta comes from the docstrings, and gate 8 confirms the site still builds. |
+| F-9 | **Recorded + worked around at every step; the fix is NOT in this change.** Every `uv run` rewrote `uv.lock`; each step ran `git restore uv.lock` and never staged it. Measured at the final state: `uv.lock` is **absent** from `git diff --name-only 45aa61c..HEAD`, so the one-line refresh P-74 folded into this config commit has not landed here. **Follow-up for Phase 6:** keep the stale-lock refresh as a separate one-line chore TODO (or fold it into the S6.4 bump checklist) rather than re-opening this change's scope. |
+| F-10 | **Recorded; the §"Mechanical vs manual split" claim is wrong and was corrected in place.** `D209`/`D403` (and `D205`) offer **no** autofix in ruff 0.16.10 — probed with `--fix --diff` in groups 4, 5, 8, 9 (empty diffs). All 130 format sites were hand-edited; the `fixable` widening in `pyproject.toml` still lands as decided (it is a forward-looking allowance, not a used fix). |
+| F-11 | **Recorded; ISSUE candidate.** `AuthService._publish` does not catch a publisher exception, so a raising publisher propagates — `AGENTS.md` promises the opposite for authentication, the spec does not. Docstring states the actual behavior; no code touched. |
+| F-12 | **Recorded; ISSUE candidate.** `SqliteFileRepository.list_by_namespace` interpolates the namespace into a SQL `LIKE` pattern with no escape character and `FileService.list_files` does not validate `namespace`, so `_` acts as a wildcard against REQ-014's prefix match. Documented as-is. |
+| F-13 | **Recorded; ISSUE candidate** (same family as F-11) — `FileService._publish` propagates a publisher failure; `AGENTS.md` over-promises for file-management. |
+| F-14 | **Recorded; ISSUE candidate** (same family) — `SearchService._publish` likewise; `AGENTS.md` calls the search events "best-effort". **F-11/F-13/F-14 are one shared ask:** either the guidance or the four `_publish` implementations (mail included) must change — a separate ISSUE, not this chore. |
+| F-15 | **Recorded; separate ISSUE/FEATURE candidate.** `docs/specs/search.md` v4 adds REQ-024 `set_search_service()` (AC-038…AC-041, EDGE-022/EDGE-023), but no such function exists in `src/` and no test references it. No docstring claims it exists; nothing was added. |
+| F-16 | **Recorded; guidance follow-up.** `UserManager.remove_role` and `_validate_roles` raise bare `ValueError` outside the `UserManagerError` hierarchy that `AGENTS.md` presents as the whole surface. Code matches its spec (user-roles-permissions REQ-026); the docstrings say so. |
+| F-17 | **Recorded; spec-drift follow-up.** `docs/specs/user-management.md` REQ-006 / AC-008 / AC-009 and the `AGENTS.md` user-management section are stale against the user-roles-permissions REQ-026 amendment. Docstrings describe the code as it is; the amendment is a separate change. |
+
+**No finding is open against this change.** Every F-item is either fixed (F-6), corrected in the record (F-1…F-5, F-7, F-8, F-10), or escalated out of this change's scope (F-9, F-11…F-17). The ISSUE candidates Phase 6 must record as follow-ups: **the publisher-failure guidance mismatch (F-11/F-13/F-14 + mail), the SQL `LIKE` wildcard (F-12), and the unimplemented `set_search_service()` (F-15)**; the guidance/spec-drift candidates F-16, F-17 and the stale-lock chore F-9 are lower-priority follow-ups.
+
+### Verdict
+
+**PHASE 5 VERIFIED.** Scope coverage 45/45 DONE, invariants 10/10 HELD (INV-G/INV-H are review items and are confirmed at Phase 6), 13/13 gates PASS, zero files under `tests/` and zero out-of-scope files touched, `check_traceability.py` exit 0. Spec coverage is n/a (DOCS/CHORE defines no IDs) and is **not** substituted by code coverage. AGENTS.md Phase 5 DOCS/CHORE item 16 — "run lint and type checks where applicable; confirm no test files or behavior were touched" — is satisfied by gates 5–7 and the diff reality check.
+
+**Next (S6.1):** review against the normative basis — this record (§"Exact change scope", §"Invariants that MUST hold"), the final code state, and the INV-G / INV-H review checklist items; record the F-9/F-11/F-12/F-13/F-14/F-15/F-16/F-17 follow-ups.
