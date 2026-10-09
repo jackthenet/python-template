@@ -855,6 +855,135 @@ def _active_hook_ids() -> set[str]:
     return set(re.findall(r"^\s*-\s*id:\s*([\w-]+)", text, re.MULTILINE))
 
 
+# --- T-006: the integration surface (the skill, the local hook, AGENTS.md, the advisory rule) -------
+
+_SKILLS_DIR = _REPO_ROOT / ".agents" / "skills"
+_MAP_SKILL = _SKILLS_DIR / "code-structure-map" / "SKILL.md"
+_SPECIFY_SKILL = _SKILLS_DIR / "specify" / "SKILL.md"
+_AGENTS_MD = _REPO_ROOT / "AGENTS.md"
+_WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
+_CHECK_COMMAND = f"{_RUN_COMMAND} --check"  # REQ-023's pinned hook entry
+_SKILL_BODY_MAX_LINES = 60  # REQ-022: the skill body stays under this many lines
+_MAP_MENTION = re.compile(r"STRUCTURE\.md|make_map|code-structure-map")
+_COUNT_LINE = re.compile(r"^([\w.-]+/)\s+[\u2014\u2013-]")  # REQ-009: a non-code top-level dir is one count line
+_SAME_COMMIT_RULE = re.compile(r"same commit", re.IGNORECASE)
+_CONFLICT_RULE = re.compile(r"either side", re.IGNORECASE)
+_HAND_MERGE_RULE = re.compile(r"hand[- ]merge", re.IGNORECASE)
+_FRESHNESS_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("the same-commit regeneration rule", _SAME_COMMIT_RULE),
+    ("the take-either-side-and-regenerate conflict rule", _CONFLICT_RULE),
+)
+# The vocabulary of the workflow machinery (REQ-026): gates, todo statuses, handoff fields,
+# prohibitions. A line that names the map *and* this vocabulary wires the map into a gate.
+_MACHINERY = re.compile(
+    r"\u25c6|blockedBy|BLOCKED-|Status:|VERIFIED|prohibition|prerequisite|fast-path|--skip-spec",
+    re.IGNORECASE,
+)
+# The three AGENTS.md sections REQ-024 allows the map to be named in (its four places, two of which
+# sit in Tooling). Anywhere else, a map mention is workflow machinery wiring (REQ-026).
+_ALLOWED_MAP_SECTIONS = frozenset({"Tooling & Execution Environment", "Skill-to-Phase Mapping", "Project Structure"})
+
+
+def _text_of(path: Path) -> str:
+    """A repository guidance file as UTF-8 text, or a test failure naming the missing file (P-67)."""
+    if not path.is_file():
+        pytest.fail(f"{path.relative_to(_REPO_ROOT)} does not exist")
+    return path.read_text(encoding="utf-8")
+
+
+def _md_section(text: str, heading: str) -> list[str]:
+    """The body lines of the markdown section `heading`, up to the next heading of the same or a higher level."""
+    level = len(heading) - len(heading.lstrip("#"))
+    body: list[str] = []
+    inside = False
+    for line in text.splitlines():
+        if line.startswith("#"):
+            if line.strip() == heading.strip():
+                inside = True
+                continue
+            if inside and len(line) - len(line.lstrip("#")) <= level:
+                break
+        if inside:
+            body.append(line)
+    return body
+
+
+def _fenced_block(lines: Sequence[str]) -> str:
+    """The first fenced code block in `lines` (the layout block of the Project Structure section)."""
+    body: list[str] = []
+    inside = False
+    for line in lines:
+        if line.strip().startswith("```"):
+            if inside:
+                return "\n".join(body)
+            inside = True
+        elif inside:
+            body.append(line)
+    pytest.fail("the Project Structure section contains no fenced layout block")
+
+
+def _block_dir_paths(block: str) -> set[str]:
+    """The directory paths a layout block shows, in either form the block may use.
+
+    Explicit path tokens (`src/backend/<feature>/`) are read as written; tree-drawn nesting is
+    rebuilt into a full path from the branch-marker column. A `<placeholder>` segment stands for any
+    name, so the path is recorded only up to it (REQ-024 item 1).
+    """
+    paths: set[str] = set()
+    stack: list[tuple[int, str]] = []
+    for line in block.splitlines():
+        head, branch, rest = line.partition("\u2500\u2500")
+        name = re.match(r"[\w<>.-]+/?", rest.strip()) if branch else None
+        if name is None or set(name.group(0)) == {"."}:
+            continue
+        column = len(head)
+        while stack and stack[-1][0] >= column:
+            stack.pop()
+        stack.append((column, name.group(0).rstrip("/")))
+        segments: list[str] = []
+        for _, segment in stack:
+            if segment.startswith("<"):
+                break
+            segments.append(segment)
+        if segments:
+            paths.add("/".join(segments) + "/")
+        for token in re.findall(r"[\w.][\w./-]*/", line.split("<", 1)[0]):
+            if "/" in token.rstrip("/"):  # an explicit path token, not a bare tree-drawn name
+                paths.add(token)
+    return paths
+
+
+def _map_dir_paths(map_text: str) -> tuple[set[str], set[str]]:
+    """The directories the map's tree names: full entry paths, and REQ-009 count-line top-level names."""
+    entries = _tree_entries(map_text)
+    full = {text.rstrip("/") for _, text in entries if _ENTRY_PATH.fullmatch(text)}
+    counted = {m.group(1).rstrip("/") for _, text in entries if (m := _COUNT_LINE.match(text))}
+    assert full and counted, f"the map's tree names no directory at all ({len(entries)} entry lines)"
+    return full, counted
+
+
+def _paths_missing_from_map(paths: set[str], full: set[str], counted: set[str]) -> list[str]:
+    """The layout paths the map does not name.
+
+    A path below a top-level directory the map renders as a REQ-009 count line is named by that count
+    line (REQ-009 never renders `.agents/skills/` as a tree entry); a path below a code dir MUST
+    appear as a full tree entry, which is what keeps a `src/frontend/` entry a failure.
+    """
+    return [path for path in sorted(paths) if path.rstrip("/") not in full and path.split("/", 1)[0] not in counted]
+
+
+def _hook_block(config: str, hook_id: str) -> str:
+    """The YAML lines of hook `hook_id`'s own block, from its `- id:` line to the next hook or repo."""
+    lines = config.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if re.match(rf"^\s*-\s*id:\s*{re.escape(hook_id)}\s*$", line)), None
+    )
+    if start is None:
+        pytest.fail(f".pre-commit-config.yaml declares no hook with id {hook_id!r}")
+    end = next((i for i in range(start + 1, len(lines)) if re.match(r"^\s*-\s*(id|repo):", lines[i])), len(lines))
+    return "\n".join(lines[start:end])
+
+
 def test_ac_004_exit_code_contract(tmp_path: Path) -> None:
     """AC-004 (REQ-004): every row of the exit-code table is exactly the stated code, `1` and `3`
     never occur in generate mode, and when two conditions apply at once the precedence order
@@ -1060,3 +1189,129 @@ def test_edge_016_crlf_checkout_is_not_stale(tmp_path: Path) -> None:
 
     regen = _generate(root, "STRUCTURE.md")
     assert regen.returncode == 0 and out.read_bytes() == lf, "EDGE-016: generate mode must rewrite the file with LF"
+
+
+def test_ac_022_skill_exists_with_four_rules() -> None:
+    """AC-022 (REQ-022): the skill exists, follows the skill format, and states the four rules."""
+    text = _text_of(_MAP_SKILL)
+    assert text.startswith("---\n"), "the skill must open with a frontmatter block"
+    front, closed, body = text[4:].partition("\n---")
+    assert closed, "the frontmatter block is never closed"
+    assert re.search(r"^name:\s*\S", front, re.MULTILINE), "the frontmatter must carry a `name`"
+    assert re.search(r"^description:\s*\S", front, re.MULTILINE), "the frontmatter must carry a `description`"
+    body_lines = [line for line in body.splitlines() if line.strip()]
+    assert body_lines, "the skill body is empty"
+    assert len(body_lines) < _SKILL_BODY_MAX_LINES, (
+        f"REQ-022: the skill body must stay under {_SKILL_BODY_MAX_LINES} lines, got {len(body_lines)}"
+    )
+    rules: dict[str, re.Pattern[str]] = {
+        "read the map before walking the tree": re.compile(r"STRUCTURE\.md[^\n]*\bbefore[^\n]*\btree", re.IGNORECASE),
+        "regenerate when it is stale": re.compile(r"\bstale\b", re.IGNORECASE),
+        "regenerate in the same commit as the .py change": _SAME_COMMIT_RULE,
+        "on a merge conflict take either side and regenerate": _CONFLICT_RULE,
+    }
+    missing = [rule for rule, pattern in rules.items() if not pattern.search(text)]
+    assert not missing, f"the skill does not state: {missing}"
+    assert _RUN_COMMAND in text, "the skill must name the generate command it points the reader at"
+    assert _HAND_MERGE_RULE.search(text), "the skill must say the generated map is never hand-merged"
+
+
+def test_ac_023_hook_is_check_only_and_no_ci_job() -> None:
+    """AC-023 (REQ-023): the map hook is a check-only local hook, and no CI job runs the generator."""
+    config = _text_of(_PRE_COMMIT)
+    assert _active_hook_ids(), ".pre-commit-config.yaml declares no hook at all"
+    block = _hook_block(config, "structure-map-check")
+    between = config[config.index("- repo: local") : config.index("id: structure-map-check")]
+    assert "- repo:" not in between.removeprefix("- repo: local"), "the hook is not in the existing `repo: local` block"
+    fields = {
+        "entry": f"entry: {_CHECK_COMMAND}",
+        "language": "language: system",
+        "pass_filenames": "pass_filenames: false",
+        "stages": "stages: [pre-commit]",
+        "files": r"files: \.py$",
+    }
+    missing = [f"{name}: {value}" for name, value in fields.items() if value not in block]
+    assert not missing, f"the structure-map-check hook is missing {missing}; its block is:\n{block}"
+    entry = next(
+        (line.split("entry:", 1)[1].strip() for line in block.splitlines() if line.strip().startswith("entry:")), ""
+    )
+    assert "--check" in entry, f"REQ-023: the hook entry must be check-only, got {entry!r}"
+    assert "--out" not in entry and entry != _RUN_COMMAND, f"REQ-023: the hook must never rewrite the map: {entry!r}"
+    workflows = sorted(p for p in _WORKFLOWS_DIR.iterdir() if p.is_file())
+    assert workflows, f"no workflow file under {_WORKFLOWS_DIR}"
+    mentioning = [p.name for p in workflows if "make_map" in p.read_text(encoding="utf-8")]
+    assert not mentioning, f"ADR-085: no GitHub Actions workflow may run the generator, found {mentioning}"
+
+
+def test_ac_024_agents_md_layout_matches_the_map(tmp_path: Path) -> None:
+    """AC-024 (REQ-024): the corrected layout block agrees with the generated map and shows no stale form."""
+    agents = _text_of(_AGENTS_MD)
+    section = _md_section(agents, "## Project Structure")
+    assert section, "AGENTS.md has no Project Structure section"
+    block = _fenced_block(section)
+    paths = _block_dir_paths(block)
+    assert paths, "the layout block shows no directory path at all"
+    shown = [name for name in ("model/", "services/", "src/frontend/") if name in block]
+    assert not shown, f"REQ-024: the layout block still shows {shown}"
+    stale = sorted(p for p in paths if {"model", "services", "frontend"} & set(p.split("/")))
+    assert not stale, f"REQ-024: the layout block still shows a stale directory: {stale}"
+    out = tmp_path / "STRUCTURE.md"
+    full, counted = _map_dir_paths(_map_text(out, _generate(_REPO_ROOT, str(out))))
+    missing = _paths_missing_from_map(paths, full, counted)
+    assert not missing, f"REQ-024: layout paths absent from the generated map's tree: {missing}"
+    tooling = "\n".join(_md_section(agents, "## Tooling & Execution Environment"))
+    assert tooling, "AGENTS.md has no Tooling & Execution Environment section"
+    assert _RUN_COMMAND in tooling, "the Tooling section must name the generate command"
+    assert "--check" in tooling, "the Tooling section must name the --check command"
+    mapping = _md_section(agents, "### Skill-to-Phase Mapping")
+    assert mapping, "AGENTS.md has no Skill-to-Phase Mapping section"
+    for skill in ("code-structure-map", "python-best-practices"):
+        rows = [line for line in mapping if skill in line]
+        assert rows, f"the Skill-to-Phase Mapping has no row for {skill}"
+        assert all("(ambient)" in line for line in rows), f"the {skill} row is not marked `(ambient)`"
+    cited = [
+        str(p.relative_to(_REPO_ROOT))
+        for p in (_AGENTS_MD, *sorted(_SKILLS_DIR.rglob("*")))
+        if p.is_file() and "tests/architecture" in p.read_text(encoding="utf-8")
+    ]
+    assert not cited, f"REQ-024: `tests/architecture` is cited again in {cited}"
+
+
+def test_ac_026_map_hook_is_advisory() -> None:
+    """AC-026 (REQ-026): no gate, todo status, handoff field or prohibition depends on the map."""
+    heading = ""
+    wired: list[str] = []
+    for line in _text_of(_AGENTS_MD).splitlines():
+        if line.startswith("#"):
+            heading = line.lstrip("#").strip()
+        if _MAP_MENTION.search(line) and (heading not in _ALLOWED_MAP_SECTIONS or _MACHINERY.search(line)):
+            wired.append(f"[{heading}] {line.strip()}")
+    assert not wired, f"REQ-026: the map is wired into the workflow machinery: {wired}"
+    skills = {p: _text_of(p) for p in sorted(_SKILLS_DIR.rglob("SKILL.md")) if p.parent.name != "code-structure-map"}
+    assert skills, f"no phase skill found under {_SKILLS_DIR}"
+    for path, text in skills.items():
+        if path == _SPECIFY_SKILL:
+            continue
+        hits = [line.strip() for line in text.splitlines() if _MAP_MENTION.search(line)]
+        assert not hits, f"REQ-026: {path.relative_to(_REPO_ROOT)} makes the map part of a phase: {hits}"
+    p1 = _md_section(_text_of(_SPECIFY_SKILL), "### P.1 Frame (orchestrator)")
+    assert p1, "specify/SKILL.md has no P.1 Frame section"
+    advisory = [line.strip() for line in p1 if _MAP_MENTION.search(line)]
+    assert len(advisory) == 1, f"REQ-026: P.1 must carry exactly one advisory sentence about the map, got {advisory}"
+    assert re.search(r"\bread\b", advisory[0], re.IGNORECASE), (
+        f"the P.1 sentence must advise reading the map: {advisory[0]!r}"
+    )
+    assert not _MACHINERY.search(advisory[0]), f"REQ-026: the P.1 sentence is a gate, not advice: {advisory[0]!r}"
+
+
+def test_ac_027_freshness_policy_documented_twice() -> None:
+    """AC-027 (REQ-027): the skill and the AGENTS.md pointer line both state both freshness rules."""
+    skill = _text_of(_MAP_SKILL)
+    tooling = "\n".join(_md_section(_text_of(_AGENTS_MD), "## Tooling & Execution Environment"))
+    assert tooling, "AGENTS.md has no Tooling & Execution Environment section"
+    pointer = [line for line in tooling.splitlines() if _MAP_MENTION.search(line)]
+    assert pointer, "the Tooling section carries no pointer line naming the map and the skill"
+    for label, text in (("the skill", skill), ("the AGENTS.md Tooling section", tooling)):
+        missing = [rule for rule, pattern in _FRESHNESS_RULES if not pattern.search(text)]
+        assert not missing, f"{label} does not state: {missing}"
+        assert _HAND_MERGE_RULE.search(text), f"{label} does not say the generated map is never hand-merged"

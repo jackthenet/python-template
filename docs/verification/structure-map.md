@@ -1332,3 +1332,139 @@ repo-wide sweep (Phase 5).
 - The pinned message strings live once in `_stale_message`/`_missing_message` plus `_RUN_COMMAND`;
   AC-021 (T-007, the committed `STRUCTURE.md`) reuses the same `--check` path and must not restate
   them.
+
+## Phase 3 — S3.1 test derivation, T-006 (2026-10-09)
+
+**Task:** T-006 — the integration surface: the `code-structure-map` skill, the `structure-map-check`
+local pre-commit hook (check-only, no CI job), the four `AGENTS.md` edits, the single advisory
+sentence in `specify/SKILL.md` P.1, and the freshness policy documented twice.
+**Requirements:** REQ-022, REQ-023, REQ-024, REQ-026, REQ-027 · **AC:** AC-022, AC-023, AC-024, AC-026, AC-027.
+**File:** `tests/acceptance/test_structure_map.py` (the only test file in `allowed_files.test_files`).
+
+### Node → ID map
+
+| Node | AC / REQ | Witness |
+|---|---|---|
+| `test_ac_022_skill_exists_with_four_rules` | AC-022 / REQ-022 | `.agents/skills/code-structure-map/SKILL.md` exists, opens with `name` + `description` frontmatter, body under 60 non-blank lines, states all four rules, names the generate command, says the map is never hand-merged |
+| `test_ac_023_hook_is_check_only_and_no_ci_job` | AC-023 / REQ-023 | the `structure-map-check` hook sits inside the existing `repo: local` block with the five pinned fields; its `entry` is `uv run python scripts/make_map.py --check`, carries no `--out`, is not the bare generate command; no file under `.github/workflows/` mentions `make_map` |
+| `test_ac_024_agents_md_layout_matches_the_map` | AC-024 / REQ-024 | the Project Structure fenced block shows no `model/`/`services/`/`src/frontend/` (literal **and** tree-reconstructed), every directory path it shows is named by the generated map, the Tooling section names both commands, both `(ambient)` rows exist, no `tests/architecture` citation in `AGENTS.md` or `.agents/` |
+| `test_ac_026_map_hook_is_advisory` | AC-026 / REQ-026 | every `AGENTS.md` line naming the map sits in one of the three REQ-024 sections and carries no machinery vocabulary (`◆`, `blockedBy`, `BLOCKED-`, `Status:`, `VERIFIED`, `prohibition`, `prerequisite`, `fast-path`, `--skip-spec`); no other phase skill mentions the map; `specify/SKILL.md` P.1 carries exactly one advisory sentence, and that sentence advises *reading*, not gating |
+| `test_ac_027_freshness_policy_documented_twice` | AC-027 / REQ-027 | the skill **and** the `AGENTS.md` Tooling pointer both state the same-commit rule and the take-either-side conflict rule, and both say never hand-merge |
+
+New helpers (all reuse the T-002…T-005 harness — `_run`, `_map_text`, `_generate`, `_tree_entries`,
+`_ENTRY_PATH`, `_PRE_COMMIT`, `_active_hook_ids`, `_RUN_COMMAND`): `_text_of` (explicit
+`encoding="utf-8"`, P-67), `_md_section`, `_fenced_block`, `_block_dir_paths`, `_map_dir_paths`,
+`_paths_missing_from_map`, `_hook_block`; constants `_CHECK_COMMAND`, `_SKILL_BODY_MAX_LINES`,
+`_MAP_MENTION`, `_COUNT_LINE`, `_SAME_COMMIT_RULE`, `_CONFLICT_RULE`, `_HAND_MERGE_RULE`,
+`_FRESHNESS_RULES`, `_MACHINERY`, `_ALLOWED_MAP_SECTIONS`.
+
+### RED gate
+
+`red_command` run verbatim (targeted, never the full suite):
+
+```text
+5 failed in 0.71s
+FAILED test_ac_023_hook_is_check_only_and_no_ci_job
+FAILED test_ac_022_skill_exists_with_four_rules
+FAILED test_ac_027_freshness_policy_documented_twice
+FAILED test_ac_026_map_hook_is_advisory
+FAILED test_ac_024_agents_md_layout_matches_the_map
+```
+
+Failure mode per node — every one is an `AssertionError` or a `pytest.fail`, no collection, import or
+fixture error (`uv run pytest --collect-only tests/acceptance/test_structure_map.py` → 28 collected,
+0 errors, before and after):
+
+| Node | Observed RED failure |
+|---|---|
+| AC-022 | `Failed: .agents\skills\code-structure-map\SKILL.md does not exist` |
+| AC-023 | `Failed: .pre-commit-config.yaml declares no hook with id 'structure-map-check'` |
+| AC-024 | `AssertionError: REQ-024: the layout block still shows ['model/', 'services/']` (the tree-reconstructed clause would also flag `src/frontend/`, `src/frontend/shared/`) |
+| AC-026 | `AssertionError: REQ-026: P.1 must carry exactly one advisory sentence about the map, got []` |
+| AC-027 | `Failed: .agents\skills\code-structure-map\SKILL.md does not exist` |
+
+Test-data validity: no fixture builds a model instance; every fixture is an in-domain text artifact —
+the real `AGENTS.md`, `.pre-commit-config.yaml`, `.github/workflows/` (3 files), `.agents/skills/`
+(9 `SKILL.md`), and a `tmp_path/STRUCTURE.md` written outside the repository, so no repo file is
+written by these tests. All file reads are `encoding="utf-8"` (P-67). `_REPO_ROOT` is derived from
+`Path(__file__).resolve().parents[2]`, so the witnesses resolve the worktree they live in.
+
+### Anti-vacuity (P-68 lesson, adapted — no stub pass over markdown/config witnesses)
+
+Checked by probing the helpers against plausible right and plausible wrong inputs
+(`_block_dir_paths`, `_paths_missing_from_map`, `_hook_block`, `_md_section`, `_map_dir_paths`):
+
+| Node | Wrong-but-plausible implementation | Assertion that catches it |
+|---|---|---|
+| AC-022 | a skill file that exists with frontmatter but states three of the four rules (the conflict rule missing) | `missing = [rule … ]; assert not missing` names the missing rule; `_HAND_MERGE_RULE` separately requires the never-hand-merge clause; `len(body_lines) < 60` catches a skill that dumps the whole policy in a 200-line body |
+| AC-023 | a hook added with `entry: uv run python scripts/make_map.py` (generate mode — it would rewrite the map on every commit), or `stages: [pre-push]` like `mkdocs-build`, or a CI job running `--check` | the pinned `fields` dict requires `entry: … --check` and `stages: [pre-commit]` verbatim; `assert "--check" in entry` and `assert "--out" not in entry and entry != _RUN_COMMAND`; the workflow scan asserts the glob is non-empty **and** that no workflow mentions `make_map` |
+| AC-024 | a rewritten block that keeps `model/`/`services/`, or lists `src/frontend/`, or names a directory the map does not show, or a Tooling section that names only the generate command | the literal `shown` clause plus the tree-reconstructed `stale` clause (`{"model", "services", "frontend"}` segments); `_paths_missing_from_map` lists every block path the map does not name; `assert _RUN_COMMAND in tooling` / `assert "--check" in tooling`; `assert rows` + `all("(ambient)" …)` per skill row |
+| AC-026 | the map wired into a gate — e.g. a Phase Matrix / Atomic Steps / Handoff Output / Agent Prohibitions line mentioning `STRUCTURE.md`, a `◆` gate row, or a second map sentence in P.1 phrased as a requirement | the section whitelist (`Tooling & Execution Environment`, `Skill-to-Phase Mapping`, `Project Structure`) plus `_MACHINERY` on the same line; the per-skill `hits` assertion; `len(advisory) == 1` plus `not _MACHINERY.search(advisory[0])` |
+| AC-027 | the policy documented only in the skill (the `AGENTS.md` pointer line names the commands but not the rules), or the conflict rule phrased without "either side" | the per-target loop over `(("the skill", skill), ("the AGENTS.md Tooling section", tooling))` requires `_SAME_COMMIT_RULE` and `_CONFLICT_RULE` in **both**, plus `_HAND_MERGE_RULE` in both |
+
+Non-empty guards (added so an empty collection can never satisfy a witness): `_active_hook_ids()`
+non-empty; the `.github/workflows/` glob non-empty; the Project Structure section slice, its fenced
+block and the extracted path set non-empty; the Tooling and Skill-to-Phase section slices non-empty;
+`_map_dir_paths` asserts both the full-entry set and the count-line set are non-empty; the skill set
+under `.agents/skills/` non-empty; the P.1 section slice non-empty; the Tooling pointer-line list
+non-empty; the skill body non-empty.
+
+### Deliberate under-assertions (and who covers them)
+
+- **REQ-009 count lines.** `.agents/skills/` and `userdocs/` can never be tree entries — REQ-009
+  renders every non-code top-level directory as one count line. `_paths_missing_from_map` therefore
+  accepts a path whose top-level directory the map renders as a count line, and demands a full tree
+  entry everywhere else (which is what keeps `src/frontend/` a failure, since `src/` is rendered in
+  full). Probed: a corrected block yields `missing: []`, adding `src/frontend/` yields
+  `['src/frontend/']`.
+- **"exactly four rules" (REQ-022) is not counted.** The four required rules are each asserted; a fifth
+  rule is not detected. AC-026 covers the only fifth rule that would matter (a gate/prohibition).
+- **AC-027 checks the Tooling section, not one line.** The two rules need not sit on the same line as
+  the command; they must sit in the section that carries the pointer line (`pointer` list asserted
+  non-empty). Phase 6 review reads the wording.
+- **AC-026 is section- and vocabulary-based, not an exhaustive reading of the workflow.** A gate that
+  depends on the map without naming it on the same line is out of reach; AC-024's `(ambient)` row
+  assertion and the Phase 6 review of the four-place edit bound it.
+- **AC-023 does not run pre-commit.** The hook's *effect* (a stale map blocks a commit) is AC-021
+  (T-007, the committed `STRUCTURE.md`) plus the local hook itself; running pre-commit here would be a
+  full-tool run, not a witness.
+- **AC-024's map is generated into `tmp_path`**, never into the repository root — the committed
+  `STRUCTURE.md` is T-007's artifact (AC-021).
+
+### Phase 4 contract for T-006
+
+Phase 4 must create/edit exactly these files; nothing else may change:
+
+1. `.agents/skills/code-structure-map/SKILL.md` (new) — `---` frontmatter with `name:` and
+   `description:`; body under 60 non-blank lines; the text must contain, somewhere in the file: a
+   sentence matching `STRUCTURE.md … before … tree` (same line), the word `stale`, the phrase
+   `same commit`, the phrase `either side`, a `hand-merge`/`hand merge` negation, and the literal
+   command `uv run python scripts/make_map.py` (AC-022, AC-027).
+2. `.pre-commit-config.yaml` — one hook inside the existing `- repo: local` block, no other `- repo:`
+   between it and `- repo: local`, with the lines `entry: uv run python scripts/make_map.py --check`,
+   `language: system`, `pass_filenames: false`, `stages: [pre-commit]`, `files: \.py$` exactly as
+   REQ-023 pins them (AC-023). No `--out` in the entry.
+3. `AGENTS.md` — four places only: (a) the Project Structure section: the fenced block must contain no
+   `model/`, `services/` or `frontend` path segment, and every directory path it shows (tree-drawn
+   nesting is rebuilt from the `──` marker column; `<placeholder>` segments cut the path) must be
+   named by the map — code-dir paths as full tree entries, non-code top-level dirs via their count
+   line; (b) the Tooling section must contain the literal `uv run python scripts/make_map.py`, the
+   literal `--check`, a line naming the map/skill, `same commit`, `either side` and a hand-merge
+   negation; (c) the Tooling type-check line gains `uv run mypy scripts/`; (d) the Skill-to-Phase
+   Mapping table gains rows for `code-structure-map` and `python-best-practices`, each containing
+   `(ambient)` (AC-024, AC-027).
+4. `.agents/skills/specify/SKILL.md` — exactly one line inside `### P.1 Frame (orchestrator)` that
+   mentions the map, contains the word `read`, and contains none of the `_MACHINERY` markers (AC-026).
+5. No `.github/workflows/` file may ever mention `make_map` (read-only witness scope; AC-023), and no
+   file under `AGENTS.md`/`.agents/` may cite `tests/architecture` (AC-024).
+
+Interlock (gate_interlock 2): the hook fires on `\.py$` while `STRUCTURE.md` does not yet exist, so
+after the hook is added this task must commit no `.py` file without regenerating the map in the same
+commit — T-007 lands the committed map.
+
+### Ruff gate
+
+`uv run ruff check tests/acceptance/test_structure_map.py` → `All checks passed!`;
+`uv run ruff format tests/acceptance/test_structure_map.py` → clean (changed path only, no repo-wide
+sweep, P-6).
+
