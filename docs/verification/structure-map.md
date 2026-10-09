@@ -3896,5 +3896,110 @@ for the line count was written to a temp directory outside the worktree), no tes
 Next atomic step: **S4.2 (T-007)** — generate + commit `STRUCTURE.md`, restructure the six test functions
 for NFR-005, confirm GREEN.
 
+## Phase 4 — T-007 GREEN (S4.2)
 
+**Date:** 2026-10-09. **Task:** T-007 (the committed artifact — `STRUCTURE.md`; REQ-021, AC-021, NFR-002,
+NFR-005). **Worktree:** `feature/structure-map`. Skill: `implement` (Phase 4, GREEN from RED).
 
+### RED (input state, S4.1 at commit `fca7137`)
+
+| Check | RED figure |
+|---|---|
+| `test_ac_021_committed_map_matches_fresh_render` | FAILED — `assert _MAP_FILE.is_file()` — no `STRUCTURE.md` at the repository root |
+| `test_nfr_002_map_line_budget` | FAILED — same cause (no committed map to count) |
+| `test_nfr_005_complexipy_threshold_holds` | FAILED — `complexipy src tests --max-complexity-allowed 15` exits 1: **6 of 1 980** analysed functions over the ceiling — `test_ac_009_tree_code_dirs_full_other_dirs_counted` 34, `test_ac_012_package_header_and_exports` 26, `test_ac_016_private_symbols_and_dunders` 25, `test_inv_002_no_module_hidden_by_pruning` 22, `_block_dir_paths` 21, `test_ac_026_map_hook_is_advisory` 17 |
+
+### What S4.2 changed
+
+1. **NFR-005 — split the six over-complex Phase-3 test functions** (allowed by
+   `allowed_files.test_files`; the ceiling and the `[tool.complexipy]` paths are untouched, P-56). Every
+   test node name and every assertion condition is preserved; only clause-level helpers were extracted
+   (early returns instead of `if/else` ladders, one helper per AC clause group):
+
+   | Over-complex function (before) | Extracted helpers | After |
+   |---|---|---|
+   | `test_ac_009_tree_code_dirs_full_other_dirs_counted` (34) | `_ac009_top_file_failures` 9, `_ac009_src_sorting_failures` 9, `_ac009_dir_count_failures` 6, `_ac009_count_line_failures` 6 | 0 |
+   | `test_ac_012_package_header_and_exports` (26) | `_ac012_exports_failures` 9, `_ac012_header_path_failures` 5 | 8 |
+   | `test_ac_016_private_symbols_and_dunders` (25) | `_ac016_dunder_failures` 9, `_ac016_private_only_failures` 7, `_ac016_module_header_failures` 7 | 2 |
+   | `test_inv_002_no_module_hidden_by_pruning` (22) | `_inv002_path_claim` 8, `_inv002_count_line_claim` 3 | 11 |
+   | `_block_dir_paths` (21) | `_tree_drawn_paths` 11, `_stacked_path` 4, `_explicit_path_tokens` 2 | 1 |
+   | `test_ac_026_map_hook_is_advisory` (17) | `_agents_md_map_machinery_lines` 7, `_assert_phase_skills_not_wired` 8 | 2 |
+
+   `test_inv_002_no_module_hidden_by_pruning` first landed at exactly **15** — at the ceiling, no headroom —
+   so the `.github/` count-line assertion was extracted as well (now 11). complexipy counts a `continue`,
+   `break`, boolean operator and comprehension clause as a branch, which is why the Phase-3 bodies reached
+   34 while reading as ~10 `if`s.
+
+2. **REQ-021 — generated and committed `STRUCTURE.md`** with the generator itself
+   (`uv run python scripts/make_map.py`, defaults), never by hand (EDGE-010), after every other change file
+   was committed, and committed as its own commit.
+
+### GREEN (this step)
+
+| Gate | Result |
+|---|---|
+| `green_command` (the three T-007 nodes) | **3 passed in 1.33s** — `test_ac_021_committed_map_matches_fresh_render`, `test_nfr_002_map_line_budget`, `test_nfr_005_complexipy_threshold_holds` |
+| AC-021 (`uv run python scripts/make_map.py --check`) | **exit 0** — the committed bytes equal a fresh render (re-run after the map commit and after the later test-file edit: still 0) |
+| NFR-002 | **1 938 lines ≤ 2 000** (margin 62). Spec §10 projected ≈1 875; the real artifact is 63 lines larger — the ceiling holds, no knob was pulled, the REQ-017 field cap is unchanged |
+| Map composition | 444 Directory-tree lines, 119 Packages module entries (`#### `), 32 group headers (`### `); `scripts/make_map.py` is mapped in Packages scope (REQ-011) and the three new test files appear as tree entries |
+| NFR-005 (`uv run complexipy src tests --max-complexity-allowed 15`) | **exit 0 — 0 of 1 995 analysed functions over 15** (was 6 of 1 980) |
+| AC-024 cross-check against the real artifact | the corrected `AGENTS.md` Project Structure block shows **21** directory paths; **0** are missing from the committed map's tree (`_block_dir_paths` vs `_map_dir_paths` of `STRUCTURE.md`); `test_ac_024_agents_md_layout_matches_the_map` passes |
+| Hook-clean (INV-006, proven in T-005) | `STRUCTURE.md`: 0 trailing-whitespace lines, ends with exactly one newline; **no `.gitattributes`** exists |
+| Regression over the touched files (`tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py`) | **55 passed** (the 3 T-007 nodes were failing before; no other node changed state) |
+| `uv run ruff check` + `ruff format --check` on the changed paths | clean / already formatted |
+
+### Finding F-10: one generator invocation cannot satisfy AC-021 (spec ambiguity, AC-021 / REQ-021)
+
+The map lists top-level files by name, and the file listing is `git ls-files --cached --others
+--exclude-standard`, i.e. it includes untracked files. The **first** render therefore cannot contain the
+`STRUCTURE.md` entry — the file it is writing does not exist yet — and the committed map would be stale the
+moment it exists (measured: render #1 = 1 937 lines, render #2 = 1 938 lines, the only difference is the
+added `STRUCTURE.md` tree line at position 12). The DAG's step 1 ("run `make_map.py` … this writes
+`./STRUCTURE.md`") is satisfiable only by generating **twice**: the committed map is the render that already
+contains its own entry, and that render is a fixed point (render #3 == render #2, `--check` exits 0).
+No generator change is proposed (out of this task's scope); the fix is procedural and is what S4.2 did.
+
+### Scope of this step
+
+Changed: `tests/acceptance/test_structure_map.py`, `tests/property/test_structure_map.py`,
+`tests/unit/test_make_map.py` (NFR-005 splits only — no assertion removed or weakened), `STRUCTURE.md`
+(new, generated), `docs/verification/structure-map.md` (this record). **Not** changed:
+`scripts/make_map.py` (so no regeneration-diff problem, P-77), `AGENTS.md`, the skills,
+`.pre-commit-config.yaml`, `.github/` (no CI job), no `.gitattributes`, no dependency or coverage /
+complexity / bandit / ty configuration. `.github/task-runner/tasks.json` and `docs/tasks/structure-map.tasks.json`
+were **not** touched — the `VERIFIED` status sync is S4.4.
+
+Commits (local, nothing pushed): `0a1017b` test splits for NFR-005; `725e7ca` `STRUCTURE.md` alone;
+`c123fd7` the INV-002 headroom extraction. `git status --porcelain` is empty apart from this verification
+record and `uv.lock` (rewritten by every `uv run`, P-74; restored with `git restore uv.lock`, never staged).
+
+**S4.2 (T-007) gate: GREEN observed — 3/3 T-007 witnesses pass, `--check` exits 0, NFR-002 and NFR-005 hold.**
+Next atomic step: **S4.3 (T-007)** — refactor (no-op fast-path expected: the splits already follow the
+file's existing `_…_failures` pattern), then **S4.4** — commit status `VERIFIED` + sync the DAG.
+
+## Phase 4 — T-007 refactor (S4.3)
+
+**Date:** 2026-10-09. **Task:** T-007. **Skill:** `implement` (Phase 4, S4.3 refactor, keep GREEN; no-op fast-path).
+
+**S4.3: no structural changes needed.** The S4.2 diff (`0a1017b`, `c123fd7`) was examined and already
+follows each file's own convention, so restructuring it would be churn with no behavior-preserving gain:
+the acceptance/unit helpers are `_…_failures(...) -> list[str]` clause helpers aggregated into one
+`assert not failures, "\n".join(failures)` — the same shape as the pre-existing `_code_dir_entry_failures`
+and `_seq_failures` — and the property-file helpers (`_inv002_path_claim -> str | None`,
+`_inv002_count_line_claim`) follow that file's own style, which asserts inside the `check()` closure and
+has no `_…_failures` convention. `scripts/make_map.py` was not touched, so no regeneration is required
+(REQ-027). No test node name, assertion condition or message was changed; `STRUCTURE.md` was not touched.
+
+Checks run to verify the fast-path rather than assert it:
+
+| Check | Result |
+|---|---|
+| `green_command` (the three T-007 nodes, verbatim) | **3 passed in 1.38s** |
+| `uv run ruff check tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py` | All checks passed |
+| `uv run ruff format --check` (same three files) | 3 files already formatted |
+| `uv run complexipy src tests --max-complexity-allowed 15` | exit 0 — "All functions are within the allowed complexity" |
+| `git status --porcelain` after `git restore uv.lock` | only `docs/verification/structure-map.md` (this record) |
+
+**S4.3 (T-007) gate: refactor step complete — no structural change, T-007 witnesses still GREEN.**
+Next atomic step: **S4.4 (T-007)** — commit + set `VERIFIED` in `.github/task-runner/tasks.json` and sync
+`docs/tasks/structure-map.tasks.json`.
