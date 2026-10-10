@@ -7219,3 +7219,110 @@ Per the user's answers to **Q-30** and **Q-31** on this change, a spec amendment
 | map | `uv run python scripts/make_map.py --check` | exit **0** (map not hand-edited; unchanged by this step) |
 
 **Next:** re-run **S5.1** with a fresh subagent (full suite + `--cov` + acceptance/property/contract runs + coverage ≥ 92). M1 is resolved; M3 (load-sensitive hypothesis/latency nodes) still has to be read together with its isolation-free neighbours before classification.
+
+---
+
+## Phase 5 — S5.1 full test suite (re-run, 2026-10-10)
+
+**Objective:** re-run the six required suites on the merged, post-fix branch and classify every failure (regression / pre-existing on this branch / pre-existing on `origin/main` / environment-host-load-dependent). No lint, no types (S5.2), no traceability (S5.3), no report (S5.4), no fixes.
+
+**Tree under test:** `crosscut/settings-public-registry-setter` at `eaa2f72` (the `structure-map` NFR-002 amendment), working tree clean, `origin/main` merged in at `f50519a`; the Phase 4 test-isolation fix (`61a8ab1` + record `cc04a1e`) is in. Pre-flight: `git status --porcelain` empty, `uv run python scripts/make_map.py --check` exit **0**, `STRUCTURE.md` = 2004 lines. `main` == `origin/main` == `801e107` (one docs-only commit ahead of the branch's merge: `docs/todo/settings-public-registry-setter.md`, no code).
+
+**Output handling (P-91/P-104 lesson):** every run was captured to `../s51-scratch/` — **outside** the worktree, so no scratch file reaches the map render or `test_nfr_004_mypy_and_ruff_clean` — and read back through its summary line plus the `FAILED`/`ERROR` lines with `-q`. No `ResourceWarning` noise appeared in any run.
+
+### The six required runs
+
+| # | Command | Summary line | Result |
+|---|---|---|---|
+| 1 | `uv run pytest tests/ -q --cov --cov-report=term` | `2 failed, 888 passed, 1 skipped in 320.52s (0:05:20)` | **FAIL** (2 timing flakes, F1/F2 below) |
+| 2 | `uv run pytest tests/acceptance/ -q` | `430 passed, 1 skipped in 89.49s (0:01:29)` | **PASS** |
+| 3 | `uv run pytest tests/property/ -q` | `82 passed in 94.16s (0:01:34)` | **PASS** |
+| 4 | `uv run pytest tests/contract/ -q` | `60 passed in 90.14s (0:01:30)` | **PASS** |
+| 5 | `uv run pytest tests/ -q -p no:randomly` | `890 passed, 1 skipped in 295.95s (0:04:55)` | **PASS** |
+| 6 | `uv run pytest tests/ -q --randomly-seed=20261010` | `890 passed, 1 skipped in 293.28s (0:04:53)` | **PASS** |
+
+891 nodes collected in every full run (890 passed + 1 skipped, or 2 failed + 888 passed + 1 skipped). The single skip is `tests/acceptance/filemanagement/test_filemanagement.py:364` — `symlinks not available on this host` (unchanged on `main`).
+
+**Run 6 seed choice.** Run 1 used `pytest-randomly 5.0.0`'s auto seed (not printed under `-q`). Run 6 pins `--randomly-seed=20261010`, distinct from every seed recorded anywhere in this change's records (540840457, 716655549, 2708124179, 2370016065, 245967306, 3216070721, 2919859313, 272126213, 2558377041, and the `1/7/42/2026/99999/5/12345/777` mix of the Phase 4 re-entry).
+
+### Coverage total (recorded for S5.4)
+
+```text
+TOTAL                                                4767    222   1004    115    94%
+Required test coverage of 92.0% reached. Total coverage: 93.85%
+```
+
+The `[tool.coverage.report] fail_under = 92` gate **passes** (93.85%; run 1). The `CoverageWarning: Module src/frontend was never imported` line is the known empty-frontend placeholder in `[tool.coverage.run] source`, not a failure. Coverage is a secondary signal; the S5.1 gate is the suite result.
+
+### Failure list with classification
+
+Only **two** failures occurred across the six runs, both in run 1, both timing-only (no behavioural assertion failed anywhere):
+
+| ID | Node | Signature |
+|---|---|---|
+| **F1** | `tests/property/settings/test_settings_properties.py::test_inv_005_slider_grid_valid` | `hypothesis.errors.FlakyFailure: … produces unreliable results: Failed on the first call but did not on a subsequent one` — `DeadlineExceeded: Test took 298.51ms, which exceeds the deadline of 200.00ms`; the **same input** (`maxv=94`) re-measured at **192.75 ms** in the same test |
+| **F2** | `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` | `assert 0.3063626999501139 < 0.3` — median of 15 query samples; the samples in that one run are bimodal, `0.1569 … 0.3332 s` |
+
+**Classification of both: environment/host/load-dependent, pre-existing on `origin/main`. Neither is a regression caused by this change.** Evidence below (E1–E10).
+
+### Classification evidence
+
+| ID | Experiment | Result |
+|---|---|---|
+| E1 | **Test-code identity with `main`.** `git diff main...HEAD -- tests/contract/search/test_search_contracts.py` | **empty** — the whole F2 witness file is byte-identical to `origin/main` |
+| E1b | `test_inv_005_slider_grid_valid` extracted from `git show main:…` and `git show HEAD:…` and compared | **identical: True**. The file's only diff is this change's added `test_inv_011_last_install_wins` plus imports; F1's decorator (`@settings(max_examples=_MAX_EXAMPLES)`, i.e. the default 200 ms deadline), body and `_make_registry` are untouched |
+| E2 | **Measured code path untouched.** `git diff main...HEAD -- src/backend/search/service.py` | only the new `set_search_service`, its `_logger`, and comments; the pre-existing `_singleton_lock` and `get_search_service`'s `with _singleton_lock:` are unchanged context lines, and `SearchService.search` / the source query path — what F2 times — is not in the diff at all |
+| E2b | `git diff main...HEAD -- src/backend/settings/registry.py` | `_registry_lock` around the three module-level slot functions + `set_settings_registry`. `@logged_class(slow_threshold_ms=250)` on `SettingsRegistry` is an unchanged context line; `set_value` and `YamlValueRepository` — what F1 pays per call — are untouched |
+| E3 | Branch, **isolation ×3**: the two nodes + `test_inv_001_token_hash_uniqueness`, `-p no:randomly --durations=5` | **3 passed** each run — search `7.88 / 7.93 / 8.06 s`, F1 `3.02 / 3.20 / 3.45 s`, tokens `0.63 s` |
+| E4 | `origin/main` (primary worktree, **read-only**), same isolation command ×3 | **3 passed** each run — search `7.97 / 8.05 / 8.28 s`, F1 `3.30 / 3.33 / 3.44 s`, tokens `0.63 / 0.63 / 0.66 s`. **No measurable branch-vs-main timing delta** on either measured path. `git status --porcelain` in the primary worktree: empty before and after |
+| E5 | Branch, **the identical run-1 command re-run** (`uv run pytest tests/ -q --cov --cov-report=term`) | **`890 passed, 1 skipped in 305.36s (0:05:05)`**, coverage **93.85%** — the same command on the same tree reproduces **zero** failures |
+| E6 | Branch, the three nodes **with coverage instrumentation** (`--cov`), 2 runs | **3 passed** both (search `8.06 / 8.10 s`, F1 `3.08 / 3.35 s`). The `Required test coverage of 92.0% not reached. Total coverage: 42.19%` line in those two runs is the expected result of a 3-node partial run, not a gate run |
+| E7 | Branch, the three nodes **while a full suite with `--cov` ran concurrently** in the same worktree, 2 runs | **3 passed** both — search `8.92 / 9.02 s` (+13% under concurrent load, still inside budget) |
+| E8 | Branch, the three nodes under synthetic CPU oversubscription (`load.py`, 32 then **128** busy-loop workers on a 32-logical-CPU host) | **3 passed** — CPU starvation alone does not flip either witness, which rules out a simple compute-cost regression; the run-1 mechanism is the long in-process full-suite run (≈300 s of SQLite + YAML + rotating-log churn, plus coverage line tracing and Windows file/AV pressure), not CPU |
+| E9 | **Repo precedent, same signature, other changes** | `docs/workflow/PROBLEMS.md` **P-86** — *"the full-suite baseline is not byte-for-byte reproducible: `test_nfr_001_performance_budgets` failed under full-suite load, passed in isolation"*, median **306 ms** vs the 300 ms budget (this run: **306.36 ms**), with the standing Phase 5 rule *"re-run it isolated and record both results"*; **P-35/P-36** the same budget tripping under CI load; `docs/verification/dependency-updates.md:302` — `DeadlineExceeded` `288.56 ms > 200 ms` wrapped in `FlakyFailure` under full-suite load; `docs/verification/mail-service.md` §"Pre-existing flaky failures (other features)" names **this exact node** `test_inv_005_slider_grid_valid` as a pre-existing one-off flake; `docs/verification/main-ci-green.md` §B and its pinned-seed section — the 200 ms-deadline failures are load-dependent and *"cannot be re-observed on demand locally"* |
+| E10 | **Mechanism for F1, named.** F1 keeps hypothesis' default 200 ms deadline while its own work is O(maxv) YAML-writing `set_value` calls: `maxv=94` → 95 saves, and the run-1 captured log measures `YamlValueRepository.save returned in 1.698 ms` and `SettingsRegistry.set_value returned in 1.529 ms` per call → ≈150–300 ms per example, i.e. the deadline sits **inside** the example's normal cost band | Sibling property files already carry the cure for exactly this (`tests/property/filemanagement/test_filemanagement_properties.py`: "failed on the first call, passed on the retry", `deadline=2000`). Not this change's to fix — F1 is a `settings`-feature witness this change does not touch |
+
+### The node the launch prompt asked about
+
+`tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uniqueness` (hypothesis `DeadlineExceeded`, 232.50 ms vs the 200 ms deadline in the Phase 4 re-entry's M3) **did not fail in any run of this step**: it is inside runs 1, 3, 5 and 6 and inside the E3/E4/E6/E7/E8 probes — **12/12 passes**. Measured cost in isolation: **0.63 s for the whole test** (10 examples, ≤ 8 argon2id hashes per example) on both the branch and `main`, i.e. per-example well inside the 200 ms deadline on this host today. The node is unchanged by this change (`git diff main...HEAD -- tests/property/authentication/test_tokens.py` empty; no `src/backend/authentication/` file appears in this change's `src/` diff). Classification if it recurs: **load-dependent**, per M3 and the P-86 / `main-ci-green.md` §B precedent — not a regression.
+
+### This change's own latency witnesses (NFR-002 / NFR-003)
+
+Both passed in every run that collected them (runs 1, 2, 4, 5, 6). Measured with `-s` in isolation (`tests/contract/singleton_install/test_performance_contract.py`, median of 100 installs per path, budget 1.0 ms):
+
+| Slot | empty-slot path | replacing path |
+|---|---|---|
+| settings | 0.098 ms | 0.138 ms |
+| eventbus | 0.075 ms | 0.112 ms |
+| permissions | 0.153 ms | 0.198 ms |
+| search | 0.099 ms | 0.140 ms |
+| sessionmanagement | 0.104 ms | **0.203 ms** |
+
+Worst median **0.203 ms** against the 1.0 ms NFR-002 budget — a ≈5× margin, so this change's own timing witness is not load-fragile at these numbers. `test_nfr_003_slot_lock_is_short_lived` is an interleaving witness (barrier-based, no wall-clock budget) and passed everywhere.
+
+### M1 / M2 / M3 status after the re-run
+
+- **M1 (map ceiling) — resolved** by the NFR-002 amendment (`eaa2f72`): `test_nfr_002_map_line_budget` and `test_ac_021_committed_map_matches_fresh_render` pass on this branch (inside run 2 and runs 5/6). `test_ac_021` still fails on `origin/main` for the host CRLF byte reason (the `main` full-suite run below), i.e. it is pre-existing there and fixed here by regenerating the map.
+- **M2 (`test_stdlib_decorator_pipeline` order-dependence on `main`) — did not recur** in any of the six runs (nor in the E5 re-run).
+- **M3 (load-sensitive nodes) — classified**: `test_nfr_001_performance_budgets` is F2 (E9/P-86 known flake), `test_inv_001_token_hash_uniqueness` did not recur, and F1 is the same class (E10).
+
+### Cross-check runs (context, not gate runs)
+
+| Command | Result |
+|---|---|
+| `origin/main` (primary worktree, read-only): `uv run pytest tests/ -q --cov --cov-report=term` | `1 failed, 818 passed, 1 skipped in 277.55s (0:04:37)`, coverage **93.74%** — the only failure is `test_ac_021_committed_map_matches_fresh_render` (the known CRLF raw-byte host dependency, PROBLEMS P-103). `git status --porcelain` empty before and after |
+| Branch, E5 (identical to run 1) | `890 passed, 1 skipped`, coverage 93.85% |
+
+Branch vs `main` on the same command: **890 passed vs 818 passed** (this change adds 72 nodes) and **0 failures vs 1 failure** — the branch is strictly better than `origin/main` on the full suite.
+
+### Order and seed stability
+
+Four full-suite orders were run (run 1 random auto-seed, run 5 deterministic, run 6 random `20261010`, E5 random auto-seed): **0 isolation failures**, and the Phase 4 leak's victim set is empty in all four — the fix holds across orders. The only run-to-run variation left is the two known timing witnesses (F1/F2), which appear in 1 of 4 full-suite runs and never in a targeted run.
+
+### S5.1 gate
+
+**S5.1 PASSES.** The full suite is clean apart from **two** failures, both observed in one of four full-suite runs and both proven **environment/host/load-dependent and pre-existing on `origin/main`** (E1/E1b/E2/E2b code and measured-path identity; E3/E4 identical isolation timings on `main`; E5 the identical command reproducing nothing; E6–E8 targeted runs under instrumentation, concurrent-suite load and 4× CPU oversubscription; E9 the repo's own P-86 / P-35 / `mail-service` / `dependency-updates` / `main-ci-green` records naming these very nodes; E10 the mechanism). **No failure is a regression caused by this change.** Coverage **93.85% ≥ 92** passes. Acceptance, property and contract suites pass standalone (430 + 1 skip, 82, 60).
+
+Nothing was fixed, weakened, skipped, xfailed or deselected; no source or test file was edited by this step; scratch output stayed outside the worktree (`../s51-scratch/`); the primary worktree was used read-only and is clean.
+
+**Next:** **S5.2** — lint (`uv run ruff check .`, the one full-repo sweep) + types (`uv run mypy src/`).
