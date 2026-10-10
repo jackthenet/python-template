@@ -7,7 +7,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **Spec:** n/a (REFACTOR) — `docs/specs/settings-coverage.md` REQ-002 / AC-003 and `docs/specs/logging-coverage.md` REQ-011 / AC-011 need an amendment (Q-01); `docs/specs/settings-public-registry-setter.md` REQ-011 / AC-016 collide (Q-02)
 - **Opened:** 2026-10-06
 - **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
-- **Answer rounds:** 1 (2026-10-10: Q-01, Q-02, Q-03, Q-04 answered)
+- **Answer rounds:** 2 (round 1: Q-01, Q-02, Q-03, Q-04 · round 2: Q-05, Q-07, Q-08, Q-14)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -102,10 +102,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Hardcoded locations in `src/main.py`: `:144` `sqlite:///./data/authentication.db`, `:152` `sqlite:///./data/permissions.db`, `:181` `sqlite:///./data/usermanagement/users.db`, `:194` `sqlite:///./data/filemanagement.db`, `:197` `LocalDiskStorageBackend("./data/files")`; the registry's value directory comes from the `SettingsRegistry` default `YamlValueRepository("settings")`. `src/backend/permissions/service.py:108-109` already defines `DEFAULT_DATABASE_URL = "sqlite:///./data/permissions.db"` and `DEFAULT_USER_DATABASE_URL = "sqlite:///./data/usermanagement/users.db"` — the same literals, duplicated in `main.py`.
 - **Question:** Which parameters does `build_composition_root()` take — keyword-only with defaults equal to today's literals (database URLs, storage root, value repository / settings registry, event bus), or zero parameters with the test monkeypatching paths?
 - **Recommended:** Keyword-only parameters defaulting to today's literals for the storage locations (`database_url`s, `storage_root`, `settings_registry`, `event_bus`), reusing `permissions.service.DEFAULT_DATABASE_URL` / `DEFAULT_USER_DATABASE_URL` instead of re-typing the literals — without them an in-process test cannot isolate a temp dir, and defaults keep the no-argument call identical to today.
-- **Answer:** **PENDING**
+- **Answer:** **A — keyword-only parameters with defaults equal to today's literals** (`database_url`s, `storage_root`, `settings_registry`, `event_bus`), reusing `permissions.service.DEFAULT_DATABASE_URL` / `DEFAULT_USER_DATABASE_URL` rather than re-typing them.
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — the spec's API block at P.4; makes Q-11 (in-process filesystem isolation) answerable and lets the two subprocess tests become in-process ones
 
 ## Q-06 — What happens to the entrypoint itself (`python src/main.py`)?
 
@@ -126,10 +126,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** `src/backend/shared/` currently holds only `principal.py` + `__init__.py`; AGENTS.md says "`shared/` is deliberately small" (code belongs there only when shared by multiple features with no business logic). Coverage `source = ["src/backend", "src/frontend"]` — `src/main.py` is outside it (measured: no `main.py` row in a `--cov` report), `fail_under = 92`. `STRUCTURE.md:118` and `:1627` map `src/main.py` (221 lines).
 - **Question:** Keep the factory in `src/main.py`, or move it to `src/backend/shared/composition.py` / `src/backend/composition/`?
 - **Recommended:** Keep it in `src/main.py` — smallest diff, no new module, no coverage-source change, no new cross-package import surface, and the two approved specs' "the entrypoint (`src/main.py`)" wording keeps resolving; `shared/` is the wrong home for the application's own wiring (it is not feature-shared code).
-- **Answer:** **PENDING**
+- **Answer:** **B — move it to a new `src/backend/composition/` package** (against P.2's recommendation). Consequences the user accepted: `docs/specs/settings-coverage.md` REQ-002 and `docs/specs/logging-coverage.md` REQ-011 wording "the entrypoint (`src/main.py`)" must be amended to name the composition module; the code enters the coverage `source = ["src/backend", ...]` set, so it is measured against `fail_under = 92` (Q-20); `STRUCTURE.md` gains a new package (Q-21); `src/backend/api/` (the `backend-api` TODO) can import the composition root without importing a top-level module.
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — P.4 spec: new package `src/backend/composition/` (home of `build_composition_root()` and `App`); `src/main.py` keeps only the `__main__` shim (Q-06) and the spec amendments' wording
 
 ## Q-08 — Where does `setup_logger()` go, given AC-011's test asserts a module-level call?
 
@@ -138,10 +138,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** The test parses `src/main.py` with `ast` and asserts (a) exactly one `setup_logger` call anywhere and (b) exactly one as a **top-level module statement** (`:41-45`); `tests/unit/logging_coverage/test_edge_cases.py:106-107` separately asserts `main_src.count("setup_logger(") == 1`. `setup_logger()` at `:221` must run **after** `register_logging_settings` (`:173`) because it reads `logging.*` live (comment at `:165-169`, REQ-011/REQ-005).
 - **Question:** Move `setup_logger()` to be the first statement inside the factory (and amend REQ-011/AC-011 + rewrite both tests to assert "exactly one call, inside the composition root, before any feature object is constructed"), or keep it at module level in `src/main.py`?
 - **Recommended:** Move it inside the factory as its first call and amend REQ-011/AC-011 + rewrite the two source-scan tests — keeping it at module level means `import main` still installs log sinks (an import side effect the change exists to remove) and splits the wiring in two places.
-- **Answer:** **PENDING**
+- **Answer:** **A — `setup_logger()` becomes the factory's first call** (after `register_logging_settings`, which must precede it because it reads `logging.*` live); amend `logging-coverage.md` REQ-011/AC-011 to "exactly one call, inside the composition root, before any feature object is constructed" and rewrite `tests/acceptance/logging_coverage/test_setup_logger.py` and `tests/unit/logging_coverage/test_edge_cases.py:106-107`.
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — the amendment PR now covers `logging-coverage.md` REQ-011/AC-011 explicitly; the two source-scan tests are in this change's test scope
 
 ## Q-09 — Is the current call order normative, and which edges are load-bearing invariants?
 
@@ -210,10 +210,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: `src/backend/filemanagement/feature_settings.py:45`, `src/backend/mail/feature_settings.py:66`, `src/backend/sessionmanagement/feature_settings.py:29` define `register_settings`, and no call site exists anywhere in `src/` (`grep -rn "register_settings(" src/` → only definitions). After `import main`: `has("filemanagement.storage_root") = False`, `has("mail.smtp_host") = False`, `has("sessionmanagement.cleanup_batch_size") = False` (16 keys total across the three features). `settings-coverage.md` REQ-002 says "each feature's `register_settings(registry)`"; REQ-005/AC-006 make the unregistered case a silent hardcoded-default fallback with a warning. AGENTS.md documents all three features as "Registered via the feature-owned `register_settings(registry)` (call at startup)".
 - **Question:** Keep them out of scope (open a separate ISSUE/FEATURE TODO for the missing registrations), or fix them here as part of the extraction?
 - **Recommended:** Out of scope, open a separate TODO — registering 16 keys changes observable behavior (views, persistence, `SettingChanged` events, live reads) and would hide a real defect inside an architecture change; the factory's test should assert **today's** registered set so the gap stays visible.
-- **Answer:** **PENDING**
+- **Answer:** **C — fix the three missing `register_settings` calls in this change, with a new acceptance test asserting the gap is closed** (against P.2's recommendation). The `settings-coverage.md` REQ-002 wording is left as-is because it already requires "each feature's `register_settings(registry)`" — the change makes AC-003 true instead of amending it.
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — the change is no longer behavior-preserving in this respect: it registers 16 previously unregistered keys (`filemanagement.*`, `mail.*`, `sessionmanagement.*`). **Backlog consequence:** the separate `docs/todo/startup-settings-registration-gaps.md` TODO (score 5/5) is now absorbed by this change — its disposition (merge into this change / keep separate) is the orchestrator's next backlog decision.
 
 ## Q-15 — Does the factory install the `PermissionService` / `SessionService` singletons?
 
