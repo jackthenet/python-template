@@ -785,3 +785,43 @@ check-only, REQ-023) is satisfied because the map is regenerated **in the same c
 | ID | Finding | Disposition |
 |---|---|---|
 | **F-21** | §5.3/S4.1 predicted a **5-line** map diff. The actual diff is **6 lines**: the map renders a per-module line count (`#### scripts/make_map.py (567 lines)` → `(581 lines)`), and the fix adds 14 lines to that module. The S4.1 probe could not predict it — it ran a **scratch copy of the generator outside the repository** against the unmodified tree, so `make_map.py`'s own count never changed there. | Expected, not a defect: the line-count line is generated content of the artifact, and the map must be regenerated for the edited file (REQ-021). No signature line outside the §5.3 set changed, and the total stays 1 941, so NFR-002 holds. Recorded so the S5.1/S6.x reviewers do not read the sixth line as scope creep. |
+
+### S4.3 refactor (2026-10-10)
+
+**Verdict: near no-op.** The S4.2 code is already the minimal form that keeps the F-08 `None` guard and
+INV-007 fidelity; **one stale comment line was corrected** and nothing structural was changed.
+
+**Considered and rejected (no churn invented):**
+
+| Option | Why rejected |
+|---|---|
+| Inline `_abbreviate_default` into the two comprehensions | It is called from **two** sites (`args.defaults`, `args.kw_defaults`); inlining duplicates the threshold ternary and the `ast.Name(id=…)` mechanism — a bigger diff and two places to keep in sync. Helper stays. |
+| Push the `None` guard **into** `_abbreviate_default` (`ast.expr \| None -> ast.expr \| None`) so both call sites become identical one-liners | Measured, not assumed: typeshed declares `ast.arguments.defaults: list[ast.expr]`, so the widened return type fails the gate — `uv run mypy` on a probe of exactly that shape reports `List comprehension has incompatible type List[expr \| None]; expected List[expr]`. Keeping it type-exact would need an overload/TypeVar — more code than the one inline `None if d is None else …` guard. The current split (helper is non-`None`, only the caller that can hold `None` guards it) is the smallest type-exact form. |
+| Collapse the three `"…"` constants (`_SUMMARY_MARKER`, `_FIELD_MARKER`, `_DEFAULT_MARKER`) into one `_ELLIPSIS` | Renames two **out-of-scope** constants for cosmetics and blurs the per-rule spec IDs each one carries (REQ-018 / REQ-017 / REQ-014 v2). The file's convention is deliberately one marker constant per rule; `_DEFAULT_MARKER` already matches the `_X_MARKER` naming. |
+| Rename `_drop_long_defaults` (it abbreviates, it no longer drops) | Cosmetic, and the name is the reference key in this change's own records (triage §3, S4.1, S4.2, `docs/todo/complexipy-scripts.md`, `structure-map.md` S4.3) — S4.2 explicitly recorded "no rename". The docstring's first line already states the v2 behaviour ("abbreviate … in the default's own slot") and the paragraph below states why deletion was wrong, so the name is not load-bearing. |
+| Shorten the 4-line `_DEFAULT_MARKER` comment or the `_drop_long_defaults` docstring | They carry the non-obvious *why* (`ast.unparse` cannot emit `…` from a `Constant`; the substitution is idempotent → INV-001; deleting a positional default shifts the kept ones → INV-007). Trim would remove evidence, not noise. |
+| `_abbreviate_default` docstring | States the rule plus the "a substitution, never a deletion" constraint; the *why* lives once in `_drop_long_defaults` rather than twice. Note: `scripts/*` is ruff `D`-exempt (`per-file-ignores`), so this is a review judgement, not a gate. |
+
+**The one change (comment only, 1 line, `scripts/make_map.py:73`):** the constant's comment still stated
+the **pre-fix** rule — "a parameter default is rendered **only when** its `ast.unparse` text is at most
+this long" — which is exactly the drop semantics the amended REQ-014 v2 removed (an over-long default is
+now rendered as `…` in its own slot). Corrected to
+`# REQ-014 v2: a parameter default is rendered verbatim only when its ast.unparse text is at most this long.`
+Behaviour-identical, and kept to **one line** on purpose: `make_map.py` stays at **581 lines**, so the map's
+per-module count line for the file (F-21) does not move and `STRUCTURE.md` is **byte-identical** — no map
+churn, no second regeneration.
+
+**Gates (all run in this worktree after the edit):**
+
+| Gate | Command | Result |
+|---|---|---|
+| Map regenerate + check | `uv run python scripts/make_map.py` then `--check` | exit **0** / **0**; `STRUCTURE.md` **1 941 lines** (unchanged) and **not modified** in the working tree (`git status` shows only `scripts/make_map.py`) |
+| Witnesses (§4.5) | the four node ids, `-v` | **4 passed** |
+| Targeted set | `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q` | **58 passed** (unchanged from S4.2) |
+| Lint | `uv run ruff check scripts/make_map.py` | `All checks passed!` (exit 0) |
+| Format | `uv run ruff format --check scripts/make_map.py` | `1 file already formatted` (exit 0) |
+| Types | `uv run mypy scripts/make_map.py` | `Success: no issues found in 1 source file` (exit 0) |
+| Complexity | `uv run complexipy --max-complexity-allowed 15 scripts/make_map.py` | `All functions are within the allowed complexity.` (exit 0) — `_abbreviate_default` 1, `_drop_long_defaults` 4, `_signature` 3 (unchanged) |
+
+No test, spec, traceability, changelog or `pyproject.toml` file was touched; the full `tests/` suite was
+not run (light tier — full regression stays the S6.4 pre-merge gate).

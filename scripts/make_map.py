@@ -70,7 +70,7 @@ _IMPORT_ROOT = "src/"
 _SUMMARY_LIMIT = 100
 _SUMMARY_MARKER = "…"
 
-# REQ-014: a parameter default is rendered only when its ast.unparse text is at most this long.
+# REQ-014 v2: a parameter default is rendered verbatim only when its ast.unparse text is at most this long.
 _DEFAULT_MAX_CHARS = 20
 
 # REQ-014 v2 / EDGE-017: the `…` an over-long default is abbreviated to, in its own slot — the same
