@@ -873,3 +873,39 @@ A step MUST log a problem when it:
 - **Duration / iterations:** one S5.1 failure + one Phase 4 re-entry; the fix is ~90 lines in one shared helper plus one decorator line per witness (15 witnesses).
 - **Resolution:** fixed **once in the shared place** — `tests/singleton_install_test_helpers.py` gained `SingletonSlot.save()` / `SingletonSlot.restore()` and a `witness_slots` decorator that parks the live bus (`isolated_event_bus`) and puts every slot back to the exact object it held before the witness, applied as one line per slot-writing witness. No assertion, no `finally` block and no `src/` file was touched; the witnesses' own `reset_*()` semantics (INV-001, EDGE-010, AC-009/010/012) still run at full strength, and the two witnesses whose trailing assertions need an empty slot (`test_edge_003`, `test_edge_004`) keep it — the outer state is restored only after the test body returns. **Durable rules:** (1) a test that clears a **module singleton slot** must restore what it found, not leave the slot empty — the suite's session fixtures install state in those slots and every later test reads them lazily; the repo's precedents are `eventbus_test_helpers.isolated_event_bus` and `settings_test_helpers.restore_singleton`, and a new witness file must use one of them rather than a bare `reset_*()` in `finally`; (2) restoring a slot is **not** `clear()` then `install(saved)` when the slot may already hold `saved` — for the event bus that shuts the live bus down suite-wide; save/restore must be identity-safe; (3) a Phase 5 failure spread across unrelated features is an isolation bug, not a behaviour bug — prove it by deselecting the suspect files (the delta *is* the diagnosis) before touching `src/`; (4) the RED/GREEN gates of a task are targeted, so a suite-wide isolation defect can only surface at S5.1 — that is what Phase 5 is for, and a 12/12-VERIFIED DAG is no evidence against it.
 - **Date:** 2026-10-10
+
+## P-105 — `bump-my-version` crashes with `UnicodeEncodeError` on the Windows console because its configured commit message contains `→` (S6.4)
+
+- **Problem:** `[tool.bumpversion] message = "Bump version: {current_version} → {new_version}"` is written to the console by `bump-my-version`, and on a Windows cp1252 stdout the non-ASCII arrow raises `UnicodeEncodeError`, so the bump aborts **after** it has worked out the file changes — the step looks like a tool failure rather than an encoding one.
+- **Step / Phase:** S6.4 (Phase 6, version bump) — one failed invocation + one retry.
+- **Change:** settings-public-registry-setter / CROSS-CUTTING
+- **Duration / iterations:** 2 attempts (1 crash, 1 success).
+- **Resolution:** run it as `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv tool run bump-my-version bump <level>` (the dry run needs the same prefix). **Durable rule:** every `bump-my-version` call in this repo (S6.4, and any release task) must carry that prefix on Windows; alternatively the `[tool.bumpversion] message` template could drop the arrow, which would fix it for every future change — left as a `chore` candidate rather than folded into this change.
+- **Date:** 2026-10-10
+
+## P-106 — a version bump leaves `uv.lock` stale because `[tool.bumpversion]` has no `uv.lock` entry, so the next `uv run` silently dirties the tree mid-step (S6.4)
+
+- **Problem:** the project pins its own version in `uv.lock` (`name = "python-template"`), but `[tool.bumpversion] [[tool.bumpversion.files]]` does not cover `uv.lock`. After `bump-my-version bump minor` committed `pyproject.toml` at `1.2.0`, the very next `uv run …` re-locked the workspace and left an uncommitted `uv.lock` diff inside a step that had just declared a clean tree — and CI compares the lockfile.
+- **Step / Phase:** S6.4 (Phase 6, version bump) — one extra commit.
+- **Change:** settings-public-registry-setter / CROSS-CUTTING
+- **Duration / iterations:** one extra commit (`chore: sync uv.lock to version 1.2.0`).
+- **Resolution:** commit the re-locked `uv.lock` immediately after the bump commit, before pushing. **Durable rule:** after any version bump in this repo, run one `uv run` (or `uv lock`) and commit the resulting `uv.lock` in the same release step; a `[[tool.bumpversion.files]]` entry for the lock's version line is the permanent fix and is a `chore` candidate.
+- **Date:** 2026-10-10
+
+## P-107 — `gh pr create` rejects `--json` in the installed `gh` version (prints help instead of creating) (S6.4)
+
+- **Problem:** adding `--json url,number` to `gh pr create` makes it print its usage block and exit non-zero, which reads like a malformed body/flag error and costs a retry cycle.
+- **Step / Phase:** S6.4 (Phase 6, open PR) — one failed invocation.
+- **Change:** settings-public-registry-setter / CROSS-CUTTING
+- **Duration / iterations:** 2 attempts.
+- **Resolution:** create with plain output (`GH_PAGER=cat gh pr create --base main --head <branch> --title … --body-file …`), then read it back machine-readably with `gh pr view <n> --json number,state,mergeable,title,url`. **Durable rule:** `--json` is valid on `gh pr view`, not on `gh pr create` — split create and read-back.
+- **Date:** 2026-10-10
+
+## P-108 — the agent shell tool kills long-running commands, so a cold full-suite run with `--cov` (1093 s) cannot complete in one call (S5.1)
+
+- **Problem:** the first cold `uv run pytest tests/ -q --cov` on the merged branch ran ~18 min and was terminated by the harness before it returned, so the Phase 5 gate produced no output at all; two further attempts with the same shape also died. The suite is ~320 s warm with `--cov` and ~296 s deterministic without it, so only the **cold** run is over the limit — a shape that looks safe on a warm worktree.
+- **Step / Phase:** S5.1 (Phase 5 verify) — 3 aborted runs before the gate produced evidence.
+- **Change:** settings-public-registry-setter / CROSS-CUTTING
+- **Duration / iterations:** 3 aborted runs + 2 successful runs.
+- **Resolution:** the gate was produced by (1) warming the tree with a `-p no:randomly` run first, (2) capturing output to a file **outside** the worktree (`../s51-scratch/`) so `make_map.py` and `test_nfr_004_mypy_and_ruff_clean` cannot see it, and (3) reading the tail of the log in a separate short command instead of waiting on the run. **Durable rules:** (1) never launch a cold full-suite run as a single blocking shell call — warm the cache first or split the run; (2) always capture to a file outside the worktree and read it afterwards (also P-91: the suite's `ResourceWarning` flood buries real failures); (3) a run that returns nothing is an aborted run, not a failed gate — re-run it, do not interpret it.
+- **Date:** 2026-10-10
