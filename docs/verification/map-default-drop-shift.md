@@ -1238,3 +1238,178 @@ recorded as the **S6.4 pre-merge gate** (5.4.3) and must be green in the Phase 6
 PR opens.
 
 **Gate ◆ Phase 5: passed.** Next: **S6.1 Review vs. normative basis** (Phase 6, REVIEW).
+
+## Phase 6 — S6.1 review vs. the normative basis (2026-10-10)
+
+HEAD at entry: `496d218` (`docs(map-default-drop-shift): S5.4 verification report …`), `git status
+--porcelain` **empty** before the step and after it (the only write is this section). Type **ISSUE,
+light tier**, so the normative basis is the **triage record (§1–§6) + the affected spec IDs**, and the
+ISSUE review gate is: *the reproduction tests are GREEN; the fix introduces no behavior beyond the
+affected spec IDs; the full regression suite has no new failures* (the last clause is the S6.4
+pre-merge gate under the light tier, §6 / 5.4.3).
+
+**Bounded inputs used (per AGENTS.md "Bounded scope (per S6.x step)", P-27).** The FINAL state of the
+files the change touched — `git diff --name-status main...HEAD` → `M STRUCTURE.md`,
+`M docs/verification/map-default-drop-shift.md`, `M docs/verification/traceability.md`,
+`M scripts/make_map.py`, `M tests/acceptance/test_structure_map.py`,
+`M tests/property/test_structure_map.py`, `M tests/unit/test_make_map.py` — read as final content, NOT
+a commit-by-commit code review. The single exception is the test-weakening check, which the step brief
+names as legitimate and which can only be done against the previous test state (`git show 0ecf7bc`).
+
+**Normative basis as it stands on `main`.** `docs/specs/structure-map.md` **v2**: REQ-014 heading `:270`,
+rule text `:287-294`; AC-014 `:429`; INV-007 `:454` (§8); EDGE-017 `:476` (§9); §11 witnesses `:533`,
+`:553`, `:570`; changelog v2 `:642`. The amendment reached `main` through Spec Amendment **PR A #79**,
+merge `d8ba07f`, spec commit `b0c5d96` — `git merge-base --is-ancestor b0c5d96 main` and
+`… d8ba07f HEAD` both succeed, and PR B touches **no** spec file
+(`git diff --name-status main...HEAD -- docs/specs/` is empty), so the Spec Amendment Workflow item 6
+(merge the spec PR before implementation) is satisfied and this change authored no spec text of its own.
+
+**Commands this step ran (targeted / read-only only — no full suite, no code or test edit):**
+
+| Check | Command | Result |
+|---|---|---|
+| Reproduction witnesses re-run | the four §4.5 node ids, `-q` | **`4 passed in 3.47s`** (exit 0) |
+| The three structure-map modules | `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q` | **`58 passed in 72.26s`** (exit 0, 0 skipped/deselected) |
+| Map freshness (check only, P-94) | `uv run python scripts/make_map.py --check` | **exit 0**, no output, `STRUCTURE.md` unmodified afterwards |
+| Artifact-level INV-007 audit (read-only AST scan of the tracked tree) | `git ls-files` + `ast` over `src`/`tests`/`scripts`/`migrations` | **8 over-long defaults in 4 functions** — and the committed map carries **exactly 8 `…` occurrences in exactly 4 signature spans** (`STRUCTURE.md` `AuthService.__init__`, `build_auth_service`, `build_memory_auth_service`, `simple_template`): no placeholder missing, none spurious |
+| Map self-consistency | `wc -l scripts/make_map.py` vs `STRUCTURE.md:487` | **581** vs `#### scripts/make_map.py (581 lines)`; map total **1 941** lines (NFR-002 ≤ 2 000) |
+| Full regression suite | `uv run pytest tests/` | **not run** — the S6.4 pre-merge gate (light tier, §6) |
+
+### Verdict per review question
+
+**1. Does the final `scripts/make_map.py` satisfy the amended REQ-014 / AC-014 and the new INV-007 /
+EDGE-017? — YES.**
+
+- **REQ-014 v2** (`structure-map.md:290-293`): *"a default that exceeds the threshold is abbreviated to
+  the single-character placeholder **`…` in its own slot** — the parameter is never removed from the
+  rendered list and never loses its `=` separator, so the rendered list preserves the source's parameter
+  names, their order, the positional-only / positional / keyword-only split, and **which parameters carry
+  a default**. The rule is **uniform** across positional, positional-only and keyword-only defaults."*
+  Code: `scripts/make_map.py:397-398` — `args.defaults = [_abbreviate_default(d) for d in args.defaults]`
+  and `args.kw_defaults = [None if d is None else _abbreviate_default(d) for d in args.kw_defaults]`:
+  a **substitution in place over both lists**, so list alignment (and therefore names, order, slot split
+  and the defaults-set) is structurally preserved — the deletion that caused the shift is gone. The
+  abbreviation itself is `scripts/make_map.py:381-385` (`_abbreviate_default` →
+  `ast.Name(id=_DEFAULT_MARKER)`, `_DEFAULT_MARKER = "…"` at `:80`). *Witnesses:*
+  `test_edge_017_over_long_default_keeps_its_slot` (`tests/unit/test_make_map.py:1028`) and
+  `test_ac_014_symbol_inventory_and_unparsed_signatures` (`tests/unit/test_make_map.py:996`).
+- **AC-014 v2** (`:429`): *"the signature text equals the `ast.unparse` rendering **except that a
+  parameter default whose unparsed text exceeds 20 characters renders as the `…` placeholder in its own
+  slot** … **And** the rendered parameter list, **with every `…` replaced by the literal `...`**, parses
+  with `ast.parse` and yields the same parameter names, order, positional-only / positional /
+  keyword-only split and set of defaulted parameters as the source."* The first clause holds because
+  `_signature` (`scripts/make_map.py:402-415`) is unchanged and still calls `_drop_long_defaults(node.args)`
+  at `:410` then unparses `node.args` at `:414` — the
+  placeholder is the only deviation from a plain `ast.unparse` render. The parse/fidelity clause is
+  witnessed clause-by-clause by `test_inv_007_signature_fidelity_survives_default_abbreviation`
+  (`tests/property/test_structure_map.py:628`, helpers `_inv007_failures` clauses 1–5).
+- **INV-007** (`:454`): witnessed by the same property test, whose expected rendering is computed from
+  the **source AST** (`_expected_params`, `tests/property/test_structure_map.py:553`), not from the
+  generator — so it is not a tautology of the implementation. Its last clause (*"a `…` appears **only**
+  where the source default's unparsed text exceeds the REQ-014 threshold"*) also holds over the
+  committed artifact: this step's independent AST scan and map scan agree exactly (8 ↔ 8, above).
+  Latent caveat recorded as **F-26** (not a current violation).
+- **EDGE-017** (`:476`): *"The parameter is rendered in its own slot as `name: annotation=…`; the
+  placeholder never shifts a neighbouring default onto an earlier parameter, a parameter with no default
+  is never given one, and a parameter with a default is never rendered without one."* All four clauses
+  are pinned by `_EDGE017_MODULE` / `_EDGE017_LINES` / `_EDGE017_NEEDLES` (`tests/unit/test_make_map.py:693-740`): the three
+  slots (`shift` / `posonly` / `keys`), a function whose **only** default is over-long (`only`), the
+  no-default keyword-only parameter (`need: int,` present **and** `need: int=…` absent — the F-08 trap),
+  the shift itself as negative needles (`b: str=1`, `c: list[int]='xy'` must be absent), and the
+  unchanged 20-character boundary (`edge(exact: str='0123456789abcdefgh')`, Q-8).
+
+**2. Is the fix the minimal fix? — YES.** The entire implementation delta is **two hunks** in
+`scripts/make_map.py` (`git diff --numstat main...HEAD -- scripts/make_map.py` → **+25 / −11**): one new
+helper (`_abbreviate_default`, `:381-385`), the two rewritten comprehensions in `_drop_long_defaults`, one new
+module constant (`_DEFAULT_MARKER`), and two documentation corrections (the `_DEFAULT_MAX_CHARS` comment
+at `:73`, the `_drop_long_defaults` docstring). Untouched, exactly as triage §5.5 required:
+`_signature`, `_class_name` (REQ-016), `type_params` (REQ-017), the threshold value
+`_DEFAULT_MAX_CHARS = 20` (`:74`), the CLI, every other generator output, and every `src/` module. No
+new dependency, no new pattern (so no ADR, per the AGENTS.md ADR threshold), no compatibility flag or
+setting (Q-18). **What the change introduced that the spec does not require:** only implementation
+mechanism, no behavior — (a) the `ast.Name(id=_DEFAULT_MARKER)` injection and its explanatory comment
+(the spec deliberately leaves the mechanism open; F-07/F-19), (b) one **extra** acceptance witness not
+listed in spec §11 (`test_ac_014_committed_map_renders_over_long_default_in_place`) — permitted, since
+the matrix/§11 may cite more witnesses than the strategy table names, never fewer (S5.3 §5.3.5).
+
+**3. Does the observed behaviour match what the triage predicted? — YES, with one already-recorded
+prediction delta.** §3.2's required line and the committed map now agree byte-for-byte
+(`- def \`simple_template(name: str='test', subject: str='Test {{who}}', body_html: str=…,
+body_text: str='Test {{who}}') -> EmailTemplate\``), and §3.3's required
+`reset_token_ttl: timedelta=…`, `lockout_duration: timedelta=…`, `origin: str=…` are all present on the
+`AuthService.__init__` map line while its short neighbours `session_ttl: timedelta=timedelta(days=7)`
+and `max_failed_attempts: int=5` are unharmed — the observed-vs-required statement (defaults attached to
+the wrong parameter / optional parameters rendered as required) is reversed. §3.3's scan (8 over-long
+defaults, 4 functions, 3 map lines keyword-only + 1 positional) reproduces exactly at this HEAD. The
+delta: §5.3/S4.1 predicted **5** changed map lines, the change produced **6** — the sixth is the map's
+own per-module line count for the edited file (`#### scripts/make_map.py (567 lines)` → `(581 lines)`),
+recorded and explained as **F-21**; it is generated content of the artifact, not scope creep.
+
+**4. Was any acceptance test weakened, narrowed or deleted to reach GREEN? — NO.**
+`git diff main...HEAD -- tests/` removes **no** test function (a grep for removed `def test_` lines
+returns nothing); three witnesses were added. The only pre-existing witness that changed is
+`test_ac_014_symbol_inventory_and_unparsed_signatures`, **re-derived in place** from the amended AC-014
+— authorized by the Spec Amendment Workflow and Q-11, and the change is **strictly stronger**
+(`git show 0ecf7bc -- tests/unit/test_make_map.py`):
+
+| Aspect | Before `0ecf7bc` | After `0ecf7bc` (final state) |
+|---|---|---|
+| `_AC014_LINES` | 13 expected lines; `items(pool: list[int])` and `resize(... data: dict[str, int], … over: str)` — the **omission** the v1 wording allowed | same 13 lines, **2 of them re-worded** to the v2 rendering — `items(pool: list[int]=…)` and `resize(... data: dict[str, int]=…, …, over: str=…)` (the `resize` line carries the over-long keyword-only defaults `data`/`over`, F-05) — the old strings are now **wrong per spec v2**, so this is re-derivation, not relaxation |
+| `_AC014_DEFAULTS` needles | 6 needles (3 positive, 3 negative) | **all 6 kept verbatim + 3 positive added** (`data: dict[str, int]=…`, `over: str=…`, `pool: list[int]=…`) = 9 — strictly more assertions |
+| Docstring | "a parameter default shown only when its unparsed text is ≤ 20 characters" | the v2 wording (verbatim ≤ 20, longer abbreviated in its own slot) |
+| Skips / xfails / deselect | none | none (this step: `58 passed`, 0 skipped, 0 deselected) |
+
+The new acceptance witness follows the established artifact-level pattern of
+`test_ac_021_committed_map_matches_fresh_render` / `test_nfr_002_map_line_budget` (REQ-021/AC-021 make
+the committed map the object under test) and locates both witnesses **by content**, asserting exactly one
+matching line each, so it cannot pass vacuously (F-11).
+
+**5. Is the regenerated `STRUCTURE.md` consistent with the map rule (REQ-021 / REQ-023)? — YES.**
+`0c73790` (the fix) contains **`scripts/make_map.py` and `STRUCTURE.md` in the same commit** — the
+REQ-023 / AGENTS.md "Structure Map" same-commit regeneration rule. The S4.3 comment-only commit
+`db425ae` carries **no** map diff, which is legal and verified rather than assumed: the regeneration was
+byte-identical, because `STRUCTURE.md`'s blob is the same at `0c73790` and `db425ae` (`1a8b586`) and the
+only property the map records for that file is its line count, which is **581 at both commits** (the
+comment edit replaced one line with one line). Fresh at HEAD: `make_map.py --check` → exit 0 (this step,
+tree clean afterwards); the map's own count line matches the file (581); total 1 941 lines (NFR-002);
+`test_ac_021_committed_map_matches_fresh_render` is GREEN in this step's 58-passed run. The map delta is
+6 lines, all generated content, no hand edit (REQ-022/EDGE-010 respected).
+
+**6. ISSUE-specific: did the fix introduce behavior beyond the affected spec IDs? — NO, and no
+reclassification is required.** Every rendered-text change traces to an ID amended or added by the merged
+amendment: REQ-014 v2 / AC-014 v2 (the placeholder rule), INV-007 (fidelity), EDGE-017 (the three slots
+plus the two boundary shapes). The two non-signature map lines are generated metadata the required
+regeneration absorbs (F-01/F-16/F-21), not new behavior. No new CLI surface, setting, flag, dependency,
+`src/` change or backend behavior; the change stays inside one feature (the structure-map generator and
+its artifact), so the light-tier qualification (§6) still holds and the Escalation Rules are not
+triggered.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| **F-26** | INV-007's last clause ("a `…` appears **only** where the source default's unparsed text exceeds the REQ-014 threshold") is not enforceable against a source default whose **own text contains a literal `…`** and fits the threshold: `def f(x: str = "…")` renders `x: str='…'`, which is indistinguishable from the placeholder, and the INV-007 strategy never draws such a value (`_SHORT_DEFAULTS = ("1", "'xy'", "None", "42")`, `tests/property/test_structure_map.py:483`), so no witness would flag it. Measured at this HEAD: **0** tracked `.py` defaults contain `…` at all, so the committed artifact satisfies the clause (8 placeholders ↔ 8 over-long defaults) and there is **no current violation**. | **Low** (latent witness/spec gap, no present defect) | **Deferred — out of scope.** Closing it needs either a spec-wording refinement (a spec amendment, not this ISSUE) or an extra value in the property strategy; neither is required by the affected IDs. Recorded for the after-workflow-optimization. |
+| **F-27** | `_drop_long_defaults` (`scripts/make_map.py:387`) is now a **misnomer** — it abbreviates, it no longer drops. | **Info** (naming) | **Accepted as-is / deferred.** S4.3 considered the rename and rejected it (the name is the reference key across this change's records and the sibling TODO; the docstring's first line states the v2 rule). Cosmetic, out of scope for an ISSUE fix. |
+| **F-28** | Three module constants hold the same `"…"` character (`_SUMMARY_MARKER:71`, `_DEFAULT_MARKER:80`, `_FIELD_MARKER:85`). | **Info** (duplication) | **Accepted as-is.** The file's convention is one marker constant per rule, each carrying its own spec ID (REQ-018 / REQ-014 v2 / REQ-017); collapsing them would rename two out-of-scope constants for cosmetics (S4.3). |
+| **F-29** | `test_ac_014_committed_map_renders_over_long_default_in_place` pins the **whole** `simple_template` map line, including its docstring summary — an unrelated docstring edit in `tests/mail_test_helpers.py` would break an AC-014 acceptance test. | **Low** (witness brittleness, intentional) | **Accepted.** The committed artifact is the object under test (REQ-021/AC-021 precedent), the witness locates by content and requires exactly one match, and the failure message prints both lines, so a future break is diagnosable, not silent. |
+| **F-30** | No witness **parses** the committed map's signature lines: INV-007's parse clause is witnessed over generated synthetic modules (property) and the artifact is witnessed by needles (acceptance). | **Info** (coverage shape) | **No action — covered by measurement.** This step's independent audit (8 over-long defaults in the tree ↔ 8 placeholders in 4 map signature spans) confirms the clause over the artifact. Recorded so the audit is not mistaken for a test. |
+| **F-31** | The map delta is 6 lines, of which 2 are generated metadata (`docs/` file count, `make_map.py`'s own line count) rather than the fix. | **Info** | **Closed at S6.1 — verified not scope creep** (F-01/F-16/F-21 reconciled: 4 signature lines + 2 metadata lines, total 1 941 unchanged, `--check` exit 0). |
+| **F-32** | `CHANGELOG.md` has **no** `## [Unreleased]` entry and `pyproject.toml` is still `1.1.0` at this HEAD. | **Open item, not a defect** | **Deferred to S6.4** — AGENTS.md Phase 6 items 10–11 (entry under `Fixed`, `bump-my-version bump patch` `1.1.0 → 1.1.1`, entries moved to `## [1.1.1] - <date>` in the bump commit) and F-20. The review skill flags a missing changelog **when the PR opens**, not in S6.1. **Blocking for S6.4, not for this gate.** |
+
+### Does any finding block a clean review?
+
+**No.** F-26…F-31 are low/informational and either accepted with reasons or deferred as out of scope for
+this ISSUE's IDs; none contradicts the normative basis, none is an unimplemented or unauthorized
+behavior, and no acceptance test was weakened, narrowed or deleted. **F-32 is not a review finding
+against the normative basis** — it is the Phase 6 obligation owed at S6.4, together with the light-tier
+**full regression suite** (`uv run pytest tests/ -v`, 5.4.3), which must be green before the PR opens and
+must be recorded in the review report (S6.3/S6.4).
+
+**Review Order note.** This step covers skill Review Order steps 1 (**normative basis**) and 3
+(**acceptance tests, weakening**). Steps 2 (traceability), 4–5 (implementation quality, feature
+boundaries and architecture rules) and 6–7 (quality, observability) are **S6.2**/**S6.3**; observability
+is not applicable to this change (the spec states the `scripts/` tooling is outside the backend tracing
+policy, `structure-map.md:505-507`).
+
+**Gate ◆ S6.1: passed** — the change implements exactly what its normative basis requires, no more and
+no less; 7 findings recorded, **0 blocking**. Next: **S6.2 Traceability + boundaries**.
