@@ -48,6 +48,18 @@ _logger = get_logger("settings")
 _SYSTEM_PRINCIPAL = Principal()
 
 _registry: list[SettingsRegistry | None] = [None]
+# REQ-026 / ADR-084: one module-level lock per owning module, guarding the three
+# slot operations — install, lazy create and reset — as one mutually exclusive
+# set. It covers only the slot read/swap (NFR-003); ADR-017's instance-level
+# RLock on SettingsRegistry guards instance state and stays a separate lock.
+# Reentrant, not a plain Lock, because the guarded lazy create constructs the
+# registry, whose constructor reads the settings singleton back through the
+# event bus (SettingsRegistry.__init__ -> get_event_bus -> EventBus.__init__ ->
+# get_settings_registry(required=False)): a plain Lock self-deadlocks that
+# cold-start read. The nested read still sees an empty slot and creates nothing,
+# so the reentrancy changes no behavior (measured; see docs/verification/
+# settings-public-registry-setter.md, T-001 GREEN).
+_registry_lock = threading.RLock()
 
 
 @logged_class(slow_threshold_ms=250)
@@ -418,16 +430,38 @@ def get_settings_registry(required: bool = True) -> SettingsRegistry | None:
     With ``required=False`` the existing singleton is returned, or ``None`` if
     it has not been created yet (no side effect).
     """
-    reg = _registry[0]
-    if reg is None:
-        if not required:
-            return None
-        reg = SettingsRegistry()
-        _registry[0] = reg
+    with _registry_lock:
+        reg = _registry[0]
+        if reg is None:
+            if not required:
+                return None
+            reg = SettingsRegistry()
+            # REQ-007: the owner's lazy create writes its own slot directly and
+            # never calls set_settings_registry() — it is not an install, so it
+            # must not emit the replace WARNING.
+            _registry[0] = reg
     return reg
+
+
+@logged(slow_threshold_ms=5)
+def set_settings_registry(registry: SettingsRegistry) -> None:
+    """Install ``registry`` as the shared default registry (singleton).
+
+    Replaces a non-empty default unconditionally and is never retroactive: an
+    object already constructed with an instance keeps it. The parameter is never
+    ``None`` — clearing the slot stays the job of ``reset_settings_registry()``.
+    """
+    with _registry_lock:
+        previous = _registry[0]
+        _registry[0] = registry
+    if previous is not None:
+        # REQ-002: exactly one WARNING naming the feature's shared default (never
+        # the instance), emitted after the lock is released (NFR-003).
+        _logger.warning("settings: shared default registry replaced")
 
 
 @logged(slow_threshold_ms=5)
 def reset_settings_registry() -> None:
     """Reset the shared default registry (for tests)."""
-    _registry[0] = None
+    with _registry_lock:
+        _registry[0] = None

@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from logging_test_helpers import PIPELINE_COUNT_CODE, run_python
+from logging_test_helpers import PIPELINE_COUNT_CODE, run_python, subprocess_setup_code
 
 from backend.logging import logged
 
@@ -33,17 +33,13 @@ def test_inv_001_concurrent_setup_logger_sinks(tmp_path: Path) -> None:
     @given(st.integers(min_value=1, max_value=16))
     def inner(n: int) -> None:
         log_file = tmp_path / f"inv_001_{n}.log"
-        code = f"""
-import threading, tempfile
-from backend.settings import SettingsRegistry, YamlValueRepository
-from backend.settings import registry as _reg_mod
-from backend.logging import register_settings as logging_register, setup_logger
+        code = (
+            subprocess_setup_code(str(log_file), {"logging.log_level": "INFO"})
+            + f"""
+import threading
 
-reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-_reg_mod._registry[0] = reg
-logging_register(reg)
-reg.set_value('logging.log_file', {str(log_file)!r})
-reg.set_value('logging.log_level', 'INFO')
+from backend.logging import setup_logger
+
 errors = []
 
 def worker():
@@ -60,6 +56,7 @@ for t in threads:
 print("ERRORS", len(errors))
 {PIPELINE_COUNT_CODE}
 """
+        )
         result = run_python(code)
         assert result.returncode == 0, result.stderr
         assert "ERRORS 0" in result.stdout

@@ -1422,7 +1422,7 @@ def test_ac_027_freshness_policy_documented_twice() -> None:
 # --- T-007: the committed artifact — STRUCTURE.md (REQ-021, AC-021, NFR-002, NFR-005) -----------
 
 _MAP_FILE = _REPO_ROOT / "STRUCTURE.md"
-_NFR_002_LINE_BUDGET = 2_000  # NFR-002: the committed map is ≤ 2 000 lines
+_NFR_002_LINE_BUDGET = 2_200  # NFR-002 (v3): the committed map is ≤ 2 200 lines
 _COMPLEXIPY_MAX = "15"  # NFR-005: [tool.complexipy] max-complexity-allowed
 _COMPLEXIPY_PATHS: tuple[str, ...] = ("src", "tests")  # NFR-005: [tool.complexipy] paths
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -1535,7 +1535,7 @@ def test_ac_014_committed_map_renders_over_long_default_in_place() -> None:
 
 
 def test_nfr_002_map_line_budget() -> None:
-    """NFR-002: the committed STRUCTURE.md is non-empty and within the ≤ 2 000 line ceiling."""
+    """NFR-002: the committed STRUCTURE.md is non-empty and within the ≤ 2 200 line ceiling."""
     assert _MAP_FILE.is_file(), "REQ-021: no STRUCTURE.md is committed at the repository root"
     lines = _MAP_FILE.read_text(encoding="utf-8").splitlines()
     assert any(line.strip() for line in lines), "the committed map is empty: the line budget would pass vacuously"

@@ -769,6 +769,37 @@ The project version is a semantic version (major.minor.patch) stored in `pyproje
 
 ---
 
+## Using the Feature Singletons (install and reset)
+
+Five features expose their shared default as a module singleton — settings, event bus, permissions, search and session management. Each owns a private one-element slot and publishes the same trio; use the trio, never the slot (spec: `docs/specs/settings-public-registry-setter.md`, ADR-083 / ADR-084).
+
+- **The trio.** `get_*()` reads the shared default (constructing it lazily), `set_*()` installs an instance you built as the shared default, `reset_*()` clears the slot. The names are `set_settings_registry`, `set_event_bus`, `set_permission_service`, `set_search_service` and `set_session_service`, each re-exported from its own feature package root.
+- **Install, never write the slot.** Writing another package's private slot is banned twice: ruff `TID251` rejects the import of the slot's module, and the architecture scan test fails on the assignment — including inside the code strings handed to `subprocess`. A module still writes its **own** slot (that is how its lazy create works).
+- **Install semantics.** Replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does; never retroactive (an object built earlier keeps the dependency it was given); lifecycle-neutral (it neither starts what it installs nor shuts down what it replaces); never accepts `None`; publishes no event.
+- **Test seam.** `reset_*()` stays the seam between tests. To swap in a scratch instance and put the original back, capture it with `get_*()`, re-install it in the `finally` with `set_*()`, and reset when the capture was `None`. `witness_slots` in `tests/singleton_install_test_helpers.py` does exactly that for all five slots and restores outer state on teardown.
+- **Session-management carve-out.** `get_session_service(repository=...)` needs a repository to construct a default, so observe the install/reset pair through `get_session_service(repository)`.
+
+```python
+from backend.settings import (
+    SettingsRegistry,
+    get_settings_registry,
+    reset_settings_registry,
+    set_settings_registry,
+)
+
+saved = get_settings_registry(required=False)  # required=False: capture without creating one
+set_settings_registry(SettingsRegistry(value_repository=YamlValueRepository(tmp_dir)))
+try:
+    ...  # the code under test reads get_settings_registry()
+finally:
+    if saved is not None:
+        set_settings_registry(saved)           # put the original instance back
+    else:
+        reset_settings_registry()              # the slot was empty; install never takes None
+```
+
+---
+
 ## Using the Logging Feature
 
 New backend features MUST use the shared logging feature at `src/backend/logging/` (spec: `docs/specs/logging.md`) instead of inventing their own logging.
@@ -804,6 +835,7 @@ New backend features MUST use the shared event bus at `src/backend/eventbus/` (s
 - **Isolate errors.** A handler's exception is caught and logged; other handlers for the same event still run; the exception never propagates to the publisher.
 - **Lifecycle.** The worker starts lazily on the first `publish()`. Call `shutdown()` to drain pending events and stop (idempotent). The bus is usable as a context manager.
 - **Testing.** Use `EventBus(max_queue_size=...)` for a fresh instance, and `reset_event_bus()` to reset the module singleton between tests.
+- **Install the shared default.** `set_event_bus(bus)` installs `bus` as the shared default event bus. It replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does (the lazy create inside `get_event_bus()` writes the owner's own slot and is not an install, so it never warns); it is never retroactive — an object constructed earlier keeps its bus — and it is lifecycle-neutral: it neither starts the installed bus nor shuts down the one it replaces. Clearing the slot stays the job of `reset_event_bus()`, which stays the test seam between tests (unlike an install, it does shut the instance down).
 
 ```python
 from backend.eventbus import get_event_bus
@@ -832,6 +864,7 @@ New backend features that need typed, validated configuration values MUST use th
 - **Events.** Value changes publish `SettingChanged` (key, value, previous) to the event bus (best-effort).
 - **Errors.** Exceptions are the `SettingsError` hierarchy (from `backend.settings.exceptions`): `SettingsNotFoundError`, `SettingsValidationError`, `SettingsRegistrationError`, `TemplateNotFoundError`, `TemplateValidationError`, `TemplateStorageError`, `ValueStorageError`.
 - **Testing.** Use `reset_settings_registry()` to reset the module singleton between tests. Test registries MUST pass an explicit isolated value repository (e.g., `YamlValueRepository(tempfile.mkdtemp())`) to avoid cross-test contamination from the shared default directory.
+- **Install the shared default.** `set_settings_registry(registry)` installs `registry` as the shared default registry every feature reads. It replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does (the lazy create inside `get_settings_registry()` writes the owner's own slot and is not an install, so it never warns); it is never retroactive — an object constructed earlier keeps the registry it was given. The parameter is never `None`: clearing the slot stays the job of `reset_settings_registry()`, which stays the test seam between tests.
 
 ```python
 from backend.settings import SettingDefinition, SettingKind, get_settings_registry
@@ -867,6 +900,27 @@ manager.verify_password(user.id, "s3cret!x")
 
 ---
 
+## Using the Permissions Feature
+
+New backend features that need roles, grants or permission checks MUST use the shared permissions feature at `src/backend/permissions/` (spec: `docs/specs/user-roles-permissions.md`) instead of inventing their own role or grant storage.
+
+- **Service entry point.** Use `get_permission_service()` (the module singleton) or `PermissionService(role_repository, grant_repository, system_repository, user_manager, session_lookup=..., catalog=..., event_bus=..., settings_registry=...)` for tests/DI. The composition root (`src/main.py`) builds the one process instance and injects it into the features as their `permission_service`.
+- **Core operations.** Checks: `has_permission(user_id, permission, session_token=None)` (fail-closed) and `require_permission(...)` (raises `PermissionDeniedError` and publishes `PermissionDenied`). Administration: `create_role` / `list_roles` / `delete_role`, `grant_permission` / `revoke_permission` / `get_role_permissions`, `assign_role` / `add_role` / `remove_role` / `set_roles`, `set_system_permissions` / `get_system_permissions`.
+- **Static catalog.** Permission names never appear at runtime: each feature exposes `register_actions(catalog)` and the composition root builds the `PermissionCatalog` from them at startup; an unknown name is an `UnknownPermissionError`, never an implicitly created grant.
+- **Settings.** `register_settings(registry)` registers `permissions.system_principal` (LIST, default the bootstrap system set); the table is the source of truth and a registry write updates it through the `SettingChanged` subscription.
+- **Errors.** Exceptions are the `AuthorizationError` hierarchy (from `backend.permissions`): `PermissionDeniedError`, `RoleNotFoundError`, `RoleAlreadyExistsError`, `RoleInUseError`, `RoleProtectedError`, `UnknownPermissionError`.
+- **Storage.** Use `SqliteRoleRepository` / `SqliteGrantRepository` / `SqliteSystemPrincipalRepository` (default `sqlite:///./data/permissions.db`); the repository ABCs are the seam for the `Memory*` fakes in tests.
+- **Install the shared default.** `set_permission_service(service)` installs `service` as the shared default `PermissionService`. It replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does (the lazy create inside `get_permission_service()` writes the owner's own slot and is not an install, so it never warns); it is never retroactive — an object constructed earlier keeps the service it was given — and neither the installed nor the replaced instance is started or shut down. Clearing the slot stays the job of `reset_permission_service()`, which stays the test seam between tests.
+
+```python
+from backend.permissions import get_permission_service
+
+service = get_permission_service()  # the shared default (lazily constructed)
+service.require_permission(user_id, "filemanagement.upload", session_token=token)
+```
+
+---
+
 ## Using the Authentication Feature
 
 New backend features that need login, sessions, or password recovery MUST use the shared authentication feature at `src/backend/authentication/` (spec: `docs/specs/authentication.md`) instead of inventing their own auth.
@@ -898,6 +952,26 @@ service = AuthService(
     event_bus=event_bus,
 )
 result = service.login(LoginRequest(identifier="alice", password="s3cret!x"))
+```
+
+---
+
+## Using the Session Management Feature
+
+New backend features that need to list or revoke the sessions a user is logged in with MUST use the shared session-management feature at `src/backend/sessionmanagement/` (spec: `docs/specs/session-management.md`) instead of reading authentication's session table directly.
+
+- **Service entry point.** Use `get_session_service(repository=None, event_bus=None, settings_registry=None)` (the module singleton — the first call must pass a `repository`, later calls need none) or `SessionService(repository, event_bus=None, settings_registry=None, permission_service=None)` for tests/DI. The repository is authentication's `SessionRepository` ABC.
+- **Core operations.** `list_sessions(token=... | user_id=..., limit=..., principal=...)` (exactly one of token/user_id; valid sessions only, newest first, the current one pinned first), `revoke_session(session_id, principal=...)`, `logout_all_sessions(token, principal=...)`, `logout_other_sessions(token, principal=...)`, `revoke_all_sessions(..., principal=...)`, `cleanup_expired(principal=...)`. Each enforces its `sessionmanagement.*` action through the injected `PermissionChecker` (ADR-071).
+- **Events.** The service subscribes to `LoginSucceeded` (cap eviction) and to the user-management lifecycle events (revocation) and publishes `SessionsListed` / `SessionRevoked` / `AllSessionsRevoked` / `ExpiredSessionsDeleted`; a `None` event bus means no subscriptions and no events.
+- **Settings & registrations.** `register_settings(registry)` registers `sessionmanagement.max_listed_sessions`, `sessionmanagement.max_sessions_per_user` and `sessionmanagement.cleanup_batch_size` (read live); `register_actions(catalog)` adds the `sessionmanagement.*` actions; `build_session_source(repository)` exposes sessions to the search feature.
+- **Install the shared default.** `set_session_service(service)` installs `service` as the shared default `SessionService`. It replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does (the lazy create inside `get_session_service()` writes the owner's own slot and is not an install, so it never warns); it is never retroactive — a caller that already obtained a service keeps that instance — and neither the installed nor the replaced service is started or shut down. Clearing the slot stays the job of `reset_session_service()`, which stays the test seam between tests.
+
+```python
+from backend.authentication import SqliteSessionRepository
+from backend.sessionmanagement import get_session_service
+
+service = get_session_service(SqliteSessionRepository("sqlite:///./app.db"))  # first call passes the repository
+service.logout_other_sessions(token)
 ```
 
 ---
@@ -986,6 +1060,7 @@ New backend features that need to expose their content to cross-feature search M
 - **Events.** Registration/unregistration/failure publish `SourceRegistered`/`SourceUnregistered`/`SourceQueryFailed` (best-effort; non-sensitive data only — never query text or result content).
 - **Errors.** Exceptions are the `SearchError` hierarchy (from `backend.search`): `UnknownSourceError`, `MalformedQueryError` (invalid pagination, non-filterable/non-sortable field, invalid operator, wrong value type — identifies the reason and the field/source), `SourceQueryFailedError` (source + reason + error kind).
 - **Existing sources.** user-management, file-management, and session-management expose `build_user_source(repository)` / `build_file_source(repository)` / `build_session_source(repository)` — the startup wiring in `src/main.py` registers all three.
+- **Install the shared default.** `set_search_service(service)` installs `service` as the shared default `SearchService`. It replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does (the lazy create inside `get_search_service()` writes the owner's own slot and is not an install, so it never warns); it is never retroactive — a service obtained earlier keeps that instance together with every source registered on it — and an install registers or unregisters nothing on either instance. Clearing the slot stays the job of `reset_search_service()`, which stays the test seam between tests.
 
 ```python
 from backend.search import SearchQuery, get_search_service

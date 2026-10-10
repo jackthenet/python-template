@@ -16,7 +16,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from logging_test_helpers import managed_sinks, pipeline_logger, run_python, wait_for_file_content
+from logging_test_helpers import (
+    managed_sinks,
+    pipeline_logger,
+    run_python,
+    subprocess_setup_code,
+    wait_for_file_content,
+)
 
 from backend.logging import get_logger, logged, setup_logger
 
@@ -34,21 +40,19 @@ _OVERHEAD_SAMPLES = 3
 def test_nfr_001_setup_time_budget(tmp_path: Path) -> None:
     """NFR-001 (structlog-logging, amending logging.md NFR-001): setup_logger() completes in under 25 ms (median of 3 fresh processes)."""
     log_file = tmp_path / "nfr_001.log"
-    code = f"""
-import time, tempfile
-from backend.settings import SettingsRegistry, YamlValueRepository
-from backend.settings import registry as _reg_mod
-from backend.logging import register_settings as logging_register, setup_logger
-reg = SettingsRegistry(value_repository=YamlValueRepository(tempfile.mkdtemp()))
-_reg_mod._registry[0] = reg
-logging_register(reg)
-reg.set_value('logging.log_file', {str(log_file)!r})
-reg.set_value('logging.log_level', 'INFO')
+    code = (
+        subprocess_setup_code(str(log_file), {"logging.log_level": "INFO"})
+        + """
+import time
+
+from backend.logging import setup_logger
+
 start = time.perf_counter()
 setup_logger()
 elapsed_ms = (time.perf_counter() - start) * 1000
-print(f"SETUP_MS {{elapsed_ms:.2f}}")
+print(f"SETUP_MS {elapsed_ms:.2f}")
 """
+    )
     samples: list[float] = []
     for _ in range(3):
         result = run_python(code)

@@ -29,11 +29,34 @@ _logger = get_logger("eventbus")
 # Sentinel placed in the queue to tell the worker to stop after draining.
 _SENTINEL = object()
 
+# AC-017/AC-018 fallback: the queue size used when the settings registry has no
+# ``eventbus.max_queue_size`` (event-bus.md D4 default).
+_DEFAULT_MAX_QUEUE_SIZE = 1000
+
 
 def _handler_name(handler: Callable[..., None]) -> str:
     """Best-effort human-readable name for a handler (for logging)."""
     qualname = getattr(handler, "__qualname__", None)
     return qualname if qualname is not None else repr(handler)
+
+
+def _resolve_max_queue_size() -> int:
+    """Resolve the default queue size from the settings registry (AC-017/AC-018).
+
+    The guarded read (``required=False``) never creates the settings singleton, so
+    there is no import side effect. It does take the settings module lock, so a
+    caller that holds the event-bus slot lock must resolve the value **before**
+    taking it and pass it in (finding F-72: the acquisition order is settings →
+    bus everywhere, never bus → settings).
+    """
+    # Lazy import: backend.settings' registry reaches back into this module, so a
+    # module-level import here would be circular.
+    from backend.settings import get_settings_registry
+
+    registry = get_settings_registry(required=False)
+    if registry is not None and registry.has("eventbus.max_queue_size"):
+        return registry.get_value("eventbus.max_queue_size")
+    return _DEFAULT_MAX_QUEUE_SIZE
 
 
 @logged_class(slow_threshold_ms=250)
@@ -55,15 +78,8 @@ class EventBus:
         if max_queue_size is None:
             # AC-017/AC-018: read eventbus.max_queue_size from the settings
             # registry when it exists; otherwise fall back to the original
-            # hardcoded default. The guarded read (required=False) never
-            # creates the singleton, so there is no import side effect.
-            from backend.settings import get_settings_registry
-
-            registry = get_settings_registry(required=False)
-            if registry is not None and registry.has("eventbus.max_queue_size"):
-                max_queue_size = registry.get_value("eventbus.max_queue_size")
-            else:
-                max_queue_size = 1000
+            # hardcoded default.
+            max_queue_size = _resolve_max_queue_size()
         self._max_queue_size = max_queue_size
         self._queue: queue.Queue = queue.Queue(maxsize=max_queue_size)
         self._registry: list[tuple[type, Callable[..., None]]] = []
@@ -235,23 +251,72 @@ class EventBus:
 
 _default_bus: list[EventBus | None] = [None]
 
+# REQ-006 / ADR-084: one module-level lock guards all three slot operations —
+# install, lazy create and reset. It is held only for the slot read/swap: no
+# settings read, no shutdown() and no worker start happens under it (NFR-003,
+# finding F-72).
+_default_bus_lock = threading.Lock()
+
 
 @logged(slow_threshold_ms=5)
 def get_event_bus() -> EventBus:
     """Return the shared default event bus (singleton)."""
+    # F-76: the settings value only matters when a bus is about to be constructed,
+    # so a resolved slot is returned on a plain reference read. Resolving it on
+    # every call reached the settings registry's enforced methods from the
+    # composition root while its permission service was still unset, so
+    # ``import main`` raised AttributeError (the settings read stays on the
+    # lazy-create path, exactly as before the module lock was added).
     bus = _default_bus[0]
-    if bus is None:
-        bus = EventBus()
+    if bus is not None:
+        return bus
+    # F-72: the settings read is resolved BEFORE the slot lock is taken. The
+    # settings lazy create constructs a SettingsRegistry, which calls back into
+    # this function, so a thread that reached settings while holding the bus lock
+    # would close an ABBA cycle with a thread doing the opposite. Passing the
+    # resolved value in keeps ``EventBus.__init__`` out of the settings module.
+    max_queue_size = _resolve_max_queue_size()
+    with _default_bus_lock:
+        bus = _default_bus[0]
+        if bus is None:
+            # REQ-007: the owner's lazy create writes its own slot directly and
+            # never calls set_event_bus() — it is not an install, so it must not
+            # emit the replace WARNING.
+            bus = EventBus(max_queue_size=max_queue_size)
+            _default_bus[0] = bus
+            _logger.debug("event bus: created shared default instance")
+        return bus
+
+
+@logged(slow_threshold_ms=5)
+def set_event_bus(bus: EventBus) -> None:
+    """Install ``bus`` as the shared default event bus (singleton).
+
+    Replaces a non-empty default unconditionally and is never retroactive: an
+    object constructed earlier with a bus keeps that bus. The install is
+    lifecycle-neutral (EDGE-011) — it neither starts the installed bus nor shuts
+    down the one it replaces; only ``reset_event_bus()`` shuts down (REQ-005).
+    The parameter is never ``None`` — clearing stays the job of
+    ``reset_event_bus()``.
+    """
+    with _default_bus_lock:
+        previous = _default_bus[0]
         _default_bus[0] = bus
-        _logger.debug("event bus: created shared default instance")
-    return bus
+    if previous is not None:
+        # REQ-002: exactly one WARNING naming the shared default (never the
+        # instance), emitted after the lock is released (NFR-003).
+        _logger.warning("event bus: shared default bus replaced")
 
 
 @logged(slow_threshold_ms=5)
 def reset_event_bus() -> None:
-    """Reset the shared default event bus (for tests)."""
-    bus = _default_bus[0]
+    """Reset the shared default event bus (for tests) — still shuts it down."""
+    with _default_bus_lock:
+        bus = _default_bus[0]
+        _default_bus[0] = None
     if bus is not None:
+        # event-bus.md REQ-005 / EDGE-007: reset keeps its shutdown semantics.
+        # Draining and joining the worker is feature-level work, so it runs
+        # outside the slot lock (NFR-003).
         bus.shutdown()
-    _default_bus[0] = None
     _logger.debug("event bus: reset shared default instance")

@@ -14,6 +14,7 @@ from typing import Any
 
 from eventbus_test_helpers import isolated_event_bus
 from logging_coverage_test_helpers import (
+    INVENTORY_INSTALL_OPERATIONS,
     INVENTORY_MODULE_FUNCTIONS,
     entry_records,
     exit_records,
@@ -112,21 +113,31 @@ def test_concrete_repo_provider_traced(log_records: list[Any], tmp_path: Any) ->
 
 
 def test_module_functions_traced(log_records: list[Any]) -> None:
-    """AC-005: every public module-level function produces entry + exit records."""
+    """AC-005: every public module-level function produces entry + exit records.
+
+    The five install operations are the exception to the *mechanism*, not to the requirement: they
+    are covered by AC-014's per-function witness (see the ``probed`` filter below).
+    """
     # The inventory includes reset_settings_registry / reset_event_bus (module
     # functions under test); save the singletons so the suite state is
     # restored on exit (no state leak into later tests).
     saved_registry = get_settings_registry(required=False)
+    # The five install operations take the object they install, so this bare-call probe cannot
+    # reach them: their entry/exit pair is witnessed per function by AC-014 of change
+    # settings-public-registry-setter (singleton_install/test_install.py), which installs a real
+    # instance of each feature's own type and restores the slot. The probe covers the rest of the
+    # inventory (AC-005's getters, resets, token helpers and the logging entry point).
+    probed = {name: fn for name, fn in INVENTORY_MODULE_FUNCTIONS.items() if name not in INVENTORY_INSTALL_OPERATIONS}
     with isolated_event_bus():
         try:
-            # Call each inventory module function.
-            for name, fn in INVENTORY_MODULE_FUNCTIONS.items():
+            # Call each probed inventory module function.
+            for name, fn in probed.items():
                 if name == "hash_token":
                     fn("probe")
                 else:
                     fn()
 
-            for name in INVENTORY_MODULE_FUNCTIONS:
+            for name in probed:
                 # Match the exact qualname (module functions have no class prefix).
                 # "At least 1" (not "exactly 1"): a traced function may be invoked
                 # internally by another traced function (e.g. get_settings_registry

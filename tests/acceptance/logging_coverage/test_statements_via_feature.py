@@ -2,7 +2,7 @@
 one-off statements stay statements, but they are written through the shared logging
 feature's exported ``get_logger()`` and the feature module imports no logging backend.
 
-The witness is per file (spec AC-009 names the four files and the statement count in
+The witness is per file (structlog-logging AC-009 names the four files and the statement count in
 each): the module's source is parsed, its one-off statement call sites are counted —
 the statements are kept as statements, none added, none removed — and every one of
 them must be written on a logger the module obtained from ``get_logger()``.
@@ -24,10 +24,10 @@ from logging_coverage_test_helpers import messages
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# REQ-001 / REQ-005: the logging backends a feature module must never import.
+# structlog-logging REQ-001 / REQ-005: the logging backends a feature module must never import.
 _BACKEND_PACKAGES = frozenset({"loguru", "structlog"})
 
-# The level methods through which a one-off statement is written (REQ-005).
+# The level methods through which a one-off statement is written (structlog-logging REQ-005).
 _LEVEL_METHODS = frozenset({"debug", "info", "warning", "warn", "error", "exception", "critical", "fatal", "log"})
 
 
@@ -46,7 +46,7 @@ def _parse(relative_path: str) -> ast.Module:
 
 
 def _backend_imports(tree: ast.AST) -> list[str]:
-    """Every import of a logging backend package inside ``tree`` (REQ-001 / REQ-005)."""
+    """Every import of a logging backend package inside ``tree`` (structlog-logging REQ-001 / REQ-005)."""
     found: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -59,7 +59,7 @@ def _backend_imports(tree: ast.AST) -> list[str]:
 def _dir_backend_imports(relative_dir: str) -> list[str]:
     """Every module under ``relative_dir`` (repo-relative) that imports a logging backend.
 
-    The per-feature half of REQ-001/REQ-005: migrating one file is not enough when a
+    The per-feature half of structlog-logging REQ-001/REQ-005: migrating one file is not enough when a
     sibling module of the same feature still imports the backend.
     """
     return sorted(
@@ -109,7 +109,7 @@ def _written_via_get_logger(call: ast.Call, feature_names: set[str]) -> bool:
 
 
 def _statement_violations(relative_path: str, expected_statements: int) -> list[str]:
-    """AC-009's three clauses for one module, as violation strings (empty means it holds).
+    """structlog-logging AC-009's three clauses for one module, as violation strings (empty means it holds).
 
     The clauses are collected instead of asserted one by one, so one run names every
     violation — in both files — and a clause that already holds is visible in the
@@ -170,12 +170,12 @@ _EVENTBUS_STATEMENT_MESSAGES = ("event bus: published event type", "event bus: s
 
 
 def test_ac_009_settings_statements_go_through_get_logger(log_records: list[Any]) -> None:
-    """AC-009 (settings half): the 17 statements in ``registry.py`` and the 11 in
+    """AC-009 (settings half): the 18 statements in ``registry.py`` and the 11 in
     ``repository.py`` are written through ``get_logger()``, and neither module — nor
     any other module of the settings feature — imports a logging backend."""
-    # REQ-005 fixes the statement count per file; logging-coverage REQ-010 v2 keeps each of them a statement.
+    # structlog-logging REQ-005 fixes the statement count per file; logging-coverage REQ-010 v2 keeps each of them a statement.
     violations = [
-        *_statement_violations("src/backend/settings/registry.py", 17),
+        *_statement_violations("src/backend/settings/registry.py", 18),
         *_statement_violations("src/backend/settings/repository.py", 11),
     ]
 
@@ -183,7 +183,7 @@ def test_ac_009_settings_statements_go_through_get_logger(log_records: list[Any]
     if offenders := _dir_backend_imports("src/backend/settings"):
         violations.append(f"a module under src/backend/settings/ imports a logging backend: {offenders}")
 
-    assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
+    assert not violations, "structlog-logging AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
 
     # The kept statements still emit their unchanged wording through the pipeline (spec §9 row 2).
     _run_settings_statements()
@@ -192,16 +192,16 @@ def test_ac_009_settings_statements_go_through_get_logger(log_records: list[Any]
 
 
 def test_ac_009_eventbus_statements_go_through_get_logger(log_records: list[Any]) -> None:
-    """AC-009 (event bus half): the 10 statements in ``eventbus.py`` are written through
+    """AC-009 (event bus half): the 11 statements in ``eventbus.py`` are written through
     ``get_logger()``, and no module of the event bus feature imports a logging backend."""
-    # REQ-005 fixes the statement count per file; logging-coverage REQ-010 v2 keeps each of them a statement.
-    violations = _statement_violations("src/backend/eventbus/eventbus.py", 10)
+    # structlog-logging REQ-005 fixes the statement count per file; logging-coverage REQ-010 v2 keeps each of them a statement.
+    violations = _statement_violations("src/backend/eventbus/eventbus.py", 11)
 
     # T-005's completion gate: the whole event bus feature is backend-free.
     if offenders := _dir_backend_imports("src/backend/eventbus"):
         violations.append(f"a module under src/backend/eventbus/ imports a logging backend: {offenders}")
 
-    assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
+    assert not violations, "structlog-logging AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
 
     # The kept statements still emit their unchanged wording through the pipeline (spec §9 row 2).
     _run_eventbus_statements()
@@ -209,32 +209,34 @@ def test_ac_009_eventbus_statements_go_through_get_logger(log_records: list[Any]
         raise AssertionError(f"AC-009: event bus statements never emitted {missing}; got {messages(log_records)!r}")
 
 
-# AC-009's four named files, with the statement count REQ-005 fixes in each.
+# structlog-logging AC-009's four named files, with the statement count its REQ-005 fixes in each
+# (refreshed from the 17/11/10/1 migration snapshot to the post-change state by change
+# settings-public-registry-setter: each install operation adds one one-off WARNING, REQ-002).
 _AC_009_STATEMENTS: dict[str, int] = {
-    "src/backend/settings/registry.py": 17,
+    "src/backend/settings/registry.py": 18,
     "src/backend/settings/repository.py": 11,
-    "src/backend/eventbus/eventbus.py": 10,
-    "src/backend/permissions/service.py": 1,
+    "src/backend/eventbus/eventbus.py": 11,
+    "src/backend/permissions/service.py": 2,
 }
 
-# REQ-005 / AC-009 state the total explicitly ("each of the 39 one-off statements").
-_AC_009_TOTAL_STATEMENTS = 39
+# structlog-logging REQ-005 / AC-009 state the total explicitly ("each of the 42 one-off statements").
+_AC_009_TOTAL_STATEMENTS = 42
 
 
 def test_ac_009_statements_go_through_get_logger() -> None:
     """AC-009 (the spec-named all-four witness): none of the four files REQ-005 names imports a
-    logging backend, and each of the 39 one-off statements is written through ``get_logger()``.
+    logging backend, and each of the 42 one-off statements is written through ``get_logger()``.
 
     The two witnesses above cover one feature each; this is the criterion as the spec states it —
-    the four files and the 39 statements together — so it goes green only when the last of them
+    the four files and the 42 statements together — so it goes green only when the last of them
     (``src/backend/permissions/service.py``) is migrated. REQ-001's repo-wide half ("no module
     under ``src/`` or ``tests/`` imports one") is AC-001's witness, not this one's.
     """
-    # Guards the table against drifting from REQ-005's per-file counts (17 + 11 + 10 + 1).
+    # Guards the table against drifting from REQ-005's per-file counts (18 + 11 + 11 + 2).
     assert sum(_AC_009_STATEMENTS.values()) == _AC_009_TOTAL_STATEMENTS, (
-        "REQ-005 fixes 39 one-off statements across the four named files"
+        "structlog-logging REQ-005 fixes 42 one-off statements across the four named files"
     )
 
     violations = [v for path, count in _AC_009_STATEMENTS.items() for v in _statement_violations(path, count)]
 
-    assert not violations, "AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)
+    assert not violations, "structlog-logging AC-009 / REQ-005 (logging-coverage REQ-010 v2): " + "; ".join(violations)

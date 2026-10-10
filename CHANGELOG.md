@@ -9,6 +9,60 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-10
+
+### Added
+
+- A public install operation on each of the five singleton-owning features —
+  `set_settings_registry()`, `set_event_bus()`, `set_permission_service()`, `set_search_service()`,
+  `set_session_service()` — the third member of every feature's `get_*()` / `reset_*()` trio,
+  re-exported from the feature package root. Installing over a non-empty default replaces it
+  unconditionally and logs exactly one `WARNING`; it is never retroactive, never starts or shuts
+  down either instance, never accepts `None` (clearing stays `reset_*()`'s job), and publishes no
+  event (`settings-public-registry-setter` T-001…T-005, REQ-001…REQ-010 / REQ-014, ADR-083).
+- Two guards against writing another package's private singleton slot: ruff `TID251` banned-api
+  entries for the five private slots (`TID251` added to `[tool.ruff.lint] select`, without which the
+  table is inert) and the source-scanning architecture test
+  `tests/unit/architecture/test_singleton_slots.py`, which also reads the code strings handed to
+  `subprocess` (T-007 / T-008, REQ-013, ADR-084).
+- The new wiring requirement in each affected feature spec: `settings.md` v5 REQ-026,
+  `event-bus.md` v2 REQ-008, `user-roles-permissions.md` v2 REQ-030, `search.md` v4 REQ-024,
+  `session-management.md` v2 REQ-023.
+- `AGENTS.md` sections `## Using the Permissions Feature` and `## Using the Session Management
+  Feature` (Q-30), an "Install the shared default" bullet in each of the five features' "Using the …"
+  section (REQ-015), and a `## Using the Feature Singletons (install / reset)` section describing the
+  trio, the slot ban and the test seam (Phase 6 review).
+
+### Changed
+
+- `src/main.py` installs the registry it wires through `set_settings_registry()` and reads the shared
+  instance back through `get_settings_registry()` at its six `register_*_settings` calls and its four
+  service-construction sites, instead of writing the private slot and passing a local handle
+  (T-006, REQ-011 / AC-016).
+- `get_permission_service()` is now traced with `@logged(slow_threshold_ms=5)` and carries a
+  `module function` row in the `docs/specs/logging-coverage.md` §3.1 inventory (v4, Q-31 = Option A);
+  `reset_permission_service()` stays out of scope and remains a follow-up candidate.
+- `docs/specs/structure-map.md` NFR-002 (v3): the `STRUCTURE.md` line budget raised 2 000 → 2 200.
+  This change's own new test packages and traced install operations grew the committed map to 2 004
+  lines (`make_map --check` exit 0); the content policy is unchanged and the REQ-017 per-class field
+  cap stays the safety valve.
+- `docs/specs/structlog-logging.md` v2: the REQ-005 per-file statement counts and AC-009's total
+  refreshed 39 → 42 for the five new one-off replace `WARNING`s, with the pinned counts in
+  `tests/acceptance/logging_coverage/test_statements_via_feature.py` raised to match.
+
+### Fixed
+
+- Concurrent first reads of four of the five feature singletons could construct two instances and
+  silently lose one. Install, lazy create and reset are now mutually exclusive under one
+  module-level lock per owning module (REQ-006); the settings slot lock is an `RLock` because its
+  guarded lazy create re-enters the guard through the event bus (finding F-57).
+
+### Removed
+
+- The 12 writes to another package's private singleton slot — one in `src/main.py`, eleven in test
+  helpers and in code strings handed to `subprocess` — each migrated to the owning feature's public
+  install operation with the same capture-install-restore semantics and no test weakened (REQ-012).
+
 ## [1.1.1] - 2026-10-10
 
 ### Added

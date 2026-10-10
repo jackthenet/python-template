@@ -1,8 +1,9 @@
 """Unit tests for the event bus feature (docs/specs/event-bus.md).
 
 Covers the spec's edge cases: lazy start, drop-on-full, non-callable handler,
-non-class event type, unsubscribe no-op, dedup, publish-after-shutdown,
-handler raising, start idempotent, and no registered handlers.
+non-class event type, unsubscribe no-op, dedup, publish-after-shutdown, handler
+raising, start idempotent, no registered handlers, and (event-bus.md v2) the
+install operation's lifecycle neutrality and the guarded lazy create.
 """
 
 from __future__ import annotations
@@ -11,9 +12,10 @@ import threading
 import time
 
 import pytest
-from eventbus_test_helpers import UserCreated, wait_for
+from eventbus_test_helpers import UserCreated, isolated_event_bus, wait_for
+from singleton_install_test_helpers import EVENTBUS_SLOT, concurrent_reads, widened_lazy_create_window
 
-from backend.eventbus import EventBus
+from backend.eventbus import EventBus, get_event_bus
 
 
 def test_edge_001_lazy_start() -> None:
@@ -150,3 +152,37 @@ def test_edge_010_no_handlers() -> None:
         time.sleep(0.3)  # allow the worker to process
     finally:
         bus.shutdown()
+
+
+# --- Public install operation (event-bus.md v2 EDGE-011, EDGE-012) ---
+
+
+def test_edge_011_replaced_bus_not_shut_down() -> None:
+    """EDGE-011: installing over a running shared default neither shuts it down nor starts the installed bus."""
+    with isolated_event_bus():
+        replaced = EventBus()
+        received: list[object] = []
+        replaced.subscribe(UserCreated, received.append)
+        replaced.start()  # Given: the shared default's worker is running
+        replacement = EventBus()
+        try:
+            EVENTBUS_SLOT.install(replaced)
+            EVENTBUS_SLOT.install(replacement)  # replace the running default
+            assert replaced.is_running, "the install shut down the bus it replaced"
+            replaced.publish(UserCreated("u1", "e1"))
+            assert wait_for(lambda: len(received) == 1), "the replaced bus stopped dispatching"
+            assert not replacement.is_running, "the install started the bus it installed"
+        finally:
+            replaced.shutdown()
+            replacement.shutdown()
+
+
+def test_edge_012_concurrent_lazy_create(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EDGE-012: two threads racing to lazily create the shared default receive one bus."""
+    with isolated_event_bus():
+        EVENTBUS_SLOT.clear()  # Given: the shared default is unset
+        with widened_lazy_create_window(monkeypatch, EventBus) as window:
+            reads = concurrent_reads(EVENTBUS_SLOT, 2)
+        assert len(window.instances) == 1, f"lazy create race built {len(window.instances)} buses"
+        assert reads[0] is reads[1], "the two racing readers did not receive the same bus"
+        assert get_event_bus() is reads[0], "the shared default is not the bus both readers received"

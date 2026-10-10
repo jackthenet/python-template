@@ -7,6 +7,9 @@ validation (unknown permission rejected, feature wildcard allowed).
 
 The ``backend.permissions`` imports are deferred into the test bodies so the module
 collects cleanly before the feature is implemented (RED).
+
+The last section covers the shared-default install edge cases added by
+``user-roles-permissions.md`` v2 (EDGE-027, EDGE-028).
 """
 
 from __future__ import annotations
@@ -18,6 +21,12 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from singleton_install_test_helpers import (
+    PERMISSIONS_SLOT,
+    concurrent_reads,
+    non_tracing_warnings,
+    widened_lazy_create_window,
+)
 
 from backend.usermanagement import SqliteUserRepository, UserCreate, UserManager
 
@@ -1112,3 +1121,48 @@ def test_login_before_permissions() -> None:
     assert (None, "usermanagement.verify_password", None) in spy.calls
     assert (None, "usermanagement.get_user", None) in spy.calls
     assert all(permission != "authentication.login" for _, permission, _ in spy.calls)
+
+
+# --- Public install operation (user-roles-permissions.md v2 EDGE-027, EDGE-028) ---
+
+_EDGE_ROLE_NAME = "editor"
+
+
+def test_install_over_nonempty_default(log_records: list[Any]) -> None:
+    """EDGE-027: installing over a non-empty shared default replaces it, warns once, and leaves the replaced service working."""
+    from backend.permissions import get_permission_service, reset_permission_service
+
+    reset_permission_service()
+    try:
+        replaced = PERMISSIONS_SLOT.new()
+        replacement = PERMISSIONS_SLOT.new()
+        replaced.create_role(_EDGE_ROLE_NAME)  # an object holding the replaced service keeps using it
+        PERMISSIONS_SLOT.install(replaced)  # the shared default is now non-empty
+        PERMISSIONS_SLOT.install(replacement)  # EDGE-027: replace it — no exception
+        assert get_permission_service() is replacement, "the non-empty shared default was not replaced"
+        warnings = non_tracing_warnings(log_records)
+        assert len(warnings) == 1, f"expected exactly one replace WARNING, got {warnings!r}"
+        assert "permission" in str(warnings[0]).lower(), (
+            f"the WARNING does not name the shared default: {warnings[0]!r}"
+        )
+        # No lifecycle effect: the replaced service keeps working for every object that
+        # holds it, with its own stores intact and separate from the replacement's.
+        assert [role.role for role in replaced.list_roles()] == [_EDGE_ROLE_NAME]
+        assert not replacement.list_roles()
+    finally:
+        reset_permission_service()
+
+
+def test_concurrent_lazy_create(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EDGE-028: two threads racing to lazily create the shared default receive one service."""
+    from backend.permissions import PermissionService, get_permission_service, reset_permission_service
+
+    reset_permission_service()
+    try:
+        with widened_lazy_create_window(monkeypatch, PermissionService) as window:
+            services = concurrent_reads(PERMISSIONS_SLOT, 2)
+        assert len(window.instances) == 1, f"lazy create race built {len(window.instances)} services"
+        assert services[0] is services[1], "the two racing readers did not receive the same service"
+        assert get_permission_service() is services[0], "the shared default is not the service both readers received"
+    finally:
+        reset_permission_service()

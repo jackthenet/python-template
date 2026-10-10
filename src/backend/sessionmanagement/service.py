@@ -23,6 +23,7 @@ injected checker, never on ``backend.permissions`` (ADR-070).
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -31,7 +32,7 @@ from backend.authentication import InvalidSessionError, LoginSucceeded, hash_tok
 from backend.authentication.models import Session
 from backend.authentication.repositories import SessionRepository
 from backend.eventbus import get_event_bus
-from backend.logging import logged, logged_class
+from backend.logging import get_logger, logged, logged_class
 from backend.sessionmanagement.events import (
     AllSessionsRevoked,
     EventPublisher,
@@ -43,6 +44,10 @@ from backend.sessionmanagement.models import SessionEntry
 from backend.settings import SettingsRegistry, get_settings_registry
 from backend.shared import PermissionChecker, Principal, requires_permission
 from backend.usermanagement import UserDeactivated, UserDeleted, UserEvent, UserPasswordChanged
+
+# The feature's own logger: attributable records, never the instance or a token
+# (NFR-004).
+_logger = get_logger("sessionmanagement")
 
 # Hardcoded fallbacks for the live settings reads (REQ-019): unregistered
 # keys fall back to these defaults.
@@ -357,6 +362,20 @@ class SessionService:
 # (house pattern, cf. settings._registry, eventbus._default_bus).
 _session_service: list[SessionService | None] = [None]
 
+# REQ-023 / ADR-083: one module-level lock guards all three slot operations —
+# install, lazy create and reset — as one mutually exclusive set, and is held
+# only for the slot read/swap (NFR-003). A plain ``Lock``, not an ``RLock``: no
+# guarded section here calls another slot operation, so ``set_session_service()``
+# and ``reset_session_service()`` read ``_session_service[0]`` directly and never
+# call ``get_session_service()`` while holding it (the F-57 self-deadlock shape).
+# This section is NOT a leaf: ``SessionService.__init__`` reads the shared event
+# bus whenever an event bus is injected, so the create path resolves
+# ``get_event_bus()`` BEFORE taking this lock — measured: the naive shape
+# deadlocks (ABBA with ``_default_bus_lock``), the shipped shape emits no edge
+# out of this lock (docs/verification/settings-public-registry-setter.md,
+# § "Phase 4 — T-005 RED (S4.1)").
+_session_service_lock = threading.Lock()
+
 
 @logged(slow_threshold_ms=5)
 def get_session_service(
@@ -368,18 +387,60 @@ def get_session_service(
 
     The first call creates the singleton and requires a ``repository``
     (``ValueError`` without one) (AC-042); subsequent calls (with or without
-    arguments) return the existing instance (AC-041).
+    arguments) return the existing instance (AC-041) — including the instance
+    ``set_session_service()`` installed, which needs no ``repository`` argument
+    (EDGE-013).
     """
     service = _session_service[0]
-    if service is None:
-        if repository is None:
-            raise ValueError("a repository is required to create the shared SessionService")
-        service = SessionService(repository, event_bus, settings_registry)
-        _session_service[0] = service
+    if service is not None:
+        # A filled slot is returned on a plain reference read: no lock and no
+        # cross-module read on the hit path (P-71 rule 1, the F-76 lesson).
+        return service
+    if event_bus is not None:
+        # Warm the shared event bus before this module's lock is taken: the
+        # constructor below reads ``get_event_bus()`` only when an event bus is
+        # injected, and on a filled bus slot that read is the lock-free early
+        # return — so no other module's lock is held when this one is taken.
+        get_event_bus()
+    with _session_service_lock:
+        service = _session_service[0]
+        if service is None:
+            # EDGE-003 / AC-042 unchanged: this feature has no default
+            # construction, so an empty slot without a repository still raises.
+            if repository is None:
+                raise ValueError("a repository is required to create the shared SessionService")
+            service = SessionService(repository, event_bus, settings_registry)
+            # REQ-007: the owner's lazy create writes its own slot directly and
+            # never calls set_session_service() — it is not an install, so it
+            # must not emit the replace WARNING.
+            _session_service[0] = service
     return service
+
+
+@logged(slow_threshold_ms=5)
+def set_session_service(service: SessionService) -> None:
+    """Install ``service`` as the shared default SessionService (REQ-023, ADR-083).
+
+    Replaces a non-empty default unconditionally and is never retroactive: a
+    service obtained earlier keeps that instance, and neither the installed nor
+    the replaced service is started or shut down (REQ-003, EDGE-014). A later
+    ``get_session_service()`` returns the installed instance with no
+    ``repository`` argument (EDGE-013). The parameter is never ``None`` —
+    clearing the slot stays the job of ``reset_session_service()`` (REQ-004) —
+    and it is checked by the annotation and ``mypy`` only, with no runtime type
+    check and no new exception (REQ-005). It publishes no event (REQ-009).
+    """
+    with _session_service_lock:
+        previous = _session_service[0]
+        _session_service[0] = service
+    if previous is not None:
+        # REQ-002: exactly one WARNING naming the feature's shared default (never
+        # the instance), emitted after the lock is released (NFR-003).
+        _logger.warning("session-management: shared default session service replaced")
 
 
 @logged(slow_threshold_ms=5)
 def reset_session_service() -> None:
     """Reset the shared SessionService (for test isolation, REQ-020, ADR-065)."""
-    _session_service[0] = None
+    with _session_service_lock:
+        _session_service[0] = None

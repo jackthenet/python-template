@@ -1,6 +1,7 @@
 # Spec: Structlog logging pipeline (structlog-logging)
 
 ## Changelog
+- v2 (2026-10-07): Amendment (change `settings-public-registry-setter`). REQ-005's per-file one-off-statement counts and AC-009's total are refreshed from the migration snapshot (17/11/10/1, total 39) to the post-change state (18/11/11/2, total 42): the five public install operations each add one one-off WARNING record required by `settings-public-registry-setter.md` REQ-002. No ID changed; the migration requirement itself is unchanged.
 - v1 (2026-10-04): Draft (Phase P, P.4). CROSS-CUTTING. Supersedes the logging-backend choice recorded in ADR-002 and amends `docs/specs/logging.md` (v3), `docs/specs/logging-coverage.md` (v2), `docs/specs/settings-coverage.md` (v2) and `docs/specs/settings.md` (v4).
 
 ## 1. Overview & Objectives
@@ -104,7 +105,7 @@ Public API surface (REQ-015): `setup_logger`, `logged`, `logged_class`, `get_log
 | REQ-002 | `setup_logger()` installs exactly two managed sinks: a console sink on standard error writing colorized human-readable text, and a rotating file sink (UTF-8, JSON records, rotation size = `log_max_bytes`, backup count = `log_backup_count`). |
 | REQ-003 | The two managed handlers are owned by a dedicated, non-propagating logger; the logging feature never attaches, removes or reconfigures a handler, level or logger that it does not own. |
 | REQ-004 | Records emitted through the standard library by third-party loggers reach the same two managed sinks with the correct level, logger name, message and originating file and line. |
-| REQ-005 | The feature exports `get_logger()`; it is the only supported way for feature code to obtain a logger for one-off statements, and every direct backend statement in `src/backend/settings/registry.py` (17), `src/backend/settings/repository.py` (11), `src/backend/eventbus/eventbus.py` (10) and `src/backend/permissions/service.py` (1) is migrated to it. |
+| REQ-005 | The feature exports `get_logger()`; it is the only supported way for feature code to obtain a logger for one-off statements, and every direct backend statement in `src/backend/settings/registry.py` (18), `src/backend/settings/repository.py` (11), `src/backend/eventbus/eventbus.py` (11) and `src/backend/permissions/service.py` (2) is migrated to it. |
 | REQ-006 | `setup_logger()` accepts an optional keyword-only `renderer` parameter (`"text"`, `"json"`, or `None`); called with no argument it stays settings-driven and uses the default renderer pair (text console, JSON file). |
 | REQ-007 | `@logged` traces synchronous and asynchronous calls — entry, exit with elapsed milliseconds, exception — through the pipeline's bound-logger machinery; its parameters are `level`, `slow_threshold_ms`, `slow_threshold_setting` and `include_args`; `context_getter` and `depth` are removed. |
 | REQ-008 | `@logged_class` traces the public methods of a class with the same records, skips private methods, marks the class as traced and exposes the resolved slow-call threshold. |
@@ -148,7 +149,7 @@ These IDs are restated in the amendment PR (see §10 Impact Analysis); they are 
 | AC-006 | REQ-004 | **Given** a third-party logger with no handlers of its own, **When** it emits a record at or above the configured level, **Then** the record reaches both managed sinks with its original level and message. |
 | AC-007 | REQ-004 | **Given** the same forwarded record, **When** the file record is read, **Then** `file` and `line` name the emitting source location, not the logging feature's own code. |
 | AC-008 | REQ-005 | **Given** `get_logger("x")`, **When** a level method is called with a message and keyword fields, **Then** one record reaches each managed sink carrying the message and the fields. |
-| AC-009 | REQ-005 | **Given** the four named files, **When** the change is implemented, **Then** none of them imports a logging backend, **And** each of the 39 one-off statements is written through `get_logger()`. |
+| AC-009 | REQ-005 | **Given** the four named files, **When** the change is implemented, **Then** none of them imports a logging backend, **And** each of the 42 one-off statements is written through `get_logger()`. |
 | AC-010 | REQ-006 | **Given** `setup_logger(renderer="json")`, **When** a record is emitted, **Then** the console record is a JSON object; **Given** `setup_logger(renderer="text")`, **Then** the file record is human-readable text; **Given** `setup_logger()`, **Then** the console record is text and the file record is JSON. |
 | AC-011 | REQ-007 | **Given** a traced synchronous function and a traced `async` function, **When** each is called, **Then** an entry record and an exit record carrying `elapsed_ms` are emitted at the configured level. |
 | AC-012 | REQ-007 | **Given** a traced function that raises, **When** it is called, **Then** an exception record carrying the exception type and message is emitted, **And** the exception propagates unchanged. |

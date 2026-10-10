@@ -13,10 +13,16 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ruamel.yaml import YAML
 from settings_test_helpers import restore_singleton, wait_for
+from singleton_install_test_helpers import (
+    SETTINGS_SLOT,
+    non_tracing_warnings,
+    widened_lazy_create_window,
+)
 
 from backend.eventbus import EventBus
 from backend.settings import (
@@ -31,6 +37,7 @@ from backend.settings import (
     SliderSpec,
     YamlValueRepository,
     get_settings_registry,
+    reset_settings_registry,
 )
 from backend.settings.exceptions import (
     SettingsNotFoundError,
@@ -47,6 +54,9 @@ _VOLUME_VALUE = 4
 _TEMPLATE_B_VALUE = 7
 _SNAPSHOT_B_VALUE = 42
 _EVENT_COUNT = 2
+_CONCURRENT_READERS = 8
+_CONCURRENT_INSTALLS = 8
+_BARRIER_TIMEOUT = 5.0
 
 
 def _text(key: str, default: str = "x") -> SettingDefinition:
@@ -613,3 +623,115 @@ def test_ac_038_thread_safe_registration() -> None:
     for i in range(32):
         assert registry.has(f"app.k{i}")
     bus.shutdown()
+
+
+# --- Public install operation (settings.md v5 AC-040 .. AC-043, REQ-026) ---
+
+
+def test_ac_040_set_settings_registry_installs_default() -> None:
+    """AC-040: installing a registry returns None and makes it the shared default."""
+    saved = get_settings_registry(required=False)
+    try:
+        reset_settings_registry()  # Given: the shared default is unset
+        registry = SETTINGS_SLOT.new()  # built with isolated repositories
+        assert SETTINGS_SLOT.install(registry) is None
+        assert get_settings_registry() is registry
+    finally:
+        restore_singleton(saved)
+
+
+def test_ac_041_replace_logs_one_warning(log_records: list[Any]) -> None:
+    """AC-041: replacing a held default logs exactly one WARNING; installing into an unset slot logs none."""
+    saved = get_settings_registry(required=False)
+    try:
+        reset_settings_registry()
+        first = SETTINGS_SLOT.new()
+        SETTINGS_SLOT.install(first)
+        assert not non_tracing_warnings(log_records)  # unset slot: no WARNING
+        log_records.clear()
+        second = SETTINGS_SLOT.new()
+        SETTINGS_SLOT.install(second)  # held slot: one WARNING
+        warnings = non_tracing_warnings(log_records)
+        assert len(warnings) == 1
+        assert "registry" in str(warnings[0])  # the record names the shared default
+        assert get_settings_registry() is second
+    finally:
+        restore_singleton(saved)
+
+
+def test_ac_042_concurrent_install_and_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-042: concurrent lazy creates yield one shared default; concurrent installs and reads never see a torn slot."""
+    saved = get_settings_registry(required=False)
+    try:
+        # Unset default: 8 threads read it into existence at the same moment.
+        reset_settings_registry()
+        with widened_lazy_create_window(monkeypatch, SettingsRegistry) as window:
+            reads = _concurrent_get_settings_registry(_CONCURRENT_READERS)
+        assert len(window.instances) == 1
+        assert all(read is reads[0] for read in reads)
+
+        # Held default: installs and reads interleaved.
+        SETTINGS_SLOT.install(SETTINGS_SLOT.new())
+        installed = [SETTINGS_SLOT.new() for _ in range(_CONCURRENT_INSTALLS)]
+        errors: list[BaseException] = []
+        start = threading.Barrier(_CONCURRENT_INSTALLS + _CONCURRENT_READERS)
+
+        def _installer(i: int) -> None:
+            try:
+                start.wait(timeout=_BARRIER_TIMEOUT)
+                SETTINGS_SLOT.install(installed[i])
+            except BaseException as exc:
+                errors.append(exc)
+
+        def _reader() -> None:
+            try:
+                start.wait(timeout=_BARRIER_TIMEOUT)
+                assert isinstance(SETTINGS_SLOT.read(), SettingsRegistry)
+            except BaseException as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_installer, args=(i,)) for i in range(_CONCURRENT_INSTALLS)]
+        threads += [threading.Thread(target=_reader) for _ in range(_CONCURRENT_READERS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert not errors
+        assert isinstance(get_settings_registry(), SettingsRegistry)
+    finally:
+        restore_singleton(saved)
+
+
+def test_ac_043_install_then_reset_then_default() -> None:
+    """AC-043: after install then reset, the getter returns a freshly created default, not the installed one."""
+    saved = get_settings_registry(required=False)
+    try:
+        installed = SETTINGS_SLOT.new()
+        SETTINGS_SLOT.install(installed)
+        reset_settings_registry()
+        default = get_settings_registry()
+        assert isinstance(default, SettingsRegistry)
+        assert default is not installed
+    finally:
+        restore_singleton(saved)
+
+
+def _concurrent_get_settings_registry(count: int) -> list[SettingsRegistry | None]:
+    """``get_settings_registry()`` from ``count`` threads released at the same moment."""
+    start = threading.Barrier(count)
+    results: list[SettingsRegistry | None] = []
+    guard = threading.Lock()
+
+    def _reader() -> None:
+        start.wait(timeout=_BARRIER_TIMEOUT)
+        value = get_settings_registry()
+        with guard:
+            results.append(value)
+
+    threads = [threading.Thread(target=_reader) for _ in range(count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(results) == count
+    return results

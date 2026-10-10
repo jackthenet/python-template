@@ -63,9 +63,12 @@ from backend.search import (
 )
 from backend.sessionmanagement import SessionService, build_session_source
 from backend.sessionmanagement.feature_actions import register_actions as register_sessionmanagement_actions
-from backend.settings import SettingsRegistry
+from backend.settings import (
+    SettingsRegistry,
+    get_settings_registry,
+    set_settings_registry,
+)
 from backend.settings.feature_actions import register_actions as register_settings_actions
-from backend.settings.registry import _registry as _settings_registry_singleton
 from backend.usermanagement import (
     SqliteUserRepository,
     UserManager,
@@ -75,6 +78,21 @@ from backend.usermanagement import (
     register_settings as register_usermanagement_settings,
 )
 from backend.usermanagement.feature_actions import register_actions as register_usermanagement_actions
+
+
+# --- Reading the shared settings registry back (REQ-011, ADR-083) ---
+def _shared_settings_registry() -> SettingsRegistry:
+    """Return the shared settings registry installed by this module.
+
+    ``get_settings_registry()`` is typed ``SettingsRegistry | None``; the install
+    below runs at this module's import time, before every consumer site, and
+    nothing resets the slot in between, so the narrowing assert cannot fire here
+    (the house precedent is ``src/backend/search/service.py``).
+    """
+    registry = get_settings_registry()
+    assert registry is not None  # nosec B101
+    return registry
+
 
 # --- The static permission catalog (REQ-004, REQ-005) ---
 # Built at startup from the six features' ``register_actions`` calls; closed
@@ -132,10 +150,10 @@ _user_manager_proxy = _LazyUserManager()
 
 # --- The shared settings registry (one of the six services) ---
 # Wired with the shared PermissionService (via the lazy proxy, which is set to
-# the real service below); set as the shared singleton so the other services
-# and the settings registration use the same instance.
-_settings_registry = SettingsRegistry(permission_service=_permission_service_proxy)
-_settings_registry_singleton[0] = _settings_registry
+# the real service below) and installed as the shared default through the public
+# install operation, so every consumer site reads the same instance back through
+# get_settings_registry() instead of a local handle (REQ-011, ADR-083).
+set_settings_registry(SettingsRegistry(permission_service=_permission_service_proxy))
 
 # --- The session repository (the check's session lookup: REQ-017, ADR-073) ---
 # Built before the shared PermissionService, which takes it as ``session_lookup``.
@@ -158,7 +176,7 @@ _permission_service = PermissionService(
     session_lookup=_session_repository,  # validates a provided session token (REQ-017, AC-020)
     catalog=_catalog,
     event_bus=get_event_bus(),  # activates the SettingChanged subscription (REQ-019, D16)
-    settings_registry=_settings_registry,
+    settings_registry=_shared_settings_registry(),
 )
 _permission_service_proxy.set_service(_permission_service)
 
@@ -170,12 +188,12 @@ _permission_service_proxy.set_service(_permission_service)
 _permission_service.set_system_permissions(BOOTSTRAP_SYSTEM_PERMISSIONS | {"settings.has", "settings.get_value"})
 
 # --- Register every feature's settings ---
-register_logging_settings(_settings_registry)
-register_authentication_settings(_settings_registry)
-register_usermanagement_settings(_settings_registry)
-register_eventbus_settings(_settings_registry)
-register_permissions_settings(_settings_registry)  # REQ-019: the permissions.system_principal alias
-register_search_settings(_settings_registry)  # search feature
+register_logging_settings(_shared_settings_registry())
+register_authentication_settings(_shared_settings_registry())
+register_usermanagement_settings(_shared_settings_registry())
+register_eventbus_settings(_shared_settings_registry())
+register_permissions_settings(_shared_settings_registry())  # REQ-019: the permissions.system_principal alias
+register_search_settings(_shared_settings_registry())  # search feature
 
 # --- The shared UserManager (one of the six services) ---
 _user_repository = SqliteUserRepository("sqlite:///./data/usermanagement/users.db")
@@ -195,13 +213,13 @@ _file_repository = SqliteFileRepository("sqlite:///./data/filemanagement.db")
 _file_service = FileService(
     _file_repository,
     LocalDiskStorageBackend("./data/files"),
-    settings_registry=_settings_registry,
+    settings_registry=_shared_settings_registry(),
     permission_service=_permission_service,
 )
 _mail_service = MailService(permission_service=_permission_service)
 _session_service = SessionService(
     _session_repository,
-    settings_registry=_settings_registry,
+    settings_registry=_shared_settings_registry(),
     permission_service=_permission_service,
 )
 
@@ -211,7 +229,7 @@ _session_service = SessionService(
 # session). Additive; no existing startup behavior changes.
 _search_service = get_search_service(
     event_bus=get_event_bus(),
-    settings_registry=_settings_registry,
+    settings_registry=_shared_settings_registry(),
     permission_service=_permission_service,
 )
 _search_service.register_source(build_user_source(_user_repository))
