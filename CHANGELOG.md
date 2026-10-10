@@ -9,6 +9,8 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-10
+
 ### Added
 
 - A public install operation on each of the five singleton-owning features —
