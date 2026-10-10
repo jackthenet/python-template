@@ -13,17 +13,19 @@ read from disk.
 
 from __future__ import annotations
 
+import ast
+import copy
 import getpass
 import platform
 import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -458,5 +460,208 @@ def test_inv_006_output_is_hook_clean() -> None:
                 "INV-006: the trailing-whitespace / end-of-file-fixer hooks change the map: "
                 f"{[ln for ln in text.split(chr(10)) if ln != ln.rstrip(' \t')][:3]!r}"
             )
+
+    check()
+
+
+# --- map-default-drop-shift: INV-007 signature fidelity (REQ-014, amended to v2) ----------------
+# REQ-014 v2: a parameter default whose unparsed text exceeds the threshold is abbreviated to the
+# `…` placeholder **in its own slot**. `…` in a default position is a SyntaxError (finding F-06),
+# so — exactly as the spec words it — the parse clause is stated over the parameter list with every
+# `…` replaced by the literal `...`.
+
+_PLACEHOLDER = "…"  # REQ-014: the placeholder an over-long default is abbreviated to
+_DEFAULT_MAX_CHARS = 20  # REQ-014: the threshold value itself is out of scope (Q-8)
+_MAX_PARAMS = 7  # per generated function: 2 positional-only + 2 positional + 3 keyword-only
+_MAX_FUNCTIONS = 3
+
+_NAMES: tuple[str, ...] = ("alpha", "beta", "gamma", "delta", "eps", "zeta", "eta", "theta", "iota", "kappa")
+_ANNOTATIONS: tuple[str, ...] = ("int", "str", "list[int]", "dict[str, int]")
+# Default source text per length class: short, exactly the threshold, over it. The expected
+# rendering is computed from `ast.unparse` of the source, so the class boundary is checked by the
+# witness, not assumed from the spelling.
+_SHORT_DEFAULTS: tuple[str, ...] = ("1", "'xy'", "None", "42")
+_EXACT_DEFAULTS: tuple[str, ...] = ("'0123456789abcdefgh'",)  # unparsed: exactly 20 characters
+_OVER_DEFAULTS: tuple[str, ...] = ("'0123456789abcdefghij0'", "[1, 2, 3, 4, 5, 6, 7]")
+
+_TEXT_DEFAULT = st.sampled_from((*_SHORT_DEFAULTS, *_EXACT_DEFAULTS, *_OVER_DEFAULTS))
+_POSITIONAL_SLOTS = st.lists(_TEXT_DEFAULT, max_size=2)  # a positional slot always has a default
+_KWONLY_SLOTS = st.lists(st.one_of(_TEXT_DEFAULT, st.just(None)), max_size=3)  # `None`: no default
+
+_DEF_LINE = re.compile(r"^- def `(?P<name>\w+)\((?P<params>.*)\) -> None`")
+
+
+def _param_text(name: str, annotation: str, default: str | None) -> str:
+    """One parameter's source text: `name: annotation`, plus `=default` when it has a default."""
+    return f"{name}: {annotation}" if default is None else f"{name}: {annotation}={default}"
+
+
+def _slot_text(names: Sequence[str], annos: Sequence[str], defaults: Sequence[str | None]) -> str:
+    """The source text of one slot's parameters, in order."""
+    return ", ".join(
+        _param_text(name, anno, default) for name, anno, default in zip(names, annos, defaults, strict=True)
+    )
+
+
+def _signature_text(
+    names: Sequence[str],
+    annos: Sequence[str],
+    posonly: Sequence[str],
+    positional: Sequence[str],
+    kwonly: Sequence[str | None],
+) -> str:
+    """The parameter list of one generated function: the three REQ-014 slots joined with their `/`
+    and `*` markers, taking each parameter's name and annotation from the drawn order."""
+    parts: list[str] = []
+    used = 0
+    for marker, defaults in (("/", posonly), ("", positional)):
+        if defaults:
+            rendered = _slot_text(names[used : used + len(defaults)], annos[used : used + len(defaults)], defaults)
+            parts.append(f"{rendered}, {marker}" if marker else rendered)
+            used += len(defaults)
+    if kwonly:
+        stop = used + len(kwonly)
+        parts.append(f"*, {_slot_text(names[used:stop], annos[used:stop], kwonly)}")
+    return ", ".join(parts)
+
+
+@st.composite
+def _slots(draw: st.DrawFn) -> tuple[list[str], list[str], list[str | None]]:
+    """One function's drawn default slots — positional-only, positional, keyword-only — with the
+    keyword-only slot able to hold `None` for a parameter that has **no** default (the F-08 shape).
+    At least one slot must be non-empty, so the generated function always has a parameter."""
+    posonly, positional, kwonly = draw(_POSITIONAL_SLOTS), draw(_POSITIONAL_SLOTS), draw(_KWONLY_SLOTS)
+    assume(posonly or positional or kwonly)
+    return posonly, positional, kwonly
+
+
+@st.composite
+def _signature_module(draw: st.DrawFn) -> str:
+    """Source text of a module of 1-3 functions covering every REQ-014 slot and every default
+    length class (short, exactly the threshold, over it). Positional slots always carry a default,
+    so the generated module is always valid Python (valid test data, never a false RED)."""
+    functions: list[str] = []
+    for _ in range(draw(st.integers(min_value=1, max_value=_MAX_FUNCTIONS))):
+        posonly, positional, kwonly = draw(_slots())
+        names = draw(st.lists(st.sampled_from(_NAMES), min_size=_MAX_PARAMS, max_size=_MAX_PARAMS, unique=True))
+        annos = draw(st.lists(st.sampled_from(_ANNOTATIONS), min_size=_MAX_PARAMS, max_size=_MAX_PARAMS))
+        params = _signature_text(names, annos, posonly, positional, kwonly)
+        functions.append(f"def f{len(functions)}({params}) -> None:\n    'Traced.'\n")
+    return "\n".join(functions)
+
+
+def _expected_params(fn: ast.FunctionDef) -> str:
+    """The REQ-014 rendering of a source function's parameter list: the `ast.unparse` text with
+    every default whose unparsed text exceeds the threshold abbreviated to the `…` placeholder in
+    its own slot — derived from the source, never from the generator."""
+    args = copy.deepcopy(fn.args)
+    for index, default in enumerate(args.defaults):
+        if len(ast.unparse(default)) > _DEFAULT_MAX_CHARS:
+            args.defaults[index] = ast.Name(id=_PLACEHOLDER)
+    for index, default in enumerate(args.kw_defaults):
+        if default is not None and len(ast.unparse(default)) > _DEFAULT_MAX_CHARS:
+            args.kw_defaults[index] = ast.Name(id=_PLACEHOLDER)
+    return ast.unparse(args)
+
+
+def _param_names(args: ast.arguments) -> list[str]:
+    """Every parameter name of an arguments node, in source order across the three slots."""
+    return [param.arg for param in (*args.posonlyargs, *args.args, *args.kwonlyargs)]
+
+
+def _defaulted_names(args: ast.arguments) -> frozenset[str]:
+    """The names of the parameters that carry a default — the clause the defect breaks, and the
+    clause a rule that substitutes every `kw_defaults` entry would break in the other direction."""
+    positional = [*args.posonlyargs, *args.args]
+    with_default = positional[len(positional) - len(args.defaults) :]
+    return frozenset(
+        {param.arg for param in with_default}
+        | {param.arg for param, default in zip(args.kwonlyargs, args.kw_defaults, strict=True) if default is not None}
+    )
+
+
+def _slot_split(args: ast.arguments) -> tuple[int, int, int]:
+    """(positional-only, positional, keyword-only) counts — as parsed, so the `/` and `*` markers
+    are part of the witness: a missing `/` would move a parameter out of the positional-only slot."""
+    return len(args.posonlyargs), len(args.args), len(args.kwonlyargs)
+
+
+def _inv007_failures(fn: ast.FunctionDef, params: str) -> list[str]:
+    """The INV-007 clauses the rendered parameter list `params` violates for the source function `fn`."""
+    expected = _expected_params(fn)
+    failures: list[str] = []
+    if params != expected:
+        failures.append(f"{fn.name}: clause 4: the rendered parameter list is {params!r}, expected {expected!r}")
+
+    substituted = params.replace(_PLACEHOLDER, "...")
+    try:
+        rendered_args = ast.parse(f"def {fn.name}({substituted}) -> None: pass").body[0].args
+    except SyntaxError as error:
+        return [
+            *failures,
+            f"{fn.name}: clause 5: the parameter list with every {_PLACEHOLDER!r} replaced by '...' "
+            f"does not parse ({error}): {substituted!r}",
+        ]
+    if ast.unparse(rendered_args) != expected.replace(_PLACEHOLDER, "..."):
+        failures.append(
+            f"{fn.name}: clause 5: the substituted list re-unparses to {ast.unparse(rendered_args)!r}, "
+            f"expected {expected.replace(_PLACEHOLDER, '...')!r}"
+        )
+    for label, actual, want in (
+        ("clause 1: parameter names in order", _param_names(rendered_args), _param_names(fn.args)),
+        (
+            "clause 2: parameters carrying a default",
+            sorted(_defaulted_names(rendered_args)),
+            sorted(_defaulted_names(fn.args)),
+        ),
+        (
+            "clause 3: positional-only / positional / keyword-only split",
+            _slot_split(rendered_args),
+            _slot_split(fn.args),
+        ),
+    ):
+        if actual != want:
+            failures.append(f"{fn.name}: {label} is {actual!r}, the source's is {want!r}")
+    return failures
+
+
+def test_inv_007_signature_fidelity_survives_default_abbreviation() -> None:
+    """INV-007 (REQ-014): for any generated module, every rendered signature's parameter list —
+    with each `…` placeholder replaced by the literal `...` — parses with `ast.parse` and yields
+    exactly the source's parameter names in order, the same positional-only / positional /
+    keyword-only split and exactly the set of parameters that carry a default, and a `…` appears
+    only where the source default's unparsed text exceeds the REQ-014 threshold."""
+    if not _GENERATOR.is_file():
+        pytest.fail(f"{_GENERATOR} does not exist — T-002 Phase 4 has not implemented the generator")
+
+    @settings(max_examples=_MAX_EXAMPLES, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @given(module=_signature_module())
+    def check(module: str) -> None:
+        try:
+            functions = [stmt for stmt in ast.parse(module).body if isinstance(stmt, ast.FunctionDef)]
+        except SyntaxError as error:
+            pytest.fail(f"the generated INV-007 fixture does not parse — invalid test data: {error}")
+        assert functions, "INV-007 fixture: the generated module declares no function"
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            root = _git_tree(base / "tree", {"src/sig.py": module})
+            map_text = _render(root, base / "map.md", 3)
+            matches = [match for line in map_text.splitlines() if (match := _DEF_LINE.match(line))]
+            assert len(matches) == len(functions), (
+                f"INV-007: the map renders {len(matches)} signature lines for a module declaring "
+                f"{len(functions)}: {[m.group('name') for m in matches]!r}"
+            )
+
+            failures: list[str] = []
+            for fn, match in zip(functions, matches, strict=True):
+                if match.group("name") != fn.name:
+                    failures.append(
+                        f"{fn.name}: the rendered signature is named {match.group('name')!r}, "
+                        "so the fidelity clauses below compare the wrong pair"
+                    )
+                    continue
+                failures += _inv007_failures(fn, match.group("params"))
+            assert not failures, "\n".join(failures)
 
     check()

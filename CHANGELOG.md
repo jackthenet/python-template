@@ -9,6 +9,8 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-10
+
 ### Added
 
 - Ruff now gates docstrings (`D` rules, Google style) over `src/`, and every missing or
@@ -20,6 +22,16 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 - The changelog-entry rule: every change adds an entry under `## [Unreleased]`, and a version
   bump moves those entries into a dated release section (`AGENTS.md` Phase 6 +
   `## Versioning`, and the `implement`, `verify` and `review` skills).
+
+### Fixed
+
+- The structure-map generator no longer drops a parameter default whose unparsed text exceeds 20
+  characters: it abbreviates that default to the `…` placeholder in the parameter's own slot, so
+  `STRUCTURE.md` signature lines no longer shift an over-long default onto the following parameter
+  or render a defaulted parameter as required. Corrected renderings: `AuthService.__init__`,
+  `build_auth_service`, `build_memory_auth_service`, `simple_template` (`map-default-drop-shift`;
+  rule amended in `docs/specs/structure-map.md` v2 — REQ-014/AC-014 amended, INV-007 and EDGE-017
+  added).
 
 ## [1.1.0] - 2026-10-09
 

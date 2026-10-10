@@ -1427,6 +1427,28 @@ _COMPLEXIPY_MAX = "15"  # NFR-005: [tool.complexipy] max-complexity-allowed
 _COMPLEXIPY_PATHS: tuple[str, ...] = ("src", "tests")  # NFR-005: [tool.complexipy] paths
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
+# AC-014/EDGE-017 (REQ-014 v2): the two over-long-parameter-default witnesses that are live in the
+# committed artifact (docs/verification/map-default-drop-shift.md §3.2/§3.3). Both are located **by
+# content, never by line number** — the map's line numbers drift with every regeneration (F-11).
+_ELLIPSIS = "…"  # REQ-014: the placeholder an over-long default is abbreviated to
+_SIMPLE_TEMPLATE_MARKER = "def `simple_template("
+_AUTH_SERVICE_INIT_MARKER = "`__init__(self, user_manager: UserManager"
+_SIMPLE_TEMPLATE_LINE = (
+    "- def `simple_template(name: str='test', subject: str='Test {{who}}', body_html: str="
+    f"{_ELLIPSIS}"
+    ", body_text: str='Test {{who}}') -> EmailTemplate`: Build an EmailTemplate for a test."
+)
+# The three over-long keyword-only defaults keep their `=…` (they are optional in the source, and
+# AGENTS.md documents them as such), while the short defaults next to them stay verbatim — so the
+# witness cannot pass by abbreviating everything.
+_AUTH_SERVICE_INIT_NEEDLES: tuple[str, ...] = (
+    f"reset_token_ttl: timedelta={_ELLIPSIS}",
+    f"lockout_duration: timedelta={_ELLIPSIS}",
+    f"origin: str={_ELLIPSIS}",
+    "session_ttl: timedelta=timedelta(days=7)",
+    "max_failed_attempts: int=5",
+)
+
 
 def _complexipy(max_allowed: str) -> subprocess.CompletedProcess[str]:
     """The CI complexity gate (`complexipy src tests --max-complexity-allowed <n>`) run from the repo root.
@@ -1479,6 +1501,37 @@ def test_ac_021_committed_map_matches_fresh_render(tmp_path: Path) -> None:
     )
     check = _check(_REPO_ROOT, str(_MAP_FILE))
     assert check.returncode == 0, f"AC-021: --check exits {check.returncode}, expected 0: {_output(check)!r}"
+
+
+def test_ac_014_committed_map_renders_over_long_default_in_place() -> None:
+    """AC-014/EDGE-017 (REQ-014): the committed STRUCTURE.md abbreviates an over-long parameter
+    default to the `…` placeholder in its own slot — `simple_template`'s 21-character positional
+    default never shifts the other defaults onto earlier parameters, and `AuthService.__init__`'s
+    three over-long keyword-only defaults keep their `=…` instead of rendering as required
+    parameters, with their short neighbours verbatim."""
+    assert _MAP_FILE.is_file(), "REQ-021: no STRUCTURE.md is committed at the repository root"
+    lines = _MAP_FILE.read_text(encoding="utf-8").splitlines()
+
+    simple = [line for line in lines if _SIMPLE_TEMPLATE_MARKER in line]
+    assert len(simple) == 1, (
+        f"AC-014 witness: {len(simple)} map lines match {_SIMPLE_TEMPLATE_MARKER!r}, "
+        "the witness needs exactly one (locate by content, never by line number)"
+    )
+    init = [line for line in lines if _AUTH_SERVICE_INIT_MARKER in line]
+    assert len(init) == 1, (
+        f"AC-014 witness: {len(init)} map lines match {_AUTH_SERVICE_INIT_MARKER!r}, "
+        "the witness needs exactly one (locate by content, never by line number)"
+    )
+
+    failures: list[str] = []
+    if simple[0] != _SIMPLE_TEMPLATE_LINE:
+        failures.append(
+            f"clause 1: the simple_template line is\n  {simple[0]!r}\nexpected\n  {_SIMPLE_TEMPLATE_LINE!r}"
+        )
+    for needle in _AUTH_SERVICE_INIT_NEEDLES:
+        if needle not in init[0]:
+            failures.append(f"clause 2: {needle!r} is missing from the AuthService.__init__ line: {init[0]!r}")
+    assert not failures, "\n".join(failures)
 
 
 def test_nfr_002_map_line_budget() -> None:

@@ -449,7 +449,7 @@ migrations/
 .agents/ — 17 files (skills)
 .github/ — 9 files (CI and tooling)
 .vscode/ — 2 files
-docs/ — 225 files (process record)
+docs/ — 231 files (process record)
 userdocs/ — 2 files (published docs)
 
 ## Packages
@@ -484,7 +484,7 @@ Check referential integrity of the traceability matrix (docs/verification/tracea
 - def `matrix_rows(matrix_path: Path) -> list[MatrixRow]`: Parse the matrix tables, keeping only tables that have a Status column.
 - def `check(matrix_path: Path, rows: list[MatrixRow], specs: set[str], tests: set[str]) -> list[str]`: Return one message per referential-integrity violation.
 - def `main() -> int`
-#### scripts/make_map.py (567 lines)
+#### scripts/make_map.py (581 lines)
 Generate the repository structure map (spec: docs/specs/structure-map.md).
 - @dataclass(frozen=True) class `Module`: One in-scope source file: read once, parsed once (REQ-001).
   - `path: str`
@@ -683,7 +683,7 @@ SQLite/SQLModel implementations of the authentication repository ABCs.
 #### src/backend/authentication/service.py (453 lines)
 The authentication service (T-004, T-005, T-006).
 - @logged_class(slow_threshold_ms=250, include_args=False) class `AuthService`: The authentication use-case service.
-  - `__init__(self, user_manager: UserManager, user_repository: UserRepository, session_repository: SessionRepository, reset_repository: PasswordResetRepository, webauthn_repository: WebAuthnCredentialRepository, *, webauthn_provider: WebAuthnProvider | None=None, event_bus: EventPublisher | None=None, attempt_tracker: AttemptTracker | None=None, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta, max_failed_attempts: int=5, lockout_duration: timedelta, rp_id: str='localhost', rp_name: str='Python Template', origin: str, permission_service: PermissionChecker | None=None) -> None`: Wire the service from injected collaborators.
+  - `__init__(self, user_manager: UserManager, user_repository: UserRepository, session_repository: SessionRepository, reset_repository: PasswordResetRepository, webauthn_repository: WebAuthnCredentialRepository, *, webauthn_provider: WebAuthnProvider | None=None, event_bus: EventPublisher | None=None, attempt_tracker: AttemptTracker | None=None, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta=…, max_failed_attempts: int=5, lockout_duration: timedelta=…, rp_id: str='localhost', rp_name: str='Python Template', origin: str=…, permission_service: PermissionChecker | None=None) -> None`: Wire the service from injected collaborators.
   - `login(self, request: LoginRequest, principal: Principal=_SYSTEM_PRINCIPAL) -> LoginResult`: Authenticate by username or email and open a session (REQ-001).
   - `session_info(self, token: str, principal: Principal=_SYSTEM_PRINCIPAL) -> SessionInfo`: Introspect the session a raw token stands for (REQ-008).
   - `logout(self, token: str, principal: Principal=_SYSTEM_PRINCIPAL) -> None`: Revoke the session behind a raw token (REQ-009).
@@ -1672,8 +1672,8 @@ Shared helpers for the authentication test suite.
 - def `db_url(tmp_path: Path, name: str='auth.db') -> str`: A cross-platform absolute-path SQLite file URL under tmp_path.
 - def `valid_login(identifier: str='alice', password: str='correct-horse-1') -> dict[str, Any]`: A valid LoginRequest field mapping.
 - def `create_user(user_manager: UserManager, username: str='alice', email: str='alice@example.com', password: str='correct-horse-1', roles: list[str] | None=None) -> Any`: Create a user through user-management and return the UserRead.
-- def `build_auth_service(tmp_path: Path, *, event_bus: EventCollector | None=None, max_failed_attempts: int=5, lockout_duration: timedelta, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta, webauthn_provider: WebAuthnProvider | None=None) -> AuthFixture`: Wire a full AuthService over SQLite stores under tmp_path.
-- def `build_memory_auth_service(*, event_bus: EventCollector | None=None, max_failed_attempts: int=5, lockout_duration: timedelta, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta, webauthn_provider: WebAuthnProvider | None=None) -> AuthFixture`: Wire a full AuthService over in-memory SQLite (property tests).
+- def `build_auth_service(tmp_path: Path, *, event_bus: EventCollector | None=None, max_failed_attempts: int=5, lockout_duration: timedelta=…, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta=…, webauthn_provider: WebAuthnProvider | None=None) -> AuthFixture`: Wire a full AuthService over SQLite stores under tmp_path.
+- def `build_memory_auth_service(*, event_bus: EventCollector | None=None, max_failed_attempts: int=5, lockout_duration: timedelta=…, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta=…, webauthn_provider: WebAuthnProvider | None=None) -> AuthFixture`: Wire a full AuthService over in-memory SQLite (property tests).
 - @pytest.fixture def `collector() -> EventCollector`
 - @pytest.fixture def `auth(tmp_path: Path, collector: EventCollector) -> AuthFixture`
 - @pytest.fixture def `auth_service(auth: AuthFixture) -> AuthService`
@@ -1813,7 +1813,7 @@ Shared helpers for the mail test suite.
 - def `resolve_mail_config() -> Any`: The live SMTP config resolution (the read the service performs per send).
 - def `event_text(event: object) -> str`: Serialize an event to a string for secret scanning.
 - def `message_bodies(message: EmailMessage) -> tuple[str, str]`: Return the (text/plain, text/html) bodies of a multipart message.
-- def `simple_template(name: str, subject: str='test', body_html: str='Test {{who}}', body_text: str='Test {{who}}') -> EmailTemplate`: Build an EmailTemplate for a test.
+- def `simple_template(name: str='test', subject: str='Test {{who}}', body_html: str=…, body_text: str='Test {{who}}') -> EmailTemplate`: Build an EmailTemplate for a test.
 - def `closed_port() -> int`: Return a localhost port with no listener (a connect is refused).
 #### tests/search_test_helpers.py (211 lines)
 Shared helpers for the search test suite (docs/specs/search.md).

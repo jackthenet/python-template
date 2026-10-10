@@ -1014,6 +1014,19 @@ passed / 1 skipped; property subset 77 passed; the 18 unit witnesses run inside 
 defines are already defined by other specs, so its PASS is not evidence of this spec's coverage — the rows
 below are.
 
+**Amended 2026-10-10 by `map-default-drop-shift` (ISSUE, light tier; S5.3).** Spec Amendment PR A (merge
+`d8ba07f`) amended the REQ-014 / AC-014 wording and added **INV-007** and **EDGE-017**, so the spec now
+defines **85 IDs** (27 REQ + 27 AC + 7 INV + 17 EDGE + 7 NFR) and this section has **58 rows: 2 added
+(INV-007, EDGE-017) and 1 updated in place (REQ-014 / AC-014)** — the only rows this change touched, and
+the two INV/EDGE sub-headings' row counts were corrected to match. Every other row keeps the gate record of
+the change that wrote it (convention B). The three rows' witnesses were written in Phase 3 (`0ecf7bc`, RED
+observed at S3.2) and are GREEN at S5.1 **targeted + smoke** (evidence commit `7d6ac22`): the four §4.5
+reproduction witnesses **4 passed**, the structure-map modules **58 passed** (19 unit / 7 property /
+32 acceptance), acceptance smoke **396 passed, 1 skipped** (the pre-existing host symlink skip). Under the
+light-tier rule the **full regression suite is the Phase 6 pre-merge gate (S6.4)**, so no row of this
+change cites a full-suite count — see `docs/verification/map-default-drop-shift.md` §"Phase 5 — S5.1"
+and §6.
+
 ### REQ / AC (27 rows, 54 IDs)
 
 | Requirement | Acceptance Criterion | Test | Status |
@@ -1031,7 +1044,7 @@ below are.
 | REQ-011 | AC-011 | `test_ac_011_packages_scope` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | REQ-012 | AC-012 | `test_ac_012_package_header_and_exports` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | REQ-013 | AC-013 | `test_ac_013_module_header_and_summary` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
-| REQ-014 | AC-014 | `test_ac_014_symbol_inventory_and_unparsed_signatures` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| REQ-014 | AC-014 | `test_ac_014_symbol_inventory_and_unparsed_signatures` (unit — re-derived in place for the amended wording by map-default-drop-shift, strictly more assertions, never weakened); `test_ac_014_committed_map_renders_over_long_default_in_place` (acceptance — new map-default-drop-shift witness: the committed map renders an over-long default in its own slot) | GREEN (map-default-drop-shift S5.1 targeted+smoke: 4 reproduction witnesses passed, structure-map modules 58 passed — 19 unit / 7 property / 32 acceptance, acceptance smoke 396 passed + 1 pre-existing host skip, 2026-10-10, commits 0ecf7bc RED → 0c73790 fix, evidence 7d6ac22; wording amended by Spec Amendment PR A, merge d8ba07f. Prior record as observed by structure-map: S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | REQ-015 | AC-015 | `test_ac_015_decorators_render_as_prefix` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | REQ-016 | AC-016 | `test_ac_016_private_symbols_and_dunders` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | REQ-017 | AC-017 | `test_ac_017_class_fields_capped_untyped_omitted` | GREEN (structure-map S5.1 full suite 816 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
@@ -1046,7 +1059,7 @@ below are.
 | REQ-026 | AC-026 | `test_ac_026_map_hook_is_advisory` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | REQ-027 | AC-027 | `test_ac_027_freshness_policy_documented_twice` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 
-### INV (6 rows, property witnesses)
+### INV (7 rows, property witnesses — INV-007 added by map-default-drop-shift, 2026-10-10)
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
@@ -1056,8 +1069,9 @@ below are.
 | INV-004 (REQ-005) | — | `test_inv_004_check_matches_byte_equality` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | INV-005 (REQ-005) | — | `test_inv_005_check_writes_nothing` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | INV-006 (REQ-019) | — | `test_inv_006_output_is_hook_clean` | GREEN (structure-map S5.1 property 77 passed; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| INV-007 (REQ-014) | — | `test_inv_007_signature_fidelity_survives_default_abbreviation` (property, Hypothesis over default length × parameter slot; name deliberately distinct from the other specs' test_inv_007_* witnesses — bare-ID namespace, F-09/F-15) | GREEN (map-default-drop-shift S5.1 targeted+smoke: property module 7 passed, structure-map modules 58 passed, 2026-10-10, commits 0ecf7bc RED → 0c73790 fix, evidence 7d6ac22; ID added by Spec Amendment PR A, merge d8ba07f) |
 
-### EDGE (16 rows)
+### EDGE (17 rows — EDGE-017 added by map-default-drop-shift, 2026-10-10)
 
 | Requirement | Acceptance Criterion | Test | Status |
 |-------------|---------------------|------|--------|
@@ -1077,6 +1091,7 @@ below are.
 | EDGE-014 (REQ-002) | — | `test_edge_014_max_depth_below_one_is_usage_error` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | EDGE-015 (REQ-009) | — | `test_edge_015_unlabelled_dir_counted_without_label` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
 | EDGE-016 (REQ-005) | — | `test_edge_016_crlf_checkout_is_not_stale` | GREEN (structure-map S5.1 acceptance 395 passed/1 skipped; S5.2 clean; docs/verification/structure-map.md, commit 3ec204c, 2026-10-09) |
+| EDGE-017 (REQ-014) | — | `test_edge_017_over_long_default_keeps_its_slot` (unit — over-long default in a positional-only, positional and keyword-only slot, a function whose only default is over-long, and a keyword-only parameter with no default) | GREEN (map-default-drop-shift S5.1 targeted+smoke: unit module 19 passed, structure-map modules 58 passed, 2026-10-10, commits 0ecf7bc RED → 0c73790 fix, evidence 7d6ac22; ID added by Spec Amendment PR A, merge d8ba07f) |
 
 ### NFR (7 rows)
 
