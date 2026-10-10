@@ -94,10 +94,18 @@ its **existing capture-install-restore semantics unchanged** (`REQ-012`).
   with no `repository` argument still raises `ValueError`, so install→reset→read
   is observed through `get_session_service(repository)` for that feature
   (`EDGE-003`, `AC-012`, `session-management.md` AC-049).
-- **Extends, does not supersede:** ADR-017 (its `threading.RLock` guards
-  `SettingsRegistry` **instance** state — the definition map, the values, the
-  template repository; this ADR's module lock guards the **slot variable**. Two
-  different locks, and the settings module ends up with both); ADR-065
+- **Extends, does not supersede:** ADR-017 (its lock guards `SettingsRegistry`
+  **instance** state — the definition map, the values, the template repository —
+  and ships as a plain `threading.Lock` on the instance, `registry.py:101`;
+  this ADR's module lock guards the **slot variable** and is a plain
+  `threading.Lock` in the four non-settings modules but a `threading.RLock` in
+  `settings/registry.py:62`, because the guarded lazy create constructs the
+  registry and its constructor reads the settings singleton back through the
+  event bus (`SettingsRegistry.__init__ -> get_event_bus -> EventBus.__init__ ->
+  get_settings_registry(required=False)`), so a plain `Lock` would self-deadlock
+  that cold-start read — see the code comment at `registry.py:55-61` and the
+  T-001 GREEN evidence. Two different locks, and the settings module ends up
+  with both); ADR-065
   (constructor DI plus module singleton stands — `set_session_service` is
   additive); ADR-009 (instantiability is the reason an install operation is
   useful at all); ADR-040 (the `required=False` guarded read is unchanged, now
@@ -128,10 +136,13 @@ its **existing capture-install-restore semantics unchanged** (`REQ-012`).
   (Q-10): it would emit a second traced entry/exit pair on every first read and
   make the WARNING path reachable from a read. The lock, not the setter, is what
   makes the lazy path safe.
-- **Per-operation locks, an `RLock`, or a lock-free reference** — rejected: one
-  plain `Lock` per module is what search already does (`service.py:547`), the
-  guarded section is a read-and-swap of one list element, and re-entrancy buys
-  nothing when no guarded section calls another.
+- **Per-operation locks or a lock-free reference** — rejected: one lock per
+  module is what search already does (`service.py:547`), and the guarded section
+  is a read-and-swap of one list element. A plain `threading.Lock` is enough for
+  the four non-settings modules, where no guarded section calls another; the
+  settings slot is the one place where an `RLock` is required, because its
+  guarded lazy create re-enters the guard through the registry constructor and
+  the event bus (see Consequences, and the comment at `registry.py:55-61`).
 - **Publish an event on install, or shut down the replaced instance** — rejected:
   no requirement asks for it, and shutting down an instance the caller may still
   hold would destroy a live object (the scratch/park pattern in
