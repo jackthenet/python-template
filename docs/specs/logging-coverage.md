@@ -1,6 +1,7 @@
 # Spec: logging-coverage
 
 ## Changelog
+- v4 (2026-10-10): Amendment (change `settings-public-registry-setter`, CROSS-CUTTING, Q-31 = Option A) — **inventory rows only, no ID changed or added**: the §3.1 inventory gains a `module function` row for `get_permission_service()` (permissions), traced with `@logged(slow_threshold_ms=5)`, `include_args` default — the same treatment as the four other singleton `get_*()` functions. The getter was untraced in code and absent from the inventory; that contradicted AC-011 of `docs/specs/settings-public-registry-setter.md`, which requires a traced lazy read for each of AC-009's four features, permissions included, and the user resolved the contradiction in favour of AC-011. `reset_permission_service()` stays out of scope (AC-011 names only the getter); the search and session-management singleton getters/resets remain the pre-existing gap. The executable inventory (`tests/logging_coverage_test_helpers.INVENTORY_MODULE_FUNCTIONS`) gains the matching entry.
 - v3 (2026-10-06): Amendment (change `settings-public-registry-setter`, CROSS-CUTTING) — **inventory rows only, no ID changed or added**: the §3.1 inventory gains five `module function` rows for the new public install operations (`set_settings_registry()`, `set_event_bus()`, `set_permission_service()`, `set_search_service()`, `set_session_service()`), each traced with `@logged` at a concrete `slow_threshold_ms` per REQ-007 and covered by REQ-001 (the inventory is normative). The test-side inventory helper gains the five entries. The permissions, search and session-management singleton getters/resets remain absent from the inventory (a pre-existing gap: the permissions pair is untraced in code) — recorded as a follow-up candidate in `docs/verification/settings-public-registry-setter.md`, not fixed here.
 - v2 (2026-10-04): Amendment (change `structlog-logging`, ADR-082). REQ-010 and AC-010 restated: the "direct backend statements are kept" policy is retired — one-off statements stay, but they are written through the shared logging feature's exported logger instead of an imported backend. Goal, Design Pattern, Dependencies and D1 wording aligned with the restated IDs (no ID change). `tests/acceptance/logging_coverage/test_direct_loguru_kept.py` is deleted by the implementation PR (it exists solely to enforce the retired wording) and its replacement is `tests/acceptance/logging_coverage/test_statements_via_feature.py`. REQ-011 and AC-011 corrected to the no-argument `setup_logger()` call: the entrypoint never passes a `Settings` object (it has never done so on disk, and the level and sinks come from the settings registry), so the call is written as `setup_logger()` (§1, D5, §3.3).
 
@@ -64,6 +65,7 @@ trace).
 | `get_settings_registry()` | settings | module function | `@logged` | default | sensible |
 | `reset_settings_registry()` | settings | module function | `@logged` | default | sensible |
 | `set_settings_registry(registry)` | settings | module function | `@logged` | default | sensible |
+| `get_permission_service()` | permissions | module function | `@logged` | default | 5 |
 | `set_permission_service(service)` | permissions | module function | `@logged` | default | sensible |
 | `set_search_service(service)` | search | module function | `@logged` | default | sensible |
 | `set_session_service(service)` | sessionmanagement | module function | `@logged` | default | sensible |
@@ -81,8 +83,14 @@ Notes:
 - The five `set_*` install-operation rows were added by change `settings-public-registry-setter`
   (`docs/specs/settings-public-registry-setter.md` REQ-010): each install operation is a public
   module function of its owning feature and is traced with `@logged(slow_threshold_ms=5)`, the
-  same threshold as its sibling `get_*` / `reset_*` functions. The inventory is not yet complete
-  for the permissions, search and session-management singleton getters/resets (pre-existing gap).
+  same threshold as its sibling `get_*` / `reset_*` functions.
+- `get_permission_service()` was added to the inventory by change `settings-public-registry-setter`
+  (Q-31 = Option A, 2026-10-10): it is traced with `@logged(slow_threshold_ms=5)`, the concrete
+  threshold of its sibling `get_*` / `reset_*` functions, because AC-011 of that change requires a
+  traced lazy read for each of AC-009's four features. `reset_permission_service()` is **not** in
+  the inventory — it stays out of scope (AC-011 names only the getter). The inventory is still not
+  complete for the search and session-management singleton getters/resets and for the permissions
+  reset (pre-existing gap).
 
 ### 3.2 Tracing annotation patterns
 
