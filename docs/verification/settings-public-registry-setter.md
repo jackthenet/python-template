@@ -6945,3 +6945,109 @@ Not re-run (unchanged by a docstring edit, and already recorded at S4.2): `compl
 - **`git status --porcelain` after S4.3:** exactly `docs/verification/settings-public-registry-setter.md`, `src/backend/permissions/service.py`, `tests/logging_coverage_test_helpers.py` — no `uv.lock` (P-42), no `pyproject.toml`, no spec, no test assertion, no DAG copy, no `AGENTS.md`, no `docs/todo/` / `docs/questions/`.
 - **No test weakened, deleted, renamed or re-asserted; no new behaviour; nothing committed.**
 - **Next: S4.4 (T-010) commit + set `VERIFIED`** in `.github/task-runner/tasks.json` (sync to `docs/tasks/settings-public-registry-setter.tasks.json`), then Phase 5.
+
+---
+
+## Phase 5 — S5.1 full test suite (2026-10-10)
+
+**Objective:** run the whole repository's test suite on the merged branch and classify every failure (regression / pre-existing on this branch before the merge / pre-existing on `origin/main` / environment-dependent). No lint, no types (S5.2), no traceability (S5.3), no report (S5.4).
+
+**Tree under test:** `crosscut/settings-public-registry-setter` at `7b9b1e0`, working tree clean, `origin/main` merged in at `f50519a` (`main` = `427dfd0`). All commands ran in the change worktree; the only command run in the primary worktree is the read-only `origin/main` comparison (E5 below) — nothing there was edited or committed.
+
+**Output handling (P-91 lesson):** every run was captured to a file and read back through its summary line plus the `FAILED` lines; `-q` was used throughout. No `ResourceWarning` noise appeared in any run (the `tests/conftest.py::_sqlite_engines_disposed` fixture holds).
+
+### The five required runs
+
+| # | Command | Summary line | Result |
+|---|---|---|---|
+| 1 | `uv run pytest tests/ -q --cov --cov-report=term` | `21 failed, 869 passed, 1 skipped in 1093.28s (0:18:13)` | **FAIL** |
+| 2 | `uv run pytest tests/acceptance/ -q` | `8 failed, 422 passed, 1 skipped in 142.48s (0:02:22)` | **FAIL** |
+| 3 | `uv run pytest tests/property/ -q` | `4 failed, 78 passed in 154.27s (0:02:34)` | **FAIL** |
+| 4 | `uv run pytest tests/contract/ -q` | `60 passed in 92.19s (0:01:32)` | **PASS** |
+| 5 | `uv run pytest tests/ -q -p no:randomly` | `13 failed, 877 passed, 1 skipped in 364.24s (0:06:04)` | **FAIL** |
+
+Run 1 is the default (pytest-randomly) order; run 5 is the deterministic order. The two orders fail on **different** sets (21 vs 13) — the failures are order-dependent, not order-specific (see "Order dependence").
+
+### Coverage total (recorded for S5.4)
+
+```text
+TOTAL                                    4767    231   1004    115    94%
+Required test coverage of 92.0% reached. Total coverage: 93.62%
+```
+
+The `[tool.coverage.report] fail_under = 92` gate **passes** (93.62%). The `CoverageWarning: Module src/frontend was never imported` line is the known empty-frontend placeholder in `[tool.coverage.run] source`, not a failure. Coverage is a secondary signal; the S5.1 gate is the suite result.
+
+### Failure list with classification
+
+**Class A — regression caused by this change (12 of the 13 deterministic-order failures).** Test-side state leak, not a `src/` defect. Every one is a logging/settings victim:
+
+| Node | Symptom |
+|---|---|
+| `tests/contract/logging/test_logging_contracts.py::test_nfr_002_decorator_overhead_budget` | `NFR-002: the measurement context requires the pipeline active at DEBUG, got level 20` |
+| `tests/contract/logging/test_logging_contracts.py::test_nfr_003_diagnose_false` | `wait_for_file_content(…/logging_session0/logs/app.log, …, timeout=15)` → False |
+| `tests/integration/logging/test_external_reconfiguration.py::test_edge_003_file_config_keeps_managed_handlers` | `SettingsNotFoundError: unknown setting logging.log_level` |
+| `tests/integration/logging/test_logging_integration.py::test_stdlib_decorator_pipeline` | `wait_for_file_content(…/logging_session0/logs/app.log, …)` → False |
+| `tests/property/logging/test_pipeline_invariants.py::test_inv_004_other_loggers_untouched` | `SettingsNotFoundError: unknown setting logging.log_level` |
+| `tests/property/logging/test_pipeline_invariants.py::test_inv_002_no_local_value_ever_recorded` | `INV-002: the raising traced call must emit an exception record to the file sink` |
+| `tests/property/logging/test_pipeline_invariants.py::test_inv_003_elapsed_non_negative` | `INV-003/REQ-011: … must emit an exit record carrying elapsed_ms` |
+| `tests/property/logging/test_pipeline_invariants.py::test_inv_005_required_fields_present` | `INV-005: the statement call emitted no record the test could wait for` |
+| `tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_keeps_foreign_sink` | `reconfigure never applied` |
+| `tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_replaces_only_the_managed_sinks` | `reconfigure never applied` |
+| `tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_after_external_removal_of_a_managed_sink` | `reconfigure did not re-establish the managed handlers` |
+| `tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation` | `EDGE-008: the new rotation size must take effect` — `10485760 == 20971520` (the hardcoded fallback, not the setting) |
+
+The same class produced nine further victims in the random-order run 1 (`test_ac_001_setup_logger_adds_sinks`, `test_ac_003_file_record_fields_as_json`, `test_ac_012_exception_record_and_propagation`, `test_ac_014_logged_class_records`, `test_ac_015_no_local_values_in_exception_record`, `test_sink_reconfigured_on_change`, `test_ac_017_live_reconfigure`, `test_sink_failure_does_not_interrupt`, `test_service_registry_classes_traced`) — identical mechanism, victims chosen by the random order.
+
+**Class B — environment/host-dependent, pre-existing on `origin/main` (1 failure, with a regression riding on top of it on this branch).**
+
+`tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render` fails for **two independent reasons**:
+
+1. **Host-dependent (pre-existing on `main`).** The test compares **raw bytes** (`committed == fresh`) while `scripts/make_map.py` always writes LF (`out.write_text(…, newline="\n")`, REQ-019) and this host has `core.autocrlf=true`, so the checked-out `STRUCTURE.md` is CRLF: `At index 22 diff: b'\r' != b'\n'`. On `main` the same node fails with **equal line counts** (`committed 1941 lines, fresh 1941 lines`) — no content difference, only the newline bytes — and `uv run python scripts/make_map.py --check` exits **0** there (`_check` normalises CRLF→LF per EDGE-016). CI (Linux checkout, LF) is unaffected.
+2. **Regression caused by this change (branch only).** On the branch the same node reports a real content difference — `line 189 differs: committed 'tests/acceptance/permissions/test_system_principal.py' / fresh '…/test_singleton_install.py'` — and `uv run python scripts/make_map.py --check` exits **1** (`STRUCTURE.md is out of date`), while it exits 0 on `main`. `grep -c singleton_install STRUCTURE.md` = **0**: this change added ~20 test files and 7 new test directories and never regenerated the map (AGENTS.md: regenerate it in the same commit as the `.py` change; skill `code-structure-map`).
+
+### Classification evidence
+
+| ID | Experiment | Result |
+|---|---|---|
+| E1 | `uv run pytest tests/acceptance/logging_coverage/test_services_traced.py tests/acceptance/logging_coverage/test_sink_failure.py -q -p no:randomly` | `6 passed in 1.13s` — the two failures the prior step named do **not** reproduce in isolation |
+| E2 | the same two files with `tests/acceptance/singleton_install/test_concurrency.py` **before** them | `2 failed, 7 passed in 4.74s` — **both** named failures reproduced (`test_service_registry_classes_traced`: `assert 1 == 2` `SettingsRegistry.has` entry records; `test_sink_failure_does_not_interrupt`: `assert 0 == 1` entry records) |
+| E3 | `test_concurrency.py` followed by the 12 Class-A victim nodes | `9 failed, 10 passed in 96.95s` — one leaker alone breaks 9 of the 12 |
+| E4 | per-file leaker probe: each new witness file, then the two victims (`test_ac_001_setup_logger_adds_sinks`, `test_inv_004_other_loggers_untouched`) | **leaks (2 failed):** `tests/acceptance/singleton_install/test_concurrency.py`, `tests/unit/singleton_install/test_edges.py`, `tests/contract/singleton_install/test_api_contract.py`, `tests/contract/singleton_install/test_performance_contract.py`, `tests/property/singleton_install/test_install_properties.py`. **clean (0 failed):** `tests/acceptance/singleton_install/test_install.py`, `tests/unit/architecture/test_singleton_slots.py`, `tests/contract/singleton_install/test_guidance_contract.py`, `tests/contract/singleton_install/test_lint_contract.py`, `tests/integration/singleton_install/test_composition_root.py` |
+| E5 | `origin/main` comparison, primary worktree, read-only: `uv run pytest tests/ -q -p no:randomly` | `1 failed, 818 passed, 1 skipped in 278.09s (0:04:38)` — **only** `test_ac_021`, and only via the CRLF byte diff. `git status --porcelain` before and after: empty |
+| E6 | branch, deterministic order, the five E4 leaker files deselected (`--deselect` × 5 paths) | `1 failed, 871 passed, 1 skipped, 18 deselected in 282.48s (0:04:42)` — **identical to `main`'s result**: the only remaining failure is the host-dependent `test_ac_021` |
+| E7 | `uv run python scripts/make_map.py --check` | branch: exit **1** (`STRUCTURE.md is out of date`); `main`: exit **0** |
+| E8 | `git cat-file -e <ref>:<file>` for the five leaker files | present at the pre-merge branch tip `09f21ef`, absent on `main` — the leak is this change's own and predates the `origin/main` merge, so it is not inherited from `main` |
+
+E6 is decisive: with this change's five leaking files removed from the run, the branch's full deterministic suite matches `main`'s exactly.
+
+### The leaked state, named
+
+**`backend.settings.registry._registry[0]` — the settings feature's module-level singleton slot** (the shared default `SettingsRegistry`). Not a handler, not `caplog`, not an autouse fixture.
+
+Chain, in order:
+
+1. `tests/conftest.py::_logging_session_setup` (session, autouse) installs the session's isolated registry via `settings_test_helpers.install_isolated_registry()`, registers `logging.*` on it, sets `logging.log_file` to the session temp path (`…/logging_session0/logs/app.log`) and `logging.log_level` to `DEBUG`, then calls the session's one `setup_logger()`.
+2. The five E4 files run the `SLOTS` witnesses of `tests/singleton_install_test_helpers.py`. Each witness ends in `finally: … slot.clear()` — for the settings slot that is `reset_settings_registry()`, leaving `_registry[0] = None`. Nothing restores the session registry.
+3. The next `get_settings_registry()` **lazily creates a bare registry** with no feature definitions registered, so `logging.*` is gone and `_settings.py::_settings_from_registry` falls back to the hardcoded defaults. A later `setup_logger()` reconfigures the sinks at **level INFO** writing to **`logs/app.log` under the CWD** — visible in the captured log: `{'level': 'INFO', 'file': 'logs\\app.log', 'rotation_bytes': 10485760, 'reconfigured': True}`.
+4. Consequences — which is why the symptoms look unrelated: `@logged` entry/exit records are `DEBUG` and are dropped (E2's `assert 1 == 2` and `assert 0 == 1`); every `wait_for_file_content(…/logging_session0/logs/app.log)` assertion times out; `registry.get_value("logging.log_level")` raises `SettingsNotFoundError`; `maxBytes` reverts to the 10 MB default (EDGE-008).
+
+The prior step's suspicion (`test_concurrency.py` leaking module state) is **confirmed** for the two named failures (E2) but **incomplete**: four further new files leak the same slot (E4), and the two named failures did **not** appear in this step's deterministic full run (run 5 failed on a different set of 12) — the failure set is a function of which victims run after any leaker, not of the `-p no:randomly` order itself.
+
+### Order dependence
+
+| Run | Order | Failures |
+|---|---|---|
+| 1 | pytest-randomly (default) | 21 (12-class logging victims + 9 more of the same class) |
+| 5 | `-p no:randomly` | 13 (12 logging victims + `test_ac_021`) |
+| E6 | `-p no:randomly`, 5 leakers deselected | 1 (`test_ac_021`, host-dependent) |
+| E5 | `-p no:randomly`, `origin/main` | 1 (`test_ac_021`, host-dependent) |
+
+The suite is **not** order-independent on this branch: the leak makes whichever logging/settings test follows a leaker fail, so the random order picks a different victim set than the deterministic order. `tests/contract/` (run 4) passes because none of its own leaker files (`test_api_contract.py`, `test_performance_contract.py`) is followed by a logging victim inside that directory run.
+
+### S5.1 gate
+
+**S5.1 FAILS.** The full suite does not pass on the merged branch: 13 failures in the deterministic order (21 in the random order). Classification: **12 are regressions introduced by this change** (test-side singleton-slot leak from its own new witness files — E4/E6/E8), and **1 (`test_ac_021`) is host-dependent on `origin/main` but additionally stale on this branch because this change never regenerated `STRUCTURE.md`** (E7), so it also needs this change's attention. Coverage (93.62% ≥ 92) passes.
+
+Nothing was fixed, weakened, skipped, xfailed or deselected in the five required runs (the E-series deselects are diagnostic probes, recorded here, not part of the gate). No source or test file was edited by this step.
+
+**Re-entry required:** Phase 4 (S4.x) — restore the settings singleton slot in the five leaking witnesses (or have the session fixture re-install `logging.*` after them), and regenerate `STRUCTURE.md` (`uv run python scripts/make_map.py`) in the same commit as the `.py` change. Then re-run S5.1.
