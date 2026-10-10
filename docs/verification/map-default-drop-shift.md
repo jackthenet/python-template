@@ -1413,3 +1413,159 @@ policy, `structure-map.md:505-507`).
 
 **Gate ◆ S6.1: passed** — the change implements exactly what its normative basis requires, no more and
 no less; 7 findings recorded, **0 blocking**. Next: **S6.2 Traceability + boundaries**.
+
+## Phase 6 — S6.2 traceability + boundaries (2026-10-10)
+
+HEAD at entry: `87f2ad4` (`docs(map-default-drop-shift): S6.1 review vs normative basis`), `git status
+--porcelain` **empty** before the step and after it (the only write is this section). This step writes
+**only this file**: no `src/`, no `tests/`, no `docs/verification/traceability.md` (S5.3 owns it), no spec,
+no `AGENTS.md`/`CHANGELOG.md`, no `STRUCTURE.md`, no `docs/todo/` or `docs/questions/`, no code edit, no PR,
+no version bump. **The full test suite was not run** — under the light tier (§6) it is the S6.4 pre-merge
+gate (5.4.3); the only test execution here is the targeted four-witness re-run in the table below.
+
+**Bounded inputs used (per AGENTS.md "Bounded scope (per S6.x step)", P-27).** The structure-map section
+of the matrix (`docs/verification/traceability.md:997-1107`), this file's S5.3 (§5.3.2–§5.3.5), S5.4
+(§5.4.1–§5.4.4) and S6.1 (findings F-26…F-32) sections, and the **FINAL** state of the seven files
+`git diff --name-status main...HEAD` lists — read as final content, not a commit-by-commit diff. The one
+historical diff examined is `git show d1fa73f -- docs/verification/traceability.md` (and the equivalent
+whole-branch `git diff main...HEAD -- docs/verification/traceability.md`), which check 3 requires.
+
+### Commands run (targeted / read-only only — no full suite, no edit)
+
+| # | Command | Result | Exit |
+|---|---|---|---|
+| 1 | `uv run python scripts/check_traceability.py` (the CI `traceability` job, `.github/workflows/spec-validation.yml`) | `Traceability: PASS (883 matrix rows, 136 spec IDs, 804 test functions)` | **0** |
+| 2 | The four §4.5 witnesses, `-q` (targeted, to confirm the rows' `GREEN` still reads true) | `4 passed in 2.63s` | **0** |
+| 3 | `uv run python scripts/make_map.py --check` (check only, P-94) | no output; `git status --porcelain` empty afterwards | **0** |
+| 4 | `git diff --stat main...HEAD -- src/` / `--numstat` | **empty** (no `src/` file touched) | 0 |
+| 5 | `git diff --name-status main...HEAD` | 7 files, all `M` (no `A`/`R`/`D` — nothing added or moved) | 0 |
+| 6 | `git show --stat 0c73790` / `git rev-parse 0c73790:STRUCTURE.md db425ae:STRUCTURE.md HEAD:STRUCTURE.md` | see check 5 below | 0 |
+| 7 | Matrix row parse with the checker's own `matrix_rows()` over `git show main:…` vs `git show HEAD:…` | `main` **881 rows** → `HEAD` **883 rows** (+2) | 0 |
+| 8 | `git diff main...HEAD -- tests/ \| grep -E "^[+-]\s*def test_"` | **3 added, 0 removed** | — |
+| 9 | `git diff main...HEAD \| grep -E "^[+-]\s*(from\|import)\s"` | 4 lines, all in `tests/property/test_structure_map.py` (see check 4) | — |
+
+### Check 1 — Traceability completeness (the four IDs this change owns): **INTACT**
+
+Every normative ID this change owns has a matrix row in the structure-map section, each citing a test
+function that exists in this worktree at the exact line the row cites.
+
+| ID | Matrix row (`docs/verification/traceability.md`) | Cited witness | Witness exists (grep `def <name>`) | Status token |
+|---|---|---|---|---|
+| `REQ-014` + `AC-014` | `:1047` (updated in place) | `test_ac_014_symbol_inventory_and_unparsed_signatures`; `test_ac_014_committed_map_renders_over_long_default_in_place` | `tests/unit/test_make_map.py:996`; `tests/acceptance/test_structure_map.py:1506` | `GREEN` (declared) |
+| `INV-007` | `:1072` (added) | `test_inv_007_signature_fidelity_survives_default_abbreviation` | `tests/property/test_structure_map.py:628` | `GREEN` (declared) |
+| `EDGE-017` | `:1094` (added) | `test_edge_017_over_long_default_keeps_its_slot` | `tests/unit/test_make_map.py:1028` | `GREEN` (declared) |
+
+Checker (command 1): **`Traceability: PASS (883 matrix rows, 136 spec IDs, 804 test functions)`, exit 0** —
+identical to the S5.3 post-edit and S5.4 re-run lines (§5.3.3, §5.4.2 #9), i.e. nothing this step changed
+and nothing has drifted since.
+
+**F-24 re-confirmed by reading the checker, and narrowed.** `scripts/check_traceability.py:102-105`
+implements rule (1) — "every ID defined by a spec has a row" — behind
+`REQ_OR_AC_RE.fullmatch(id_)` (`:15` = `\b(?:REQ|AC)-\d+\b`), so a **missing `INV-`/`EDGE-` row is invisible
+to CI**: the PASS is *not* evidence that the two rows exist, and they were therefore read directly (the
+table above, `:1072` and `:1094`). Conversely rule (3) at `:112-115` polices **every** backticked
+`test_*` in **every** row of a Status table, so the *existence* of the two INV/EDGE witnesses **is**
+checker-verified — the gap is one-directional (missing row, not missing test). Rule (2) (`:107-110`)
+confirms the two new IDs are defined by a spec: `INV-007` and `EDGE-017` are present in
+`docs/specs/structure-map.md` (v2, amended IDs `REQ-014`/`AC-014` likewise), which is why the rows pass.
+
+### Check 2 — Every test this change added or changed traces back to a normative ID: **INTACT, no orphan**
+
+`git diff main...HEAD -- tests/` adds **3** `def test_…` and removes **0** (command 8). Each names its ID
+in the first line of its docstring, and each is cited by exactly one matrix row (1 hit per name in
+`docs/verification/traceability.md`):
+
+| Test (final state) | Category dir | ID cited in the docstring | Matrix row |
+|---|---|---|---|
+| `test_ac_014_committed_map_renders_over_long_default_in_place` (`tests/acceptance/test_structure_map.py:1506`) | acceptance | "**AC-014/EDGE-017 (REQ-014)**: the committed STRUCTURE.md abbreviates an over-long parameter default to the `…` placeholder in its own slot…" | `:1047` |
+| `test_inv_007_signature_fidelity_survives_default_abbreviation` (`tests/property/test_structure_map.py:628`) | property (Hypothesis `@given(module=_signature_module())`, `:638`) | "**INV-007 (REQ-014)**: … the same positional-only / positional / keyword-only split and exactly the set of parameters that carry a default…" | `:1072` |
+| `test_edge_017_over_long_default_keeps_its_slot` (`tests/unit/test_make_map.py:1028`) | unit | "**EDGE-017 (REQ-014)**: a parameter default whose unparsed text exceeds 20 characters is abbreviated to the `…` placeholder in its own slot…" | `:1094` |
+| `test_ac_014_symbol_inventory_and_unparsed_signatures` (`tests/unit/test_make_map.py:996`) — **changed**, not added | unit | "**AC-014 (REQ-014)**: … a parameter default of ≤ 20 characters shown verbatim while a longer one is abbreviated to the `…` placeholder in its own slot (**EDGE-017**)…" | `:1047` |
+
+Category placement matches the Test Category Hierarchy (artifact-level witness → `tests/acceptance/`,
+invariant over an input space → `tests/property/`, local generator behaviour → `tests/unit/`), which is
+also the category the spec's §11 Test Strategy assigns to each ID (`structure-map.md:533`, `:553`, `:570`,
+cross-read at §5.3.5). Everything else the branch adds under `tests/` is a **helper or fixture**, not a
+test — `_ELLIPSIS`, `_PLACEHOLDER`, `_DEFAULT_MAX_CHARS`, `_MAX_PARAMS`, `_MAX_FUNCTIONS`, `_DEF_LINE`,
+`_signature_module`, `_expected_params`, `_inv007_failures`, `_EDGE017_MODULE`, `_EDGE017_LINES`,
+`_SIMPLE_TEMPLATE_MARKER`, `_SIMPLE_TEMPLATE_LINE`, `_AUTH_SERVICE_INIT_MARKER` — so no orphan test exists
+in either direction. The fixture source strings declare no `test_*` functions (`shift`, `only`, `posonly`,
+`keys`, `edge`), so they cannot inflate the checker's test-name set either.
+
+### Check 3 — No row refreshed that this change did not touch (Q-129, convention B): **INTACT — exactly 2 added, 1 updated**
+
+`git show d1fa73f -- docs/verification/traceability.md` and the whole-branch equivalent
+`git diff main...HEAD -- docs/verification/traceability.md` (the branch touched the matrix in that one
+commit only) agree, and the whole-branch view is the stronger check because it covers every commit of the
+change:
+
+| Measure | Value |
+|---|---|
+| Changed table lines (whole branch) | **3 added, 1 removed** → `INV-007` row added, `EDGE-017` row added, `REQ-014 / AC-014` row removed+re-added = **updated in place** |
+| Net matrix rows | `main` **881** → `HEAD` **883** (+2), parsed with the checker's own `matrix_rows()` over `git show <ref>:docs/verification/traceability.md` — matches the checker's `883 matrix rows` and S5.3's `881 → 883` (§5.3.3) |
+| Rows in the structure-map section | **58** (lines 1034–1106): 27 REQ/AC + 7 INV + 17 EDGE + 7 NFR, i.e. **85 IDs** — exactly the totals the S5.3 amendment note states (`:1018-1020`) |
+| Diff hunk positions | `@@ -1014`, `@@ -1031`, `@@ -1046`, `@@ -1056`, `@@ -1077` — **all inside the structure-map section** (it starts at `:997`); no other change's section was touched |
+| Non-row edits | 13 preamble lines (the dated amendment note) + 2 sub-heading lines (`### INV (6 rows…)` → `(7 rows… 2026-10-10)`, `### EDGE (16 rows)` → `(17 rows… 2026-10-10)`, F-25) — prose only, no Status cell |
+
+So the count is exactly what S5.3 reported (**2 added, 1 updated in place**), and the other 26 REQ/AC rows,
+INV-001…INV-006, EDGE-001…EDGE-016, all 7 NFR rows and every row of every other section are byte-identical
+to `main` — no historical gate record was refreshed by a change that did not re-run it.
+
+### Check 4 — Feature boundaries and architecture rules: **INTACT**
+
+| Boundary | Evidence |
+|---|---|
+| `src/backend/**` untouched | `git diff --stat main...HEAD -- src/` and `--numstat` are both **empty** (command 4) — no backend behaviour, no model, no service, no migration, no `pyproject.toml`/lock in the diff |
+| Nothing moved to the wrong place | `git diff --name-status main...HEAD` → 7 × `M`, **no `A`/`R`/`D`**: the generator stays in `scripts/make_map.py`, the generated artifact stays at the repository root (`STRUCTURE.md`), the tests stay in `tests/unit/`, `tests/property/`, `tests/acceptance/`, the records stay in `docs/verification/` |
+| No cross-feature internal import introduced | The branch's **only** import changes (command 9) are in `tests/property/test_structure_map.py`: `+import ast`, `+import copy`, `Mapping` → `Mapping, Sequence`, and `hypothesis` gains `assume` — stdlib plus the already-declared property-testing dependency. `scripts/make_map.py:16-25` is **stdlib-only and unchanged by the branch** (REQ-001), so the generator still imports no feature. The apparent `from backend.logging import logged, logged_class` at `tests/unit/test_make_map.py:745` is a line **inside the `_AC015_MODULE` fixture source string** (the pre-existing AC-015 witness), not an import of the test module, and it is not in this branch's diff |
+| Flat-feature-package note | The repo has flat feature packages under `src/backend/` and **no** `model/` or `services/` directory anywhere; this change created no directory and none was expected, so the "code lives in the correct feature directory" check resolves to: the change belongs to the structure-map feature, whose whole footprint is `scripts/make_map.py` + `STRUCTURE.md` + its three test modules |
+| Dependency rule | No dependency added (`deptry` clean at S5.2 5.2.1 #7; `pyproject.toml` not in the diff), so no ADR is owed (AGENTS.md ADR threshold: new dependency / new pattern / cross-feature interface — none present) |
+| Observability | Not applicable: the spec places the `scripts/` tooling outside the backend tracing policy (`structure-map.md:505-507`, recorded in S6.1) |
+
+### Check 5 — Generated-file rule (REQ-023 / AGENTS.md "Structure Map"): **INTACT**
+
+- `git show --stat 0c73790` → `STRUCTURE.md | 12 ±` **and** `scripts/make_map.py | 34 ±` **in the same
+  commit** — the map was regenerated in the same commit as the `.py` change (REQ-023, triage §5.3).
+- The later comment-only refactor `db425ae` carries **no** map diff, and that is verified rather than
+  assumed: `git rev-parse 0c73790:STRUCTURE.md db425ae:STRUCTURE.md HEAD:STRUCTURE.md` → all three are
+  blob **`1a8b586`**, and `git show <ref>:scripts/make_map.py | wc -l` is **581 at both** commits — the only
+  property the map records for that file (its line count) did not change, so a regeneration would have been
+  byte-identical.
+- Fresh at HEAD: `uv run python scripts/make_map.py --check` → **exit 0**, no output, working tree still
+  clean (command 3) — the committed map is a byte-exact fresh render, so it was **not hand-edited**
+  (REQ-022 / EDGE-010).
+- The map delta is 6 lines, all generated content: 4 signature lines (`AuthService.__init__`,
+  `build_auth_service`, `build_memory_auth_service`, `simple_template`) plus 2 metadata lines
+  (`docs/ — 225 → 231 files`, `#### scripts/make_map.py (567 lines) → (581 lines)`) — F-21/F-31, reconciled
+  at S6.1, not scope creep.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| **F-33** | The structure-map `NFR-006` row (`docs/verification/traceability.md:1105`) cites `wc -l scripts/make_map.py` = **567 lines**; the file is **581** at HEAD, so the number inside that cell no longer describes the current tree. | **Info** (stale number inside a historical cell — not a stale row) | **No action — and refreshing it would be the violation.** The cell is the dated record of the structure-map S5.1/S5.2 gate (2026-10-09, commit `3ec204c`), `NFR-006` is a spec §11 **record row with no witness by design**, and this change did not touch `NFR-006` — under decision Q-129 (convention B) a later change updates only the rows it actually touched. Recorded so S6.3 does not read it as a referential-integrity defect (the checker's rules 1–4 do not, and cannot, police numbers inside a Status cell). |
+| **F-34** | The matrix's own "Drift Checks" list (`docs/verification/traceability.md:1118-1126`) promises CI detects an "**Orphaned test:** a test function has no spec reference", but `check_traceability.py` implements no orphan rule at all (rules 1–4, `:102-121`), and rule (1) is restricted to `REQ`/`AC` (`:15`, `:104`), so a missing `INV-`/`EDGE-` row is also invisible — the same one-directional gap F-24 recorded. | **Info** (pre-existing tooling gap, outside this ISSUE's scope) | **No action in this change** — changing `scripts/` is out of scope (triage §8, the parameter-default rule only). Both directions were therefore verified by hand for this change: all 4 owned IDs have rows (check 1) and all 3 added tests are cited exactly once in the matrix (check 2), so there is **no orphan and no missing row here**. Handed to the after-workflow-optimization together with F-24 and F-25. |
+
+### Does any finding block a clean review at S6.3?
+
+**No.** F-33 and F-34 are informational: neither contradicts the normative basis, neither is a missing
+traceability link or an orphaned test, and neither is actionable inside this ISSUE's scope. Traceability is
+complete for the four IDs this change owns (checker exit 0, plus the two rows read directly because of the
+F-24/F-34 gap), no test is orphaned, no untouched row was refreshed, boundaries and architecture rules hold
+(`src/` untouched, no new import, nothing moved), and the generated-file rule is satisfied.
+
+The only items still open for this change are the ones S6.1 already named and S6.4 owes: **F-32** (the
+`CHANGELOG.md` `## [Unreleased]` → `Fixed` entry and the `patch` bump `1.1.0 → 1.1.1` with the entries moved
+to `## [1.1.1] - <date>`) and the light-tier **full regression suite** (`uv run pytest tests/ -v`, 5.4.3),
+which must be green before the PR opens and recorded in the review report.
+
+**Review Order note.** This step covers skill Review Order steps 2 (**traceability**), 5 (**architecture /
+feature boundaries**) and the boundary half of 4; step 1 (normative basis) and step 3 (test weakening) were
+closed at S6.1, and steps 6–7 (quality, observability) are **S6.3** — quality gates were already recorded
+green at S5.2 (5.2.1 #1–#8, #11–#13).
+
+**Gate ◆ S6.2: passed** — traceability intact (4/4 owned IDs with a row citing an existing witness; checker
+`PASS (883 matrix rows, 136 spec IDs, 804 test functions)`, exit 0), zero orphaned tests, exactly 2 rows
+added + 1 updated in place and no other row refreshed, boundaries and architecture rules respected
+(`src/` diff empty), generated-file rule satisfied (map and `.py` in one commit, `--check` exit 0).
+2 findings recorded, **0 blocking**. Next: **S6.3 Review report (clean)**.
