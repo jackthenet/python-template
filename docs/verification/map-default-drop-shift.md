@@ -868,3 +868,82 @@ qualification (§6): Phase 5 runs targeted + smoke instead, and `uv run pytest t
 the PR opens, with the result recorded in the review report. Phase 4 ran no full-suite command.
 
 **Gate ◆ Phase 4 (GREEN + REFACTORED): closed.** Phase 5 (`S5.1`) may start.
+
+## Phase 5 — S5.1 targeted + smoke test evidence (2026-10-10)
+
+HEAD at entry: `fada820` (`docs(map-default-drop-shift): Phase 4 close-out (GREEN, REFACTORED)`), working
+tree clean. This step **ran tests only** — nothing was edited, regenerated, weakened, skipped or
+deselected, and `git status --porcelain` is **empty** after the runs (the map is untouched:
+`uv run python scripts/make_map.py --check` → **exit 0**, no output, run check-only per P-94).
+
+**Light tier (§6): the full regression suite (`uv run pytest tests/`) is deliberately NOT run here.**
+Under the light-tier qualification the **full regression suite is the Phase 6 pre-merge gate (S6.4)** —
+`uv run pytest tests/ -v` must pass before the PR opens and its result is recorded in the review report.
+Phase 5 runs the reproduction witnesses, the covering tests named in §6, the affected feature's test set,
+and an acceptance-category smoke sweep instead.
+
+### 5.1.1 The four §4.5 witnesses (reproduction tests GREEN)
+
+- **command:** `uv run pytest tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place -v`
+- **result:** **`4 passed in 3.31s`** (exit 0) — `test_ac_014_symbol_inventory_and_unparsed_signatures`, `test_edge_017_over_long_default_keeps_its_slot`, `test_ac_014_committed_map_renders_over_long_default_in_place`, `test_inv_007_signature_fidelity_survives_default_abbreviation`. 0 failed, 0 skipped, 0 xfail, 0 errors.
+
+### 5.1.2 The affected feature's test set (structure-map: unit + property + acceptance)
+
+- **command:** `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -v`
+- **result:** **`58 passed in 44.77s`** (exit 0) — 58 collected, **0 failed, 0 skipped, 0 deselected**.
+- The two witnesses the light-tier note in §6 calls out are among the passes:
+  `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render` **PASSED**
+  (red on `main` at triage, §3.5/F-01/F-02/F-16 — green because Phase 4 regenerated the map in the same
+  commit as the `.py` change) and `tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget`
+  **PASSED** (NFR-002, the map stays ≤ 2 000 lines at 1 941).
+
+### 5.1.3 Every covering test named in §6, per module
+
+§6 names the covering tests as `tests/unit/test_make_map.py`, `tests/property/test_structure_map.py` and
+`tests/acceptance/test_structure_map.py`. Each was also run **on its own** so each covering module's result
+is recorded separately and reconciles against the §3.5 baseline:
+
+| Covering module (as named in §6) | Command | Result line | Reconciliation vs the §3.5/§6 baseline |
+|---|---|---|---|
+| `tests/unit/test_make_map.py` | `uv run pytest tests/unit/test_make_map.py -v` | **`19 passed in 4.67s`** (exit 0) | §3.5 recorded unit + property = **24 passed**; unit is now 19 because Phase 3 added `test_edge_017_over_long_default_keeps_its_slot` (+1) |
+| `tests/property/test_structure_map.py` | `uv run pytest tests/property/test_structure_map.py -v` | **`7 passed in 28.41s`** (exit 0) | 7 = the baseline's 6 + the new `test_inv_007_signature_fidelity_survives_default_abbreviation` (+1); unit + property = **26 = 24 + 2**, no baseline test lost |
+| `tests/acceptance/test_structure_map.py` | `uv run pytest tests/acceptance/test_structure_map.py -v` | **`32 passed in 13.34s`** (exit 0) | §3.5 recorded **1 failed, 30 passed**; now **32 passed** = 30 + the new `test_ac_014_committed_map_renders_over_long_default_in_place` (+1) + the previously **pre-existing** `test_ac_021_committed_map_matches_fresh_render` turning green (F-01/F-02/F-16) |
+
+**No covering test regressed:** every module is fully green, and the only count changes are the three new
+witnesses plus the pre-existing AC-021 red resolved by the Phase 4 regeneration.
+
+### 5.1.4 Smoke sweep — the acceptance category as a whole
+
+- **command:** `uv run pytest tests/acceptance -q`
+- **result:** **`396 passed, 1 skipped in 62.93s (0:01:02)`** (exit 0; wall clock `1m4s` for the whole
+  `uv run` invocation). Not slow — run in full, nothing substituted or narrowed.
+- The single skip is **pre-existing and host-dependent**, not produced by this step or this change:
+  `tests/acceptance/filemanagement/test_filemanagement.py:364` — `test_ac_031_symlink_rejected` calls
+  `pytest.skip("symlinks not available on this host")` from its own `except OSError` guard around
+  `os.symlink` (Windows host without symlink privilege). That file is **not** in this branch's diff
+  (`git diff --name-status main...HEAD` lists only `STRUCTURE.md`, `docs/verification/map-default-drop-shift.md`,
+  `scripts/make_map.py`, `tests/unit/test_make_map.py`, `tests/property/test_structure_map.py`,
+  `tests/acceptance/test_structure_map.py`). No test was skipped, marked or deselected by this step.
+
+### 5.1.5 Gate summary
+
+| Check | Command | Result |
+|---|---|---|
+| Reproduction witnesses | the four §4.5 node ids, `-v` | **4 passed** (exit 0) |
+| Affected feature's test set | the three structure-map modules, `-v` | **58 passed** (exit 0) |
+| Covering tests per §6 | each of the three modules, `-v` | **19 / 7 / 32 passed** (exit 0 each) |
+| Acceptance smoke | `uv run pytest tests/acceptance -q` | **396 passed, 1 skipped** (exit 0, 62.93s) |
+| Full regression suite | `uv run pytest tests/ -v` | **not run here — deferred to the S6.4 pre-merge gate** (light tier, §6) |
+| Tree state after the step | `git status --porcelain` | **empty** (nothing written by this step except this record) |
+| Map freshness (check only) | `uv run python scripts/make_map.py --check` | **exit 0** |
+
+### New findings from S5.1
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-22** | The acceptance-category smoke sweep reports **1 skipped** (`test_ac_031_symlink_rejected`, `tests/acceptance/filemanagement/test_filemanagement.py:364`) because `os.symlink` raises `OSError` on this Windows host. The skip is inside the test's own platform guard and predates this change. | No action. Recorded so the S6.4 full-suite count is read correctly: a `skipped` there is a host capability, not a weakened or deselected test, and the S6.4 run must report the same 1 skip on this host. |
+
+**Gate ◆ S5.1: passed** — reproduction witnesses GREEN, the affected feature's test set fully GREEN
+(including AC-021 and NFR-002), every §6 covering module GREEN, acceptance smoke GREEN. Lint and type
+checks are **S5.2**; the traceability rows are **S5.3**; the full regression suite stays the **S6.4**
+pre-merge gate. Next: **S5.2 Lint + types**.
