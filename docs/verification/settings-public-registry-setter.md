@@ -7940,3 +7940,36 @@ Four findings: **1 Minor (S62-1, ADR-083 amendment note — flagged for the huma
 (S62-2, S62-3, S62-4). Nothing was edited in this step beyond this record; the full suite was not re-run.
 
 **Next:** **S6.3** — the review report (clean, with S61-1, S61-3, S62-1 and S62-4 listed for the PR reviewer).
+
+## Phase 6 — S6.2 fix: finding S62-1 (M1) resolved (2026-10-10)
+
+**Finding M1 (= S62-1, Minor).** `docs/decisions/ADR-083-public-install-operation-feature-singletons.md`
+mis-described the locks this change ships: the Consequences bullet called ADR-017's **instance** lock an
+`RLock` (it is a plain `threading.Lock`, `src/backend/settings/registry.py:101`), and the Alternatives
+bullet rejected "an `RLock`" outright, while the settings **slot** lock this change introduces is a
+deliberate `threading.RLock` (`registry.py:62`) — the guarded lazy create constructs the registry, whose
+constructor re-enters the guard through the event bus (`SettingsRegistry.__init__ -> get_event_bus ->
+EventBus.__init__ -> get_settings_registry(required=False)`), so a plain `Lock` self-deadlocks the
+cold-start read (finding F-57; reason recorded in the code comment at `registry.py:55-61` and in the
+T-001 GREEN evidence). The other four slot locks stay plain `threading.Lock` (`eventbus:258`,
+`permissions:540`, `search:610`, `sessionmanagement:377`).
+
+**Resolution — documentation only, the ADR corrected to match the code (never the reverse).** Two bullets
+edited, nothing else in the ADR (Status, Decision, Context, numbering untouched):
+- Consequences "Extends, does not supersede" — ADR-017's lock is now stated as a plain `threading.Lock` on
+  the instance; this ADR's slot lock is stated as a plain `Lock` in the four non-settings modules and an
+  `RLock` in `settings/registry.py`, with the re-entrancy reason and the code/evidence citations.
+- Alternatives Considered — the rejection narrowed to **per-operation locks or a lock-free reference**; the
+  plain-`Lock` preference is scoped to the four modules whose guarded sections are leaves, and the settings
+  slot is named as the one place an `RLock` is required.
+
+**Not touched:** no code, test, spec or other ADR; `STRUCTURE.md` unchanged (no file added, removed or
+renamed). REQ-006's normative substance is unchanged — one module-level lock per owning module guarding
+install + lazy create + reset as one set; the lock *class* is not asserted by any test and is not part of
+the spec's normative wording, so no spec amendment is needed. ADR-017's own "single `threading.RLock`"
+wording (line 17) and the code comment at `registry.py:54` still describe the instance lock as an `RLock`
+while the shipped instance lock is a plain `Lock` — pre-existing (ADR-017's territory, not this change's),
+left for the human reviewer.
+
+**Commit:** `9b2596a docs(ADR-083): correct lock claims to match shipped code (review M1)` — one file,
+`docs/decisions/ADR-083-public-install-operation-feature-singletons.md` (+19 / −8). Not pushed.
