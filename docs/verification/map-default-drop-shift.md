@@ -412,3 +412,141 @@ The AC-014 row (`:526`) keeps its function name (the witness is re-derived in pl
 - TODO `Status: READY` may be set on `main` once this record is verified: the triage cites existing approved IDs (REQ-014, AC-014, REQ-021, AC-021, REQ-019/INV-001, INV-006, NFR-002, NFR-005, REQ-023), confirms observed-vs-required deviation with executed evidence and **two** live witnesses in the committed artifact, records the Spec Amendment stop (item 13) with PR A's exact wording and gates, names the reproduction tests with RED/GREEN commands, and qualifies the change for the **light tier** with the covering tests named.
 - No P.5 step runs for ISSUE; no spec-approval PR is opened for this change beyond PR A itself.
 - Next atomic step when PR A is merged: **S3.1 Derive tests** (Phase 3) in this worktree.
+
+---
+
+## PR A — spec amendment (executed on this branch, 2026-10-10)
+
+PR A is the Spec Amendment PR required by §3.4 / §7 and opened from this same change branch
+(`issue/map-default-drop-shift` → `main`). It changes **only** `docs/specs/structure-map.md` plus the
+regenerated `STRUCTURE.md` (F-02 disposition below) and this record. **No** `scripts/`, `tests/`,
+`src/`, `pyproject.toml`, `docs/todo/` or `docs/questions/` file is touched, and there is **no version
+bump** (Q-3/Q-4: the `patch` bump belongs to PR B at S6.4).
+
+`git diff --name-status main...HEAD` after the PR A commits:
+
+```text
+M  STRUCTURE.md
+M  docs/specs/structure-map.md
+M  docs/verification/map-default-drop-shift.md
+```
+
+### A.1 Amended IDs — exact before / after
+
+**REQ-014** (§5, the signature bullet; only the last sentence changes) — before:
+
+```text
+- signatures are produced with `ast.unparse` for parameters, annotations and return annotation, so
+  formatting drift in the source cannot change the map; a parameter default is included **only when
+  its unparsed text is ≤ 20 characters**.
+```
+
+after:
+
+```text
+- signatures are produced with `ast.unparse` for parameters, annotations and return annotation, so
+  formatting drift in the source cannot change the map; a parameter default is rendered **only when
+  its unparsed text is ≤ 20 characters**, and a default that exceeds the threshold is abbreviated to
+  the single-character placeholder **`…` in its own slot** — the parameter is never removed from the
+  rendered list and never loses its `=` separator, so the rendered list preserves the source's
+  parameter names, their order, the positional-only / positional / keyword-only split, and **which
+  parameters carry a default**. The rule is **uniform** across positional, positional-only and
+  keyword-only defaults (EDGE-017, INV-007).
+```
+
+**AC-014** (§7) — the Given/When/Then prefix through "in the stated line form" is unchanged; the last
+clause is replaced by three. Before (last clause):
+
+```text
+**And** the signature text equals the `ast.unparse` rendering, **And** a parameter default of ≤ 20
+characters is shown while a longer one is omitted.
+```
+
+after (last three clauses):
+
+```text
+**And** the signature text equals the `ast.unparse` rendering **except that a parameter default whose
+unparsed text exceeds 20 characters renders as the `…` placeholder in its own slot**, **And** a
+parameter default of ≤ 20 characters is shown verbatim while a longer one is abbreviated to `…`,
+**And** the rendered parameter list, **with every `…` replaced by the literal `...`**, parses with
+`ast.parse` and yields the same parameter names, order, positional-only / positional / keyword-only
+split and set of defaulted parameters as the source.
+```
+
+The amendment is **stricter** than v1: v1 permitted "a longer one is omitted"; v2 forbids omission and
+adds a parse-and-fidelity clause. No other ID was renumbered, restated or deleted, and no AC was
+weakened.
+
+### A.2 New IDs (added verbatim per §7.3/§7.4, in the existing table shape and section placement)
+
+- **INV-007** — §8 Invariants, immediately after INV-006: *"For every rendered signature, the parameter
+  list with each `…` placeholder replaced by the literal `...` parses with `ast.parse` and yields
+  exactly the source's parameter names in order, the same positional-only / positional /
+  keyword-only split, and exactly the set of parameters that carry a default; a `…` appears **only**
+  where the source default's unparsed text exceeds the REQ-014 threshold."*
+- **EDGE-017** — §9 Edge Cases, immediately after EDGE-016: *edge* — "A parameter default whose
+  unparsed text exceeds 20 characters, in a positional, positional-only or keyword-only slot —
+  including a function whose **only** default is over-long, and a keyword-only parameter that has
+  **no** default at all"; *expected behavior* — "The parameter is rendered in its own slot as
+  `name: annotation=…`; the placeholder never shifts a neighbouring default onto an earlier parameter,
+  a parameter with no default is never given one, and a parameter with a default is never rendered
+  without one."
+
+Both are worded over the **placeholder-substituted** text, never over the literal rendered list, per
+**F-06** (`…` in a default position is a `SyntaxError`).
+
+### A.3 §11 Test Strategy — two rows added (existing rows untouched)
+
+```text
+| INV-007 | REQ-014 | property | `tests/property/test_structure_map.py` | `test_inv_007_signature_fidelity_survives_default_abbreviation` |
+| EDGE-017 | REQ-014 | unit | `tests/unit/test_make_map.py` | `test_edge_017_over_long_default_keeps_its_slot` |
+```
+
+These are the witnesses named by the §4 reproduction plan. The AC-014 row keeps
+`test_ac_014_symbol_inventory_and_unparsed_signatures` — the witness is re-derived in place in PR B,
+not renamed (§4.4).
+
+### A.4 §15 Changelog — v2 prepended above v1 (section placement unchanged)
+
+> `- v2 (2026-10-10): REQ-014 amended — … AC-014 amended — … INV-007 (signature fidelity) and EDGE-017
+> added, with their §11 witnesses. The 20-character threshold value is unchanged. No existing ID was
+> renumbered, restated or deleted. Change map-default-drop-shift (ISSUE, Spec Amendment Workflow); see
+> docs/verification/map-default-drop-shift.md.`
+
+The section stays §15 at the bottom of the file (the layout-preserving choice recorded in §7.6);
+"top of the changelog" means newest-first **inside** §15, matching the other amended specs.
+
+### A.5 Gate results (all run in this worktree at the PR A commits)
+
+| Gate | Command | Result |
+|---|---|---|
+| Traceability referential integrity (CI `traceability` job) | `uv run python scripts/check_traceability.py` | **exit 0** — `Traceability: PASS (881 matrix rows, 136 spec IDs, 801 test functions)`; no new REQ/AC ID was introduced, and INV/EDGE rows are not required by the checker (§12 of the spec, F-09) |
+| Spec validation (CI `spec-validation` job, per spec) | `uv run python scripts/verify_spec.py docs/specs/structure-map.md` | **exit 0** — all REQ/AC/INV checks ✓, `Traceability: PASS` (see F-15) |
+| Task DAG (CI, `\|\| true`) | `uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json` | **exit 0** — `PASSED: 7 tasks, acyclic, well-formed` (unchanged; PR A touches no DAG file) |
+| Docs site | `uv run --group docs mkdocs build --strict` | **exit 0** (F-13: `docs_dir: userdocs`, the spec is not in the site) |
+| Structure-map acceptance | `uv run pytest tests/acceptance/test_structure_map.py -q` | **31 passed** — fully GREEN, including `test_ac_021_committed_map_matches_fresh_render`, which was red on `main` (F-02 disposition below) |
+| Structure-map unit + property (smoke) | `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py -q` | **24 passed** — no existing expectation changed by the amendment; no test asserts on spec **text** (`grep -rn "docs/specs/structure-map" tests/` matches only module docstrings) |
+| Map freshness | `uv run python scripts/make_map.py --check` | **exit 0** (was exit 1 on `main`) |
+| Lint / format | `uv run ruff check .` / `uv run ruff format --check .` | **All checks passed!** / **343 files already formatted** — PR A touches no `.py` file, so both are unchanged from `main` |
+
+### A.6 Finding dispositions taken in PR A
+
+- **F-02 — disposition: fixed inside PR A** (orchestrator decision, recorded here). `STRUCTURE.md` was
+  regenerated with `uv run python scripts/make_map.py` and verified with `--check` (exit 0), so PR A's
+  CI gate set is meaningful instead of carrying the pre-existing red `test_ac_021` failure. The change
+  is a **generated-file regeneration**, not a behavior change: the diff is **one line**, the
+  `docs/ — 223 files (process record)` count → `225 files`. The map is never hand-edited (REQ-021,
+  REQ-022 conflict rule), and `make_map.py` was run **once**, followed by `--check` (P-94).
+- **F-09 — disposition: `docs/verification/traceability.md` is deliberately NOT touched by PR A.**
+  `check_traceability.py` rule (3) fails any matrix row citing a backticked test function that does not
+  exist under `tests/`; `test_inv_007_signature_fidelity_survives_default_abbreviation` and
+  `test_edge_017_over_long_default_keeps_its_slot` are written in Phase 3 (PR B). The INV-007/EDGE-017
+  rows and the updated REQ-014/AC-014 rows are therefore written in **PR B** (§4.6). The checker passes
+  in PR A because rule (1) covers REQ/AC only and PR A adds no new REQ/AC ID.
+
+### A.7 New findings from PR A
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-15** | F-10 predicted `verify_spec.py` would print `✗ INV-007 has property test` once the ID exists. It prints **`✓`**: the per-ID mark is `any("007" in f for f in property_funcs)` over **all** property test functions in the repository, and other specs already define `test_inv_007_*` (`test_inv_007_key_containment`, `test_inv_007_load_scope_valid`) — the same bare-ID namespace as F-09. The `failures` list is still only populated when the whole category is empty, so the exit code is 0 either way. | No action; PR A's `spec-validation` job is green as predicted, for a slightly different reason. Recorded so the after-workflow-optimization sees that `verify_spec.py` cannot witness a *specific* INV's property test. |
+| **F-16** | §3.5/§5.3 measured the fresh `docs/` count as **224**; the regeneration in this worktree renders **225**. Both are correct: `git ls-files docs` is 224 on `main` and 225 on this branch, because the P.4 triage record (`docs/verification/map-default-drop-shift.md`) is a tracked `docs/` file on the change branch only. | Expected, not a defect: PR A merges the triage record together with the map, so `main`'s count and the committed map agree after the merge. PR B adds no new `docs/` file, so its regeneration stays at 225 unless `main` moves. |
