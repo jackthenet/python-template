@@ -7051,3 +7051,117 @@ The suite is **not** order-independent on this branch: the leak makes whichever 
 Nothing was fixed, weakened, skipped, xfailed or deselected in the five required runs (the E-series deselects are diagnostic probes, recorded here, not part of the gate). No source or test file was edited by this step.
 
 **Re-entry required:** Phase 4 (S4.x) — restore the settings singleton slot in the five leaking witnesses (or have the session fixture re-install `logging.*` after them), and regenerate `STRUCTURE.md` (`uv run python scripts/make_map.py`) in the same commit as the `.py` change. Then re-run S5.1.
+
+---
+
+## Phase 4 re-entry — test-isolation fix (post-S5.1, 2026-10-10)
+
+**Objective:** repair the test-isolation defect S5.1 exposed, so the branch's deterministic full-suite run matches `main`'s, and regenerate `STRUCTURE.md`. Explicitly **not** in this step: the coverage run, the traceability update and the verification report (that is the S5.1 re-run).
+
+**Tree at entry:** `crosscut/settings-public-registry-setter` at `4dc8bef` (the S5.1 evidence commit), working tree clean. All commands ran in the change worktree; the only command run in the primary worktree is the read-only `main` comparison (M3 below).
+
+### Before — deterministic reproduction
+
+`uv run pytest tests/ -q -p no:randomly` (no `--cov`) → **`16 failed, 874 passed, 1 skipped in 1108.73s (0:18:28)`** (`../s51-scratch/before_full_det.log`).
+
+The 16 `FAILED` nodes:
+
+| # | Node | Class |
+|---|---|---|
+| 1 | `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render` | stale map (this change never regenerated it) |
+| 2 | `tests/contract/logging/test_logging_contracts.py::test_nfr_002_decorator_overhead_budget` | leak victim (S5.1 list) |
+| 3 | `tests/contract/logging/test_logging_contracts.py::test_nfr_003_diagnose_false` | leak victim (S5.1 list) |
+| 4 | `tests/integration/logging/test_external_reconfiguration.py::test_edge_003_file_config_keeps_managed_handlers` | leak victim (S5.1 list) |
+| 5 | `tests/integration/logging/test_logging_integration.py::test_stdlib_decorator_pipeline` | leak victim (S5.1 list) |
+| 6 | `tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uniqueness` | hypothesis `DeadlineExceeded` (249.43 ms > 200 ms) |
+| 7 | `tests/property/logging/test_pipeline_invariants.py::test_inv_002_no_local_value_ever_recorded` | leak victim (S5.1 list) |
+| 8 | `tests/property/logging/test_pipeline_invariants.py::test_inv_003_elapsed_non_negative` | leak victim (S5.1 list) |
+| 9 | `tests/property/logging/test_pipeline_invariants.py::test_inv_004_other_loggers_untouched` | leak victim (S5.1 list) |
+| 10 | `tests/property/logging/test_pipeline_invariants.py::test_inv_005_required_fields_present` | leak victim (S5.1 list) |
+| 11 | `tests/property/usermanagement/test_usermanagement_properties.py::test_inv_002_password_round_trip` | hypothesis `DeadlineExceeded` (argon2 under load) |
+| 12 | `tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_after_external_removal_of_a_managed_sink` | leak victim (S5.1 list) |
+| 13 | `tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_keeps_foreign_sink` | leak victim (S5.1 list) |
+| 14 | `tests/unit/logging/test_logging_sink_ownership.py::test_reconfigure_replaces_only_the_managed_sinks` | leak victim (S5.1 list) |
+| 15 | `tests/unit/logging/test_sink_ownership.py::test_ac_005_no_duplicate_records` | leak victim (same class, different victim than S5.1's run) |
+| 16 | `tests/unit/test_settings_coverage.py::test_sink_reconfigured_rotation` | leak victim (S5.1 list) |
+
+16 here vs S5.1's 13: same 891 collected nodes, and the leak's victim set is order/timing dependent (S5.1 §"Order dependence") — nodes 2/3/4/5/7-10/12/13/14/16 are S5.1's 12 victims, node 1 is S5.1's `test_ac_021`, and 6/11/15 are the run's own timing/order additions.
+
+### The defect — two leak mechanisms, both test-side
+
+1. **Settings slot left empty.** Each `SLOTS` witness in the five files named by S5.1 E4 ends with `finally: … slot.clear()`; for the settings slot that is `reset_settings_registry()`, which discards the registry `tests/conftest.py::_logging_session_setup` installed for the session (it holds `logging.log_file` = the session temp path and `logging.log_level = DEBUG`). The next `get_settings_registry()` lazily builds a **bare** registry, so the next `setup_logger()` reconfigures the two managed sinks from the hardcoded fallbacks (INFO, `logs/app.log` under CWD): DEBUG entry records are dropped, and file-sink witnesses wait on a file that is never written.
+2. **Event bus slot cleared without parking.** `reset_event_bus()` **shuts down** the instance it resets, so a witness that clears the bus slot without `eventbus_test_helpers.isolated_event_bus()` kills the suite's live bus — and the settings → logging `SettingChanged` reconfigure path (AC-020) lives on that bus. `tests/contract/singleton_install/test_api_contract.py::test_ac_008_…` and `tests/property/singleton_install/test_install_properties.py::test_inv_002_…` did exactly that.
+
+### The fix — one place: `tests/singleton_install_test_helpers.py`
+
+Fixed in the shared helper, not per witness, because the leak is a property of the shared `SLOTS` teardown table, and the repo already has the save/restore precedent there in two forms (`eventbus_test_helpers.isolated_event_bus`, `settings_test_helpers.restore_singleton`):
+
+* `SingletonSlot` gained a `saver` field and two methods — `save()` (what the slot holds now; for settings the **non-creating** `get_settings_registry(required=False)`, because building a default there would *be* the leak) and `restore(instance)` (`install(instance)` — the public install replaces the slot contents without touching either instance's lifecycle, so restoring never shuts the saved bus down; an empty save stays a plain `clear()`).
+* A `witness_slots` decorator: park the live bus (`isolated_event_bus()`), snapshot all five slots, run the witness, and in `finally` put every slot back to **the exact object it held before**. `functools.wraps` keeps the signature, so pytest still injects fixtures and `@given` still drives the hypothesis witnesses.
+* Applied as one decorator line to the 15 witnesses that write a slot: `test_concurrency.py` (AC-009, AC-010, NFR-003), `test_edges.py` (EDGE-001/002/003/004/006/007), `test_api_contract.py` (AC-007, AC-008), `test_performance_contract.py` (NFR-002 ×2), `test_install_properties.py` (INV-001/002/003).
+
+Diff: `6 files changed, 112 insertions(+), 5 deletions(-)` — 91 lines in the helper, one line per decorated witness, plus two clarifying comments. **Commit: `61a8ab1`** (`test(singleton_install): restore the session settings registry in teardown; regenerate STRUCTURE.md`), with the regenerated `STRUCTURE.md` in the same commit.
+
+**What was deliberately not done.** No `src/` file was touched. No assertion was weakened, renamed, removed or converted to a weaker check — the decorator wraps the test body, so no assertion line and no `finally` block was edited, and INV-001, EDGE-010 and AC-009/010/012 still assert slot-clearing and last-install-wins at full strength. No test was deleted, skipped or xfailed. No autouse fixture was added (the helper fix covers it), no dependency was added. `tests/acceptance/singleton_install/test_install.py` keeps its own `_settings_singleton_restored` fixture (it does not leak — S5.1 E4 — and replacing it would be churn, not a fix).
+
+**Witnesses that genuinely need the slot left empty** — kept, and now commented at the site: `test_edge_003_session_service_repository_rule` (asserts `SESSIONMANAGEMENT_SLOT.read()` raises `ValueError` **after** the clear) and `test_edge_004_required_false_after_install_and_reset` (asserts `get_settings_registry(required=False) is None` twice **after** the clear). Their `slot.clear()` stays; the outer session state is restored only after the test body returns, which is why the fix wraps the body instead of editing the `finally` blocks.
+
+### After — targeted and order-proof runs
+
+| # | Command | Result |
+|---|---|---|
+| T1 | `uv run pytest tests/acceptance/singleton_install tests/unit/singleton_install tests/contract/singleton_install tests/property/singleton_install tests/acceptance/logging_coverage -q -p no:randomly` | **`53 passed in 13.72s`** |
+| T2 | the previously failing order: the four `singleton_install` dirs, then `tests/acceptance/logging_coverage tests/contract/logging tests/integration/logging tests/property/logging tests/unit/logging tests/unit/test_settings_coverage.py` | **`129 passed in 32.91s`** |
+| T3 | the same mix + `tests/{acceptance,unit,integration}/settings`, randomized: `--randomly-seed=1 / 7 / 42 / 2026 / 99999 / 5 / 12345 / 777` | `210 passed` × 7; seed 7 → 1 failed (see M2, reproduces on `main`) |
+| T4 | `uv run pytest tests/acceptance/test_structure_map.py -q -p no:randomly` | **`1 failed, 31 passed`** — only `test_nfr_002_map_line_budget` (see M1) |
+
+The two victims S5.1 named by node (`tests/acceptance/logging_coverage/test_services_traced.py::test_service_registry_classes_traced`, `…/test_sink_failure.py::test_sink_failure_does_not_interrupt`) are inside T1/T2 and pass; both are in `tests/acceptance/logging_coverage/`, not `tests/unit/logging/` as the launch prompt stated.
+
+Order dependence is **repaired, not hidden**: the witnesses now leave the suite exactly as they found it, so the victim set no longer depends on what runs after a leaker — eight different random seeds over the leak-prone mix give the same result, and the deterministic full run's victim list (12 nodes) is empty.
+
+### After — deterministic full suite
+
+`uv run pytest tests/ -q -p no:randomly` (no `--cov`), three runs:
+
+| Run | Summary | FAILED nodes |
+|---|---|---|
+| A1 | `3 failed, 887 passed, 1 skipped in 351.80s (0:05:51)` | `test_nfr_002_map_line_budget`, `test_nfr_001_performance_budgets`, `test_inv_001_token_hash_uniqueness` |
+| A2 | `3 failed, 887 passed, 1 skipped in 298.50s` | `test_nfr_004_mypy_and_ruff_clean`, `test_ac_021_committed_map_matches_fresh_render`, `test_nfr_002_map_line_budget` — both extra nodes were **scratch-file pollution**: a `Temp/` directory of run logs I had put in the worktree was picked up by the map render and by the mypy/ruff witness. `Temp/` was moved outside the worktree (`../s51-scratch/`) and the map regenerated; A2 is not a valid gate run. |
+| A3 (gate) | **`2 failed, 888 passed, 1 skipped in 311.88s (0:05:11)`** | `tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget`, `tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uniqueness` |
+
+A1 ran with a map that had been generated while a scratch `Temp/` directory still existed inside the worktree, so both the committed map and the fresh render carried a `Temp/ — 1 files` entry and the map-compare node passed; A3 is the clean gate run, taken after the scratch was moved outside the worktree (`../s51-scratch/`) and the map regenerated.
+
+**Before → after:** `16 failed / 874 passed` → **`2 failed / 888 passed`**. All 12 leak victims and the stale-map node are gone; `test_ac_021_committed_map_matches_fresh_render` now **passes** on this host (regenerating the map removes both the stale content and the CRLF byte mismatch).
+
+### Remaining findings (not isolation, not fixed here)
+
+**M1 — `test_nfr_002_map_line_budget` fails: the honest map is over the NFR-002 ceiling.** `uv run python scripts/make_map.py` renders **2004 lines** for this branch; `docs/specs/structure-map.md` NFR-002 caps the committed map at **2 000** (`_NFR_002_LINE_BUDGET = 2_000` in `tests/acceptance/test_structure_map.py`). `main`'s committed map is 1941, and this change's tree (+7 test directories, ~20 test files, the new install operations and their traced functions) adds **+63** lines, consuming the ≈125-line margin the spec projected. It was hidden before because the committed map was stale — the two nodes are in tension: with the stale map `test_ac_021` fails and NFR-002 passes; with the honest map the reverse. **This needs a decision outside this step's scope** (a Spec Amendment to `structure-map.md` NFR-002, or one of the map-verbosity knobs recorded in `docs/verification/structure-map.md`, e.g. the REQ-017 per-class field cap). Hand-editing `STRUCTURE.md` and weakening the budget test are both prohibited, so the step stops at the finding.
+
+**M2 — `tests/integration/logging/test_logging_integration.py::test_stdlib_decorator_pipeline` is order-dependent on `main` too.** With `--randomly-seed=7` over the logging/settings mix it fails on this branch **and** with the same seed in the primary worktree on `main` (`1 failed, 168 passed`), and with the `singleton_install` directories removed from the mix it still fails on the branch (`1 failed, 177 passed`) — so it is a pre-existing leak inside the logging test set, not this change's. Out of scope here; worth its own ISSUE.
+
+**M3 — two load-sensitive nodes, unchanged by the fix.** `tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uniqueness` fails with hypothesis `DeadlineExceeded` (232.50 ms vs the 200 ms deadline) in the full-suite runs and passes 3/3 in isolation; the same node failed the same way in the **before** run (249.43 ms). `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` failed once (median 0.53 s vs the 0.30 s budget, samples 0.27–0.57 s) and passed in the other run and 3/3 in isolation. Neither is an isolation failure; the S5.1 re-run must read them together with their isolation-free neighbours before classifying.
+
+### Structure map
+
+`uv run python scripts/make_map.py` → `uv run python scripts/make_map.py --check` exits **0**; `grep -c singleton_install STRUCTURE.md` = **23** (was 0); 1941 → 2004 lines. Generated in the same commit as the `.py` change, never hand-edited (skill `code-structure-map`).
+
+### Gates
+
+| Gate | Command | Result |
+|---|---|---|
+| ruff (changed paths) | `uv run ruff check tests/singleton_install_test_helpers.py tests/acceptance/singleton_install/test_concurrency.py tests/unit/singleton_install/test_edges.py tests/contract/singleton_install/test_api_contract.py tests/contract/singleton_install/test_performance_contract.py tests/property/singleton_install/test_install_properties.py` | `All checks passed!` |
+| ruff format | `uv run ruff format --check <same paths>` | `6 files already formatted` |
+| traceability | `uv run python scripts/check_traceability.py` | `Traceability: PASS (883 matrix rows, 136 spec IDs, 875 test functions)` |
+| complexity | `uv run complexipy src tests --max-complexity-allowed 15` | `All functions are within the allowed complexity.` |
+| map | `uv run python scripts/make_map.py --check` | exit **0** |
+| types | not re-run (no `src/` file touched; mypy is S5.2's gate) | n/a |
+
+### Problem log
+
+`docs/workflow/PROBLEMS.md` gained **P-103** (the `test_ac_021` raw-byte/CRLF host dependency and the rule to read that node together with `make_map --check`'s exit code) and **P-104** (the singleton-slot teardown leak, its two mechanisms, and the durable rules: restore what a slot-clearing test found; save/restore must be identity-safe for the bus; a Phase 5 failure spread across unrelated features is an isolation bug — prove it by deselecting the suspect files before touching `src/`).
+
+### Gate
+
+**Phase 4 re-entry gate: PASS for the isolation defect.** Deterministic full suite `2 failed, 888 passed, 1 skipped` against `main`'s `1 failed, 818 passed, 1 skipped`; the branch's passed count is higher because it adds tests, and **zero** failures are isolation failures. The two remaining nodes are M1 (a real NFR-002 budget violation this change causes, needing a human/spec decision) and M3 (a load-sensitive hypothesis deadline that also fails before the fix).
+
+**Next:** re-run **S5.1** with a fresh subagent (full suite + `--cov` + acceptance/property/contract runs + coverage ≥ 92), and decide M1 before Phase 5 can pass.
