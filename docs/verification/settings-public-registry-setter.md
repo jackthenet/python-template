@@ -7716,3 +7716,227 @@ no test was re-run.
 
 **Next:** **S6.2** — traceability (REQ → AC → executable test, every affected feature's matrix rows updated)
 plus feature boundaries and architecture rules.
+
+---
+
+## Phase 6 — S6.2 traceability + boundaries (2026-10-10)
+
+Step objective: verify traceability referential integrity and the orphan direction the script does not check,
+feature boundaries (install/slot logic ownership, no cross-feature internal imports, `shared/` stays small, the
+`TID251` ban still holds), the architecture rules (this repository's equivalent of `model/` vs `services/`, and
+the two ADRs against the shipped structure), that no acceptance test was weakened (read from the **file** side, the
+complement of S6.1's spec-side judgement), and that no public symbol exists that no spec ID covers.
+
+Bounded inputs: `docs/verification/traceability.md`, the final code state of the **67** files this change owns
+(`git diff --name-only origin/main HEAD` — **11** under `src/`, **41** under `tests/`, **19** test files added,
+**22** modified), and the architecture rules. The full test suite was **not** re-run (Phase 5 owns that gate);
+the recorded numbers are read instead — **890 passed, 1 skipped**, coverage **93.85%** vs `fail_under = 92`, spec
+coverage **53/53** (S5.1 re-run, evidence commit `99efbee`). Two **targeted** boundary witnesses were re-run on
+the final tree (see check 2). No source, test or spec file was edited in this step.
+
+### Check 1 — traceability
+
+| Probe | Command | Result |
+|---|---|---|
+| Referential integrity (coverage, dangling IDs, missing tests, undeclared status values) | `uv run python scripts/check_traceability.py` | **PASS** — `Traceability: PASS (890 matrix rows, 136 spec IDs, 875 test functions)` |
+| Map freshness of the artifact the matrix's own row cites | `uv run python scripts/make_map.py --check` | **PASS** (exit 0) |
+
+**(a) Every REQ of this change's spec has at least one GREEN row.** The change's matrix section
+(`docs/verification/traceability.md`, §"Settings Public Registry Setter Matrix") holds **31 rows, all `GREEN`**,
+and none of them is a `RED`/`PENDING` leftover. The 53 normative IDs of `settings-public-registry-setter.md` v3
+are covered by 16 `REQ-001…REQ-016` rows, the `Acceptance Criterion` cell of those rows enumerates **all 20**
+`AC-001…AC-020`, and the `INV-001, INV-002, INV-003`, `EDGE-001 … EDGE-010` and `NFR-001 … NFR-004` rows carry the
+rest. The remaining 14 rows are the CROSS-CUTTING per-feature rows (S5.3): `settings.md` REQ-026 / INV-011 /
+EDGE-030…EDGE-033, `event-bus.md` REQ-008 / EDGE-011–EDGE-012, `user-roles-permissions.md` REQ-030 /
+EDGE-027–EDGE-028, `search.md` REQ-024 / EDGE-022–EDGE-023, `session-management.md` REQ-023 / EDGE-013–EDGE-014,
+`logging-coverage.md` REQ-001 (inventory row), and the `structure-map.md` NFR-002 row. **No REQ this change
+touches is left without a GREEN row** (the S5.3 per-feature table states the same and this step re-read it).
+Convention B is respected: no row this change did not touch was refreshed.
+
+**(b) Every test this change added traces back to a normative requirement.** The added test-function set was
+enumerated from the diff (`git diff origin/main HEAD -- tests/ | grep -E '^\+def test_'`): **71 added test
+functions** across the 19 new and 22 modified test files. Each was then looked up in the matrix **or** in the
+spec's §10 test-strategy table:
+
+```
+git diff origin/main HEAD -- tests/ | grep -E '^\+def test_' | sed 's/^+def \(test_[A-Za-z0-9_]*\).*/\1/' | sort -u \
+  | while read t; do grep -q "`$t`" docs/verification/traceability.md \
+      || grep -q "`$t`" docs/specs/settings-public-registry-setter.md || echo "ORPHAN: $t"; done
+```
+
+**Orphan list: empty (0 of 71).** Mapping by group (all 71):
+
+| Added test functions | Count | Normative owner |
+|---|---|---|
+| `test_ac_001…test_ac_012`, `test_ac_013_install_publishes_no_event`, `test_ac_014_install_is_traced`, `test_ac_016_main_installs_through_setter`, `test_ac_017_*` (2), `test_ac_018_ruff_bans_private_slot_import`, `test_ac_019_agents_md_names_installer`, `test_ac_020_permission_catalog_unchanged` | 20 | this spec's `AC-001…AC-020` |
+| `test_ac_013/014/015/016_*` (eventbus), `test_ac_038…041_*` (search), `test_ac_040/041/042/043_*` (settings), `test_ac_041/042/043/044_*` (permissions), `test_ac_046…049_*` (session-management) | 20 | the five amended feature specs' new ACs (`event-bus` AC-013–016, `search` AC-038–041, `settings` AC-040–043, `user-roles-permissions` AC-041–044, `session-management` AC-046–049) |
+| `test_inv_001/002/003` | 3 | this spec's `INV-001…INV-003` |
+| `test_inv_011_last_install_wins` | 1 | `settings.md` `INV-011` |
+| `test_edge_001…test_edge_009` | 9 | this spec's `EDGE-001…EDGE-009` |
+| `test_edge_011/012`, `test_edge_013/014`, `test_edge_022/023`, `test_edge_030…033` | 10 | `event-bus` EDGE-011–012, `session-management` EDGE-013–014, `search` EDGE-022–023, `settings` EDGE-030–033 |
+| `test_install_over_nonempty_default`, `test_concurrent_lazy_create` (`tests/unit/permissions/test_edge_cases.py`) | 2 | `user-roles-permissions` `EDGE-027`, `EDGE-028` (named in the matrix row with the ID in parentheses) |
+| `test_nfr_001…test_nfr_004` | 4 | this spec's `NFR-001…NFR-004` |
+| `test_inventory_covers_install_operations` | 1 | `AC-015` / `REQ-010` and `logging-coverage.md` REQ-001 (inventory row) |
+| `test_installed_registry_serves_feature_registration` | 1 | `REQ-011` / `AC-016` (the spec's §10 table lists it with `—` as the second integration witness; the matrix REQ-011 row names it) |
+
+Two enumeration notes, neither an orphan (**S62-2**, Note): five witnesses —
+`test_edge_002_same_instance_twice`, `test_edge_003_session_service_repository_rule`,
+`test_edge_004_required_false_after_install_and_reset`, `test_edge_005_install_in_subprocess`,
+`test_edge_006_live_bus_not_shut_down` — are not spelled out in the matrix because its EDGE row uses range
+notation (`EDGE-001 … EDGE-010`); each is enumerated individually in the spec's §10 test-strategy table and named
+in the EDGE row's own cell (S5.3 note at line 7436 of this record). `EDGE-010` has no separate node **by design**
+(finding **F-60**): it is asserted inside `test_ac_010_concurrent_install_read_reset`
+(`_assert_no_install_lost_silently`) and `test_inv_001_last_install_wins`
+(`_assert_concurrent_installs_last_writer_wins`).
+
+**(c) No row was added for an ID no spec defines.** `check_traceability.py` fails on exactly that condition and
+passes; independently, every ID in the change's 31 rows resolves in `docs/specs/` — the change's own 53 IDs plus
+the cited feature IDs (`settings.md` v5, `event-bus.md` v2, `user-roles-permissions.md` v2, `search.md` v4,
+`session-management.md` v2, `logging-coverage.md` v3/v4, `structure-map.md` v3), all of which are amended in this
+branch or already merged.
+
+### Check 2 — feature boundaries
+
+| Probe | Evidence | Result |
+|---|---|---|
+| Install operation + slot logic live in the owning feature package | `set_settings_registry` `src/backend/settings/registry.py:447`; `set_event_bus` `src/backend/eventbus/eventbus.py:292`; `set_permission_service` `src/backend/permissions/service.py:571`; `set_search_service` `src/backend/search/service.py:638`; `set_session_service` `src/backend/sessionmanagement/service.py:421` — each next to its `get_*`/`reset_*` and its slot | **PASS** (5/5) |
+| One module-level slot lock per owning module, guarding install + lazy create + reset | `_registry_lock` `settings/registry.py:62` (**`RLock`** — see **S62-1**), `_default_bus_lock` `eventbus/eventbus.py:258`, `_permission_service_lock` `permissions/service.py:540`, `_singleton_lock` `search/service.py:610` (the pre-existing one, extended, no second lock), `_session_service_lock` `sessionmanagement/service.py:377` | **PASS** (5/5, one lock each; settings' class deviation is S62-1) |
+| No cross-feature private-slot reference | `grep -rnE "(from backend\.[a-z_.]+ import …\b(_registry\|_default_bus\|_permission_service\|_singleton\|_session_service)\b|backend\.[a-z_.]+\.(\_registry\|\_default_bus\|\_permission_service\|\_singleton\|\_session_service)\b)" src tests scripts .github` (the five slot names and the five module-qualified attribute forms) → **1 hit, a docstring** in `tests/unit/architecture/test_singleton_slots.py:131` describing the banned pattern. Zero executable references outside the five owners | **PASS** |
+| No cross-feature import of another feature's private module | `grep -rnE "^from backend\.[a-z]+\._[a-z_]+ import"` **and** `"^from backend\.[a-z]+\.[a-z_]+ import _"` over `src/backend` → 10 hits, **all intra-feature** (`backend.logging._decorator/_pipeline/_renderers/_settings` imported only by `backend/logging/*`). Added `src/` imports are public API only: `from backend.eventbus.eventbus import EventBus, get_event_bus, reset_event_bus, set_event_bus` (the package's own `__init__.py`), `from backend.sessionmanagement.service import (…)` (its own `__init__.py`), `from backend.settings import (…)`, `from backend.logging import get_logger, logged, logged_class` | **PASS** |
+| `src/backend/shared/` did not grow | `git diff --stat origin/main HEAD -- src/backend/shared/` → **empty**; the directory is still `__init__.py` + `principal.py` (3 entries with `__pycache__`) | **PASS** |
+| The `TID251` banned-api map still holds on the final tree | `pyproject.toml:197` selects `TID251`; `pyproject.toml:225-230` carries the **5 fully-qualified** keys (`backend.settings.registry._registry`, `backend.eventbus.eventbus._default_bus`, `backend.permissions.service._permission_service`, `backend.search.service._singleton`, `backend.sessionmanagement.service._session_service`), each `.msg` naming the public trio. `uv run ruff check .` → **`All checks passed!`** (zero violations repo-wide, so zero `TID251`) | **PASS** |
+| The two guards are executable and green on the final tree | `uv run pytest tests/unit/architecture/test_singleton_slots.py tests/contract/singleton_install/test_lint_contract.py -q -p no:randomly` → **6 passed in 1.48s** (AC-017 scan incl. the planted-violation and owner-write-allowed witnesses, AC-018 ruff contract, EDGE-008/EDGE-009, NFR-004). Targeted, not the full suite | **PASS** |
+| Composition root installs through the public setter and reads the slot back | `src/main.py:156` `set_settings_registry(SettingsRegistry(...))` at its module-import-time position; consumer reads through `get_settings_registry()` (`:92` via the `_shared_settings_registry()` narrowing helper); `grep -nE "\[0\] =|import .*_registry|_singleton|_default_bus" src/main.py` → **no hit** (no slot write, no private import) — REQ-011 / AC-016 boundary half | **PASS** |
+| Guidance boundary (REQ-015) | `AGENTS.md` names the five install operations **8** times and gained `## Using the Permissions Feature` (`:872`) and `## Using the Session Management Feature` (`:928`) per the v2 amendment (D13 / Q-30) | **PASS** |
+
+### Check 3 — architecture rules (this repository's equivalent of `model/` vs `services/`)
+
+No `model/` and no `services/` directory exists anywhere in `src/` (confirmed against the final tree and
+`STRUCTURE.md`, `make_map --check` exit 0), so the equivalent separation was checked per feature:
+
+- **Domain concepts** stay in each feature's model modules — untouched by this change (`settings/models.py`,
+  `search/models.py`, `sessionmanagement/models.py`, `usermanagement/models.py` are not in the diff).
+- **Use-case orchestration + slot mechanics** stay in the owning feature's service/registry module: the install
+  operation, its lock, the replace WARNING and the lazy-create write are all inside the owning module, and the
+  WARNING is emitted **after** the lock is released (NFR-003) — verified in `settings/registry.py:447-466` and by
+  the same shape in the other four.
+- **Shared plumbing stays small and feature-free**: `src/backend/shared/` unchanged (2 files, `principal.py` only),
+  and no slot mechanics were pushed into it — the S4.3 records for T-003/T-004/T-005 each explicitly reject a
+  cross-module slot-swap helper for exactly this reason, and the final tree confirms no such helper exists.
+- **ADR-083 matches the shipped structure** — public `set_*` as the third member of the trio, re-exported from the
+  five package roots (`__init__.py` `__all__` additions, RUF022-sorted), one module lock per slot guarding all
+  three slot operations, the owner's lazy create keeps its direct slot write and never calls the public setter
+  (`settings/registry.py:440-442` comment), no lifecycle effect on the replaced instance, no event, no runtime
+  `isinstance`, no new exception type, `@logged(slow_threshold_ms=5)`. **One deviation: the lock class** —
+  **S62-1** below.
+- **ADR-084 matches the shipped structure** — both guards exist and are green: the `TID251` table with
+  fully-qualified keys plus `TID251` in `select` (the ADR's first measured probe: without `select` the table is
+  inert), and the source-scanning architecture test at `tests/unit/architecture/test_singleton_slots.py` (a new
+  package with its `__init__.py`, per the spec's §10 mechanics note), covering real statements **and**
+  string-literal bodies handed to `subprocess`.
+- **Tracing policy** holds: the five install operations are `@logged` module functions and each appears as a
+  `module function` row in `docs/specs/logging-coverage.md` §3.1 (`:64`, `:67`, `:69`, `:70`, `:71`) — REQ-010 /
+  AC-015.
+
+### Check 4 — acceptance tests not weakened (file side)
+
+All **41** touched test files were enumerated from `git diff --name-only origin/main HEAD -- tests/`, and each
+diff was filtered to removed/changed assertion lines (`^-.*(assert |pytest\.raises|pytest\.fail|pytest\.skip|xfail|…)`).
+
+| Probe | Result |
+|---|---|
+| Deleted test functions (`^-def test_`) | **0** — all 71 added, none removed |
+| Added `skip` / `xfail` / `no cover` / deselect markers (`^\+.*(skip\|xfail\|deselect)`) | **0** |
+| Removed `skip` / `xfail` markers | **0** |
+| Files with removed assertion lines | **1 of 41**: `tests/acceptance/logging_coverage/test_statements_via_feature.py` (−3 / +3) |
+| Files with removed **numeric bound** lines | **2**: the same file (`_AC_009_TOTAL_STATEMENTS = 39`, per-file counts 17/11/10/1) and `tests/acceptance/test_structure_map.py` (`_NFR_002_LINE_BUDGET = 2_000`) |
+| Remaining 38 files | additions only (`−0` assertion lines); the removed lines are docstrings, comments and the **subprocess code strings** migrated from private-slot writes to the public install operation |
+
+Assertion-delta detail for the two files whose numbers moved:
+
+1. `tests/acceptance/logging_coverage/test_statements_via_feature.py` — the three removed lines are the three
+   `assert not violations, "AC-009 / REQ-005 …"` statements, each **re-added verbatim** with only the message
+   prefix disambiguated (`"structlog-logging AC-009 / REQ-005 …"`); the assertion body is byte-identical. The
+   pinned counts moved **up** (17→18, 10→11, 1→2, total 39→42) because each install operation adds exactly one
+   one-off WARNING statement (this spec's REQ-002); `_statement_violations(path, expected)` is an **exact-equality**
+   check, so a higher pinned count is a stricter, not weaker, witness, and the non-vacuity guard
+   `assert sum(_AC_009_STATEMENTS.values()) == _AC_009_TOTAL_STATEMENTS` is intact (18+11+11+2 = 42). The counts
+   follow the amended `docs/specs/structlog-logging.md` **v2** changelog (REQ-005 per-file counts and AC-009's
+   total refreshed; no ID changed).
+2. `tests/acceptance/test_structure_map.py` — `_NFR_002_LINE_BUDGET` 2 000 → 2 200 with the docstring and comment
+   restated; the assertion body (`assert any(line.strip() …)` and the ceiling comparison) is unchanged and its
+   non-vacuity guard stays. The raise follows the amended `docs/specs/structure-map.md` **v3** NFR-002 (measured
+   restatement: `main`'s map 1 941 + 63 from this change = 2 004 measured, `make_map --check` exit 0, margin
+   ≈196, REQ-017 field cap named as the safety valve).
+
+The migrated test helpers were read line by line for semantic equivalence (REQ-012's "keeping the current
+capture-install-restore semantics"):
+
+- `tests/settings_test_helpers.py` — `install_isolated_registry()` / `isolated_registry()` / `restore_singleton()`
+  replace `_registry_module._registry[0] = x` with `set_settings_registry(x)`; the save → reset → install →
+  restore order and the `saved is None` case (a plain reset, since the setter never takes `None`, REQ-004) are
+  unchanged.
+- `tests/eventbus_test_helpers.py::isolated_event_bus` — the scratch/park sequence moves to
+  `get_event_bus()` / `set_event_bus(...)`; `get_event_bus()` never returns `None` (it lazily creates), so the
+  saved instance is always live and the exit path shuts down whatever the block left installed unless it is the
+  saved bus, then restores it — the same end state as the old `if slot is None: get_event_bus()` tail, with no
+  lifecycle change to the saved bus (EDGE-011).
+- The three subprocess-embedded sites (`tests/acceptance/settings_coverage/test_setup_logger.py`,
+  `tests/acceptance/settings_coverage/test_wiring.py`, `tests/contract/logging/test_logging_contracts.py`,
+  `tests/property/logging/test_logging_properties.py`, `tests/unit/logging/test_logging_edges.py`) changed only
+  the embedded code string (private-slot write → `set_settings_registry(reg)`); the assertions around them are
+  untouched (EDGE-005).
+
+**No acceptance test was deleted, weakened, converted to a weaker check, skipped or deselected.** The two numeric
+moves are both pinned to amended spec text and are cross-referenced to **S61-1** (the human reviewer confirms the
+`structlog-logging.md` v2 and `structure-map.md` v3 amendments at the PR).
+
+### Check 5 — no behaviour outside the specification (boundary half)
+
+`git diff origin/main HEAD -- src/ | grep -E '^\+(def |class |async def )'` yields **7** new definitions:
+
+| Added symbol | Public? | Spec coverage |
+|---|---|---|
+| `set_settings_registry` / `set_event_bus` / `set_permission_service` / `set_search_service` / `set_session_service` | **public** (each re-exported in its package `__all__`) | this spec REQ-001 / REQ-002…REQ-010 / REQ-014, and one amended feature ID each: `settings.md` REQ-026, `event-bus.md` REQ-008, `user-roles-permissions.md` REQ-030, `search.md` REQ-024, `session-management.md` REQ-023 |
+| `_resolve_max_queue_size()` (`src/backend/eventbus/eventbus.py:43`) | private (module-local) | not a public symbol; it preserves the existing event-bus `eventbus.max_queue_size` read (its docstring cites `event-bus` AC-017/AC-018) and exists to keep the settings read **outside** the bus slot lock — finding **F-72**. No new behaviour (**S62-3**, Note) |
+| `_shared_settings_registry()` (`src/main.py:84`) | private (module-local) | not a public symbol; the `SettingsRegistry \| None` → `SettingsRegistry` narrowing required by REQ-011's consumer-site rule (its docstring names the house precedent). No new behaviour (**S62-3**, Note) |
+
+Removed public definitions: **none**. `__all__` removals: **one line**, `eventbus/__init__.py`'s old four-element
+list re-written to add `set_event_bus` — no public symbol was removed, renamed or re-typed (NFR-001; the
+additive-only contract is witnessed by `test_nfr_001_public_api_additive`). No new exception type, no new event,
+no new permission-catalog action (REQ-005 / REQ-009 / REQ-016, witnessed by `test_ac_008_*`, `test_ac_013_*`,
+`test_ac_020_permission_catalog_unchanged`). **No public symbol exists that no spec ID covers.**
+
+### Findings
+
+| ID | Severity | Spec ID / file | Finding | Evidence | Resolution |
+|---|---|---|---|---|---|
+| **S62-1** | **Minor** | `docs/decisions/ADR-083` (Alternatives Considered, line 131); `docs/specs/settings-public-registry-setter.md` REQ-006; `src/backend/settings/registry.py:62` | The shipped settings module lock is a **`threading.RLock`**, while REQ-006's wording says "one module-level `threading.Lock` per module" and ADR-083 lists an `RLock` among the **rejected** alternatives. The ADR was never amended, so the two ADRs no longer fully match the shipped structure | `grep -rn "RLock" src/backend` → `settings/registry.py:62` (module slot lock) plus the pre-existing ADR-017 instance lock; the other four module locks are plain `Lock` (`eventbus:258`, `permissions:540`, `search:610`, `sessionmanagement:377`). Finding **F-57** (this record, line 4019) measured a **cold-start self-deadlock** with the literal plain-`Lock` shape (`get_settings_registry()` → `SettingsRegistry()` → `get_event_bus()` → `EventBus.__init__` → `get_settings_registry(required=False)`) and resolved it with the `RLock`, stating "**ADR-083 needs an amendment note** … an orchestrator/human decision, not a spec edit from this step". The reason is recorded in the code comment (`registry.py:55-61`) but not in the ADR | **Flagged for the human reviewer; no edit in this step.** REQ-006's normative substance holds — one module-level lock per owning module, guarding install + lazy create + reset as one mutually exclusive set (witnessed GREEN by AC-009/AC-010/AC-042/EDGE-033) — no test asserts the lock class (`grep -rn "_registry_lock" tests/` → no hit), and the reentrant nested read sees an empty slot and creates nothing, so behaviour is identical to the pre-change unlocked code. The four other modules keep the plain `Lock` and each records its reason — `eventbus:252-256` (NFR-003 / F-72: no settings read, no `shutdown()`, no worker start under the lock), `permissions:532`, `search:602`, `sessionmanagement:367` (their guarded sections are leaves, so F-57's re-entrancy rationale does not transfer, and F-72's cycle is across two threads, which an `RLock` cannot fix). The fix is a one-line ADR-083 amendment note (or an S2.1-level ADR update), which is a documentation decision for the orchestrator/human, not a step-level edit |
+| **S62-2** | Note | `docs/verification/traceability.md` EDGE row; `docs/specs/settings-public-registry-setter.md` §10 | Five EDGE witnesses (`test_edge_002…test_edge_006`) are not spelled out in the matrix because its EDGE row uses range notation (`EDGE-001 … EDGE-010`), so a name-based orphan scan flags them | The range row's own cell enumerates all ten witnesses; the spec's §10 test-strategy table lists EDGE-001…EDGE-007 one per row; this record line 7436 already states the same. Re-checked: all five exist under `tests/unit/singleton_install/test_edges.py` and are GREEN in the S5.1 run | **No action** — not orphans; the range notation is the matrix's existing house style (the `NFR-001 … NFR-004` row does the same) and the script's referential-integrity check passes. Recorded so the PR reviewer's own grep does not read them as missing |
+| **S62-3** | Note | `src/backend/eventbus/eventbus.py:43`, `src/main.py:84` | Two new module-private helpers are named in no spec ID or ADR | Both are underscore-prefixed and not exported; `_resolve_max_queue_size()` exists to move the settings read outside the bus slot lock (finding **F-72**, the ABBA cycle F-57 predicted), `_shared_settings_registry()` is the `None`-narrowing REQ-011's consumer-site rule forces | **No action** — private implementation details, not public API, and neither introduces behaviour (check 5). Each carries a docstring naming the requirement/finding that forced it, which is the repository's convention for non-obvious plumbing |
+| **S62-4** | Note | `tests/acceptance/logging_coverage/test_statements_via_feature.py`, `tests/acceptance/test_structure_map.py` | The only two numeric test constants this change moved are both **raised** (39 → 42 statements; 2 000 → 2 200 map lines), the shape a reviewer must not read as a loosened bound | Each raise is pinned to an amended spec: `structlog-logging.md` **v2** changelog (REQ-005 per-file counts, AC-009 total) and `structure-map.md` **v3** changelog (NFR-002 ceiling, measured 2 004). Assertion bodies are unchanged, both non-vacuity guards intact, and the statement-count check is exact-equality, so the higher pin is stricter | **No action here; folded into S61-1** — the human reviewer confirms the two amendments at the PR (or asks for them to be split into a separate spec PR). This step edited nothing |
+
+### S6.2 gate
+
+**PASS — no Blocking finding.**
+
+1. **Traceability** — `check_traceability.py` **PASS** (890 rows / 136 spec IDs / 875 test functions); the
+   change's 31 matrix rows are all GREEN; all 16 REQs, all 20 ACs and the INV/EDGE/NFR rows are present, plus the
+   14 per-feature CROSS-CUTTING rows; **0 orphans** among the 71 added test functions; no row cites an ID no spec
+   defines.
+2. **Feature boundaries** — install operation and slot logic inside all five owning packages; one module lock per
+   slot; **zero** cross-feature private-slot references and **zero** cross-feature private-module imports;
+   `src/backend/shared/` unchanged; the `TID251` map (5 fully-qualified keys, rule selected) reports **zero**
+   violations on the final tree and the two guards re-run green (**6 passed**, targeted).
+3. **Architecture rules** — domain concepts / use-case orchestration / shared plumbing separated per feature; no
+   premature abstraction (no slot-swap helper, nothing pushed into `shared/`); ADR-084 matches the shipped
+   structure exactly; ADR-083 matches it in every respect except the settings lock class (**S62-1**, Minor).
+4. **Acceptance tests not weakened** — 0 deleted tests, 0 added skip/xfail/deselect, 1 file with removed assertion
+   lines and all three re-added with byte-identical bodies; the two numeric raises both follow amended spec text.
+5. **No behaviour outside the specification** — the only added public symbols are the five install operations,
+   each named by this spec and by its feature's amended spec; the two added helpers are private and behaviour-free.
+
+Four findings: **1 Minor (S62-1, ADR-083 amendment note — flagged for the human at the PR)** and three Notes
+(S62-2, S62-3, S62-4). Nothing was edited in this step beyond this record; the full suite was not re-run.
+
+**Next:** **S6.3** — the review report (clean, with S61-1, S61-3, S62-1 and S62-4 listed for the PR reviewer).
