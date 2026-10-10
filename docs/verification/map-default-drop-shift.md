@@ -1039,3 +1039,86 @@ limit (max 12, `_member_lines`)**, so this branch adds nothing to that TODO's de
 and `scripts/`, `check_traceability.py` exit 0, complexipy green over CI's scope, deptry clean, bandit
 exit 0 (pre-existing `nosec` warnings only). **Zero findings introduced by this branch.** Next: **S5.3
 Update traceability**.
+
+## Phase 5 — S5.3 traceability update (2026-10-10)
+
+HEAD at entry: `9d93c94` (`docs(map-default-drop-shift): S5.2 lint + types evidence`), `git status
+--porcelain` **empty** (checked before writing anything — nothing of another step was in the tree).
+This step writes **only** `docs/verification/traceability.md` and this file: no `src/`, no `tests/`, no
+spec, no `AGENTS.md`/`CHANGELOG.md`, no `STRUCTURE.md`, no `docs/todo/` or `docs/questions/`. **No test
+was run** — the evidence cited in the new rows is the S5.1 record (`7d6ac22`), and the full regression
+suite stays the **S6.4** pre-merge gate (light tier, §6).
+
+### 5.3.1 Where the rows go
+
+The matrix section for this spec is **`## Structure Map Matrix (structure-map FEATURE — S5.3,
+2026-10-09)`** (`docs/verification/traceability.md`, the section that lists the structure-map REQ/AC, INV,
+EDGE and NFR rows in four tables). The rows were placed in the existing tables so the ID order stays
+ascending, and a dated amendment note was added to that section's preamble so a reader sees why the ID and
+row counts differ from the 2026-10-09 record.
+
+### 5.3.2 Rows added / updated
+
+| Row | Action | Witness cited (exists under `tests/`) | Status cell (gate record, change + date inside the cell) |
+|---|---|---|---|
+| `INV-007 (REQ-014)` | **added** (INV table, after INV-006) | `test_inv_007_signature_fidelity_survives_default_abbreviation` (`tests/property/test_structure_map.py:628`) | `GREEN (map-default-drop-shift S5.1 targeted+smoke: property module 7 passed, structure-map modules 58 passed, 2026-10-10, commits 0ecf7bc RED → 0c73790 fix, evidence 7d6ac22; ID added by Spec Amendment PR A, merge d8ba07f)` |
+| `EDGE-017 (REQ-014)` | **added** (EDGE table, after EDGE-016) | `test_edge_017_over_long_default_keeps_its_slot` (`tests/unit/test_make_map.py:1028`) | `GREEN (… unit module 19 passed, structure-map modules 58 passed …)` — same gate record |
+| `REQ-014 / AC-014` | **updated in place** (the only row of the 27 this change touched: PR A amended its wording, Phase 3 re-derived its witness) | `test_ac_014_symbol_inventory_and_unparsed_signatures` (`tests/unit/test_make_map.py:996`, re-derived) **plus** `test_ac_014_committed_map_renders_over_long_default_in_place` (`tests/acceptance/test_structure_map.py:1506`, new acceptance witness) | `GREEN (map-default-drop-shift S5.1 targeted+smoke: 4 reproduction witnesses passed, structure-map modules 58 passed — 19 unit / 7 property / 32 acceptance, acceptance smoke 396 passed + 1 pre-existing host skip, 2026-10-10, commits 0ecf7bc RED → 0c73790 fix, evidence 7d6ac22; wording amended by Spec Amendment PR A, merge d8ba07f. Prior record as observed by structure-map: S5.1 full suite 816 passed/1 skipped; S5.2 clean; commit 3ec204c, 2026-10-09)` |
+
+Every Status cell starts with a **declared** value (`GREEN`) and carries this change's name and date inside
+the cell (Q-129 convention B), so the counts are read as *this change's* gate, not a refresh of
+structure-map's. No number was invented: `4 passed`, `58 passed (19 / 7 / 32)` and `396 passed, 1 skipped`
+are the verbatim S5.1 result lines (§5.1.1–§5.1.4).
+
+**Not touched (convention B).** The other 26 REQ/AC rows, INV-001…INV-006, EDGE-001…EDGE-016, all 7 NFR
+rows, and every row of every other change's section are byte-identical to `9d93c94` — this change did not
+re-run and therefore did not refresh them. The only prose edits are the section's dated amendment note and
+the two sub-headings' row counts (`INV (6 rows …)` → `INV (7 rows …)`, `EDGE (16 rows)` → `EDGE (17 rows)`),
+corrected because the tables they head now contain the added rows (finding F-25).
+
+Matrix totals after the step: **58 rows in the structure-map section** (27 REQ/AC + 7 INV + 17 EDGE +
+7 NFR) covering the spec's **85 IDs** (27 REQ + 27 AC + 7 INV + 17 EDGE + 7 NFR, counted with
+`grep -o "\bREQ-[0-9]\{3\}\b" docs/specs/structure-map.md | sort -u | wc -l` per prefix).
+
+### 5.3.3 Checker output (the CI `traceability` job command)
+
+| Moment | Command | Verbatim output | Exit |
+|---|---|---|---|
+| Before the edit (baseline at `9d93c94`) | `uv run python scripts/check_traceability.py` | `Traceability: PASS (881 matrix rows, 136 spec IDs, 804 test functions)` | **0** |
+| After the edit | `uv run python scripts/check_traceability.py` | `Traceability: PASS (883 matrix rows, 136 spec IDs, 804 test functions)` | **0** |
+
+Row count **+2** (the two added rows; the REQ-014/AC-014 row was updated in place, not added), spec IDs and
+test-function count unchanged — this step added no ID and no test.
+
+### 5.3.4 F-09 and F-24 dispositions
+
+- **F-09 — closed by this step.** The rows PR A deliberately left out (the checker's rule (3) fails any row
+  citing a backticked test function that does not exist under `tests/`, and the witnesses did not exist
+  before Phase 3 `0ecf7bc`) are now written, and rule (3) passes with them: all four cited functions are
+  defined under `tests/` (verified by `grep -n "def test_…"` at 5.3.2 and by the checker's exit 0).
+- **F-24 — disposition: the written rule is the gate, and it is satisfied.** The checker still cannot flag
+  a missing `INV-`/`EDGE-` row, so its PASS is not evidence that INV-007/EDGE-017 have rows; the rows
+  themselves are. They are now present, each with a GREEN witness, so the AGENTS.md obligation ("every
+  normative requirement MUST have at least one executable test") holds for the two IDs this change added.
+  The script's weakness stands as recorded for the after-workflow-optimization — nothing was changed in
+  `scripts/`.
+
+### 5.3.5 Cross-check against spec §11 (not a gate, a consistency read)
+
+The matrix citations match the spec's own §11 Test Strategy rows exactly — `structure-map.md:533`
+(AC-014 → `test_ac_014_symbol_inventory_and_unparsed_signatures`), `:553` (INV-007 →
+`test_inv_007_signature_fidelity_survives_default_abbreviation`), `:570` (EDGE-017 →
+`test_edge_017_over_long_default_keeps_its_slot`). The acceptance witness
+`test_ac_014_committed_map_renders_over_long_default_in_place` is an **extra** witness this change wrote
+(§4.2) and is not listed in §11 — the matrix may cite more witnesses than the spec's strategy table names;
+the reverse would be a finding.
+
+### New findings from S5.3
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-25** | The structure-map section's sub-headings carry hard-coded row counts (`### INV (6 rows, property witnesses)`, `### EDGE (16 rows)`). Adding a row to a table makes its heading stale, and `check_traceability.py` does not police prose counts, so the staleness is invisible to CI. | Corrected in this step to `7 rows` / `17 rows`, each annotated with the change and date that added the row, and the section preamble's `83 IDs` / `56 rows` record is left intact with a dated amendment note stating the new totals (85 IDs, 58 rows) — the original sentence stays as the historical record of the 2026-10-09 step. Recorded for the after-workflow-optimization: counts embedded in headings are a drift source. |
+
+**Gate ◆ S5.3: passed** — `INV-007` and `EDGE-017` rows added and the touched `REQ-014 / AC-014` row
+updated, all citing test functions that exist in this worktree; `check_traceability.py` exits **0**
+(`PASS (883 matrix rows, 136 spec IDs, 804 test functions)`). Next: **S5.4 Verification report**.
