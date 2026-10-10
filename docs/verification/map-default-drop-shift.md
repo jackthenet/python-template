@@ -947,3 +947,95 @@ witnesses plus the pre-existing AC-021 red resolved by the Phase 4 regeneration.
 (including AC-021 and NFR-002), every §6 covering module GREEN, acceptance smoke GREEN. Lint and type
 checks are **S5.2**; the traceability rows are **S5.3**; the full regression suite stays the **S6.4**
 pre-merge gate. Next: **S5.2 Lint + types**.
+
+## Phase 5 — S5.2 lint + types evidence (2026-10-10)
+
+Every command below is the **CI invocation**, read off the workflow files in this worktree
+(`.github/workflows/lint.yml`, `quality.yml`, `spec-validation.yml`), and was run in this worktree at
+HEAD `7d6ac22` with a clean working tree. This is the **one whole-repo ruff sweep** of the change
+(AGENTS.md "Tooling & Execution Environment" scope split: per-task steps lint only their changed paths;
+the repo-wide sweep runs once at Phase 5, matching `lint.yml` exactly).
+
+### 5.2.0 What this branch changed — the basis for every pre-existing / introduced call
+
+`git diff --name-status main...HEAD`:
+
+```text
+M	STRUCTURE.md
+M	docs/verification/map-default-drop-shift.md
+M	scripts/make_map.py
+M	tests/acceptance/test_structure_map.py
+M	tests/property/test_structure_map.py
+M	tests/unit/test_make_map.py
+```
+
+Consequences used below: **`src/` is untouched** (no bandit or `mypy src/` finding can be introduced by
+this branch), **`pyproject.toml` and the lockfile are untouched** (no dependency finding is possible),
+and the only lint/type-visible files this branch touches are `scripts/make_map.py` and the three
+structure-map test modules.
+
+### 5.2.1 The gate set
+
+| # | Check | Command (as CI runs it) | Result line (verbatim) | Exit | Finding classification |
+|---|---|---|---|---|---|
+| 1 | Lint (whole-repo sweep) | `uv run ruff check .` | `All checks passed!` | **0** | **No finding at all** — nothing to classify as pre-existing or introduced; the repo is lint-clean at HEAD, exactly as CI sees it |
+| 2 | Formatting | `uv run ruff format --check .` | `343 files already formatted` | **0** | No finding — clean at HEAD, so nothing introduced by the branch's `scripts/make_map.py` / test edits |
+| 3 | Types, `src/` (gate) | `uv run mypy src/` | `Success: no issues found in 84 source files` | **0** | No finding; `src/` is not in this branch's diff, so this result is identical to `main`'s |
+| 4 | Types, `scripts/` (gate) | `uv run mypy scripts/` | `Success: no issues found in 4 source files` | **0** | No finding — this is the tree the branch **does** change (`scripts/make_map.py`), and it is clean |
+| 5 | Traceability referential integrity | `uv run python scripts/check_traceability.py` | `Traceability: PASS (881 matrix rows, 136 spec IDs, 804 test functions)` | **0** | **No finding** — see 5.2.2: the S5.3 rows are still owed, but the script cannot flag them |
+| 6 | Cognitive complexity (CI scope: `src tests`) | `uv run complexipy src tests --max-complexity-allowed 15` | `All functions are within the allowed complexity.` | **0** | No finding; the branch's three new/edited test functions are inside the limit (5.2.3) |
+| 7 | Dependencies | `uv run deptry .` | `Scanning 91 files...` / `Success! No dependency issues found.` | **0** | No finding; dependencies did not change (no `pyproject.toml`/lock in the diff) |
+| 8 | Security | `uv run bandit -q -r src/` | 48 `[tester] WARNING nosec encountered (B105), but no failed test on file ...` lines, **no issue report**, no `Issue:` line | **0** | The 48 `nosec`-comment warnings are **pre-existing** — they are all in `src/backend/{authentication,mail,usermanagement}/feature_actions.py`, and `src/` is not in this branch's diff |
+
+**ruff: clean. mypy: clean (both `src/` and `scripts/`). check_traceability: exit 0.**
+
+### 5.2.2 check_traceability — why the expected S5.3 finding does not appear
+
+The step brief predicted a possible finding for the missing **INV-007 / EDGE-017** rows (they are written
+by **S5.3**). The script exits **0** instead, and that is correct, not a missed check:
+`scripts/check_traceability.py` enforces referential integrity only for **`REQ-`/`AC-`** ids
+(`REQ_OR_AC_RE.fullmatch(id_)` in check (1)), matched **globally** across the matrix, and `INV-`/`EDGE-`
+rows are not required by it. `AC-014` already has matrix rows (from other specs — ids are namespaced per
+spec file but the script matches by id alone), and the new witnesses are `INV-007`/`EDGE-017`/`AC-014`
+shaped rows the script does not demand. Check (3) — every backticked test name in the matrix must exist
+under `tests/` — also passes, so Phase 3/4 renamed or removed no test a matrix row cites.
+
+**The rows are still owed and S5.3 must still write them** (AGENTS.md: every normative requirement needs
+at least one GREEN test row; the CI script is a floor, not the gate). Nothing was "fixed" here.
+
+### 5.2.3 Complexity headroom for the branch's own test functions (from the gate run in 5.2.1 #6)
+
+`test_inv_007_signature_fidelity_survives_default_abbreviation` **14** (limit 15 — the tightest function
+this branch adds), `test_ac_014_symbol_inventory_and_unparsed_signatures` **10**,
+`test_edge_017_over_long_default_keeps_its_slot` **4**. All pass; the 14 is recorded so a future edit to
+that property test does not silently cross the gate.
+
+### 5.2.4 Informational only — `scripts/` is not in the complexity gate
+
+CI's complexity job scopes `src tests`; `scripts/` is the separate `complexipy-scripts` TODO, so this was
+**not** run as a gate. Informational run `uv run complexipy scripts --max-complexity-allowed 15` exits 1
+with **4 pre-existing over-limit functions**: `check_traceability.py::check` 17,
+`check_traceability.py::matrix_rows` 19, `validate_task_dag.py::check_acyclic` 22,
+`verify_spec.py::main` 22. **`scripts/make_map.py` — the file this branch changes — is fully within the
+limit (max 12, `_member_lines`)**, so this branch adds nothing to that TODO's debt.
+
+### 5.2.5 Step hygiene
+
+- No file was edited by this step: every check was already clean, so there was nothing trivial to fix and
+  no finding was "fixed" out of scope. The only write is this section.
+- `git status --porcelain` before the step: empty. After the step: only
+  `docs/verification/map-default-drop-shift.md`.
+- The full `tests/` suite was **not** run here (S5.1 record; full regression remains the **S6.4**
+  pre-merge gate per the light-tier rule, §6).
+
+### New findings from S5.2
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-23** | `uv run bandit -q -r src/` emits **48 `nosec encountered (B105), but no failed test`** warnings — redundant `# nosec B105` comments on `feature_actions.py` permission-key strings in authentication, mail and usermanagement. Exit code 0, so CI's security job is green; the noise is pre-existing (`src/` is not in this branch's diff). | No action in this change (out of scope, `src/` untouched). Worth a Problem Log / future chore: either drop the redundant `nosec` comments or run bandit with `--no-nosec-warnings`-style quieting. |
+| **F-24** | `check_traceability.py` cannot flag a missing `INV-`/`EDGE-` row (it enforces rows for `REQ-`/`AC-` only), so a change that forgets its invariant/edge rows passes CI. This change's INV-007/EDGE-017 rows are exactly that case. | S5.3 writes the rows regardless (the AGENTS.md obligation, not the script, is the gate). Recorded for the after-workflow-optimization: the script's floor is weaker than the written rule. |
+
+**Gate ◆ S5.2: passed** — ruff clean (whole repo, matching CI), ruff format clean, mypy clean over `src/`
+and `scripts/`, `check_traceability.py` exit 0, complexipy green over CI's scope, deptry clean, bandit
+exit 0 (pre-existing `nosec` warnings only). **Zero findings introduced by this branch.** Next: **S5.3
+Update traceability**.
