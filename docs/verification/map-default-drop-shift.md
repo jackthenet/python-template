@@ -1569,3 +1569,154 @@ green at S5.2 (5.2.1 #1–#8, #11–#13).
 added + 1 updated in place and no other row refreshed, boundaries and architecture rules respected
 (`src/` diff empty), generated-file rule satisfied (map and `.py` in one commit, `--check` exit 0).
 2 findings recorded, **0 blocking**. Next: **S6.3 Review report (clean)**.
+
+## Phase 6 — S6.3 review report (2026-10-10)
+
+HEAD at entry: `1b0da55` (`docs(map-default-drop-shift): S6.2 traceability + boundaries`), `git status
+--porcelain` **empty** before the step and after it (the only write is this section). This step writes
+**only this file**: no `src/`, no `tests/`, no `scripts/`, no `docs/verification/traceability.md`, no spec,
+no `AGENTS.md`, no `CHANGELOG.md`, no `pyproject.toml`, no `STRUCTURE.md`, no `docs/todo/` or
+`docs/questions/`, no PR, no version bump. **No test suite was run** — under the light tier (§6) the full
+regression suite is the **S6.4 pre-merge gate** (5.4.3) and re-running it here would be the unbounded
+re-review P-27 warns about; lint and types were **not** re-run either (S5.2 5.2.1 #1–#8, #11–#13 is the
+evidence, re-listed at S5.4 5.4.2 rows 5–8 and 11–13). Commands run here are read-only: `git status
+--porcelain`, `git log`, `git diff --name-status main...HEAD`, the S6.1/S6.2 sections of this file, and the
+current state of `CHANGELOG.md` (`## [Unreleased]` has **no** entry for this change) and `pyproject.toml`
+(`version = "1.1.0"`, `:4`) — the F-32 state, read, not changed.
+
+**Bounded inputs (per AGENTS.md "Bounded scope (per S6.x step)").** This report consolidates the two
+review steps that already did the reviewing — **S6.1** (commit `87f2ad4`, six verdicts, findings F-26…F-32)
+and **S6.2** (commit `1b0da55`, five checks, findings F-33…F-34) — plus the Phase 5 record (S5.1–S5.4:
+spec coverage 100%, 13 light-tier gates green, F-21…F-25 closed). The code was **not** re-reviewed from
+scratch; the FINAL state of the seven files `git diff --name-status main...HEAD` lists was reviewed at
+S6.1/S6.2 and nothing has changed since (`git status --porcelain` empty at both entries).
+
+### 6.3.1 The ISSUE review-gate criteria, one by one
+
+AGENTS.md "Review Gate (Phase 6)", ISSUE row, plus the "All types" clause and the light-tier deferral
+(§6, AGENTS.md "Light ISSUE tier").
+
+| # | Criterion (verbatim) | Verdict at S6.3 | Evidence (section / commit) |
+|---|---|---|---|
+| 1 | *"the reproduction tests are GREEN"* | **SATISFIED** | The four §4.5 node ids (`test_edge_017_over_long_default_keeps_its_slot`, `test_ac_014_symbol_inventory_and_unparsed_signatures`, `test_inv_007_signature_fidelity_survives_default_abbreviation`, `test_ac_014_committed_map_renders_over_long_default_in_place`): `4 passed` exit 0 at S5.1 §5.1.1 (`3.31s`), S5.4 5.4.2 #1 (`3.10s`), S6.1 (`3.47s`) and S6.2 command 2 (`2.63s`) — four independent re-runs, 0 failed / 0 skipped / 0 xfail / 0 deselected. RED was observed first at S3.2 (`5b51614`) and the Phase 4 fix is `0c73790`. |
+| 2 | *"the fix introduces no behavior beyond the affected spec IDs"* | **SATISFIED** | S6.1 verdict 2 (the whole implementation delta is **+25 / −11** in `scripts/make_map.py`, one helper + two comprehensions + one constant + two doc corrections; `_signature`, `_class_name`, `type_params`, the threshold `20`, the CLI and every `src/` module untouched) and verdict 6 (every rendered-text change traces to `REQ-014` v2 / `AC-014` v2 / `INV-007` / `EDGE-017`; the two non-signature map lines are generated metadata, F-21/F-31). No new dependency, setting, flag or public interface; `git diff --stat main...HEAD -- src/` empty (S6.2 Check 4). No reclassification owed — the Escalation Rules were not triggered. |
+| 3 | *"the full regression suite has no new failures"* | **NOT YET SATISFIED — the single open gate, by design** | Under the light-tier qualification (§6) Phase 5 ran **targeted + smoke** instead, and AGENTS.md Phase 5 ISSUE item 9 + the review skill ("MUST → ISSUE") make the **full regression suite the Phase 6 pre-merge gate**: `uv run pytest tests/ -v` MUST pass **before the PR opens (S6.4)** and its result MUST be recorded in this review report. It was deliberately not run at S5.x (5.4.3) nor at S6.1/S6.2. Supporting evidence that it is expected to pass: the acceptance smoke sweep `396 passed, 1 skipped` (S5.1 §5.1.4), the three structure-map modules `58 passed` (S5.1 §5.1.2, S6.1), and the only known red on `main` — `test_ac_021_committed_map_matches_fresh_render`, F-01/F-02/F-16 — has been green since the Phase 4 regeneration in `0c73790`. |
+| 4 | *All types: "no acceptance test was weakened or deleted to achieve GREEN"* | **SATISFIED** | S6.1 verdict 4: `git diff main...HEAD -- tests/` adds **3** `def test_…` and removes **0** (re-confirmed as command 8 at S6.2); the single changed witness `test_ac_014_symbol_inventory_and_unparsed_signatures` was **re-derived in place** from the amended AC-014 — authorized by the Spec Amendment Workflow (PR A #79, merge `d8ba07f`) and Q-11 — and is **strictly stronger** (all 6 needles kept, 3 positive needles added; the two re-worded expected lines are the ones the old wording made wrong, F-05). No skip, xfail or deselection anywhere. |
+| 5 | *All types: "feature boundaries and architecture rules are respected"* | **SATISFIED** | S6.2 Check 4: `src/` diff empty; 7 × `M` and **no** `A`/`R`/`D` (nothing added, moved or renamed); the branch's only import changes are stdlib + the already-declared `hypothesis` extras in `tests/property/test_structure_map.py`; `scripts/make_map.py:16-25` stays stdlib-only; no dependency added, so no ADR owed. |
+| 6 | *Phase 6 check 2: every REQ/AC has at least one GREEN test; every test traces to a normative ID* | **SATISFIED** | S6.2 Checks 1–3: rows for `REQ-014`/`AC-014` (`traceability.md:1047`, updated in place), `INV-007` (`:1072`) and `EDGE-017` (`:1094`), each citing a witness that exists at the cited line; `scripts/check_traceability.py` → `PASS (883 matrix rows, 136 spec IDs, 804 test functions)` exit 0; zero orphaned tests (all 3 added tests cited exactly once); exactly **2 rows added + 1 updated**, no untouched row refreshed (Q-129 convention B). Spec coverage **4/4 = 100%** (S5.4 §5.4.1). |
+| 7 | *Phase 6 item 10: a `CHANGELOG.md` entry under `## [Unreleased]`* | **OWED at S6.4 — not a defect at this gate** | F-32 (S6.1): `CHANGELOG.md` has no entry for this change and `pyproject.toml` is still `1.1.0`. The review skill flags a missing changelog **when the PR opens**, not in S6.1/S6.3; AGENTS.md Phase 6 items 10–11 assign it to S6.4. Listed as obligation (a)/(b) in 6.3.5. |
+
+**The single open gate.** Exactly one review-gate criterion is not yet green: **criterion 3, the full
+regression suite** (`uv run pytest tests/ -v`), which the light tier moves to **S6.4 as the pre-merge
+gate**. It is open *by design*, not because a failure is known. Everything the review examines — the
+normative basis, the tests, traceability, boundaries, the generated artifact, quality gates — is closed.
+Until that run is green and recorded here, this change **must not** have its PR opened, and the CLEAN
+verdict below is explicitly **conditional** on it.
+
+### 6.3.2 Consolidated Phase 6 findings (F-26 … F-34)
+
+All nine Phase 6 findings, from S6.1 (`87f2ad4`) and S6.2 (`1b0da55`), with the resolution actually taken
+or the explicit deferral:
+
+| ID | Finding | Severity | Resolution |
+|---|---|---|---|
+| **F-26** | INV-007's "a `…` appears **only** where the source default exceeds the threshold" clause is not enforceable against a source default whose own text contains a literal `…` within the threshold, and the property strategy never draws such a value (`_SHORT_DEFAULTS`, `tests/property/test_structure_map.py:483`). Measured: **0** tracked `.py` defaults contain `…`, so the artifact satisfies the clause (8 placeholders ↔ 8 over-long defaults). | Low (latent witness/spec gap, **no present violation**) | **Deferred — out of scope.** Closing it needs a spec-wording amendment (a separate Spec Amendment, not this ISSUE) or an extra value in the property strategy; neither is required by the affected IDs. Handed to the after-workflow-optimization. |
+| **F-27** | `_drop_long_defaults` (`scripts/make_map.py:387`) is now a misnomer — it abbreviates, no longer drops. | Info (naming) | **Accepted as-is / deferred** (decided at S4.3): the name is the reference key across this change's records and the sibling TODO, and the docstring's first line states the v2 rule. Cosmetic, outside an ISSUE fix. |
+| **F-28** | Three module constants hold the same `"…"` (`_SUMMARY_MARKER:71`, `_DEFAULT_MARKER:80`, `_FIELD_MARKER:85`). | Info (duplication) | **Accepted as-is.** The file's convention is one marker constant per rule, each carrying its own spec ID (REQ-018 / REQ-014 v2 / REQ-017); collapsing them would rename two out-of-scope constants for cosmetics. |
+| **F-29** | The new acceptance witness pins the whole `simple_template` map line, so an unrelated docstring edit in `tests/mail_test_helpers.py` would break an AC-014 test. | Low (witness brittleness, intentional) | **Accepted.** The committed artifact is the object under test (REQ-021/AC-021 precedent), the witness locates by content and requires exactly one match (cannot pass vacuously, F-11), and the failure message prints both lines — a future break is diagnosable, not silent. |
+| **F-30** | No witness **parses** the committed map's signature lines (INV-007's parse clause is witnessed over generated synthetic modules; the artifact by needles). | Info (coverage shape) | **No action — covered by measurement.** S6.1's independent read-only AST audit agrees with the artifact exactly (8 over-long defaults in the tree ↔ 8 `…` in 4 map signature spans). Recorded so the audit is not mistaken for a test. |
+| **F-31** | The map delta is 6 lines, 2 of them generated metadata (`docs/` file count, `make_map.py`'s own line count) rather than the fix. | Info | **Closed at S6.1** — verified not scope creep: 4 signature lines + 2 metadata lines, reconciled against F-01/F-16/F-21; total 1 941 lines unchanged (NFR-002), `make_map.py --check` exit 0. |
+| **F-32** | `CHANGELOG.md` has no `## [Unreleased]` entry and `pyproject.toml` is still `1.1.0`. | **Open item, not a defect** | **Deferred to S6.4** — AGENTS.md Phase 6 items 10–11: the entry under `Fixed`, then `bump-my-version bump patch` (`1.1.0 → 1.1.1`) with the entries moved to `## [1.1.1] - <date>` in the bump commit. **Blocking for S6.4, not for this gate** (the skill flags a missing changelog when the PR opens). |
+| **F-33** | The structure-map `NFR-006` row (`traceability.md:1105`) cites `wc -l scripts/make_map.py` = **567**; the file is **581** at HEAD. | Info (stale number inside a historical cell — **not** a stale row) | **No action — refreshing it would be the violation.** The cell is the dated record of the structure-map S5.1/S5.2 gate (2026-10-09, `3ec204c`); `NFR-006` is a spec §11 record row with no witness by design, and this change did not touch it (Q-129 convention B). The checker's rules cannot police numbers inside a Status cell, so the row was read directly. |
+| **F-34** | The matrix's "Drift Checks" list promises CI detects an *orphaned test*, but `check_traceability.py` implements no orphan rule (rules 1–4, `:102-121`) and rule (1) is restricted to `REQ`/`AC` (`:15`), so a missing `INV-`/`EDGE-` row is invisible too — the one-directional gap F-24 recorded. | Info (pre-existing tooling gap, outside this ISSUE's scope) | **No action in this change** — `scripts/` is out of scope (triage §8: the parameter-default rule only). Both directions were verified by hand for this change instead (S6.2 Checks 1–2: no missing row, no orphan). Handed to the after-workflow-optimization with F-24 and F-25. |
+
+**No finding is open as a defect in this change.** F-26…F-31 and F-33/F-34 are low or informational and are
+either accepted with a stated reason or explicitly deferred as outside this ISSUE's IDs; none contradicts
+the normative basis, none is unimplemented or unauthorized behavior, none is a missing traceability link or
+an orphaned test, and no acceptance test was weakened, narrowed or deleted. **F-32 is the only item still
+outstanding**, and it is a Phase 6 obligation owed at S6.4, not a finding against the change. The Phase 5
+ledger (F-21…F-25, §5.4.4) and the Phase P carry-overs (F-01/F-02 resolved by the Phase 4 regeneration;
+F-03 out of scope with a mitigation; F-09 closed at S5.3) are likewise all closed or recorded.
+
+### 6.3.3 Phase 6 checks that do not apply to this change, and where the applicable ones closed
+
+- **Check 9 — "document reusable shared capabilities in `AGENTS.md`": NOT APPLICABLE.** AGENTS.md scopes it
+to **FEATURE/CROSS-CUTTING only**, and this change is an **ISSUE**. It would not qualify on its own merits
+either: the delta is a rendering-rule fix inside one `scripts/` tool, not a shared capability a future
+change would call (the structure-map feature's usage note already exists in AGENTS.md "Structure Map" and
+the `code-structure-map` skill). **No `AGENTS.md` edit was made and none is owed.**
+- **Checks 3 and 4 — feature boundaries and architecture rules: already done at S6.2 (Check 4)**, not
+  re-run here: `src/` diff empty, no file added/moved/renamed, no cross-feature internal import introduced
+  (the only import changes are stdlib + `hypothesis` extras in one test module), no dependency added and
+  therefore no ADR owed. The repo has flat feature packages under `src/backend/` and no `model/` or
+  `services/` directory, so the "correct feature directory" check resolves to the structure-map footprint
+  (`scripts/make_map.py` + `STRUCTURE.md` + its three test modules), which the change left in place.
+- **Check 10 (CHANGELOG), 11 (version bump), 12 (open the PR)** are S6.4's, listed in 6.3.5.
+- Where the remaining Phase 6 checks closed: **check 1** (review vs. the normative basis) → S6.1 verdicts
+  1–6; **check 2** (traceability) → S6.2 Checks 1–3; **check 5** (acceptance tests not weakened/deleted)
+  → S6.1 verdict 4; **check 6** (no behavior beyond the spec IDs / beyond the type's contract) → S6.1
+  verdict 6; **check 7** (the report itself) → this section; **check 8** (clean report ⇒ the change is
+  complete) → the verdict in 6.3.6, conditional on the S6.4 gate.
+- **Review Order steps 6 and 7 (quality, observability), which S6.1/S6.2 both deferred to this step:**
+  **quality — closed on existing evidence**, `uv run ruff check .` (`All checks passed!`),
+  `ruff format --check .` (`343 files already formatted`), `mypy src/` (`84 source files`) and
+  `mypy scripts/` (`4 source files`), `complexipy src tests --max-complexity-allowed 15` (tightest new
+  path 14/15), `deptry .` and `bandit -q -r src/` all exit 0 with zero findings introduced by this branch
+  (S5.2 5.2.1 #1–#8, #11–#13; re-listed S5.4 5.4.2 rows 5–8, 11–13) — implementation style was reviewed
+  only **after** the normative basis, per the skill's Review Order and MUST-NOT. **Observability — not
+  applicable**: the spec places the `scripts/` tooling outside the backend tracing policy
+  (`docs/specs/structure-map.md:505-507`), the generator's observable contract (CLI, pinned exit codes,
+  stdout) is unchanged (S6.1 verdict 2), and no `src/` feature gained or lost a log statement.
+
+### 6.3.4 What S6.4 must do before the PR opens (in this order)
+
+1. **(a) `CHANGELOG.md` entry** under `## [Unreleased]` → **`Fixed`** (AGENTS.md Phase 6 item 10; F-32/F-20
+   — it does **not** exist yet). One line per user-observable change, traced to what this change actually
+   did and nothing more: the structure-map generator no longer **drops** a parameter default whose
+   unparsed text exceeds 20 characters but abbreviates it to the `…` placeholder **in its own slot**, so
+   `STRUCTURE.md` signature lines no longer shift an over-long default onto the following parameter or
+   render a defaulted parameter as required — the corrected renderings are `AuthService.__init__`,
+   `build_auth_service`, `build_memory_auth_service` and `simple_template`. Cite the amended rule
+   (`structure-map.md` v2, REQ-014/AC-014, INV-007, EDGE-017). Do **not** invent prose beyond that.
+2. **(b) Version bump per the change type** — ISSUE → **`patch`**: `bump-my-version bump patch`
+   (`1.1.0 → 1.1.1`) with a **clean working tree** (`allow_dirty` off), in the change worktree; then move
+   the `## [Unreleased]` entries into a new `## [1.1.1] - <YYYY-MM-DD>` section **in the same commit** as
+   the bump (`CHANGELOG.md` is hand-maintained; `bump-my-version` does not touch it; `tag = false`, no tag
+   on the change branch). Dry-run first if unsure: `bump-my-version bump patch --dry-run`.
+3. **(c) The full regression suite — the light-tier pre-merge gate (the single open gate, 6.3.1 #3):**
+   regenerate the map **immediately before** the run (`uv run python scripts/make_map.py`, then
+   `uv run python scripts/make_map.py --check` exit 0) — the F-01 host caveat is the `docs/` file-count
+   line going stale as `main` gains planning records, and F-03 is the CRLF (`i/lf w/crlf`,
+   `core.autocrlf=true`) second cause of `test_ac_021_committed_map_matches_fresh_render`; regeneration
+   fixes both for the run, and `STRUCTURE.md` is **never** hand-edited. Then run
+   **`uv run pytest tests/ -v`** and require it to pass with **no new failures**. Read the count correctly:
+   the acceptance category reports **1 skipped** on this host (`test_ac_031_symlink_rejected`, F-22) — a
+   platform capability guard, not a deselected or weakened test. If `test_ac_021…` is red, the cause is the
+   map, not the fix: regenerate and re-commit the map with the `.py` change (REQ-023).
+   **The result (command, counts, exit code, and the map state it was taken against) MUST be recorded in
+   this review report** — appended to this section as the S6.4 pre-merge gate record — because AGENTS.md
+   Phase 5 ISSUE item 9 / "Light ISSUE tier" and the review skill require the full-regression result to be
+   in the review report, not merely in a commit message.
+4. **(d) Open the PR** for `issue/map-default-drop-shift` → `main` (git skill, "Create PR") and present it
+   for human review/merge, **then STOP**. The agent MUST NOT merge the PR (human governance); the change
+   then goes **WAITING** until the merge, after which S7.1 cleanup runs.
+
+If the full-suite gate at (c) does **not** pass, this CLEAN verdict is void: the change stays unmerged,
+the failure is classified (pre-existing vs regression, AGENTS.md Phase 5 ISSUE item 12), and the change
+re-enters Phase 4 (or Phase 3) with a fresh subagent — the PR is not opened.
+
+### 6.3.5 Verdict
+
+The change satisfies every ISSUE review-gate criterion that is in scope at this step: the reproduction
+tests are GREEN (four independent re-runs), the fix introduces no behavior beyond the affected spec IDs
+(`REQ-014` v2, `AC-014` v2, `INV-007`, `EDGE-017` — the merged Spec Amendment PR A #79), no acceptance test
+was weakened or deleted, traceability is complete with zero orphans and no untouched row refreshed, feature
+boundaries and architecture rules hold, the generated-file rule is satisfied, and the quality gates are
+clean. All nine Phase 6 findings are resolved, accepted with a reason, or explicitly deferred as out of
+scope; **none is open as a defect**. The one criterion not yet green — the **full regression suite**
+`uv run pytest tests/ -v` — is the light-tier **S6.4 pre-merge gate** and is recorded as the **single open
+gate** (6.3.1 #3, 6.3.4 (c)).
+
+**◆ S6.3: review report CLEAN (conditional on the S6.4 full-regression pre-merge gate)**
+
+Next: **S6.4 Bump version + open PR** — obligations (a)–(d) in 6.3.4, in that order.
