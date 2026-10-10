@@ -649,16 +649,18 @@ def make_widget() -> Widget:
 # The exact REQ-014 rendering of `_AC014_MODULE`: classes first (source order), then functions
 # (source order) — so `spaced`/`fetch`, which come first in the source, render after the classes.
 # The signature text is the `ast.unparse` rendering (`b: str='xy'`, `step: int=4`), not the source
-# spacing, and the 21-character defaults of `data`/`over`/`pool` are omitted while the 20-character
-# default of `exact` is kept.
+# spacing, and a default whose unparsed text exceeds 20 characters (`data` 23, `over` 21, `pool` 21)
+# is abbreviated to the `…` placeholder **in its own slot** — never dropped, so no neighbouring
+# default shifts onto an earlier parameter — while the exactly-20-character default of `exact` is
+# kept verbatim (REQ-014 v2, EDGE-017).
 _AC014_LINES = [
     "- class `Widget(Base, Mixin)`: A widget.",
     f"{_MEMBER}`name: str`",
     f"{_MEMBER}`size: int`",
     f"{_MEMBER}`__init__(self, name: str) -> None`: Create a widget.",
     (
-        f"{_MEMBER}`resize(self, size: int, *, step: int=4, data: dict[str, int], "
-        "exact: str='0123456789abcdefgh', over: str) -> None`: Resize the widget."
+        f"{_MEMBER}`resize(self, size: int, *, step: int=4, data: dict[str, int]={_ELLIPSIS}, "
+        f"exact: str='0123456789abcdefgh', over: str={_ELLIPSIS}) -> None`: Resize the widget."
     ),
     "- class `Outer`: An outer widget.",
     f"{_MEMBER}class `Inner`: A nested widget.",
@@ -666,7 +668,7 @@ _AC014_LINES = [
     f"{_NESTED}`build(self) -> int`: Build the inner widget.",
     "- def `spaced(a: int, b: str='xy') -> None`: Spaced source formatting.",
     "- def `async fetch() -> None`: Fetch the remote map.",
-    "- def `items(pool: list[int]) -> None`: A long positional default.",
+    f"- def `items(pool: list[int]={_ELLIPSIS}) -> None`: A long positional default.",
     "- def `make_widget() -> Widget`: Build a widget locally.",
 ]
 
@@ -675,10 +677,67 @@ _AC014_LINES = [
 _AC014_DEFAULTS: tuple[tuple[str, bool], ...] = (
     ("step: int=4", True),  # 1 character: shown
     ("b: str='xy'", True),  # 4 characters: shown
-    ("exact: str='0123456789abcdefgh'", True),  # exactly 20 characters: shown
-    ("{'alpha': 1, 'beta': 2}", False),  # 23 characters: omitted, annotation kept
-    ("'0123456789abcdefghi'", False),  # 21 characters: omitted, annotation kept
-    ("[1, 2, 3, 4, 5, 6, 7]", False),  # 21 characters, positional: omitted
+    ("exact: str='0123456789abcdefgh'", True),  # exactly 20 characters: shown verbatim (Q-8)
+    ("{'alpha': 1, 'beta': 2}", False),  # 23 characters: abbreviated, its text never rendered
+    ("'0123456789abcdefghi'", False),  # 21 characters: abbreviated, its text never rendered
+    ("[1, 2, 3, 4, 5, 6, 7]", False),  # 21 characters, positional: abbreviated, never shifted
+    (f"data: dict[str, int]={_ELLIPSIS}", True),  # keyword-only over-long: `=…` in its own slot
+    (f"over: str={_ELLIPSIS}", True),  # keyword-only over-long: the `=` separator survives
+    (f"pool: list[int]={_ELLIPSIS}", True),  # positional over-long: the parameter keeps a default
+)
+
+# EDGE-017 (REQ-014 v2): every slot the amended edge case names, plus the two shapes that do not
+# occur in the tracked tree (finding F-12) — a positional-only over-long default and a function
+# whose *only* default is over-long. `keys` carries the F-08 trap: `need` has **no** default in the
+# source, so a rule that abbreviates every entry would wrongly render it as optional.
+_EDGE017_MODULE = """
+def shift(a: int = 1, b: str = "xy", c: list[int] = [1, 2, 3, 4, 5, 6, 7]) -> None:
+    'Shift the defaults.'
+
+
+def only(pool: list[int] = [1, 2, 3, 4, 5, 6, 7]) -> None:
+    'The only default in the module.'
+
+
+def posonly(a: int = 1, b: str = "0123456789abcdefghij0", /) -> None:
+    'A positional-only over-long default.'
+
+
+def keys(*, need: int, k: int = 1, m: str = "0123456789abcdefghij0") -> None:
+    'A keyword-only parameter with no default at all.'
+
+
+def edge(exact: str = "0123456789abcdefgh") -> None:
+    'A default of exactly 20 characters.'
+"""
+
+# The required rendering of `_EDGE017_MODULE`: the over-long default is abbreviated in its own slot
+# in all three slots, the `/` marker survives, `need` stays default-free, and the 20-character
+# boundary is unchanged.
+_EDGE017_LINES = [
+    f"- def `shift(a: int=1, b: str='xy', c: list[int]={_ELLIPSIS}) -> None`: Shift the defaults.",
+    f"- def `only(pool: list[int]={_ELLIPSIS}) -> None`: The only default in the module.",
+    f"- def `posonly(a: int=1, b: str={_ELLIPSIS}, /) -> None`: A positional-only over-long default.",
+    (
+        f"- def `keys(*, need: int, k: int=1, m: str={_ELLIPSIS}) -> None`: "
+        "A keyword-only parameter with no default at all."
+    ),
+    "- def `edge(exact: str='0123456789abcdefgh') -> None`: A default of exactly 20 characters.",
+]
+
+# (needle, must-be-present) — the EDGE-017 clauses per slot, so a wrong implementation is
+# attributed to the clause it breaks rather than only to the sequence check. The negative needles
+# are the shift itself: `a`'s default on `b`, and `b`'s default on `c`.
+_EDGE017_NEEDLES: tuple[tuple[str, bool], ...] = (
+    (f"c: list[int]={_ELLIPSIS}", True),  # positional slot: abbreviated in its own slot
+    (f"pool: list[int]={_ELLIPSIS}", True),  # a function whose only default is over-long keeps it
+    (f"b: str={_ELLIPSIS}, /", True),  # positional-only slot, and the `/` marker survives
+    (f"m: str={_ELLIPSIS}", True),  # keyword-only slot
+    ("need: int,", True),  # a keyword-only parameter with no default stays default-free
+    (f"need: int={_ELLIPSIS}", False),  # ... and is never given a placeholder default (F-08)
+    ("b: str=1", False),  # `a`'s default never shifts onto `b`
+    ("c: list[int]='xy'", False),  # `b`'s default never shifts onto `c`
+    ("exact: str='0123456789abcdefgh'", True),  # exactly 20 characters: verbatim, threshold intact
 )
 
 _AC015_MODULE = """
@@ -938,9 +997,9 @@ def test_ac_014_symbol_inventory_and_unparsed_signatures(tmp_path: Path) -> None
     """AC-014 (REQ-014): a module's classes render before its functions (each group in source
     order), a class's fields before its methods, in the stated line form with `ast.unparse`
     signatures — `async ` kept inside the backticks, a nested class as a member line with its own
-    members one level deeper, a parameter default shown only when its unparsed text is ≤ 20
-    characters — while a function-local class and the module's assignments and imports never
-    render."""
+    members one level deeper, a parameter default of ≤ 20 characters shown verbatim while a longer
+    one is abbreviated to the `…` placeholder in its own slot (EDGE-017) — while a function-local
+    class and the module's assignments and imports never render."""
     root = _t004_tree(tmp_path, {"src/inventory.py": _AC014_MODULE})
     out = tmp_path / "STRUCTURE.md"
 
@@ -963,6 +1022,33 @@ def test_ac_014_symbol_inventory_and_unparsed_signatures(tmp_path: Path) -> None
             failures.append(f"clause 3: {never!r} is rendered — it is not a module- or class-level symbol")
     if len(lines) != len(set(lines)):
         failures.append(f"clause 4: a symbol is rendered more than once: {lines!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_edge_017_over_long_default_keeps_its_slot(tmp_path: Path) -> None:
+    """EDGE-017 (REQ-014): a parameter default whose unparsed text exceeds 20 characters is
+    abbreviated to the `…` placeholder in its own slot — positional, positional-only and
+    keyword-only alike, including a function whose only default is over-long — so no neighbouring
+    default shifts onto an earlier parameter, a keyword-only parameter that has no default is
+    never given one, and a default of exactly 20 characters still renders verbatim."""
+    root = _t004_tree(tmp_path, {"src/edge017.py": _EDGE017_MODULE})
+    out = tmp_path / "STRUCTURE.md"
+
+    proc = _run_generator(root, out)
+    text = _map_text(out, proc)
+    lines = _symbol_lines(text, "src/edge017.py")
+    failures: list[str] = []
+
+    if proc.returncode != 0:
+        failures.append(f"clause 1: exit {proc.returncode}: {proc.stderr!r}")
+    failures += _seq_failures(lines, _EDGE017_LINES, "1")
+    joined = "\n".join(lines)
+    for needle, present in _EDGE017_NEEDLES:
+        if (needle in joined) is not present:
+            failures.append(
+                f"clause 2: {needle!r} is {'rendered' if needle in joined else 'absent'}, "
+                f"expected the opposite: {joined!r}"
+            )
     assert not failures, "\n".join(failures)
 
 

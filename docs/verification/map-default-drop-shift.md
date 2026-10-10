@@ -561,3 +561,37 @@ carried is gone, because the committed map is fresh at this commit.
 |---|---|---|
 | **F-15** | F-10 predicted `verify_spec.py` would print `✗ INV-007 has property test` once the ID exists. It prints **`✓`**: the per-ID mark is `any("007" in f for f in property_funcs)` over **all** property test functions in the repository, and other specs already define `test_inv_007_*` (`test_inv_007_key_containment`, `test_inv_007_load_scope_valid`) — the same bare-ID namespace as F-09. The `failures` list is still only populated when the whole category is empty, so the exit code is 0 either way. | No action; PR A's `spec-validation` job is green as predicted, for a slightly different reason. Recorded so the after-workflow-optimization sees that `verify_spec.py` cannot witness a *specific* INV's property test. |
 | **F-16** | §3.5/§5.3 measured the fresh `docs/` count as **224**; the regeneration in this worktree renders **225**. Both are correct: `git ls-files docs` is 224 on `main` and 225 on this branch, because the P.4 triage record (`docs/verification/map-default-drop-shift.md`) is a tracked `docs/` file on the change branch only. | Expected, not a defect: PR A merges the triage record together with the map, so `main`'s count and the committed map agree after the merge. PR B adds no new `docs/` file, so its regeneration stays at 225 unless `main` moves. |
+
+## Phase 3 — reproduction tests (S3.1/S3.2 RED, 2026-10-10)
+
+**Four witnesses, exactly the §4 plan; `scripts/make_map.py` untouched, `STRUCTURE.md` not regenerated, `docs/verification/traceability.md` untouched (F-09).**
+
+| Witness | File | Status |
+|---|---|---|
+| §4.1 `test_edge_017_over_long_default_keeps_its_slot` (new) | `tests/unit/test_make_map.py` | **RED — assertion** |
+| §4.2 `test_ac_014_committed_map_renders_over_long_default_in_place` (new) | `tests/acceptance/test_structure_map.py` | **RED — assertion** |
+| §4.3 `test_inv_007_signature_fidelity_survives_default_abbreviation` (new) | `tests/property/test_structure_map.py` | **RED — assertion** |
+| §4.4 `test_ac_014_symbol_inventory_and_unparsed_signatures` (re-derived in place) | `tests/unit/test_make_map.py` | **RED — assertion** |
+
+**Pre-flight / post-flight collection:** `uv run pytest --collect-only tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q` → `58 tests collected`, no errors (55 baseline + 3 new).
+
+### RED (all four node ids, §4.5 `red_command`)
+
+- **command:** `uv run pytest tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place -v`
+- **result:** `4 failed` (exit 1) — every failure is an `AssertionError` on **rendered signature text**; no `SyntaxError`, no `ValidationError`, no collection error, so the test data is valid and RED is a behaviour RED.
+- **failure mode per witness:**
+  - EDGE-017 unit: sequence clause 1 — the generator renders `shift(a: int, b: str=1, c: list[int]='xy')`, `only(pool: list[int])`, `posonly(a: int, b: str=1, /)`, `keys(*, need: int, k: int=1, m: str)` where the amended spec requires `shift(a: int=1, b: str='xy', c: list[int]=…)`, `only(pool: list[int]=…)`, `posonly(a: int=1, b: str=…, /)`, `keys(*, need: int, k: int=1, m: str=…)`; needle clause 2 additionally reports the **shift itself** (`b: str=1` and `c: list[int]='xy'` are rendered, must be absent) and `edge(exact: str='0123456789abcdefgh')` is already correct (no regression to fix).
+  - AC-014 acceptance (committed map): clause 1 — `simple_template` renders `name: str, subject: str='test', body_html: str='Test {{who}}', …` (defaults shifted left) instead of `name: str='test', subject: str='Test {{who}}', body_html: str=…, …`; clause 2 — `reset_token_ttl: timedelta=…`, `lockout_duration: timedelta=…`, `origin: str=…` are missing from the `AuthService.__init__` line (they render default-free), while `session_ttl: timedelta=timedelta(days=7)` and `max_failed_attempts: int=5` are present and stay unharmed.
+  - AC-014 unit (re-derived): clause 1 — `resize(...)` and `items(pool: list[int])` still render the old omission; needle clause 2 — the three new positive needles `data: dict[str, int]=…`, `over: str=…`, `pool: list[int]=…` are absent. Every pre-existing needle (the literal over-long default text absent, `exact`/`step`/`b` verbatim) is kept, so the witness is strictly stronger than before.
+  - INV-007 property: hypothesis shrank to `def f0(alpha: int='0123456789abcdefghij0') -> None` — clause 4 `the rendered parameter list is 'alpha: int', expected 'alpha: int=…'`; clause 5 `the substituted list re-unparses to 'alpha: int', expected 'alpha: int=...'`; clause 2 `parameters carrying a default is [], the source's is ['alpha']`. Clauses 1/3 (names in order, slot split) pass on this example, as expected for a single-parameter function.
+
+**Touched-file regression** (`uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q -p no:randomly`): `5 failed, 53 passed` — the four RED witnesses plus the **pre-existing** `test_ac_021_committed_map_matches_fresh_render` red recorded in §3.4 (the committed map is stale against this branch's `docs/` count, F-16). No other test changed state.
+
+**Ruff (changed paths):** `uv run ruff check tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py` → `All checks passed!`; `uv run ruff format --check` on the same three paths → `3 files already formatted`.
+
+### New findings from Phase 3
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-17** | The first draft of the INV-007 strategy put the whole slot builder inside `_signature_module`, which pushed its cyclomatic complexity to **20** and broke `test_nfr_005_complexipy_threshold_holds` (NFR-005 analyses `tests/` too, max 15). | Fixed inside S3.1 (in-step fix-and-recheck): the strategy is split into `_slots`, `_slot_text` and `_signature_text`; `uv run complexipy --max-complexity-allowed 15 tests` → *All functions are within the allowed complexity*, and NFR-005 passes again. |
+| **F-18** | §4.2's `simple_template` expectation cannot be written as one f-string: `{{who}}` inside an f-string collapses to `{who}`, so the needle silently mismatched the committed map. | The constant is built as `plain + f"{_ELLIPSIS}" + plain` so the doubled braces survive; verified against the §5.2 probe rendering byte-for-byte. |
