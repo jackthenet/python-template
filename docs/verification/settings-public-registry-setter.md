@@ -3803,12 +3803,12 @@ GREEN:
 
 | New id | Finding | One-line summary |
 |---|---|---|
-| **P-65** | F-69 | T-012's `completion_gates[0]` states the RED reason as "none of the five install operations exists", but the witness reads `AGENTS.md` — the RED is "the guidance does not name them" (same class as P-55) |
-| **P-66** | F-70 | `.github/task-runner/tasks.json` is tracked on `main`, so every cross-change merge conflicts on two whole DAGs; the "take ours" rule was undocumented |
-| **P-67** | F-71 | union-merging `docs/workflow/PROBLEMS.md` drops the trailing `- **Date:**` line of both sides' last entry — check every entry after unioning |
-| **P-68** | F-72 (new, found by this step) | the step's shell cwd silently reset to the **primary** worktree, so two commits, the traceability check and one ruff run ran against `main`; nothing was written there, but the step's commit was missing and its counts wrong until every gate command was re-run with an explicit `cd` into the change worktree |
+| **P-98** | F-69 | T-012's `completion_gates[0]` states the RED reason as "none of the five install operations exists", but the witness reads `AGENTS.md` — the RED is "the guidance does not name them" (same class as P-55) |
+| **P-99** | F-70 | `.github/task-runner/tasks.json` is tracked on `main`, so every cross-change merge conflicts on two whole DAGs; the "take ours" rule was undocumented |
+| **P-100** | F-71 | union-merging `docs/workflow/PROBLEMS.md` drops the trailing `- **Date:**` line of both sides' last entry — check every entry after unioning |
+| **P-101** | F-72 (new, found by this step) | the step's shell cwd silently reset to the **primary** worktree, so two commits, the traceability check and one ruff run ran against `main`; nothing was written there, but the step's commit was missing and its counts wrong until every gate command was re-run with an explicit `cd` into the change worktree |
 
-Post-edit self-check (the P-67 rule applied to the edited file): **70 `## P-` headings, 70 `- **Date:**`
+Post-edit self-check (the P-100 rule applied to the edited file): **70 `## P-` headings, 70 `- **Date:**`
 lines** (P-50 carries three recurrence headings), no entry renumbered or reordered; the file is 613 lines.
 
 ### Phase 3 gate ◆ — PASS
@@ -3845,7 +3845,7 @@ five `INVENTORY_MODULE_FUNCTIONS` rows in `tests/logging_coverage_test_helpers.p
 ### Phase 4 — T-001 RED (S4.1)
 
 **Date:** 2026-10-08 (run at 2026-10-08T07:11Z, re-run 07:14Z and 07:16Z — counts identical on all three).
-**Worktree:** `crosscut/settings-public-registry-setter` (every command run there with an explicit `cd`, per P-68).
+**Worktree:** `crosscut/settings-public-registry-setter` (every command run there with an explicit `cd`, per P-101).
 **Task picked:** **T-001** — settings (`src/backend/settings/registry.py` + the `backend.settings` public
 surface): "Add `set_settings_registry()` and one module lock guarding install, lazy create (both required
 modes) and reset; re-export it".
@@ -4302,7 +4302,7 @@ tests/acceptance/eventbus/test_eventbus.py`, and the S3.2 record's own §"F-11 �
 contract (fixed)"). `git diff` for this step shows **no test file changed**, and AC-015 passes on both halves —
 the lazy-create half and the install/read/reset half — so the witness is intact and strengthened, not weakened.
 
-#### Gates (all run in the change worktree, with an explicit `cd` — P-68)
+#### Gates (all run in the change worktree, with an explicit `cd` — P-101)
 
 | # | Gate | Result |
 |---|---|---|
@@ -4371,7 +4371,7 @@ implementation. **Picked task: T-003** (`permissions — src/backend/permissions
 public surface`, `"status": "PENDING"`, `dependencies: ["T-001", "T-002"]` — both `VERIFIED` at `92f4a1b`/`137d0fe`
 and `8b576df`/`145d12f`). Worktree `python-template_kopie-worktrees/crosscut/settings-public-registry-setter`,
 branch `crosscut/settings-public-registry-setter` (`pwd && git rev-parse --abbrev-ref HEAD` verified once, with an
-explicit `cd` — Problem Log **P-68**); working tree clean apart from this file. No implementation, no commit, no
+explicit `cd` — Problem Log **P-101**); working tree clean apart from this file. No implementation, no commit, no
 full-suite run in this step.
 
 ### RED gate — `red_command` verbatim
