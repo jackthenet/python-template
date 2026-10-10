@@ -1720,3 +1720,128 @@ gate** (6.3.1 #3, 6.3.4 (c)).
 **◆ S6.3: review report CLEAN (conditional on the S6.4 full-regression pre-merge gate)**
 
 Next: **S6.4 Bump version + open PR** — obligations (a)–(d) in 6.3.4, in that order.
+
+---
+
+## Phase 6 — S6.4 pre-merge gate + release (2026-10-10)
+
+HEAD at entry: `081082c` (the S6.3 review report), `git status --porcelain` **empty** at entry and after
+every commit made here. This step writes **`CHANGELOG.md`, `pyproject.toml`, `uv.lock` and this file** —
+no `src/`, no `tests/`, no `scripts/`, no `STRUCTURE.md`, no spec, no `docs/verification/traceability.md`,
+no `docs/todo/`, no `docs/questions/`, no `AGENTS.md`. **Nothing was merged; no tag was created.**
+
+### 6.4.1 Sync with `main`
+
+| Command | Result |
+|---|---|
+| `git fetch origin` | `origin/main` = `414b908` (`chore(map-default-drop-shift): status IN-WORKFLOW (PR A #79 merged as d8ba07f, Phase 3 starts)`) |
+| `git merge-base --is-ancestor origin/main HEAD` | exit **0** — `origin/main` is already an ancestor of this branch |
+| `git merge origin/main` | `Already up to date.` — **no merge commit, no conflict**, so the "take either side and regenerate `STRUCTURE.md`" rule was never reached |
+
+The branch was cut from `main` `7299108` and PR A #79 merged into `main` **from this same branch**
+(`d8ba07f`), so every planning-record commit `main` has gained since the cut is already carried here.
+
+### 6.4.2 (a) `CHANGELOG.md` entry — commit `e7c8b30`
+
+`docs(map-default-drop-shift): changelog entry` (`1 file changed, 10 insertions(+)`) — one entry under
+`## [Unreleased]` → **`Fixed`** (that heading did not exist in the section and was created; the Keep a
+Changelog order `Added` → `Fixed` is preserved). The prose is derived from §3.2 and §3.3 (the two live
+witnesses), §5.1 (the fix) and 6.3.4 (a): the generator no longer drops an over-long default but
+abbreviates it to the `…` placeholder in the parameter's own slot, so signature lines no longer shift a
+default onto the following parameter or render a defaulted parameter as required; the four corrected
+renderings and the amended rule (`structure-map.md` v2 — REQ-014/AC-014, INV-007, EDGE-017) are named.
+Nothing else was added to the file.
+
+### 6.4.3 (c) The full regression suite — the light-tier pre-merge gate (6.3.1 #3) — **CLOSED**
+
+Map freshness first, per 6.3.4 (c) (the F-01 / F-03 mitigation):
+
+| Command | Result | Exit |
+|---|---|---|
+| `uv run python scripts/make_map.py --check` (at `e7c8b30`) | no output — the committed map **is** the fresh render | **0** |
+| `git status --porcelain` immediately after | empty — nothing to regenerate, so **no** `chore(…): regenerate STRUCTURE.md` commit was owed (finding F-37) | — |
+
+The gate itself:
+
+| Command | Result | Exit | Wall time | Taken at |
+|---|---|---|---|---|
+| `uv run pytest tests/ -q` | **819 passed, 1 skipped** | 0 (no `FAILED`/`ERROR` line; the exit code is captured explicitly in the run below) | `252.04s` | `e7c8b30` |
+| `uv run pytest tests/ -q` | **819 passed, 1 skipped** | **0** | `253.01s (0:04:13)` | `c223e84` — the final code commit |
+
+- **No new failures.** The single skip is `tests/acceptance/filemanagement/test_filemanagement.py:364`
+  (`test_ac_031_symlink_rejected`, "symlinks not available on this host") — the pre-existing
+  host-capability guard recorded as **F-22**, not a deselected, newly-skipped or weakened test.
+  `-p no:randomly` was not needed: no randomly-ordered failure had to be reproduced.
+- **Count reconciliation.** The highest full-suite record in `docs/verification/traceability.md` is
+  `816 passed, 1 skipped` (structure-map S5.1, 2026-10-09, `3ec204c`); this change adds exactly **3**
+  `def test_…` (`git diff --stat main...HEAD -- tests/` → `+358 / −14`, **0** test definitions removed)
+  → **819**. Nothing disappeared, so the delta is fully explained.
+- **Why the result is valid at the final commit.** `c223e84` touches only `pyproject.toml`, `uv.lock` and
+  `CHANGELOG.md`; no test asserts the project version (`tests/contract/logging/test_dependency_contract.py`
+  parses `pyproject.toml` for deptry/quality-gate keys only), and the suite was re-run at `c223e84` anyway,
+  with the exit code captured, so the gate is measured against the tree that will actually merge.
+
+**◆ The single open gate of 6.3.1 (#3) is closed: the full regression suite passes.** The S6.3 CLEAN
+verdict is therefore **no longer conditional**.
+
+### 6.4.4 (b) Version bump — commit `c223e84` `chore(release): 1.1.1`
+
+ISSUE → **patch** (AGENTS.md "Versioning"). Working tree clean before the bump (`allow_dirty` is off).
+
+| Command / step | Result |
+|---|---|
+| `uv tool run bump-my-version bump patch --dry-run` | exit **0** — `1.1.0 → 1.1.1`; would change `pyproject.toml:4` and `[tool.bumpversion] current_version` (finding F-35 covers the tool's silent/`UnicodeEncodeError` logging on this host) |
+| `uv tool run bump-my-version bump patch --no-commit` | exit **0** — both lines changed, **no commit, no tag** |
+| `uv lock` | `Resolved 113 packages` / `Updated python-template v1.1.0 -> v1.1.1`, exit **0** |
+| `CHANGELOG.md` | the `## [Unreleased]` entries moved to **`## [1.1.1] - 2026-10-10`** in the same commit; an empty `## [Unreleased]` heading is kept for the next change (the section carried this change's `Fixed` entry plus the two post-1.1.0 `Added` entries, all of which belong to this release) |
+| `git commit -m "chore(release): 1.1.1"` | one commit, `3 files changed, 5 insertions(+), 3 deletions(-)`: `pyproject.toml` (+2/−2), `uv.lock` (+1/−1), `CHANGELOG.md` (+2) |
+| `git tag` | unchanged — **no tag created** (`tag = false`) |
+
+**Order note.** The task-definition runs the pre-merge gate (c) **before** the bump (b) — the reverse of
+6.3.4's (b)→(c) order — so the gate was measured against the pre-release tree at `e7c8b30` **and** then
+re-run at the release commit `c223e84` (6.4.3) to cover the bump itself. Both runs are identical.
+
+### 6.4.5 Re-verification after the changelog and release commits
+
+| Command | Result | Exit |
+|---|---|---|
+| `uv run python scripts/make_map.py --check` | no output | **0** |
+| `uv run python scripts/check_traceability.py` | `Traceability: PASS (883 matrix rows, 136 spec IDs, 804 test functions)` | **0** |
+| `uv run ruff check .` | `All checks passed!` | **0** |
+| `uv run ruff format --check .` | `343 files already formatted` | 0 |
+| `git status --porcelain` | empty | — |
+
+### 6.4.6 (d) PR — **#80**
+
+- Branch pushed: `52fa324..c223e84 → origin/issue/map-default-drop-shift`.
+- **PR #80** — https://github.com/jackthenet/python-template/pull/80 — `issue/map-default-drop-shift` →
+  `main`, 15 commits, not a draft. Body: type ISSUE (light tier), the defect + root cause, the normative
+  basis (merged Spec Amendment **#79**, `d8ba07f`, `structure-map.md` v2), the Phase 5 coverage table
+  (spec coverage 100%, 4/4 IDs green), the S6.3 CLEAN verdict + this pre-merge result, the traceability
+  rows, the `1.1.0 → 1.1.1` bump, and the F-01…F-34 ledger by pointer to this file.
+- **Not merged, not approved, not commented on, no auto-merge, no tag** (human governance). The change now
+  goes **WAITING**; when the human merges, **S7.1** post-merge cleanup resumes it with a fresh subagent.
+- CI as observed right after opening: `lint`, `type-check`, `spec-validation`, `security`, `traceability`,
+  `dependency-review`, `dependencies`, `docs`, `migrations`, `complexity` → **SUCCESS**; `tests` and
+  `coverage` → still **IN PROGRESS** (hence `mergeStateStatus: UNSTABLE`, i.e. pending checks, not failing).
+
+### New findings from S6.4 (F-35 … F-37)
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| **F-35** | `bump-my-version` 1.5.1 renders its log through `rich`; the `→` in the configured message `Bump version: {current} → {new}` raises `UnicodeEncodeError` on the cp1252 Windows console (visible only with `--verbose`), and at the default level a plain `--dry-run` prints **nothing at all**, which reads as a silent failure. | Info (host/tooling friction; exit 0, the bump is correct) | **No action in this change** — the bump was verified from `git diff`, not from the tool's stdout, and `--no-commit` sidesteps the message. Problem Log entry for the after-workflow-optimization: on Windows, capture bump evidence from `git diff` + `--dry-run --verbose`. |
+| **F-36** | Patching `CHANGELOG.md` with a script that reads it as text and writes it back rewrites the whole working copy to LF (`core.autocrlf=true`, the F-03 family): 10 CRLF / 287 bare LF after the first write. | Info (host line-ending friction, **no repo effect**) | **Fixed in-step** — the file was re-normalised to CRLF (299 CRLF, 0 bare LF) before the release commit, and `git diff` stayed at exactly the intended `+2` lines because the index normalises to LF. Note for future steps: patch this repo's text files with an ending-preserving tool, or re-normalise before committing. |
+| **F-37** | The 6.3.4 (c) instruction to regenerate the map immediately before the full-suite run was **not needed** here: `make_map.py --check` exits 0 at `e7c8b30` and at `c223e84`, because the branch already carries every `main` commit, so the `docs/` file-count line (F-01) is current. | Info (the F-01/F-03 caveat is conditional, not permanent) | **No action** — the mitigation stays written down; it fires only when `main` gains `docs/` files while a change worktree is behind. Re-run `--check` after any `git merge origin/main`. |
+
+**No finding is open as a defect.** F-35/F-36/F-37 are host/tooling observations; F-32 (changelog + bump)
+is **closed** by this step; F-01/F-02 stay resolved since `0c73790`; F-03 stays out of scope with the
+mitigation exercised and shown unnecessary at this commit (F-37).
+
+### ◆ S6.4 verdict
+
+(a) changelog entry under `Fixed` ✔ · (c) **full regression suite: 819 passed, 1 skipped, exit 0** at the
+final code commit — the light tier's single open gate closed ✔ · (b) version bump **1.1.0 → 1.1.1** with
+the entries moved to `## [1.1.1] - 2026-10-10` in one release commit, no tag ✔ · (d) **PR #80** open
+against `main` ✔ · `check_traceability.py` exit 0 ✔ · working tree clean ✔ · nothing merged ✔.
+
+**Next: S7.1 post-merge cleanup — after the human merges PR #80.**
