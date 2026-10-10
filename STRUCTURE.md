@@ -449,7 +449,7 @@ migrations/
 .agents/ — 17 files (skills)
 .github/ — 9 files (CI and tooling)
 .vscode/ — 2 files
-docs/ — 223 files (process record)
+docs/ — 225 files (process record)
 userdocs/ — 2 files (published docs)
 
 ## Packages
