@@ -825,3 +825,46 @@ churn, no second regeneration.
 
 No test, spec, traceability, changelog or `pyproject.toml` file was touched; the full `tests/` suite was
 not run (light tier — full regression stays the S6.4 pre-merge gate).
+
+### S4.4 Phase 4 close-out (2026-10-10)
+
+Phase 4 is closed at HEAD `db425ae`, working tree clean. This change is an **ISSUE**, so there is **no task
+DAG** and no `.github/task-runner/tasks.json` to set `VERIFIED` (Phase 2 is skipped per the Phase Matrix);
+the state-machine record is this section.
+
+**Commit list** (`git log --oneline main..HEAD`, exactly the Phase 3/4 commits, nothing else):
+
+| SHA | Subject |
+|---|---|
+| `0ecf7bc` | `test(map-default-drop-shift): reproduction witnesses for EDGE-017/INV-007 + re-derived AC-014 (RED)` |
+| `5b51614` | `docs(map-default-drop-shift): S3.2 RED gate re-check` |
+| `785da7a` | `docs(map-default-drop-shift): S4.1 fix-target re-location` |
+| `0c73790` | `fix(make_map): keep an over-long default in its slot as … (map-default-drop-shift)` |
+| `db425ae` | `refactor(make_map): correct the stale _DEFAULT_MAX_CHARS comment (map-default-drop-shift)` |
+
+**PR B file set so far** (`git diff --name-status main...HEAD`) — exactly the §5.4 prediction, all six `M`:
+`scripts/make_map.py`, `STRUCTURE.md`, `tests/unit/test_make_map.py`, `tests/property/test_structure_map.py`,
+`tests/acceptance/test_structure_map.py`, `docs/verification/map-default-drop-shift.md`.
+Still **absent** by design: `docs/verification/traceability.md` (S5.3, F-09), `CHANGELOG.md` and
+`pyproject.toml` (S6.4 version bump), `docs/specs/` (only PR A), `docs/todo/`, `docs/questions/`
+(orchestrator-owned on `main`).
+
+**Independent re-run of the targeted GREEN set** (this step, at `db425ae`, nothing re-implemented):
+
+| Check | Command | Result line |
+|---|---|---|
+| The four §4.5 node ids | the `green_command` four node ids, `-v` | **`4 passed in 2.59s`** (exit 0) |
+| The three structure-map modules | `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q` | **`58 passed in 67.52s`** (exit 0) |
+| Map freshness (check only — the generator was **not** re-run without `--check`) | `uv run python scripts/make_map.py --check` | **exit 0**, no output, `STRUCTURE.md` unmodified afterwards |
+
+**State machine:** `RED_CONFIRMED` (S3.2 gate re-check at `0ecf7bc`, `4 failed`) → `IMPLEMENTING` (S4.1
+fix-target re-location at `5b51614`) → **`GREEN`** (S4.2 GREEN table: `4 passed` on the four witnesses,
+`58 passed` on the three modules, `make_map.py --check` exit 0, ruff/format/mypy/complexipy clean) →
+**`REFACTORED`** (S4.3 verdict: near no-op, one stale comment line at `scripts/make_map.py:73` corrected,
+file still 581 lines so `STRUCTURE.md` stayed byte-identical; all S4.3 gates re-run clean).
+
+**Full regression suite is deliberately deferred** to the **S6.4 pre-merge gate** per the light-tier
+qualification (§6): Phase 5 runs targeted + smoke instead, and `uv run pytest tests/ -v` must pass before
+the PR opens, with the result recorded in the review report. Phase 4 ran no full-suite command.
+
+**Gate ◆ Phase 4 (GREEN + REFACTORED): closed.** Phase 5 (`S5.1`) may start.
