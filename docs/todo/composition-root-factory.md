@@ -5,17 +5,17 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
 - **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
-- **Change type:** REFACTOR  <!-- P.2 must confirm: the wiring *timing* is specified in settings-coverage AC-003, so a spec amendment may be required -->
+- **Change type:** CROSS-CUTTING  <!-- reclassified from REFACTOR at P.3 round 1, 2026-10-10 (Q-01 = A): `import main`'s side effects are externally observable and two approved specs' ACs pin module/import-time wiring, so the REFACTOR "no behavior delta" claim is false -->
 - **Created:** 2026-10-06
 - **Question file:** `docs/questions/composition-root-factory.md`
-- **Spec:** n/a (REFACTOR) — normative basis is the GREEN baseline + refactor scope in `docs/verification/composition-root-factory.md`; `docs/specs/settings-coverage.md` AC-003 / REQ-002 likely needs an amendment
-- **Worktree:** <created at P.4> `../python-template_kopie-worktrees/refactor/composition-root-factory`
-- **Depends on:** `settings-public-registry-setter` (it fixes the singleton install in `src/main.py:137-138` and its Q-21 answer defers this change), `structlog-logging` (IN-WORKFLOW — it touches startup logging setup)
+- **Spec:** `docs/specs/composition-root-factory.md` (created at P.4, with an Impact Analysis) — plus a **Spec Amendment PR** touching `docs/specs/settings-coverage.md` REQ-002/AC-003, `docs/specs/logging-coverage.md` REQ-011/AC-011 and `docs/specs/settings-public-registry-setter.md` REQ-011/AC-016 (Q-01 = A, Q-02 = A, 2026-10-10)
+- **Worktree:** <created at P.4> `../python-template_kopie-worktrees/crosscut/composition-root-factory`
+- **Depends on:** `settings-public-registry-setter` (IN-WORKFLOW — **hard gate confirmed by Q-02 = A on 2026-10-10**: P.4 may not start before it merges, because this change amends its REQ-011/AC-016), `structlog-logging` (**MERGED** 2026-10-07, PR #74 → `c7a9119` — dependency satisfied). **Blocks `backend-api`** (added 2026-10-10: that change builds its FastAPI app on this change's `build_composition_root()`, Q-07 = B there).
 - **Related specs:** `docs/specs/settings-coverage.md` (REQ-002 "the entrypoint calls each feature's `register_settings(registry)` once at startup", AC-003 the subprocess wiring test), `docs/specs/logging-coverage.md` (startup ordering of `setup_logger`)
 
 ## Goal (one line)
 
-Give `src/main.py` an explicit composition root — a `create_app()` / `build_services()` callable — so the object graph is built on demand instead of as a side effect of importing the module.
+Give `src/main.py` an explicit composition root — a **`build_composition_root() -> App`** callable returning a frozen dataclass of named, typed fields (decided 2026-10-10, Q-04 = A) — so the object graph is built on demand instead of as a side effect of importing the module, and `import main` creates nothing (Q-03 = A: the module-level wiring is removed, not kept as a compatibility layer).
 
 ## Why
 

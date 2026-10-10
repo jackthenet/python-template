@@ -7,7 +7,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **Spec:** n/a (REFACTOR) — `docs/specs/settings-coverage.md` REQ-002 / AC-003 and `docs/specs/logging-coverage.md` REQ-011 / AC-011 need an amendment (Q-01); `docs/specs/settings-public-registry-setter.md` REQ-011 / AC-016 collide (Q-02)
 - **Opened:** 2026-10-06
 - **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
-- **Answer rounds:** 0
+- **Answer rounds:** 1 (2026-10-10: Q-01, Q-02, Q-03, Q-04 answered)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -54,10 +54,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** `docs/specs/settings-coverage.md` REQ-002 + AC-003 (quoted in the preamble) make **import-time execution** of `src/main.py` normative; `docs/specs/logging-coverage.md` REQ-011 + AC-011 do the same for `setup_logger()`, and its test asserts the call is a top-level module statement (`tests/acceptance/logging_coverage/test_setup_logger.py:41-45`). Measured: `import main` is itself externally observable — it creates 4 SQLite DBs, `logs/app.log` and `settings/values.yaml` in the CWD. AGENTS.md classification is first-match: #4 REFACTOR requires no observable behavior change; #2 FEATURE matches ("adds externally observable behavior or capability not covered by an approved spec"); #3 CROSS-CUTTING matches an architecture change spanning ≥ 2 features (this one rewires the wiring of 7 features + 3 shared singletons).
 - **Question:** Keep the change as REFACTOR (with a Spec Amendment PR for `settings-coverage.md` REQ-002/AC-003 and `logging-coverage.md` REQ-011/AC-011), or reclassify it — FEATURE, or CROSS-CUTTING as `settings-public-registry-setter` was (its P.3 Q-2 reclassification precedent: spans ≥ 2 features + a new shared pattern)?
 - **Recommended:** Reclassify to **CROSS-CUTTING** (branch `crosscut/composition-root-factory`, spec `docs/specs/composition-root-factory.md` with an Impact Analysis, plus a Spec Amendment PR amending `settings-coverage.md` REQ-002/AC-003 and `logging-coverage.md` REQ-011/AC-011) — `import main`'s side effects are measured, externally observable behavior and two approved specs' ACs assert import/module-level wiring, so a "no behavior delta" REFACTOR claim is false on the evidence.
-- **Answer:** **PENDING**
+- **Answer:** **A — reclassify to CROSS-CUTTING.** Spec `docs/specs/composition-root-factory.md` with an Impact Analysis, branch `crosscut/composition-root-factory`, plus the Spec Amendment PR for `settings-coverage.md` REQ-002/AC-003 and `logging-coverage.md` REQ-011/AC-011.
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — `docs/todo/composition-root-factory.md` `Change type:` now CROSS-CUTTING; the branch/worktree at P.4 is `crosscut/…`; Q-29's consequences follow from this answer
 
 ## Q-02 — Collision with the in-flight `settings-public-registry-setter` REQ-011 / AC-016
 
@@ -66,10 +66,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** REQ-011: "installs the registry it wires through `set_settings_registry()` **at its current module-import-time position (`:137-138`)** … the six `register_*_settings(...)` calls (`:173-178`) and the service-construction sites (`:161`, `:198`, `:204`, `:214`) … that startup wiring still runs once, before any feature code." AC-016: "**Given** a fresh subprocess that imports `main` … **And** a source scan of `src/main.py` finds no consumer site passing the local `_settings_registry` handle". Its out-of-scope table row already names this TODO as the deferral target ("A `create_app()` / composition-root factory, moving the wiring out of module import | Explicitly deferred by Q-11").
 - **Question:** Sequence this change strictly after `settings-public-registry-setter` merges, and amend its REQ-011/AC-016 in the same amendment PR (restating them position- and import-agnostic: "the composition root installs through `set_settings_registry()` before the registrations") — or hold this change until that one is merged and then treat its REQ-011/AC-016 as an approved spec this change must amend?
 - **Recommended:** Both — do not start P.4 before that change merges, and amend its REQ-011/AC-016 (drop the `:137-138` / `:173-178` line pins, keep the install-before-register ordering rule) in this change's amendment PR; otherwise AC-016's source scan fails the moment the wiring moves.
-- **Answer:** **PENDING**
+- **Answer:** **A — sequence strictly after `settings-public-registry-setter` merges, and amend its REQ-011/AC-016 in this change's amendment PR**, restated position- and import-agnostic ("the composition root installs through `set_settings_registry()` before the registrations"), keeping the install-before-register ordering rule.
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — the amendment PR now covers three specs (`settings-coverage`, `logging-coverage`, `settings-public-registry-setter`); P.4 must not start before that change merges
 
 ## Q-03 — Must `import main` become side-effect-free, or do the module-level globals stay as a compatibility layer?
 
@@ -78,10 +78,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured consumers of `main`'s globals: only `tests/acceptance/permissions/test_composition_wiring.py` (`main._user_repository`, `main._session_repository`, `main._permission_service`) and `tests/acceptance/settings_coverage/test_wiring.py` (`import main` only). No `src/`, `scripts/`, `migrations/` or `.github/` consumer exists.
 - **Question:** Remove the module-level wiring entirely (import becomes side-effect-free, the two tests are rewritten), or keep the globals as a deprecated compatibility layer that still wires at import?
 - **Recommended:** Remove it — there are no consumers outside the two subprocess tests, so a compatibility layer would preserve exactly the import side effect the change exists to eliminate (and would keep AC-003/AC-011 true only by keeping the old code).
-- **Answer:** **PENDING**
+- **Answer:** **A — remove the module-level wiring entirely.** `import main` becomes side-effect-free; the two subprocess wiring tests are rewritten to call the factory in-process. No compatibility layer.
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — settles the TODO's open scope alternative and makes its acceptance signal ("`import main` no longer creates `data/` databases") normative; drives Q-12's answer
 
 ## Q-04 — Name and return shape of the callable
 
@@ -90,10 +90,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** The graph today is 12 module globals (`_catalog`, `_settings_registry`, `_session_repository`, `_permission_service`, `_user_repository`, `_user_manager`, `_auth_service`, `_file_repository`, `_file_service`, `_mail_service`, `_session_service`, `_search_service`) plus 2 repositories the AC-020 test reaches for. The repo's only existing factory convention is `build_*_source(repository) -> SearchSource` (`src/backend/{usermanagement,filemanagement,sessionmanagement}/search_source.py`). The TODO's goal line names `create_app()` / `build_services()`; `settings-public-registry-setter` D10 names `create_app()`.
 - **Question:** Which name (`build_composition_root()` / `create_app()` / `build_services()`), and what does it return — a frozen dataclass container with named fields, a `NamedTuple`, a plain tuple, or a dict?
 - **Recommended:** `build_composition_root() -> App` where `App` is a **frozen dataclass** with named, typed fields — named access keeps the rewritten wiring tests and mypy meaningful, a 12-value tuple is unmaintainable, and the name matches this TODO's own title (the `build_*` verb matches the existing `build_*_source` convention).
-- **Answer:** **PENDING**
+- **Answer:** **A — `build_composition_root() -> App`, `App` a frozen dataclass with named, typed fields.**
 - **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Status:** ANSWERED
+- **Incorporated:** yes — the spec's API block at P.4; the TODO's goal line (`create_app()` / `build_services()`) is restated to this name; `backend-api` Q-07 = B builds its app on this callable, so its name is a cross-change interface (note: `create_app` stays free for the FastAPI factory)
 
 ## Q-05 — Parameters: does the callable take paths/collaborators, or nothing?
 
