@@ -9,6 +9,8 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-10
+
 ### Added
 
 - Ruff now gates docstrings (`D` rules, Google style) over `src/`, and every missing or
