@@ -610,3 +610,94 @@ Independent re-run of the Phase 3 gate at HEAD `0ecf7bc` (`test(map-default-drop
 | Branch scope | `git diff --name-status main...HEAD` | `M docs/verification/map-default-drop-shift.md`, `M tests/acceptance/test_structure_map.py`, `M tests/property/test_structure_map.py`, `M tests/unit/test_make_map.py` — `scripts/make_map.py` and `STRUCTURE.md` **untouched**, `docs/verification/traceability.md` untouched (F-09) |
 
 **Gate ◆ RED: confirmed.** Phase 3 is complete; Phase 4 (`S4.1`) may start. The pre-existing `test_ac_021_committed_map_matches_fresh_render` red (F-02/F-16) is untouched by this re-check and stays a Phase 4 regeneration concern, not a Phase 3 gate item.
+
+### S4.1 fix-target re-location (2026-10-10)
+
+Re-located **by content** at HEAD `5b51614` (`docs(map-default-drop-shift): S3.2 RED gate re-check`), working tree clean. `scripts/make_map.py` was **not** edited here; the only file written is this record.
+
+**RED still holds at HEAD** — the §4.5 `red_command` (four node ids, `-v`) → **`4 failed`** (exit 1, `4 failed in 1.05s`; 0 errors, 0 skipped, 0 xfail). With `--tb=line` all four are `AssertionError` on **rendered signature text** (`tests/property/test_structure_map.py:665`, and the unit/acceptance witnesses) — the INV-007 example is still `def f0(alpha: int='0123456789abcdefghij0')`-shaped, i.e. clause 2/4/5 of INV-007 broken, no `SyntaxError`/`ValidationError`/collection error. Map freshness at HEAD: `uv run python scripts/make_map.py --check` → **exit 1** (`STRUCTURE.md is out of date`) — expected, Phase 4 regenerates.
+
+**Anchors — no drift.** `scripts/make_map.py` is 567 lines and was last touched by `28a24be` (predates the triage), so every §3.1 citation is still exact:
+
+| Anchor | Line |
+|---|---|
+| `_DEFAULT_MAX_CHARS = 20` | `:74` (comment `:73`) |
+| `_drop_long_defaults(args: ast.arguments) -> None` | `:375` (docstring `:376-381`) |
+| the two filter sites | `:382` and `:383-385` |
+| `_signature(...)` | `:388`; the `_drop_long_defaults(node.args)` call | `:396` |
+
+Current code, verbatim (`:375-385`):
+
+```python
+def _drop_long_defaults(args: ast.arguments) -> None:
+    """AC-014: keep a parameter default only when its unparsed text is <= 20 characters.
+
+    Mutates the parsed tree (each module is rendered once, and the filter is idempotent). The
+    positional defaults are one list aligned to the tail of the argument list, so dropping an entry
+    shifts the kept ones onto the earlier parameters; the keyword defaults align one-to-one with
+    `kwonlyargs`, so a dropped entry becomes None rather than being removed."""
+    args.defaults = [d for d in args.defaults if len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS]
+    args.kw_defaults = [
+        d if d is not None and len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS else None for d in args.kw_defaults
+    ]
+```
+
+The two `…` constants that already exist are **not** the default marker: `_SUMMARY_MARKER = "…"` (`:71`, REQ-018 summary truncation) and `_FIELD_MARKER = "…"` (`:79`, REQ-017 field cap). There is **no `_PLACEHOLDER`** in the file (F-19).
+
+**§5.1 still applies to this code shape — verified by patch, not by reading.** A scratch copy of the generator **outside the repository** (`/tmp/tmp.1kZgDk6X0v/make_map_probe.py`) took the `:382-385` block as an **exact single match** and replaced it with the substitution form; the probe ran with `--root <worktree> --out <temp>` (P-94: the repository's `STRUCTURE.md` was never written; `git status` stayed clean).
+
+Load-bearing clauses, unchanged and re-confirmed by the probe:
+
+- **`kw_defaults` `None` stays `None`** — the probe keeps `None if d is None else (…)`, so `keys(*, need: int, …)`-shaped required keyword-only parameters stay default-free (F-08; the §4.1 `keys` witness locks it). The probe diff shows **no** `=…` added to any parameter that has no default in the source.
+- **`_DEFAULT_MAX_CHARS = 20` untouched** (`:74`) — the probe left it at 20 and `edge(exact: str='0123456789abcdefgh')` still renders verbatim.
+
+**§5.2 probe result, reproduced at this HEAD.** Mechanism used: `ast.Name(id=_DEFAULT_MARKER)` with `_DEFAULT_MARKER = "…"` added next to `:74` — `ast.unparse` renders it as `…`, and at 1 character it survives a second `_drop_long_defaults` pass, so the rule stays idempotent (INV-001). The probe render vs the committed map is **exactly the §5.3 set** — 5 changed lines, line count **1 941 → 1 941** (NFR-002 unaffected):
+
+| Map line | Change |
+|---|---|
+| `:452` | `docs/ — 225 files (process record)` → `231 files` — pre-existing staleness only (F-01/F-16; the count grew again because `main` moved with new planning records), **not** this fix |
+| `:686` | `AuthService.__init__` — `reset_token_ttl`, `lockout_duration`, `origin` gain `=…`; `session_ttl=timedelta(days=7)` and `max_failed_attempts: int=5` unharmed |
+| `:1675` | `build_auth_service` — `lockout_duration`, `reset_token_ttl` gain `=…` |
+| `:1676` | `build_memory_auth_service` — same two |
+| `:1816` | `simple_template` — the positional shift is corrected to `name: str='test', subject: str='Test {{who}}', body_html: str=…, body_text: str='Test {{who}}'` |
+
+**New findings from S4.1.**
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-19** | §5.1's snippet writes `else _PLACEHOLDER`, but no `_PLACEHOLDER` constant exists in `scripts/make_map.py`, and a bare `str` cannot be stored in `ast.arguments.defaults` — `ast.unparse` needs AST nodes (F-07). | Phase 4 adds its own constant (suggested `_DEFAULT_MARKER = "…"` beside `_DEFAULT_MAX_CHARS` at `:74`, mirroring the `_SUMMARY_MARKER`/`_FIELD_MARKER` shape) and injects it as a node (`ast.Name(id=_DEFAULT_MARKER)`) or by string-level substitution on the rendered signature — the §5.2 choice, unchanged. Still no new dependency, no new pattern → no ADR. |
+| **F-20** | §5.4's PR B file list predates the changelog rule now on `main` (AGENTS.md Phase 6 item 10 at `:609`, item 11 at `:610`, Versioning at `:766`), so it omits `CHANGELOG.md`. | PR B also writes a `CHANGELOG.md` entry under `## [Unreleased]` (`Fixed`, at S6.4) and the bump commit moves the entries to `## [1.1.1] - <date>`. The light-tier "≤ 3 files excluding tests" count is unaffected — the criterion counts non-test files *changed by the fix*, and `CHANGELOG.md` is a Phase 6 record like `pyproject.toml`. |
+
+**§5.4 list vs the branch state.** `git diff --name-status main...HEAD` at `5b51614`:
+
+```text
+M	docs/verification/map-default-drop-shift.md
+M	tests/acceptance/test_structure_map.py
+M	tests/property/test_structure_map.py
+M	tests/unit/test_make_map.py
+```
+
+(PR A's three files — `docs/specs/structure-map.md`, `STRUCTURE.md`, this record — are already on `main` via merge `d8ba07f`, so they no longer appear in the range.) Still to be written in Phase 4 / later:
+
+| Artifact | Status | Owner step |
+|---|---|---|
+| `scripts/make_map.py` — the generator fix + corrected `_drop_long_defaults` docstring (`:376-381` still documents the shifting/`None` effects as intended) | **not written** | S4.2 |
+| `STRUCTURE.md` — regeneration, **last** step of the same commit as the `.py` change (REQ-021/AC-021, REQ-023 hook) | **not written** (`--check` exit 1) | S4.2/S4.4 |
+| `docs/verification/traceability.md` — update the structure-map `REQ-014/AC-014` row (`:1034`, currently `GREEN (structure-map S5.1 …)`) and add rows for `test_edge_017_over_long_default_keeps_its_slot` + `test_inv_007_signature_fidelity_survives_default_abbreviation` + `test_ac_014_committed_map_renders_over_long_default_in_place`, naming this change inside the Status cell (Q-129 convention B). INV-007/EDGE-017 rows already exist for **other** specs (`:135`, `:536`, `:155`, `:243`, `:319`, `:554`, `:852`) — the bare-ID namespace (F-09). Legal now: the witnesses exist since `0ecf7bc`. | **not written** | S5.3 |
+| `CHANGELOG.md` — `## [Unreleased]` → `Fixed` entry (F-20) | **not written** | S6.4 |
+| `pyproject.toml` — `bump-my-version bump patch` `1.1.0 → 1.1.1` (verified still `1.1.0` on both `main` and this branch), entries moved to `## [1.1.1] - <date>` in the same commit | **not written** | S6.4 |
+
+**Targeted GREEN commands for S4.2 (§4.5 `green_command`, unchanged):**
+
+```text
+uv run pytest tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot \
+              tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures \
+              tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation \
+              tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place -v
+uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q
+uv run python scripts/make_map.py && uv run python scripts/make_map.py --check   # both exit 0
+```
+
+The second command pair is the map-regeneration pair (write, then verify exit 0); the acceptance witness and `test_ac_021_committed_map_matches_fresh_render` go GREEN only after the regeneration, so the generator run must come **after** every `.py` edit in the commit (P-94: never run the write form while collecting evidence — `--check` or `--out <temp>` only).
+
+**Gate ◆ S4.1: task picked, RED re-observed, fix target located by content, §5.1 confirmed against the live code shape.** Next: **S4.2 Implement + confirm GREEN**.
