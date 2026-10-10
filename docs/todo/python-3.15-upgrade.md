@@ -4,7 +4,8 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
+  <!-- WAITING since 2026-10-05: P.2 returned BLOCKED-USER with 34 questions (Q-1 … Q-34) in docs/questions/python-3.15-upgrade.md, all still PENDING. The P.2 trigger re-measure also found the 3.15 trigger has NOT fired (only cpython-3.15.0b1; pydantic-core has no cp315 wheel), so this change is blocked on the user's answers AND on the external trigger. -->
 - **Change type:** DOCS/CHORE  <!-- provisional: config/CI only; escalates to REFACTOR if 3.15-only features are adopted in src/, or to ISSUE if the upgrade exposes a defect -->
 - **Created:** 2026-10-04
 - **Question file:** `docs/questions/python-3.15-upgrade.md`

@@ -113,7 +113,7 @@ The implement phase is decomposed into five atomic steps (repeated per task in t
 
 ### 7. Commit & update status — FEATURE/CROSS-CUTTING
 
-12. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`.
+12. **Commit & Update Status:** Set `"status": "VERIFIED"` in `.github/task-runner/tasks.json`. Sync final statuses back to `docs/tasks/[name].tasks.json`. The change's `CHANGELOG.md` entry under `## [Unreleased]` is added in Phase 6, not here (every change type owes one — AGENTS.md "Versioning").
 
 ## Rules
 

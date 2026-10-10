@@ -8,7 +8,7 @@ default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.16.10
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -30,6 +30,13 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^(pyproject\.toml|uv\.lock|src/|tests/|scripts/|migrations/)
+      - id: structure-map-check
+        name: structure map is up to date
+        entry: uv run python scripts/make_map.py --check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: \.py$
       - id: mkdocs-build
         name: mkdocs build --strict
         entry: uv run --group docs mkdocs build --strict

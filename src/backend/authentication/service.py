@@ -125,6 +125,19 @@ class AuthService:
         origin: str = "http://localhost:3000",
         permission_service: PermissionChecker | None = None,
     ) -> None:
+        """Wire the service from injected collaborators.
+
+        The five positional repositories are required; each keyword selects a
+        behavior. ``event_bus=None`` publishes nothing (REQ-020); a ``None``
+        ``attempt_tracker`` installs the in-memory default, and
+        ``max_failed_attempts``/``lockout_duration`` then define the lockout policy
+        (REQ-004) — with an injected tracker those two are unused. A ``None``
+        ``webauthn_provider`` builds :class:`PyWebAuthnProvider` from
+        ``rp_id``/``rp_name``/``origin``. ``permission_service=None`` is standalone
+        mode: enforced methods run unchecked (user-roles-permissions AC-031).
+        ``session_ttl``/``reset_token_ttl`` are fixed at construction and stamped
+        into each issued row, so changing them later never affects live rows.
+        """
         self._user_manager = user_manager
         self._user_repository = user_repository
         self._session_repository = session_repository
@@ -151,6 +164,11 @@ class AuthService:
     # --- private helpers (not traced by @logged_class) ---
 
     def _publish(self, event: object) -> None:
+        """Send ``event`` when a publisher is wired (``None`` publisher = no events, REQ-020).
+
+        A publisher exception is not caught here, so a failing publisher surfaces
+        to the calling operation.
+        """
         if self._event_bus is not None:
             self._event_bus.publish(event)
 
@@ -160,6 +178,11 @@ class AuthService:
             self._hasher.verify(_DUMMY_HASH, "irrelevant-password")
 
     def _user_by_identifier(self, identifier: str) -> User | None:
+        """Resolve a login identifier: username first, then email (REQ-001).
+
+        No match is ``None``, which the caller turns into the unified login failure
+        rather than a "no such user" error (REQ-003).
+        """
         user = self._user_repository.get_by_username(identifier)
         if user is None:
             user = self._user_repository.get_by_email(identifier)
@@ -173,6 +196,12 @@ class AuthService:
         ip: str | None = None,
         device_name: str | None = None,
     ) -> LoginResult:
+        """Issue a session the same way for both login methods (REQ-018).
+
+        Mints a token, stores only its SHA-256 hash (REQ-006), publishes
+        ``LoginSucceeded``, and returns the raw token exactly once — no later read
+        of the session yields it (REQ-021).
+        """
         token = new_token()
         now = datetime.now(UTC)
         session = Session(
@@ -196,6 +225,15 @@ class AuthService:
     # --- password login ---
 
     def login(self, request: LoginRequest, principal: Principal = _SYSTEM_PRINCIPAL) -> LoginResult:
+        """Authenticate by username or email and open a session (REQ-001).
+
+        Every rejection — locked identifier, unknown user, inactive user, wrong
+        password — raises the same :class:`InvalidCredentialsError`, and the locked
+        and unknown/inactive paths still run an Argon2id verification so response
+        time does not reveal the identifier's state (REQ-003/REQ-005). Failures are
+        counted against the identifier exactly as typed; a success clears the count
+        (REQ-004).
+        """
         identifier = request.identifier
 
         if self._attempt_tracker.is_locked(identifier):
@@ -228,12 +266,22 @@ class AuthService:
     # --- sessions ---
 
     def session_info(self, token: str, principal: Principal = _SYSTEM_PRINCIPAL) -> SessionInfo:
+        """Introspect the session a raw token stands for (REQ-008).
+
+        The token is hashed for the lookup and never stored or echoed; unknown,
+        revoked, and expired tokens are indistinguishable (EDGE-004/EDGE-005).
+        """
         session = self._session_repository.get_by_token_hash(hash_token(token))
         if session is None or session.revoked or session.expires_at <= datetime.now(UTC):
             raise InvalidSessionError("invalid session")
         return SessionInfo(user_id=session.user_id, created_at=session.created_at, expires_at=session.expires_at)
 
     def logout(self, token: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
+        """Revoke the session behind a raw token (REQ-009).
+
+        An unknown, already revoked, or expired token is an idempotent no-op that
+        publishes nothing (AC-014/EDGE-006).
+        """
         session = self._session_repository.get_by_token_hash(hash_token(token))
         if session is not None and not session.revoked and session.expires_at > datetime.now(UTC):
             self._session_repository.revoke(session.id)
@@ -244,6 +292,14 @@ class AuthService:
     def request_password_reset(
         self, request: PasswordResetRequest, principal: Principal = _SYSTEM_PRINCIPAL
     ) -> str | None:
+        """Start a password reset for an email address (REQ-010).
+
+        The observable result is the same for a registered and an unregistered
+        address: no error either way, and the raw token is returned exactly once
+        (``None`` when nothing was created, AC-016/EDGE-007). The address is
+        lower-cased before the lookup, and a registered address has all of its
+        earlier pending tokens invalidated first (REQ-011).
+        """
         email = request.email.lower()
         user = self._user_repository.get_by_email(email)
         if user is None:
@@ -265,6 +321,13 @@ class AuthService:
         return token
 
     def complete_password_reset(self, request: PasswordResetComplete, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
+        """Spend a reset token: change the password, consume the token, revoke every session (REQ-012).
+
+        The rejection reasons are tested in the order unknown, used, expired, so a
+        token that is both used and expired reports ``reason="used"`` (REQ-013).
+        The password change goes through user-management, so the shared password
+        rules apply and the hash is never touched here (REQ-002).
+        """
         reset = self._reset_repository.get_by_token_hash(hash_token(request.token))
         now = datetime.now(UTC)
         if reset is None:
@@ -284,6 +347,12 @@ class AuthService:
     def begin_passkey_registration(
         self, request: PasskeyRegistrationBegin, principal: Principal = _SYSTEM_PRINCIPAL
     ) -> dict[str, Any]:
+        """Return the WebAuthn registration options for a user (REQ-014/AC-022).
+
+        Enforced as ``authentication.begin_passkey_registration`` (user-roles-permissions
+        REQ-024). The provider keeps the challenge under the user id, so a second
+        begin for the same user replaces the in-flight one.
+        """
         return self._webauthn_provider.generate_registration_options(
             request.user_id, request.username, request.display_name
         )
@@ -292,6 +361,13 @@ class AuthService:
     def complete_passkey_registration(
         self, request: PasskeyRegistrationComplete, principal: Principal = _SYSTEM_PRINCIPAL
     ) -> WebAuthnCredentialRead:
+        """Verify a registration response, store the credential, and return its read model (REQ-014/AC-023).
+
+        The provider's username argument is passed empty — the stored row is keyed by
+        user id alone. A failed verification raises
+        :class:`InvalidPasskeyResponseError` and stores nothing (EDGE-013). Enforced
+        as ``authentication.complete_passkey_registration``.
+        """
         credential = self._webauthn_provider.verify_registration_response(request.user_id, "", request.response)
         now = datetime.now(UTC)
         row = WebAuthnCredential(
@@ -313,6 +389,11 @@ class AuthService:
     def begin_passkey_login(
         self, request: PasskeyLoginBegin, principal: Principal = _SYSTEM_PRINCIPAL
     ) -> dict[str, Any]:
+        """Return the WebAuthn assertion request for a stored credential id (REQ-015/AC-024).
+
+        An unknown credential id fails before any challenge is generated
+        (EDGE-014). This is an exempt operation: no permission check (REQ-024).
+        """
         credential = self._webauthn_repository.get_by_credential_id(request.credential_id)
         if credential is None:
             raise PasskeyCredentialNotFoundError("credential not found")
@@ -321,6 +402,15 @@ class AuthService:
     def complete_passkey_login(
         self, request: PasskeyLoginComplete, principal: Principal = _SYSTEM_PRINCIPAL
     ) -> LoginResult:
+        """Verify an assertion and open the session it earned (REQ-015/AC-025).
+
+        The assertion is verified before the stored row is read, so a forged response
+        fails in the provider rather than against the store (EDGE-016). A sign count
+        below the stored one raises :class:`PasskeyHijackError` and issues nothing
+        (REQ-016); otherwise the stored count is advanced to the presented one and a
+        ``method="passkey"`` session is issued alongside any password the user has
+        (REQ-018).
+        """
         assertion = self._webauthn_provider.verify_authentication_response(request.credential_id, request.response)
         credential = self._webauthn_repository.get_by_credential_id(request.credential_id)
         if credential is None:
@@ -333,6 +423,11 @@ class AuthService:
 
     @requires_permission("authentication.list_passkeys")
     def list_passkeys(self, user_id: UUID, principal: Principal = _SYSTEM_PRINCIPAL) -> list[WebAuthnCredentialRead]:
+        """The credentials stored for a user as read models (REQ-017/AC-027).
+
+        Transports are decoded from the JSON column and the public key is never
+        exposed (REQ-021). Enforced as ``authentication.list_passkeys``.
+        """
         rows = self._webauthn_repository.list_for_user(user_id)
         return [
             WebAuthnCredentialRead(
@@ -345,6 +440,12 @@ class AuthService:
 
     @requires_permission("authentication.delete_passkey")
     def delete_passkey(self, user_id: UUID, credential_id: str, principal: Principal = _SYSTEM_PRINCIPAL) -> None:
+        """Remove one of a user's credentials (REQ-017/AC-028).
+
+        An unknown credential id and a credential owned by someone else raise the
+        same :class:`PasskeyCredentialNotFoundError`, so the error does not reveal
+        which case occurred (EDGE-014). Enforced as ``authentication.delete_passkey``.
+        """
         credential = self._webauthn_repository.get_by_credential_id(credential_id)
         if credential is None or credential.user_id != user_id:
             raise PasskeyCredentialNotFoundError("credential not found")

@@ -7,6 +7,7 @@
 [![Ruff](https://img.shields.io/badge/lint-ruff-blue)](https://docs.astral.sh/ruff/)
 [![uv](https://img.shields.io/badge/env-uv-blue)](https://docs.astral.sh/uv/)
 [![pre-commit](https://img.shields.io/badge/hooks-pre--commit-blue)](https://pre-commit.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Default template for Python projects.
 

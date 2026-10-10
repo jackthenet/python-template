@@ -42,6 +42,12 @@ class PyWebAuthnProvider(WebAuthnProvider):
     """
 
     def __init__(self, rp_id: str, rp_name: str, origin: str) -> None:
+        """Fix the relying-party identity used as the expected values of every verification.
+
+        The two challenge maps are the provider's only state: registration challenges
+        are keyed by user id, authentication challenges by credential id, because the
+        ``verify_*`` calls receive only the response.
+        """
         self._rp_id = rp_id
         self._rp_name = rp_name
         self._origin = origin
@@ -49,6 +55,13 @@ class PyWebAuthnProvider(WebAuthnProvider):
         self._authentication_challenges: dict[str, str] = {}
 
     def generate_registration_options(self, user_id: UUID, username: str, display_name: str | None) -> dict[str, Any]:
+        """Build registration options and remember their challenge under the user id.
+
+        ``display_name`` falls back to ``username``; a second call for the same user
+        replaces the stored challenge and so invalidates an in-flight registration.
+        The returned mapping is the browser-facing ``public_dict``, not the options
+        object.
+        """
         webauthn = _webauthn()
         options = webauthn.generate_registration_options(
             rp_id=self._rp_id,
@@ -63,6 +76,14 @@ class PyWebAuthnProvider(WebAuthnProvider):
     def verify_registration_response(
         self, user_id: UUID, username: str, response: dict[str, Any]
     ) -> VerifiedCredential:
+        """Verify a registration response against the challenge stored for the user id (REQ-014).
+
+        ``username`` is not part of this provider's verification — the credential is
+        bound to the user id by the caller. The challenge is consumed before
+        verification, so it cannot be replayed and a response with no stored
+        challenge is checked against an empty expectation. Any underlying failure is
+        re-raised as :class:`InvalidPasskeyResponseError` (EDGE-013).
+        """
         webauthn = _webauthn()
         challenge = self._registration_challenges.pop(str(user_id), "")
         try:
@@ -84,6 +105,11 @@ class PyWebAuthnProvider(WebAuthnProvider):
         )
 
     def generate_authentication_options(self, credential_id: str) -> dict[str, Any]:
+        """Build the assertion request for one credential id and remember its challenge under that id.
+
+        User verification is "preferred" rather than required, matching the
+        verification calls, which pass ``require_user_verification=False``.
+        """
         webauthn = _webauthn()
         options = webauthn.generate_authentication_options(
             credential_ids=[credential_id],
@@ -94,6 +120,13 @@ class PyWebAuthnProvider(WebAuthnProvider):
         return options.public_dict
 
     def verify_authentication_response(self, credential_id: str, response: dict[str, Any]) -> VerifiedAssertion:
+        """Verify an assertion and report the sign count it presents (REQ-015).
+
+        The caller compares that count with the stored one for hijack detection
+        (REQ-016) — this method does not. A missing challenge means an empty
+        expectation, and any underlying failure becomes
+        :class:`InvalidPasskeyResponseError` (EDGE-016).
+        """
         webauthn = _webauthn()
         challenge = self._authentication_challenges.pop(credential_id, "")
         try:

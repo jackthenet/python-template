@@ -53,7 +53,7 @@ Not lazy about: understanding the problem (read it fully and trace the real flow
 This repository utilizes modern Python tooling managed via `uv`:
 - **Package Manager:** `uv` (Use `uv run <command>` for isolated execution)
 - **Quality Assurance & Formatting:** `ruff` (`uv run ruff check .` / `uv run ruff format .`). **Scope split:** per-task steps (S3.2, S4.3, S4.4) lint only the step's changed paths (`uv run ruff check <changed-paths>`); the whole-repo sweep (`uv run ruff check .`) runs **once at Phase 5** (verify), matching CI (`.github/workflows/lint.yml`) exactly — pre-existing lint errors are in scope, not out of scope. Ruff's built-in content-hash cache (`.ruff_cache`) makes re-runs over unchanged files cheap.
-- **Type Checking:** `mypy` (`uv run mypy src/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool. mypy runs on `src/` (the import closure needs the whole package); its built-in cache (`.mypy_cache`) is keyed on file hashes, so unchanged files are not re-checked.
+- **Type Checking:** `mypy` (`uv run mypy src/` / `uv run mypy scripts/`) — the gate; `ty` (`uv run ty check src/`) is the fast local/LSP tool. mypy runs on `src/` (the import closure needs the whole package); its built-in cache (`.mypy_cache`) is keyed on file hashes, so unchanged files are not re-checked.
 - **Test Runner:** `pytest` (`uv run pytest`)
 - **Property Testing:** `hypothesis` (`uv run pytest tests/property/`)
 - **Standard Verification:** `uv run pytest tests/`
@@ -62,6 +62,7 @@ This repository utilizes modern Python tooling managed via `uv`:
 - **Dependency Check:** `deptry` (`uv run deptry .`) — detects unused/missing/misplaced dependencies; configuration in `[tool.deptry]` (per-rule ignores for CLI/pytest-plugin tools).
 - **Documentation Site:** `mkdocs` + `mkdocs-material` + `mkdocstrings[python]` (`uv run --group docs mkdocs build --strict`) — published docs generated from `userdocs/` (never `docs/` — that is the internal process record).
 - **Test Tooling:** `polyfactory` (factories for Pydantic/SQLModel models), `respx` (httpx mocking), `time-machine` (time travel) — see "Using the Test Tooling".
+- **Structure Map:** `STRUCTURE.md` (repository root) is the generated map of the repository — generate it with `uv run python scripts/make_map.py`, check it with `uv run python scripts/make_map.py --check`; regenerate it in the same commit as the `.py` change, and on a merge conflict in it take either side and regenerate (never hand-merge the generated file). How-to skill: `code-structure-map`.
 
 **MkDocs site note.** Published docs live in `userdocs/` (binding decision Q-64; never `docs/` — that is the internal process record: specs, decisions, verification, workflow). Build gate: `uv run --group docs mkdocs build --strict` (the docs tooling is the `docs` dependency group, not the default `dev` group; `uv sync --group docs` installs it); CI: the `docs` job in `.github/workflows/quality.yml`; pre-push: the `mkdocs-build` hook in `.pre-commit-config.yaml`.
 
@@ -139,7 +140,7 @@ All **scheduled** human interaction happens **before** the workflow runs. Phase 
 | Step | Owner | Objective | Done when |
 |---|---|---|---|
 | **P.1 Frame** | orchestrator | classify the change type (Phase 0); create the TODO file and the question file from their templates; create the change's todo set; **value-triage the TODO** (existing overlap, beneficiary, 1–5 score, recommendation — see "Backlog value triage") | both files exist on `main`; the orchestrator sets TODO `Status: PREPARING`; the TODO's `## Value triage` section is filled in (the user's decision is recorded **before P.4**) |
-| **P.2 Interrogate** | subagent (specify skill) | adversarially interrogate the idea; record every question in `docs/questions/<name>.md` | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch; overlap checked against `docs/specs/` **and** every TODO in `docs/todo/` |
+| **P.2 Interrogate** | subagent (specify skill) | adversarially interrogate the idea; record every question in `docs/questions/<name>.md` | ≥ 20 questions (FEATURE/CROSS-CUTTING) recorded in **one** `BLOCKED-USER` batch, **every** entry carrying a `Recommended:` answer with a one-line reason, and a `### Category coverage` table marking each interrogation category `covered (Q-nn / E-nn)` or `skipped — <reason>` (on top of the floor, never instead of it); a non-goals / scope-boundary question asked and recorded; overlap checked against `docs/specs/` **and** every TODO in `docs/todo/` |
 | **P.3 Answer** | orchestrator ⏸ | present the batch (≤ 4 per `ask_user_question` round, most blocking first) and record the answers | every question `ANSWERED` + incorporated; the orchestrator sets TODO `Status: QUESTIONS-ANSWERED` |
 | **P.4 Draft** | subagent (specify skill) | create the change branch + worktree from `main` (so the branch carries the TODO and the answers), then write the type's Phase 1 output: draft spec (FEATURE/CROSS-CUTTING), triage (ISSUE), GREEN baseline (REFACTOR), scope (DOCS/CHORE) | the artifact exists in the worktree and is committed |
 | **P.5 Verify self-consistency** | subagent (specify skill) — **FEATURE/CROSS-CUTTING only** | run the Self-Consistency Checklist + the Dependency Smoke-Test against the draft specification; fix the specification itself | the specification passes the Self-Consistency Checklist and the Dependency Smoke-Test; the orchestrator sets the TODO `Status: READY` |
@@ -322,6 +323,8 @@ POST-MERGE [S] CLEANUP (git skill)
 | Phase 5: VERIFY | `verify` | all | Produces evidence that the change satisfies its type-specific gates. |
 | Phase 6: REVIEW | `review` | all | Reviews the change against its type-specific criteria before reviewing implementation style. |
 | (cross-cutting) | `git` | all | Branch/worktree creation, PR creation, post-merge cleanup. |
+| (ambient) | `code-structure-map` | all | Optional, before exploring: read the generated `STRUCTURE.md` map instead of walking the tree, and regenerate it with the change. |
+| (ambient) | `python-best-practices` | all | Conventions and vetted good-code examples for writing, reviewing or refactoring Python. |
 
 Non-phase skills: `.agents/skills/update-readme/` (refresh `README.md` to current GitHub front-page practice, badges backed only by facts that exist) maps to no workflow phase.
 
@@ -384,7 +387,7 @@ The step subagent MUST end with a structured handoff:
 
 #### Question files (`docs/questions/<name>.md`)
 
-Questions that need user input are recorded persistently in **one file per change** — `docs/questions/<name>.md`, created at **P.1** from `docs/questions/template.md` — so they are not lost between steps. Each entry has: the question, the generating step (step ID `P.x` / `Sx.x` + phase), why it is needed, the context at the time, the user's answer, the date/status, and whether the answer has been incorporated.
+Questions that need user input are recorded persistently in **one file per change** — `docs/questions/<name>.md`, created at **P.1** from `docs/questions/template.md` — so they are not lost between steps. Each entry has: the question, the generating step (step ID `P.x` / `Sx.x` + phase), why it is needed, the context at the time, the step's recommended answer with a one-line reason, the user's answer, the date/status, and whether the answer has been incorporated.
 
 - **MAY create questions:** any step, when it meets an ambiguity, a missing requirement, or a decision that requires user input.
 - **MUST create questions:** the **Interrogate** step (**P.2**) MUST create a question for every ambiguity, missing requirement, edge case, and scope boundary it identifies — the prep phase is where user input is most needed. Any step that returns `BLOCKED-USER` MUST have its questions recorded in the change's question file.
@@ -603,8 +606,9 @@ All types. After verification passes:
 7. Produce a review report documenting any findings and their resolutions.
 8. **The change is only considered complete when the review report is clean.**
 9. **When the review report is clean, document reusable shared capabilities in `AGENTS.md`** (FEATURE/CROSS-CUTTING only). If the change is a shared capability reusable by future changes (not a one-off), add a short "how to use this" note so future changes use it correctly. Skip this if the change is not applicable to other changes.
-10. **When the review report is clean, bump the version per the change type** (Versioning section: ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE). Run `bump-my-version bump <level>` in the change worktree with a clean working tree; the bump commit is part of the PR.
-11. **When the review report is clean, open a PR** for the change branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
+10. **When the review report is clean, add the change's `CHANGELOG.md` entry** — append it under `## [Unreleased]` in the root `CHANGELOG.md` (Keep a Changelog headings: `Added` / `Changed` / `Fixed` / `Removed`). Every change type writes one, REFACTOR and DOCS/CHORE included (usually under `Changed`). One line per user-observable change, traced to what this change actually did — never invented prose. The entry is part of the reviewed PR.
+11. **When the review report is clean, bump the version per the change type** (Versioning section: ISSUE → `patch`, FEATURE → `minor`, CROSS-CUTTING → `minor`/`major`; no bump for REFACTOR/DOCS-CHORE). Run `bump-my-version bump <level>` in the change worktree with a clean working tree; the bump commit is part of the PR. When a bump is made, move the `## [Unreleased]` entries into a new `## [<new version>] - <YYYY-MM-DD>` section in the same commit as the bump (`CHANGELOG.md` is hand-maintained — `bump-my-version` does not touch it).
+12. **When the review report is clean, open a PR** for the change branch to `main` and present it for human review/merge, then STOP. The agent MUST NOT merge the PR itself (human governance).
 
 ### Escalation Rules (Type Conversion)
 
@@ -706,7 +710,7 @@ An agent MUST:
 14. Record every `BLOCKED-USER` question in the change's question file `docs/questions/<name>.md` (step, why needed, context, question, answer, status, incorporated) and present it to the user before that change proceeds.
 15. Run **ruff** after each implementation or test step and require it to be clean before the step's other gates.
 16. Log friction (failed/relaunched/iterating/blocked steps) in `docs/workflow/PROBLEMS.md` so the after-workflow-optimization can read it.
-17. Prepare every change before running its workflow (Phase P): TODO file, ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING, all answers recorded, draft spec / triage / baseline / scope, self-consistency check (FEATURE/CROSS-CUTTING); the **value triage** (overlap, beneficiary, 1–5 score, recommendation) with the user's implement / merge / drop decision recorded before P.4.
+17. Prepare every change before running its workflow (Phase P): TODO file, ≥ 20 interrogation questions for FEATURE/CROSS-CUTTING — plus, for every type, a `Recommended:` answer on every question entry, a `### Category coverage` table in the question file, and a non-goals / scope-boundary question (all three **on top of** the floor, never instead of it) — all answers recorded, draft spec / triage / baseline / scope, self-consistency check (FEATURE/CROSS-CUTTING); the **value triage** (overlap, beneficiary, 1–5 score, recommendation) with the user's implement / merge / drop decision recorded before P.4.
 18. Keep the workflow moving: when a change reaches a human gate, mark it WAITING and continue with the next READY change; resume it with a fresh subagent when its gate clears.
 
 ---
@@ -740,7 +744,7 @@ An agent MUST:
 - **Type Safety:** Strict typing required. Every function signature must have explicit parameters and return type hints.
 - **Testing Standard:** Framework `pytest`. Tests must precede implementation code. Never remove existing tests without explicit spec authorization.
 - **Property Testing:** Use `hypothesis` for invariant verification. Strategies must match the domain.
-- **Documentation:** Keep docstrings concise; explain *why* non-obvious logic exists rather than restating *what* the code does.
+- **Documentation:** Keep docstrings concise; explain *why* non-obvious logic exists rather than restating *what* the code does. Docstrings are **Google style** and gated by ruff `D` over `src/` (`tests/`, `scripts/`, `migrations/`, `.github/` are exempt via `per-file-ignores`); every public object in a backend package carries a docstring that states something its signature does not — filler that restates the signature ("Get the user.") is rejected in review.
 
 ---
 
@@ -759,6 +763,7 @@ The project version is a semantic version (major.minor.patch) stored in `pyproje
   | REFACTOR / DOCS-CHORE | none |
 
 - **When:** Phase 6 (REVIEW), after the review report is clean and before the PR is opened. The working tree MUST be clean first (`allow_dirty` is off). The tool commits the version change with a templated message; that bump commit is part of the reviewed PR.
+- **Changelog:** the root `CHANGELOG.md` is hand-maintained (no `[[tool.bumpversion.files]]` entry): every change adds an entry under `## [Unreleased]` in Phase 6, and the agent that makes a bump moves those entries into a new `## [<new version>] - <YYYY-MM-DD>` section in the bump commit. Changes with no bump (REFACTOR, DOCS/CHORE) leave their entries under `## [Unreleased]` until the next bumped release.
 - **Tagging:** `tag = false` — the workflow never creates version tags on change branches. Version tags (e.g., `v0.2.0`) are created on `main` at release time, outside the workflow.
 - **Dry run:** `bump-my-version bump <level> --dry-run` previews the file changes without touching anything.
 
@@ -1162,33 +1167,40 @@ Before starting Phase 2, verify approval via:
 The spec is drafted and self-checked during **Phase P**; S1.4 only commits it and opens the approval PR, so the approval check runs after that PR is merged — the caching rule is unchanged.
 
 ## Project Structure
-The project is organized around a single `src/` package, with `frontend` and `backend` as the primary runtime boundaries inside it.
+The project is organized around a single `src/` package, and `backend` is the only runtime boundary that exists inside it: no `src/frontend/` directory exists (the coverage configuration reserves the name). Feature packages under `src/backend/` are flat — there is no `model/` and no `services/` subdirectory anywhere — and the only nested directory under `src/` is `src/backend/filemanagement/assets/`.
 
 ```text
 project/
+├── .agents/
+│   └── skills/
+├── .github/
+├── .vscode/
 ├── docs/
-│   ├── specs/
-│   └── decisions/
+├── userdocs/
+│
+├── scripts/
+├── migrations/
+│   └── versions/
 │
 ├── src/
 │   ├── main.py
-│   ├── frontend/
-│   │   ├── <feature>/
-│   │   │   ├── model/
-│   │   │   ├── services/
-│   │   │   └── ...
-│   │   └── shared/
 │   └── backend/
 │       ├── <feature>/
-│       │   ├── model/
-│       │   ├── services/
-│       │   └── ...
+│       │   └── <module>.py
+│       ├── filemanagement/
+│       │   └── assets/
 │       └── shared/
 │
 └── tests/
-    └── acceptance/
-        └── <feature>/
+    ├── acceptance/
+    │   └── <feature>/
+    ├── contract/
+    ├── integration/
+    ├── property/
+    └── unit/
 ```
+
+The generated `STRUCTURE.md` at the repository root is the authoritative map of this layout (see "Tooling & Execution Environment"); it is never hand-edited.
 
 ### Principles
 

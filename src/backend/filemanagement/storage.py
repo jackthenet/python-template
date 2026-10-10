@@ -91,6 +91,11 @@ class LocalDiskStorageBackend(StorageBackend):
     """
 
     def __init__(self, root: Path) -> None:
+        """Store content under ``root``; the directory itself is made by ``put``.
+
+        ``root`` is resolved on every operation rather than at construction, so
+        a not-yet-existing root is accepted here.
+        """
         self._root = Path(root)
 
     def _target(self, key: str) -> Path:
@@ -112,6 +117,12 @@ class LocalDiskStorageBackend(StorageBackend):
         return target
 
     def put(self, key: str, data: bytes | BinaryIO) -> None:
+        """Write to a temp file in ``root``, then ``os.replace`` it into place.
+
+        A failed write unlinks the temp file, so no partial content is left and
+        the previous content stays untouched; a stream source is copied rather
+        than read whole.
+        """
         target = self._target(key)
         tmp: str | None = None
         try:
@@ -131,6 +142,11 @@ class LocalDiskStorageBackend(StorageBackend):
             raise StorageError(key, "io") from e
 
     def get(self, key: str) -> BinaryIO:
+        """Open the stored file; the caller owns closing the returned stream.
+
+        The existence check and the open are separate steps, so a file deleted
+        in between surfaces as ``reason='io'`` rather than ``'not_found'``.
+        """
         target = self._target(key)
         if not target.is_file():
             raise StorageError(key, "not_found")
@@ -140,6 +156,11 @@ class LocalDiskStorageBackend(StorageBackend):
             raise StorageError(key, "io") from e
 
     def delete(self, key: str) -> None:
+        """Unlink the stored file; an already-missing file is not an error.
+
+        Something that is not a regular file at the target path raises
+        ``StorageError(reason='io')``.
+        """
         target = self._target(key)
         try:
             target.unlink(missing_ok=True)
@@ -147,6 +168,11 @@ class LocalDiskStorageBackend(StorageBackend):
             raise StorageError(key, "io") from e
 
     def exists(self, key: str) -> bool:
+        """Whether a regular file sits at ``key``.
+
+        A key that would escape the root reports ``False`` instead of raising —
+        the rejection is swallowed here.
+        """
         try:
             target = self._target(key)
         except StorageError:
@@ -154,6 +180,11 @@ class LocalDiskStorageBackend(StorageBackend):
         return target.is_file()
 
     def stat(self, key: str) -> StorageStat | None:
+        """Size and modification time read from the filesystem (mtime as UTC).
+
+        An invalid key or a non-file target yields ``None``, as does a missing
+        key.
+        """
         try:
             target = self._target(key)
         except StorageError:
@@ -173,27 +204,45 @@ class InMemoryStorageBackend(StorageBackend):
     """
 
     def __init__(self) -> None:
+        """Start empty; the two dicts are the instance's entire state.
+
+        ``_updated_at`` is tracked separately because there is no filesystem
+        mtime to read back.
+        """
         self._data: dict[str, bytes] = {}
         self._updated_at: dict[str, datetime] = {}
 
     def put(self, key: str, data: bytes | BinaryIO) -> None:
+        """Replace the whole value in one assignment and stamp the write time.
+
+        A stream source is consumed fully first, so a concurrent reader never
+        observes a half-written value (EDGE-017).
+        """
         content = bytes(data) if isinstance(data, (bytes, bytearray, memoryview)) else data.read()
         self._data[key] = content
         self._updated_at[key] = datetime.now(UTC)
 
     def get(self, key: str) -> BinaryIO:
+        """A fresh ``BytesIO`` over the stored bytes on every call.
+
+        The stream is independent of the store: reading or closing it cannot
+        change what the next read returns.
+        """
         if key not in self._data:
             raise StorageError(key, "not_found")
         return io.BytesIO(self._data[key])
 
     def delete(self, key: str) -> None:
+        """Drop the value and its timestamp; a missing key is a no-op."""
         self._data.pop(key, None)
         self._updated_at.pop(key, None)
 
     def exists(self, key: str) -> bool:
+        """Membership in the content dict — no key validation happens here."""
         return key in self._data
 
     def stat(self, key: str) -> StorageStat | None:
+        """Size computed from the stored bytes, timestamp from the last write."""
         if key not in self._data:
             return None
         return StorageStat(size=len(self._data[key]), updated_at=self._updated_at[key])

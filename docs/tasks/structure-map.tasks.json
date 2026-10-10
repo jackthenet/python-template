@@ -1,0 +1,596 @@
+{
+  "feature": "structure-map",
+  "spec": "docs/specs/structure-map.md",
+  "branch": "feature/structure-map",
+  "change_type": "FEATURE",
+  "adr": "docs/decisions/ADR-085-committed-generated-structure-map-check-only-local-hook.md + docs/decisions/ADR-086-scripts-type-checked-tree.md",
+  "grouping": "FEATURE (single feature, single spec) - NOT grouped by affected feature (the spec has no Impact Analysis). The grouping axis is the generator's own layering, so each render layer is independently verifiable: T-001 the widened type gate the generator lands in (ADR-086); T-002 the generator harness (module, CLI, file set, exit codes, document shape); T-003 the Directory tree section + Packages scope + group/module headers + path form; T-004 the symbol inventory (signatures, decorators, visibility, fields, summaries); T-005 --check + determinism + hook-clean output; T-006 the integration surface (skill, local pre-commit hook, AGENTS.md, advisory rule, freshness policy); T-007 the committed STRUCTURE.md artifact. T-007 is LAST by ADR-085 - the map is generated after the generator, the skill, the hook and the AGENTS.md edits exist, so the committed map reflects the post-change tree; AC-021, NFR-002 and NFR-005 can therefore only be gated by T-007. No task is created for regenerating the map after chore/remove-spec-tdd-driver: that PR is already merged (a2000c2, reachable from this branch) and its condition is satisfied (verification record finding F-08).",
+  "gate_interlock": "This change adds NO dependency (REQ-001: the generator is stdlib-only), so there is no deptry interlock; the interlocks that exist are gate-scope interlocks, and they are what makes the task order non-arbitrary. (1) TYPE GATE: T-001 widens the gate (`uv run mypy scripts/` joins the quality.yml type-check job) BEFORE T-002 adds scripts/make_map.py, so the generator is written under the widened gate from its first commit; T-002..T-005 each carry `uv run mypy scripts/` clean in their completion gates because they are the tasks that can break it. (2) MAP HOOK vs. ARTIFACT: T-006 adds the `structure-map-check` hook (`stages: [pre-commit]`, `files: \\.py$`) while STRUCTURE.md does not exist until T-007, so between T-006 and T-007 no `.py` file may be committed - the hook would exit 3 (map missing). T-006 and T-007 commit no `.py` file, and pre-commit is not installed in this repository's shared hooks dir (measured: `.git/hooks/pre-commit` absent), so the interlock is latent, not active; it is recorded because a Phase 4 fix-up that touches a `.py` after T-006 must regenerate the map in the same commit (REQ-027). Measured hook stages in .pre-commit-config.yaml: `deptry` at `pre-commit`, `mkdocs-build` at `pre-push` - the new hook follows the `deptry` stage. (3) NO CI MAP JOB (AC-023, ADR-085): no task adds a GitHub Actions job for `make_map.py --check`; the only workflow edit in the whole DAG is T-001's one added mypy invocation. (4) FROZEN GATE SCOPE: coverage (`source = [\"src/backend\", \"src/frontend\"]`, `fail_under = 92`), complexipy (`paths = [\"src\", \"tests\"]`, max-complexity 15), bandit (`-r src/`) and `ty` (`root = [\"./src\"]`) are unchanged by every task and `fail_under = 92` must not move - `scripts/` and its tests earn no coverage credit (ADR-086, spec §13). (5) TEST PATHS: exactly the three fixed paths the spec names (tests/acceptance/test_structure_map.py, tests/unit/test_make_map.py, tests/property/test_structure_map.py); no task creates a new test directory (Q-10). (6) COMPLEXITY: the `complexity` CI job runs `uv run complexipy src tests --max-complexity-allowed 15` (P-56) - every function in the three new test files must stay under 15, and NFR-005's witness runs that command, so a violation is fixed inside T-007.",
+  "id_coverage": {
+    "spec_ids": {
+      "REQ-001": ["T-002"],
+      "REQ-002": ["T-002"],
+      "REQ-003": ["T-002"],
+      "REQ-004": ["T-002", "T-005"],
+      "REQ-005": ["T-005"],
+      "REQ-006": ["T-002"],
+      "REQ-007": ["T-002"],
+      "REQ-008": ["T-002"],
+      "REQ-009": ["T-003"],
+      "REQ-010": ["T-003"],
+      "REQ-011": ["T-003"],
+      "REQ-012": ["T-003"],
+      "REQ-013": ["T-003"],
+      "REQ-014": ["T-004"],
+      "REQ-015": ["T-004"],
+      "REQ-016": ["T-004"],
+      "REQ-017": ["T-004"],
+      "REQ-018": ["T-004"],
+      "REQ-019": ["T-005"],
+      "REQ-020": ["T-003"],
+      "REQ-021": ["T-007"],
+      "REQ-022": ["T-006"],
+      "REQ-023": ["T-006"],
+      "REQ-024": ["T-006"],
+      "REQ-025": ["T-001"],
+      "REQ-026": ["T-006"],
+      "REQ-027": ["T-006"],
+      "AC-001": ["T-002"],
+      "AC-002": ["T-002"],
+      "AC-003": ["T-002"],
+      "AC-004": ["T-005"],
+      "AC-005": ["T-005"],
+      "AC-006": ["T-002"],
+      "AC-007": ["T-002"],
+      "AC-008": ["T-002"],
+      "AC-009": ["T-003"],
+      "AC-010": ["T-003"],
+      "AC-011": ["T-003"],
+      "AC-012": ["T-003"],
+      "AC-013": ["T-003"],
+      "AC-014": ["T-004"],
+      "AC-015": ["T-004"],
+      "AC-016": ["T-004"],
+      "AC-017": ["T-004"],
+      "AC-018": ["T-004"],
+      "AC-019": ["T-005"],
+      "AC-020": ["T-003"],
+      "AC-021": ["T-007"],
+      "AC-022": ["T-006"],
+      "AC-023": ["T-006"],
+      "AC-024": ["T-006"],
+      "AC-025": ["T-001"],
+      "AC-026": ["T-006"],
+      "AC-027": ["T-006"],
+      "INV-001": ["T-005"],
+      "INV-002": ["T-003"],
+      "INV-003": ["T-003"],
+      "INV-004": ["T-005"],
+      "INV-005": ["T-005"],
+      "INV-006": ["T-005"],
+      "EDGE-001": ["T-003"],
+      "EDGE-002": ["T-003"],
+      "EDGE-003": ["T-002"],
+      "EDGE-004": ["T-002"],
+      "EDGE-005": ["T-002"],
+      "EDGE-006": ["T-002"],
+      "EDGE-007": ["T-002"],
+      "EDGE-008": ["T-002"],
+      "EDGE-009": ["T-005"],
+      "EDGE-010": ["T-005"],
+      "EDGE-011": ["T-004"],
+      "EDGE-012": ["T-004"],
+      "EDGE-013": ["T-003"],
+      "EDGE-014": ["T-002"],
+      "EDGE-015": ["T-003"],
+      "EDGE-016": ["T-005"],
+      "NFR-001": ["T-002"],
+      "NFR-002": ["T-007"],
+      "NFR-003": ["T-002"],
+      "NFR-004": ["T-001"],
+      "NFR-005": ["T-007"],
+      "NFR-006": ["T-002"],
+      "NFR-007": ["T-003"]
+    },
+    "amended_spec_ids": {}
+  },
+  "tasks": [
+    {
+      "task_id": "T-001",
+      "feature_group": "tooling - scripts/ joins the type gate (ADR-086)",
+      "title": "add `uv run mypy scripts/` to the quality.yml type-check job and fix the one pre-existing union-attr error in scripts/verify_spec.py behaviour-preservingly, so the widened gate is clean at merge time",
+      "requirements": ["REQ-025"],
+      "acceptance_criteria": ["AC-025"],
+      "invariants": [],
+      "edge_cases": [],
+      "non_functional": ["NFR-004"],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts",
+        "tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean"
+      ],
+      "red_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean -v",
+      "implementation_steps": [
+        "Add one step `uv run mypy scripts/` to the `type-check` job of .github/workflows/quality.yml, immediately after the existing `uv run mypy src/` gate step (quality.yml:22-23 at this head). Do not add a job, do not touch the informational `ty` step, and add no step mentioning make_map.py (AC-023).",
+        "Fix the single pre-existing mypy error scripts/verify_spec.py:74 - `Item \"TextIO\" of \"TextIO | Any\" has no attribute \"reconfigure\" [union-attr]` - with a narrowing that keeps runtime behaviour identical (the reconfigure call stays on the same object, guarded or asserted rather than assumed). Measured at this head: 1 error in 1 file, checked 3 source files.",
+        "Do not change verify_spec.py's exit codes, report text, stdout format or argument handling: its witness is `uv run python scripts/verify_spec.py docs/specs/template.md` exiting 0 with the same report as before the fix (the script has no unit tests - spec §7 AC-025, ADR-086).",
+        "Create tests/acceptance/test_structure_map.py with exactly the two node IDs in tests_to_create. AC-025's test asserts all three clauses (the workflow text, `uv run mypy scripts/` exit 0, the verify_spec.py witness exit 0); NFR-004's test asserts mypy scripts/ + mypy src/ + ruff check . + ruff format --check . are all clean."
+      ],
+      "green_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts tests/acceptance/test_structure_map.py::test_nfr_004_mypy_and_ruff_clean -v",
+      "inputs": [
+        "docs/specs/structure-map.md §3 In scope (the quality.yml and verify_spec.py rows), §5 REQ-025, §7 AC-025, §10 NFR-004",
+        "docs/decisions/ADR-086-scripts-type-checked-tree.md (Decision bullets 2-4, the gate-scope table, the measured 1-error baseline)",
+        "docs/verification/structure-map.md § Phase 2 - S2.1 ADRs, findings F-02 and F-04"
+      ],
+      "allowed_files": {
+        "source_files": [
+          ".github/workflows/quality.yml (the type-check job only: one added `uv run mypy scripts/` step; no new job, no other job touched)",
+          "scripts/verify_spec.py (the union-attr fix at line 74 only; behaviour-preserving)"
+        ],
+        "test_files": [
+          "tests/acceptance/test_structure_map.py (new; created by this task and extended by T-002..T-007)"
+        ]
+      },
+      "implementation_scope": "The type gate over scripts/ and the one pre-existing type error. No generator code, no map, no skill, no hook, no AGENTS.md change.",
+      "design_constraints": [
+        "ADR-086: the widening is exactly the type gate and nothing else. Coverage, complexipy, bandit and `ty` keep their current scope; this task changes no pyproject.toml key and `fail_under = 92` must not move.",
+        "AC-025's witness is threefold and all three clauses are inside this task: quality.yml contains `uv run mypy scripts/`; `uv run mypy scripts/` exits 0; `uv run python scripts/verify_spec.py docs/specs/template.md` exits 0 with an unchanged report.",
+        "NFR-004's witness is repo-wide (mypy scripts/, mypy src/, ruff check ., ruff format --check .) over a state measured clean at this head except for the one scripts/ error, so the only source file this task must edit is scripts/verify_spec.py. allowed_files derivation (P-55): the witness's search scope is the whole repo, but its offender list is measured (1 file, named above) and is a subset of allowed_files; if a re-run names another file, that file is added to allowed_files as a DAG correction, never worked around.",
+        "No CI job for the map is added here (AC-023, ADR-085): the type-check job gains one mypy invocation, not a map job.",
+        "Gate scoping: red_command/green_command are targeted to this task's two tests; the full suite is the Phase 5 gate.",
+        "uv.lock is rewritten by the first `uv run` in this worktree (P-42): `git checkout -- uv.lock` before the commit."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before implementation; recorded in docs/verification/structure-map.md.",
+        "AC-025 passes: quality.yml's type-check job runs `uv run mypy scripts/`, `uv run mypy scripts/` exits 0, and `uv run python scripts/verify_spec.py docs/specs/template.md` exits 0 with an unchanged report.",
+        "NFR-004 passes: `uv run mypy scripts/`, `uv run mypy src/`, `uv run ruff check .` and `uv run ruff format --check .` are all clean.",
+        "uv run ruff check .github/workflows/quality.yml scripts/verify_spec.py tests/acceptance/test_structure_map.py clean (the ruff gate on the step's changed paths).",
+        "uv run python scripts/check_traceability.py still passes (its PASS is not evidence of this spec's rows - verification record finding 2; the matrix rows are Phase 3/5 work).",
+        "No dependency, coverage, complexity or bandit configuration changed."
+      ],
+      "dependencies": [],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-002",
+      "feature_group": "scripts/make_map.py - generator harness (module, CLI, file set, exit codes, document shape)",
+      "title": "create the stdlib-only generator scripts/make_map.py: the six REQ-002 CLI options, the git-based file set with the non-git ignore-list fallback, the exit-code contract (usage 2 and hard-failure 4 in this task), the four-part document shape, and the unreadable-source hard failure",
+      "requirements": ["REQ-001", "REQ-002", "REQ-003", "REQ-004", "REQ-006", "REQ-007", "REQ-008"],
+      "acceptance_criteria": ["AC-001", "AC-002", "AC-003", "AC-006", "AC-007", "AC-008"],
+      "invariants": [],
+      "edge_cases": ["EDGE-003", "EDGE-004", "EDGE-005", "EDGE-006", "EDGE-007", "EDGE-008", "EDGE-014"],
+      "non_functional": ["NFR-001", "NFR-003", "NFR-006"],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/acceptance/test_structure_map.py::test_ac_001_stdlib_only_and_single_read",
+        "tests/acceptance/test_structure_map.py::test_ac_002_cli_options_and_defaults",
+        "tests/acceptance/test_structure_map.py::test_ac_003_file_set_includes_untracked_drops_deleted",
+        "tests/acceptance/test_structure_map.py::test_ac_008_document_shape",
+        "tests/acceptance/test_structure_map.py::test_edge_006_out_parent_directory_created",
+        "tests/acceptance/test_structure_map.py::test_edge_007_non_git_root_falls_back_to_ignore_list",
+        "tests/acceptance/test_structure_map.py::test_edge_008_deleted_tracked_file_absent",
+        "tests/acceptance/test_structure_map.py::test_edge_014_max_depth_below_one_is_usage_error",
+        "tests/acceptance/test_structure_map.py::test_nfr_001_full_run_under_two_seconds",
+        "tests/acceptance/test_structure_map.py::test_nfr_003_deptry_clean",
+        "tests/unit/test_make_map.py::test_ac_006_parse_error_is_hard_failure",
+        "tests/unit/test_make_map.py::test_ac_007_grammar_is_the_running_interpreter",
+        "tests/unit/test_make_map.py::test_edge_003_newer_syntax_is_hard_failure",
+        "tests/unit/test_make_map.py::test_edge_004_non_utf8_is_hard_failure",
+        "tests/unit/test_make_map.py::test_edge_005_unopenable_file_is_hard_failure"
+      ],
+      "red_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_001_stdlib_only_and_single_read tests/acceptance/test_structure_map.py::test_ac_002_cli_options_and_defaults tests/acceptance/test_structure_map.py::test_ac_003_file_set_includes_untracked_drops_deleted tests/acceptance/test_structure_map.py::test_ac_008_document_shape tests/acceptance/test_structure_map.py::test_edge_006_out_parent_directory_created tests/acceptance/test_structure_map.py::test_edge_007_non_git_root_falls_back_to_ignore_list tests/acceptance/test_structure_map.py::test_edge_008_deleted_tracked_file_absent tests/acceptance/test_structure_map.py::test_edge_014_max_depth_below_one_is_usage_error tests/acceptance/test_structure_map.py::test_nfr_001_full_run_under_two_seconds tests/acceptance/test_structure_map.py::test_nfr_003_deptry_clean tests/unit/test_make_map.py::test_ac_006_parse_error_is_hard_failure tests/unit/test_make_map.py::test_ac_007_grammar_is_the_running_interpreter tests/unit/test_make_map.py::test_edge_003_newer_syntax_is_hard_failure tests/unit/test_make_map.py::test_edge_004_non_utf8_is_hard_failure tests/unit/test_make_map.py::test_edge_005_unopenable_file_is_hard_failure -v",
+      "implementation_steps": [
+        "Create scripts/make_map.py importing ONLY the standard library (ast incl. ast.unparse, argparse, pathlib, subprocess, sys, plus collections/re/dataclasses as needed) and the standard typing surface - no project dependency, no logging framework (REQ-001, ADR-086, spec §10 Observability).",
+        "Build the argparse surface with exactly the six REQ-002 options (--root, --out, --include-private, --max-depth with default 4 and a >= 1 bound, --check, -h/--help); anything else is an argparse usage error exiting 2 (EDGE-014). --out resolves against the current working directory; --root defaults to the repository root containing scripts/make_map.py, resolved with pathlib (AC-002).",
+        "Implement the file set as `git ls-files --cached --others --exclude-standard` filtered to *.py and kept only for paths that exist on disk (REQ-003, AC-003, EDGE-008). When --root is not a git repository or git is unavailable, fall back to the built-in ignore list (.git, .venv, __pycache__, .mypy_cache, .ruff_cache, .pytest_cache, data, dist, build, .idea), do NOT parse .gitignore, and print the limitation note to stderr exactly once (EDGE-007).",
+        "Read each source file exactly once - the line count and the AST come from the same read (REQ-001, AC-001).",
+        "Implement the hard-failure path: SyntaxError, UnicodeDecodeError or OSError on any file in the set prints every offending path once, sorted, --root-relative, with the exception type, writes NO output file, leaves a pre-existing output file byte-unchanged, and exits 4 (REQ-006, AC-006, EDGE-003, EDGE-004, EDGE-005). No degraded mode, no `(parse error)` marker.",
+        "Implement the exit-code precedence for the codes this task can produce - 2 (usage) then 4 (unreadable source) - and structure the dispatcher so T-005 can add 3 (missing --out in --check mode) then 1 (stale) in the same order (REQ-004). Do NOT implement --check's comparison in this task: AC-004 and AC-005 are T-005's gate.",
+        "Emit the REQ-008 document shape: `# Repository structure`, one blank line, the generated-by line, `## Directory tree`, `## Packages` - nothing else; no timestamp, no generator-version banner, no absolute path, no drive letter, no host or user name. The section bodies are filled by T-003/T-004; the shape itself is this task's gate (AC-008).",
+        "Create --out's parent directory when it is missing before writing (EDGE-006); write no file other than --out (INV-005's carve-out is exactly this directory).",
+        "Create tests/unit/test_make_map.py with the five node IDs above, using fixture trees built in tmp_path (a syntax-error file, a non-UTF-8 file, an unopenable file, a non-git root), and extend tests/acceptance/test_structure_map.py with the ten node IDs above, driving the CLI as a subprocess.",
+        "Guard the NFR-001 timing test with @pytest.mark.skipif on a measured calibration run (spec §10 NFR-001): a coarse upper bound, skipped on slow CI, never a CI gate."
+      ],
+      "green_command": "uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py -v",
+      "inputs": [
+        "docs/specs/structure-map.md §4 (Definitions: file set, code dirs, fresh render), §5 REQ-001/002/003/004/006/007/008, §7 AC-001/002/003/006/007/008, §9 EDGE-003/004/005/006/007/008/014, §10 NFR-001/003/006 and the Observability table",
+        "docs/decisions/ADR-086-scripts-type-checked-tree.md (stdlib-only budget, no logging framework, the tracing-policy exemption)",
+        "T-001 handoff (scripts/ is inside the mypy gate, so the new module must be strictly typed from its first commit)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "scripts/make_map.py (new)"
+        ],
+        "test_files": [
+          "tests/acceptance/test_structure_map.py",
+          "tests/unit/test_make_map.py (new)"
+        ]
+      },
+      "implementation_scope": "The generator harness: module creation, CLI, file set, the exit-code dispatcher (2 and 4), the unreadable-source hard failure, the document chrome, and the --out parent-directory rule. The Directory tree body, the Packages body and --check's comparison are NOT implemented here (T-003, T-004, T-005).",
+      "design_constraints": [
+        "REQ-001 / ADR-086: stdlib only, one read per file, no new dependency - `uv run deptry .` must stay clean with no pyproject.toml change (NFR-003, AC-001).",
+        "The generator is exempt from the AGENTS.md tracing policy and uses no logging framework at all; its entire observable output is the two --check lines on stdout and the sorted path lines on stderr (spec §10 Observability, ADR-086).",
+        "Exit-code precedence 2 -> 4 -> 3 -> 1 -> 0 is normative (REQ-004): this task produces 2 and 4 only, and an unparseable file must outrank staleness once T-005 adds staleness. 1 and 3 never occur in generate mode.",
+        "NFR-001's test is skipif-guarded on a measured calibration run and is NOT a CI gate (spec §10 NFR-001).",
+        "NFR-006 (scripts/make_map.py targets ~250 lines) is a target, not a gate: Phase 5 records the actual line count in docs/verification/structure-map.md. No test exists for it (spec §11 record row).",
+        "scripts/ is inside the mypy gate since T-001: `uv run mypy scripts/` must be clean with the new module present under the repository's strict configuration (disallow_untyped_defs, check_untyped_defs, python_version 3.14).",
+        "Test placement is fixed by Q-10: exactly tests/acceptance/test_structure_map.py and tests/unit/test_make_map.py (plus tests/property/test_structure_map.py from T-003). No new test directory.",
+        "Test data must construct valid inputs: a RED caused by a broken fixture (e.g. an invalid tmp_path tree) is not a valid RED (AGENTS.md Phase 3).",
+        "allowed_files derivation (P-55): AC-001's witness parses scripts/make_map.py itself and runs `uv run deptry .` over the scan set (src/, migrations/, scripts/ - deptry does not scan tests/); the only file in that scan set this task can be required to edit is scripts/make_map.py, which is listed. The unit and acceptance fixtures build their own trees in tmp_path and never edit repository files.",
+        "Gate scoping: red_command/green_command are targeted to this task's tests; the full suite is the Phase 5 gate.",
+        "git checkout -- uv.lock before every commit (P-42)."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before implementation; recorded in docs/verification/structure-map.md.",
+        "AC-001, AC-002, AC-003, AC-006, AC-007, AC-008 tests pass.",
+        "Unit tests for EDGE-003, EDGE-004, EDGE-005 and acceptance tests for EDGE-006, EDGE-007, EDGE-008, EDGE-014 pass.",
+        "NFR-001 passes (or is skipif-skipped by the measured calibration guard) and NFR-003 (`uv run deptry .` clean) passes.",
+        "uv run mypy scripts/ clean (the widened gate from T-001, now covering the new module).",
+        "uv run ruff check scripts/make_map.py tests/acceptance/test_structure_map.py tests/unit/test_make_map.py clean; uv run ruff format on the same paths clean.",
+        "No pyproject.toml, uv.lock, workflow, hook, AGENTS.md or skill change."
+      ],
+      "dependencies": ["T-001"],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-003",
+      "feature_group": "scripts/make_map.py - Directory tree section, Packages scope, group/module headers, path form",
+      "title": "render the Directory tree (top-level files, the four code dirs in full within --max-depth with the pruning marker, the labelled count lines for every other top-level directory) and the Packages scope and headers (one header per containing directory, package import name, exports line, module header with line count and summary), with every path --root-relative and as_posix()",
+      "requirements": ["REQ-009", "REQ-010", "REQ-011", "REQ-012", "REQ-013", "REQ-020"],
+      "acceptance_criteria": ["AC-009", "AC-010", "AC-011", "AC-012", "AC-013", "AC-020"],
+      "invariants": ["INV-002", "INV-003"],
+      "edge_cases": ["EDGE-001", "EDGE-002", "EDGE-013", "EDGE-015"],
+      "non_functional": ["NFR-007"],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/acceptance/test_structure_map.py::test_ac_009_tree_code_dirs_full_other_dirs_counted",
+        "tests/acceptance/test_structure_map.py::test_ac_010_max_depth_prunes_tree_only",
+        "tests/acceptance/test_structure_map.py::test_ac_011_packages_scope",
+        "tests/acceptance/test_structure_map.py::test_ac_012_package_header_and_exports",
+        "tests/acceptance/test_structure_map.py::test_edge_015_unlabelled_dir_counted_without_label",
+        "tests/unit/test_make_map.py::test_ac_013_module_header_and_summary",
+        "tests/unit/test_make_map.py::test_ac_020_paths_are_relative_posix",
+        "tests/unit/test_make_map.py::test_edge_001_missing_docstring_renders_no_summary",
+        "tests/unit/test_make_map.py::test_edge_002_empty_file_renders_header_only",
+        "tests/unit/test_make_map.py::test_edge_013_package_without_exports",
+        "tests/unit/test_make_map.py::test_nfr_007_output_identical_across_platforms",
+        "tests/property/test_structure_map.py::test_inv_002_no_module_hidden_by_pruning",
+        "tests/property/test_structure_map.py::test_inv_003_no_absolute_path_or_timestamp"
+      ],
+      "red_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_009_tree_code_dirs_full_other_dirs_counted tests/acceptance/test_structure_map.py::test_ac_010_max_depth_prunes_tree_only tests/acceptance/test_structure_map.py::test_ac_011_packages_scope tests/acceptance/test_structure_map.py::test_ac_012_package_header_and_exports tests/acceptance/test_structure_map.py::test_edge_015_unlabelled_dir_counted_without_label tests/unit/test_make_map.py::test_ac_013_module_header_and_summary tests/unit/test_make_map.py::test_ac_020_paths_are_relative_posix tests/unit/test_make_map.py::test_edge_001_missing_docstring_renders_no_summary tests/unit/test_make_map.py::test_edge_002_empty_file_renders_header_only tests/unit/test_make_map.py::test_edge_013_package_without_exports tests/unit/test_make_map.py::test_nfr_007_output_identical_across_platforms tests/property/test_structure_map.py::test_inv_002_no_module_hidden_by_pruning tests/property/test_structure_map.py::test_inv_003_no_absolute_path_or_timestamp -v",
+      "implementation_steps": [
+        "Render the tree block in REQ-009 order: every top-level file in the tracked set by name sorted; then the four code dirs (src/, tests/, scripts/, migrations/) rendered in full - one line per directory and one line per entry, sorted, indented two spaces per level, within --max-depth; then every other top-level directory as a single count line with a role label from a fixed built-in table (`docs/ — 200 files (process record)`, `.agents/ — 16 files (skills)`, `.github/ — 9 files (CI and tooling)`, `userdocs/ — 2 files (published docs)`), and `<name>/ — <N> files` with no label for a directory the table has no entry for (EDGE-015). Counts are of tracked files of ALL file types under that directory, taken from the REQ-003 file set (AC-009).",
+        "Implement --max-depth as a tree-only prune (REQ-010): when entries exist below the limit, the deepest rendered directory of that branch gets `(+N dirs not shown)`, `(+N files not shown)` when only files are hidden, or the combined `(+N dirs, M files not shown)` when both. Every .py in the file set is still parsed and every in-scope module is still listed in Packages regardless of depth (INV-002).",
+        "Implement the REQ-011 Packages scope exactly: every module under src/, scripts/ and migrations/, plus every tests/ module named conftest.py or ending _test_helpers.py. No other tests/ module gets a Packages entry, and no in-scope module is ever elided for size (AC-011).",
+        "Emit one group header per containing directory (REQ-012): a package header shows its import name and --root-relative path (`### \\`backend.settings\\` - src/backend/settings/`), the import name being the directory path relative to the import root src/ with / -> ., or the whole --root-relative path for a package outside src/; a plain non-package directory header shows the path only (`### scripts/`). Never one header per module.",
+        "Render the exports line: a package whose __init__.py defines __all__ lists those names sorted; otherwise it lists the public names it imports, sorted; with neither, no exports line at all (EDGE-013). Measured at this head: 11 of the package groups render an exports line, the rest render none.",
+        "Render the module header `#### <path> (<N> lines)` from the single read's line count, followed by the module summary line only when the module has a docstring (REQ-013, AC-013, EDGE-001 module half, EDGE-002: an empty file renders its header with `(0 lines)` and no symbol lines, and is not an error).",
+        "Render every path --root-relative with as_posix() (REQ-020, AC-020, NFR-007): forward slashes on Windows and Linux alike, no backslash, no drive letter, no UNC, and no timestamp, host name or user name anywhere (INV-003).",
+        "Add the property witnesses in tests/property/test_structure_map.py (new file): INV-002 over generated --max-depth values >= 1 and generated trees (no in-scope module hidden by pruning; every code-dir .py at depth <= max-depth present in the tree), and INV-003 over generated trees (no absolute path, drive letter, UNC path, timestamp, host name or user name).",
+        "Keep the symbol bodies of each module section empty in this task - AC-014..AC-018 are T-004's gate."
+      ],
+      "green_command": "uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py -v",
+      "inputs": [
+        "docs/specs/structure-map.md §4 (Definitions: code dirs, package, module, summary), §5 REQ-009/010/011/012/013/020, §7 AC-009/010/011/012/013/020, §6 INV-002/INV-003, §9 EDGE-001/002/013/015, §10 NFR-007",
+        "docs/verification/structure-map.md (re-measured counts at this head: 118 Packages-scope modules, 32 group headers, 11 exports lines, 9 root-level files, docs/ 212 files)",
+        "T-002 handoff (the file set, the document chrome, the single-read pipeline)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "scripts/make_map.py"
+        ],
+        "test_files": [
+          "tests/acceptance/test_structure_map.py",
+          "tests/unit/test_make_map.py",
+          "tests/property/test_structure_map.py (new)"
+        ]
+      },
+      "implementation_scope": "The tree section, the Packages scope and headers, and the path form. No symbol rendering (T-004), no --check semantics or determinism gate (T-005), no artifact/hook/guidance (T-006, T-007).",
+      "design_constraints": [
+        "INV-002 is scoped to code dirs (P.5 fix 6): pruning can never hide an in-scope module, and a .py outside a code dir (1 at this head, .github/hooks/ruff-post-edit.py) is parsed but appears only in its top-level directory's count line - in neither the tree nor the Packages scope.",
+        "The role-label table is a fixed built-in dict (spec §13 known-ceiling note: a naive literal table, upgrade path is a config-driven table). Mark it with a `ponytail:` comment naming the ceiling and the upgrade path.",
+        "AC-009's docs/ count comes from the REQ-003 file set (index plus untracked-not-ignored), NOT from the git index alone (P.5 fix 8).",
+        "Narrowed-gate note (decompose skill): EDGE-001 is assigned here for its module half (REQ-013 - a module with no docstring renders no summary line). Its symbol half (a symbol with no docstring renders no summary and no trailing colon) is REQ-018 and is exercised in T-004 by AC-018; T-004 is responsible for catching a regression on that path.",
+        "Property tests are required per INV-XXX (AGENTS.md Phase 3): INV-002 and INV-003 go in tests/property/test_structure_map.py - the fixed three-file placement of Q-10 does not replace that rule.",
+        "scripts/ stays inside the mypy gate: `uv run mypy scripts/` clean (T-001).",
+        "allowed_files derivation (P-55): AC-009/AC-011/AC-012 walk the generated map over the real repository read-only, and the fixtures build their own trees in tmp_path; the only repository file this task edits is scripts/make_map.py plus the three named test files, all listed. No test in this task searches a repository file it could require to change.",
+        "Gate scoping: red_command/green_command are targeted to this task's tests; the full suite is the Phase 5 gate.",
+        "git checkout -- uv.lock before every commit (P-42)."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before implementation; recorded in docs/verification/structure-map.md.",
+        "AC-009, AC-010, AC-011, AC-012, AC-013, AC-020 tests pass.",
+        "Property tests for INV-002 (no in-scope module hidden by pruning) and INV-003 (no absolute path / drive letter / UNC / timestamp / host / user) pass.",
+        "Unit tests for EDGE-001 (module half), EDGE-002, EDGE-013 and the acceptance test for EDGE-015 pass.",
+        "NFR-007 passes: the render is byte-identical for the same tree irrespective of host path separators.",
+        "uv run mypy scripts/ clean; uv run ruff check scripts/make_map.py tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py clean.",
+        "No STRUCTURE.md is written by this task (the committed artifact is T-007)."
+      ],
+      "dependencies": ["T-002"],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-004",
+      "feature_group": "scripts/make_map.py - symbol inventory (signatures, decorators, visibility, class fields, summaries)",
+      "title": "render each in-scope module's symbol inventory: module-level classes then functions (each group in source order), class fields then methods, ast.unparse-canonical signatures with the <= 20-character default rule, every decorator as a compact @name prefix, public-symbol visibility with --include-private, the 15-field cap with its elision marker, and the 100-character normalized summary",
+      "requirements": ["REQ-014", "REQ-015", "REQ-016", "REQ-017", "REQ-018"],
+      "acceptance_criteria": ["AC-014", "AC-015", "AC-016", "AC-017", "AC-018"],
+      "invariants": [],
+      "edge_cases": ["EDGE-011", "EDGE-012"],
+      "non_functional": [],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures",
+        "tests/unit/test_make_map.py::test_ac_015_decorators_render_as_prefix",
+        "tests/unit/test_make_map.py::test_ac_016_private_symbols_and_dunders",
+        "tests/unit/test_make_map.py::test_ac_017_class_fields_capped_untyped_omitted",
+        "tests/unit/test_make_map.py::test_ac_018_summary_normalization",
+        "tests/unit/test_make_map.py::test_edge_011_field_cap_marker",
+        "tests/unit/test_make_map.py::test_edge_012_long_summary_truncated"
+      ],
+      "red_command": "uv run pytest tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures tests/unit/test_make_map.py::test_ac_015_decorators_render_as_prefix tests/unit/test_make_map.py::test_ac_016_private_symbols_and_dunders tests/unit/test_make_map.py::test_ac_017_class_fields_capped_untyped_omitted tests/unit/test_make_map.py::test_ac_018_summary_normalization tests/unit/test_make_map.py::test_edge_011_field_cap_marker tests/unit/test_make_map.py::test_edge_012_long_summary_truncated -v",
+      "implementation_steps": [
+        "Render symbols grouped, each group in source order (REQ-014, AC-014): module-level classes first, then module-level functions; within a class, its annotated fields first, then its methods. A class or function defined inside a FUNCTION BODY is not rendered at all (all 12 classes the base-commit scan found under tests/ are function-local).",
+        "Line forms exactly as specified: class line `- ` + decorators + `class ` + backticked `Name(Base, ...)` + `: ` + summary; module-level function line `- ` + decorators + `def ` + backticked signature + `: ` + summary, with an `async def` keeping the `async ` prefix inside the backticks; method line at two-space indent `  - ` + decorators + backticked signature + `: ` + summary (no `def` keyword).",
+        "Produce signatures with ast.unparse for parameters, annotations and return annotation, so source formatting drift cannot change the map; include a parameter default only when its unparsed text is <= 20 characters (AC-014).",
+        "Render a nested class (a `class` statement directly in a class body) as a member line of its enclosing class (`  - class \\`Inner\\`: summary`) with its own members at the next indent level; the unit fixture must exercise it even though 0 exist at this head (REQ-014).",
+        "Do not render module-level assignments, imports, `if TYPE_CHECKING` blocks or other statements.",
+        "Render every decorator as a compact `@name` prefix in source order before the class/def/signature token - @logged, @logged_class, @property, @staticmethod, @classmethod, @override, @pytest.fixture all appear in the file set; a decorator that is not a plain name or attribute chain renders as its ast.unparse text (REQ-015, AC-015).",
+        "Apply the public-symbol visibility rule (REQ-016, AC-016): dunder names are public and always rendered; `_name` functions, methods and classes are hidden unless --include-private is passed. --include-private changes ONLY which symbols are rendered - the set of rendered modules and packages is identical with and without it, and no `_name` module is ever hidden or added by the flag.",
+        "Render class-level annotated assignments as `  - \\`name: annotation\\`` with no default value and no Field(...) payload, in source order, capped at 15 per class, with a final `  - … +N fields` line when a class has more (REQ-017, AC-017, EDGE-011). Unannotated class-level assignments are not rendered. Measured: exactly 1 class exceeds the cap at this head (src/backend/settings/models.py, 17 fields).",
+        "Normalize summaries per REQ-018 (AC-018, EDGE-012): the first logical line of the docstring, whitespace runs collapsed to single spaces, backticks removed, truncated at 100 characters with a trailing `…` when longer; no docstring (or an empty one) renders no summary and no trailing `:`.",
+        "Keep the four hardcoded constants exactly as the spec states them (the 20-character default rule, the 15-field cap, the 100-character summary, the --max-depth 4 default) - no configurability was specified."
+      ],
+      "green_command": "uv run pytest tests/unit/test_make_map.py -v",
+      "inputs": [
+        "docs/specs/structure-map.md §4 (Definitions: public symbol, summary), §5 REQ-014/015/016/017/018 with the rendering examples, §7 AC-014/015/016/017/018, §9 EDGE-011/EDGE-012, §11 unit-test-subjects paragraph (nested classes, async def, decorated symbols, a class over the field cap, a default longer than 20 characters)",
+        "docs/verification/structure-map.md (re-measured symbol counts at this head: 222 public class headers, 353 post-cap field lines, 399 public method lines, 163 public function lines, 230 hidden symbols, 0 classes nested in classes)",
+        "T-003 handoff (the module headers the symbols render under)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "scripts/make_map.py"
+        ],
+        "test_files": [
+          "tests/unit/test_make_map.py"
+        ]
+      },
+      "implementation_scope": "The symbol rendering layer inside each module section. No change to the tree section, the Packages scope, the CLI, the file set or --check.",
+      "design_constraints": [
+        "REQ-014 group order is 'grouped, each group in source order' (P.5 fix 4), not one flat source order: classes before functions at module level, fields before methods within a class.",
+        "Function-local classes are NOT rendered (P.5 fix 5); the nested-class rule applies only to a `class` statement directly in a class body, and the unit fixture must cover it because the format has to be defined for it.",
+        "ast.unparse is the mechanism for canonical signatures (ADR-086 Alternatives): a test asserting signature text asserts the ast.unparse rendering, not the source formatting.",
+        "REQ-016 uses the defined term 'public symbol' as the rule's subject (P.5 fix 7); --include-private must leave the module and package set byte-identical.",
+        "The symbol layer is what makes NFR-002's size projection true; the 15-field cap (REQ-017) is the named safety valve and must not be raised here (ADR-085 Costs, verification record F-01).",
+        "scripts/ stays inside the mypy gate: `uv run mypy scripts/` clean (T-001).",
+        "allowed_files derivation (P-55): every test in this task builds its own fixture module in tmp_path and asserts on rendered text; the only repository file it edits is scripts/make_map.py and the only test file is tests/unit/test_make_map.py. Both are listed.",
+        "Gate scoping: red_command/green_command are targeted to this task's tests; the full suite is the Phase 5 gate.",
+        "git checkout -- uv.lock before every commit (P-42)."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before implementation; recorded in docs/verification/structure-map.md.",
+        "AC-014, AC-015, AC-016, AC-017, AC-018 tests pass.",
+        "Unit tests for EDGE-011 (the `… +N fields` marker) and EDGE-012 (the 100-character truncation) pass.",
+        "The unit fixture covers a nested class, an async def, decorated symbols, a class over the field cap and a default longer than 20 characters (spec §11).",
+        "The set of rendered modules and packages is identical with and without --include-private (AC-016 third clause).",
+        "uv run mypy scripts/ clean; uv run ruff check scripts/make_map.py tests/unit/test_make_map.py clean."
+      ],
+      "dependencies": ["T-003"],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-005",
+      "feature_group": "scripts/make_map.py - --check semantics, determinism, hook-clean output",
+      "title": "close the exit-code contract with --check (stale 1, missing 3, the pinned one-line messages, the \\r\\n -> \\n normalisation) and make the render byte-deterministic and pre-commit-hook-clean: sorted --root-relative POSIX paths, LF newlines, no trailing whitespace, exactly one final newline",
+      "requirements": ["REQ-004", "REQ-005", "REQ-019"],
+      "acceptance_criteria": ["AC-004", "AC-005", "AC-019"],
+      "invariants": ["INV-001", "INV-004", "INV-005", "INV-006"],
+      "edge_cases": ["EDGE-009", "EDGE-010", "EDGE-016"],
+      "non_functional": [],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/acceptance/test_structure_map.py::test_ac_004_exit_code_contract",
+        "tests/acceptance/test_structure_map.py::test_ac_005_check_byte_exact_single_message_exit_3",
+        "tests/acceptance/test_structure_map.py::test_ac_019_double_run_byte_identical_and_hook_clean",
+        "tests/acceptance/test_structure_map.py::test_edge_009_untracked_file_listed_then_stale_on_clone",
+        "tests/acceptance/test_structure_map.py::test_edge_010_hand_edited_map_is_stale",
+        "tests/acceptance/test_structure_map.py::test_edge_016_crlf_checkout_is_not_stale",
+        "tests/property/test_structure_map.py::test_inv_001_render_is_deterministic",
+        "tests/property/test_structure_map.py::test_inv_004_check_matches_byte_equality",
+        "tests/property/test_structure_map.py::test_inv_005_check_writes_nothing",
+        "tests/property/test_structure_map.py::test_inv_006_output_is_hook_clean"
+      ],
+      "red_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_004_exit_code_contract tests/acceptance/test_structure_map.py::test_ac_005_check_byte_exact_single_message_exit_3 tests/acceptance/test_structure_map.py::test_ac_019_double_run_byte_identical_and_hook_clean tests/acceptance/test_structure_map.py::test_edge_009_untracked_file_listed_then_stale_on_clone tests/acceptance/test_structure_map.py::test_edge_010_hand_edited_map_is_stale tests/acceptance/test_structure_map.py::test_edge_016_crlf_checkout_is_not_stale tests/property/test_structure_map.py::test_inv_001_render_is_deterministic tests/property/test_structure_map.py::test_inv_004_check_matches_byte_equality tests/property/test_structure_map.py::test_inv_005_check_writes_nothing tests/property/test_structure_map.py::test_inv_006_output_is_hook_clean -v",
+      "implementation_steps": [
+        "Implement --check: normalise the on-disk bytes \\r\\n -> \\n, then compare byte-for-byte against a fresh render - no other normalisation, no whitespace-insensitive diffing, no section-level comparison (REQ-005, INV-004). Generate mode always writes LF (REQ-019).",
+        "Print exactly one line and nothing else on a difference: `<out> is out of date — run uv run python scripts/make_map.py`, naming the --out path as given (the default renders `STRUCTURE.md is out of date — run uv run python scripts/make_map.py`); no diff, no counts, no per-section report (AC-005).",
+        "Print exactly one line and exit 3 when --out does not exist: `<out> is missing — run uv run python scripts/make_map.py`, again naming the --out path as given (REQ-005, AC-005).",
+        "Complete the REQ-004 precedence dispatcher: 2 (usage) -> 4 (unreadable source) -> 3 (missing --out) -> 1 (stale) -> 0, exactly one code per run, and 1/3 never produced in generate mode. An unparseable file plus a stale map must exit 4, not 1 (AC-004).",
+        "Guarantee INV-005: the generator writes no file other than --out, and only in generate mode (creating --out's parent directory is the only directory it creates); --check never modifies the working tree.",
+        "Make the render byte-deterministic (REQ-019, INV-001): files and directories sorted by --root-relative POSIX path, symbols in source order, UTF-8 encoding, LF newlines, no trailing whitespace on any line, exactly one final newline - so the active trailing-whitespace and end-of-file-fixer pre-commit hooks leave the generated file unchanged (INV-006, AC-019).",
+        "Add the property witnesses: INV-001 (two runs, same options, byte-identical), INV-004 (--check exits 0 iff the bytes are equal after newline normalisation; any other difference - added, removed, reordered, whitespace-only - exits 1), INV-005 (--check writes nothing), INV-006 (the two hooks leave the output unchanged).",
+        "Add the acceptance witnesses for EDGE-009 (an untracked-not-ignored file is listed in the generated map, and a fresh clone of a tree whose map predates it exits 1), EDGE-010 (a hand-edited map, or one with merge conflict markers, is stale: exit 1, resolution is regeneration) and EDGE-016 (a CRLF checkout of an otherwise-identical map exits 0)."
+      ],
+      "green_command": "uv run pytest tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py -v",
+      "inputs": [
+        "docs/specs/structure-map.md §5 REQ-004 (the exit-code table and the precedence order), REQ-005 (the pinned messages, the newline normalisation) and REQ-019, §6 INV-001/004/005/006, §7 AC-004/005/019, §9 EDGE-009/010/016, §13 (why --check normalises instead of adding .gitattributes)",
+        "docs/decisions/ADR-085-committed-generated-structure-map-check-only-local-hook.md (Decision bullet 4, byte-exact check with one normalisation; Consequences F-07)",
+        "docs/verification/structure-map.md (finding 8 and F-07: no .gitattributes exists, core.autocrlf=true on this host)",
+        "T-004 handoff (the complete render, so determinism is asserted over the final document)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "scripts/make_map.py"
+        ],
+        "test_files": [
+          "tests/acceptance/test_structure_map.py",
+          "tests/property/test_structure_map.py"
+        ]
+      },
+      "implementation_scope": "--check, the completed exit-code precedence, and the determinism / hook-clean output contract. No skill, hook, AGENTS.md or committed artifact (T-006, T-007). No .gitattributes is added - the normalisation lives inside the generator (spec §13).",
+      "design_constraints": [
+        "The newline normalisation is exactly \\r\\n -> \\n and nothing else (REQ-005, INV-004, ADR-085 Alternatives): a repo-wide .gitattributes rule is out of scope and must not be added.",
+        "The two --check messages are pinned byte-for-byte (em dash, not hyphen) and are the only stdout output of the whole tool (spec §10 Observability); the sorted path lines of REQ-006 go to stderr.",
+        "AC-019's hook-clean clause is asserted against the ACTIVE hooks in .pre-commit-config.yaml (trailing-whitespace, end-of-file-fixer) - this task does not modify that file (T-006 owns it); it only proves the generated output passes them.",
+        "Narrowed-gate note (decompose skill): EDGE-009 is assigned here rather than T-002 because its second half (a fresh clone whose map predates the untracked file exits 1) needs --check; its first half (the untracked file is listed) is REQ-003 and is already gated in T-002 by AC-003/EDGE-008. T-005 is responsible for the staleness half.",
+        "Determinism is asserted over the COMPLETE document (tree + Packages + symbols), which is why this task depends on T-004: an earlier assertion would run over a partial render and would not catch a later non-deterministic symbol ordering.",
+        "AC-004 is assigned to this task for the whole exit-code table including 1 and 3, which cannot be produced before --check exists (gate satisfiability); REQ-004 is also listed under T-002, which implements the 2 and 4 branches and the dispatcher shape.",
+        "scripts/ stays inside the mypy gate: `uv run mypy scripts/` clean (T-001).",
+        "allowed_files derivation (P-55): AC-019 and INV-006 read .pre-commit-config.yaml to identify the active hooks (read-only - that file is T-006's to edit and no hook change is needed to satisfy AC-019); EDGE-009/010/016 and the four property tests build their own trees and output files in tmp_path. The files this task edits are scripts/make_map.py and the two named test files, all listed.",
+        "Gate scoping: red_command/green_command are targeted to this task's tests; the full suite is the Phase 5 gate.",
+        "git checkout -- uv.lock before every commit (P-42)."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before implementation; recorded in docs/verification/structure-map.md.",
+        "AC-004 passes for every row of the REQ-004 table including the precedence case (an unparseable file plus a stale map exits 4, not 1), and 1/3 never occur in generate mode.",
+        "AC-005 passes: a one-byte difference exits 1 with exactly the pinned line and nothing else; a missing --out exits 3 with exactly the pinned line; a CRLF-only difference exits 0.",
+        "AC-019 passes: two consecutive runs are byte-identical, no line has trailing whitespace, the file ends with exactly one LF, and the trailing-whitespace / end-of-file-fixer hooks leave it unchanged.",
+        "Property tests for INV-001, INV-004, INV-005, INV-006 pass.",
+        "Acceptance tests for EDGE-009, EDGE-010, EDGE-016 pass.",
+        "uv run mypy scripts/ clean; uv run ruff check scripts/make_map.py tests/acceptance/test_structure_map.py tests/property/test_structure_map.py clean.",
+        "No .gitattributes is created and .pre-commit-config.yaml is not modified by this task."
+      ],
+      "dependencies": ["T-004"],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-006",
+      "feature_group": "integration surface - the skill, the local pre-commit hook, AGENTS.md, the advisory rule and the freshness policy",
+      "title": "wire the map into the repository's guidance and commit machinery: the code-structure-map skill with its four rules, the check-only structure-map-check local pre-commit hook (no CI job), the four AGENTS.md edits (corrected Project Structure, the Tooling pointer line, `uv run mypy scripts/` in the type-check line, the two (ambient) Skill-to-Phase rows), and the single advisory sentence in specify/SKILL.md P.1",
+      "requirements": ["REQ-022", "REQ-023", "REQ-024", "REQ-026", "REQ-027"],
+      "acceptance_criteria": ["AC-022", "AC-023", "AC-024", "AC-026", "AC-027"],
+      "invariants": [],
+      "edge_cases": [],
+      "non_functional": [],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/acceptance/test_structure_map.py::test_ac_022_skill_exists_with_four_rules",
+        "tests/acceptance/test_structure_map.py::test_ac_023_hook_is_check_only_and_no_ci_job",
+        "tests/acceptance/test_structure_map.py::test_ac_024_agents_md_layout_matches_the_map",
+        "tests/acceptance/test_structure_map.py::test_ac_026_map_hook_is_advisory",
+        "tests/acceptance/test_structure_map.py::test_ac_027_freshness_policy_documented_twice"
+      ],
+      "red_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_022_skill_exists_with_four_rules tests/acceptance/test_structure_map.py::test_ac_023_hook_is_check_only_and_no_ci_job tests/acceptance/test_structure_map.py::test_ac_024_agents_md_layout_matches_the_map tests/acceptance/test_structure_map.py::test_ac_026_map_hook_is_advisory tests/acceptance/test_structure_map.py::test_ac_027_freshness_policy_documented_twice -v",
+      "implementation_steps": [
+        "Create .agents/skills/code-structure-map/SKILL.md in the repository's skill format (name + description frontmatter, body under 60 lines) stating exactly the four REQ-022 rules: read STRUCTURE.md before walking the tree; regenerate when it is stale (`uv run python scripts/make_map.py`); regenerate in the SAME commit as the .py change; on a merge conflict in STRUCTURE.md take either side and regenerate, never hand-merge the generated file (AC-022, AC-027).",
+        "Add exactly one hook to the existing `repo: local` block of .pre-commit-config.yaml, following the `deptry` hook's shape: id structure-map-check, name 'structure map is up to date', entry `uv run python scripts/make_map.py --check`, language system, pass_filenames false, stages [pre-commit], files `\\.py$`. It is check-only and never rewrites the map (REQ-023, AC-023).",
+        "Add NO GitHub Actions job or step that mentions make_map.py. Measured at this head: `grep -rn make_map .github AGENTS.md .agents` returns 0 hits, so AC-023's negative half holds trivially today and this task must keep it true (ADR-085: a CI --check job would fail other changes' PRs on unrelated staleness).",
+        "Rewrite the AGENTS.md Project Structure section (AGENTS.md:1120 at this head) - the fenced layout block and the sentences around it - to the layout the map shows: flat feature packages under src/backend/<feature>/ with no model/ and no services/ subdirectory anywhere, the only nested src/ directory being src/backend/filemanagement/assets/, no src/frontend/ directory (the coverage config reserves the name), tests/<category>/<feature>/, plus scripts/, migrations/, userdocs/ and .agents/skills/. Every literal directory path shown must exist in the generated map (AC-024).",
+        "Add one Tooling & Execution Environment pointer line naming the map and the skill: what the map is, the generate command, the `--check` command, the same-commit regeneration rule and the take-either-side-and-regenerate conflict rule (REQ-024 item 2, REQ-027).",
+        "Add `uv run mypy scripts/` next to `uv run mypy src/` in the AGENTS.md Tooling type-check line (REQ-024 item 3). Measured: the mypy guidance naming `uv run mypy src/` sits at AGENTS.md:56, :581 and :587 - only the Tooling & Execution Environment type-check line is changed here; the other mentions are not part of the four-place edit.",
+        "Add an `(ambient)` Skill-to-Phase Mapping row for code-structure-map (optional, before exploring) and give python-best-practices the same `(ambient)` marking so the table covers every non-phase skill (REQ-024 item 4).",
+        "Keep the AGENTS.md edit to exactly those four places and nowhere else (REQ-024). Do not reintroduce any `tests/architecture` citation: `rg -n 'tests/architecture' AGENTS.md .agents` must still return nothing (measured 0 hits at this head).",
+        "Add exactly ONE advisory sentence to .agents/skills/specify/SKILL.md P.1 to the effect of 'if STRUCTURE.md exists, read it before walking the tree' (REQ-026, AC-026). Add no phase gate, todo status, handoff field or prohibition that depends on the map, in AGENTS.md or in any phase skill.",
+        "Extend tests/acceptance/test_structure_map.py with the five node IDs above; AC-024's test generates the map into a temp --out and asserts every literal directory path in the AGENTS.md Project Structure block appears in the map's tree, plus the negative clauses (no model/, no services/, no src/frontend/, no tests/architecture citation) and the two (ambient) rows."
+      ],
+      "green_command": "uv run pytest tests/acceptance/test_structure_map.py -v",
+      "inputs": [
+        "docs/specs/structure-map.md §5 REQ-022 (the four rules), REQ-023 (the pinned hook block), REQ-024 (the four AGENTS.md places, item 1-4), REQ-026 (advisory only, the one sentence), REQ-027 (both rules documented twice), §7 AC-022/023/024/026/027, §9 EDGE-009 (the skill states the untracked-file leak)",
+        "docs/decisions/ADR-085-committed-generated-structure-map-check-only-local-hook.md (Decision bullets 3 and 5: local hook only, no CI job; the collision with the in-flight value-triage-gate change is why no workflow gate is added)",
+        "T-005 handoff (the generator is complete and deterministic, so AC-024 can generate a real map to compare the AGENTS.md block against)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          ".agents/skills/code-structure-map/SKILL.md (new)",
+          ".pre-commit-config.yaml (one added hook in the existing repo: local block)",
+          "AGENTS.md (exactly four places: the Project Structure section, the Tooling pointer line, the Tooling type-check line, the Skill-to-Phase Mapping rows)",
+          ".agents/skills/specify/SKILL.md (exactly one added advisory sentence in P.1)",
+          ".github/workflows/ (READ-ONLY witness scope: AC-023 walks every file under it and requires that none mentions make_map.py; listed so the witness scope is explicit per P-55 - this task MUST NOT edit any workflow; the only workflow edit in the DAG is T-001's)"
+        ],
+        "test_files": [
+          "tests/acceptance/test_structure_map.py"
+        ]
+      },
+      "implementation_scope": "The integration surface: skill, local hook, AGENTS.md, the specify skill's advisory sentence, and the tests that witness them. No change to scripts/make_map.py, no committed STRUCTURE.md (T-007).",
+      "design_constraints": [
+        "REQ-024 is a closed list: AGENTS.md is updated in exactly four places and nowhere else. A fifth edit is a finding, not an improvement.",
+        "AC-023's negative clause is a search over .github/workflows/: the DAG adds no map job anywhere (ADR-085 rationale - a CI --check job would fail other changes' PRs on unrelated staleness, and a workflow gate would collide with the in-flight value-triage-gate change that rewrites the Phase P table).",
+        "REQ-026 forbids turning the map into a workflow gate: no phase gate, todo status, handoff field or prohibition may depend on it. The hook is a local commit guard only.",
+        "The hook is added at stages [pre-commit] like `deptry`, not at pre-push like `mkdocs-build` (measured stages in .pre-commit-config.yaml).",
+        "Interlock (gate_interlock 2): this task adds a hook that fires on `\\.py$` while STRUCTURE.md does not yet exist, so this task and T-007 must commit no `.py` file after the hook is added; a Phase 4 fix-up that touches a `.py` here must regenerate the map in the same commit (REQ-027).",
+        "allowed_files derivation (P-55): AC-022/AC-027 read the skill file, AC-023 reads .pre-commit-config.yaml and walks .github/workflows/, AC-024 reads AGENTS.md and the generated map, AC-026 reads AGENTS.md and every file under .agents/skills/. Measured today: `grep -rn make_map .github AGENTS.md .agents` = 0 hits and `grep -rn 'tests/architecture' AGENTS.md .agents` = 0 hits, so no file inside those search scopes needs a change beyond the four listed source files; if a re-run finds a map reference in another skill file or a reintroduced tests/architecture citation, that file is added to allowed_files as a DAG correction rather than the test being weakened.",
+        "Gate scoping: red_command/green_command are targeted to this task's tests; the full suite is the Phase 5 gate.",
+        "git checkout -- uv.lock before every commit (P-42)."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before implementation; recorded in docs/verification/structure-map.md.",
+        "AC-022 passes: the skill exists with name + description frontmatter, a body under 60 lines, and all four REQ-022 rules.",
+        "AC-023 passes: the hook block matches the pinned REQ-023 YAML fields, and no file under .github/workflows/ mentions make_map.py.",
+        "AC-024 passes: every literal directory path in the Project Structure block appears in the generated map's tree; no model/, services/ or src/frontend/ entry; the Tooling section names both commands; both (ambient) rows present; `rg -n 'tests/architecture' AGENTS.md .agents` returns nothing.",
+        "AC-026 passes: no phase gate, todo status, handoff field or prohibition depends on the map, and specify/SKILL.md P.1 contains exactly one advisory sentence.",
+        "AC-027 passes: the skill and the AGENTS.md pointer line both state the same-commit rule and the conflict rule.",
+        "uv run ruff check tests/acceptance/test_structure_map.py clean; no scripts/ change, so `uv run mypy scripts/` is unaffected.",
+        "No `.py` file is committed after the hook is added without a regenerated map (REQ-027)."
+      ],
+      "dependencies": ["T-005"],
+      "status": "VERIFIED"
+    },
+    {
+      "task_id": "T-007",
+      "feature_group": "the committed artifact - STRUCTURE.md",
+      "title": "generate and commit STRUCTURE.md for the post-change tree, and gate it on AC-021 (--check exits 0 at that commit), NFR-002 (≤ 2 000 lines) and NFR-005 (the new test files stay under complexipy 15)",
+      "requirements": ["REQ-021"],
+      "acceptance_criteria": ["AC-021"],
+      "invariants": [],
+      "edge_cases": [],
+      "non_functional": ["NFR-002", "NFR-005"],
+      "amended_ids": [],
+      "tests_to_create": [
+        "tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render",
+        "tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget",
+        "tests/acceptance/test_structure_map.py::test_nfr_005_complexipy_threshold_holds"
+      ],
+      "red_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget tests/acceptance/test_structure_map.py::test_nfr_005_complexipy_threshold_holds -v",
+      "implementation_steps": [
+        "Commit every other file of the change FIRST (the generator, the tests, the skill, the hook, the AGENTS.md edits), so the working tree is clean, then run `uv run python scripts/make_map.py` at the repository root with defaults - this writes ./STRUCTURE.md for the post-change tree, which includes scripts/make_map.py itself in Packages scope (REQ-011) and the three new test files as tree entries.",
+        "Commit STRUCTURE.md as its own commit; never hand-edit it (EDGE-010: a hand-edited map is stale by definition and the resolution is regeneration).",
+        "Gate AC-021: `uv run python scripts/make_map.py --check` exits 0 at that state - the committed bytes equal a fresh render.",
+        "Gate NFR-002: count the committed map's lines and assert ≤ 2 000; record the ACTUAL line count in docs/verification/structure-map.md (the spec's projection is ≈1 875 with a ≈125-line margin). If the ceiling is exceeded, do NOT raise the ceiling and do NOT narrow the Packages scope: the knobs that would reach ~1 000 lines are already recorded in docs/verification/structure-map.md, and reaching them is a spec amendment (NFR-002 is normative at ≤ 2 000).",
+        "Gate NFR-005: run `uv run complexipy src tests --max-complexity-allowed 15`; if a function in the three new test files exceeds 15, split that test function inside this task. Never raise max-complexity-allowed and never change [tool.complexipy] paths (P-56: this CI job exists and no Phase 3-5 step runs it, so NFR-005's test is the only place it is caught).",
+        "Add the three node IDs above to tests/acceptance/test_structure_map.py: AC-021 runs --check against the committed file; NFR-002 counts its lines; NFR-005 runs the complexipy command and asserts exit 0.",
+        "Confirm the committed map is hook-clean (the trailing-whitespace and end-of-file-fixer hooks leave it unchanged - INV-006, already proven in T-005) and that no `.gitattributes` was added.",
+        "Record in docs/verification/structure-map.md: the map's line count, the tree/Packages entry counts, and the confirmation that every literal directory path in the corrected AGENTS.md Project Structure block appears in the map's tree (the AC-024 cross-check against the real artifact)."
+      ],
+      "green_command": "uv run pytest tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget tests/acceptance/test_structure_map.py::test_nfr_005_complexipy_threshold_holds -v",
+      "inputs": [
+        "docs/specs/structure-map.md §5 REQ-021, §7 AC-021, §10 NFR-002 (the ≤ 2 000 ceiling and the ≈1 875 projection) and NFR-005, §13 (why the map is committed and treated as the truth)",
+        "docs/decisions/ADR-085-committed-generated-structure-map-check-only-local-hook.md (Decision bullets 1-3; Consequences: the map is generated last and reflects the post-change tree)",
+        "docs/verification/structure-map.md (the re-measured counts and the NFR-002 projection recomputation, F-01)",
+        "T-006 handoff (the skill, the hook, the AGENTS.md corrections and the advisory sentence all exist, so the map generated here is the final one)"
+      ],
+      "allowed_files": {
+        "source_files": [
+          "STRUCTURE.md (new; generated by `uv run python scripts/make_map.py`, never hand-edited)"
+        ],
+        "test_files": [
+          "tests/acceptance/test_structure_map.py",
+          "tests/unit/test_make_map.py (READ-ONLY unless NFR-005 fails: complexipy scans src and tests, so a function over 15 is fixed here - listed per P-55)",
+          "tests/property/test_structure_map.py (READ-ONLY unless NFR-005 fails: same reason)"
+        ]
+      },
+      "implementation_scope": "The committed artifact and its three gates. No change to scripts/make_map.py, no change to AGENTS.md or the skills, no CI job, no .gitattributes. If the generator itself changes in this task, the map must be regenerated afterwards because the map maps the generator (REQ-011).",
+      "design_constraints": [
+        "T-007 is LAST (ADR-085): AC-021, NFR-002 and NFR-005 can only be gated once the whole change exists, because the committed map must reflect the post-change tree (gate satisfiability - no earlier task can pass them).",
+        "The map maps itself: scripts/make_map.py is in Packages scope (REQ-011), so the generator's final content determines part of the map's content. Generate after the generator is final; if the generator changes again, regenerate the map in the same commit (REQ-027) and re-run --check.",
+        "NFR-002's ceiling (≤ 2 000 lines) is normative and already deviates from question Q-7's ~900-1 000 budget (spec §10 NFR-002); the REQ-017 per-class field cap is the safety valve and must not be raised to meet the budget.",
+        "NFR-005's witness is the CI `complexity` job command (`uv run complexipy src tests --max-complexity-allowed 15`, P-56). scripts/ is NOT analyzed by complexipy, so the generator's own complexity is unconstrained by that job - but the three new test files are, and they are created by earlier tasks, which is why they are in this task's allowed_files.",
+        "AC-021's witness runs --check at the committed state, so the map must be generated from a clean tree: generate after all other change files are committed, then commit the map alone.",
+        "No CI job, no .gitattributes, no dependency change, no coverage/complexity/bandit/ty configuration change in this task.",
+        "allowed_files derivation (P-55): AC-021 runs --check over the whole repository (read-only); NFR-002 counts STRUCTURE.md; NFR-005 runs complexipy over src/ and tests/ - a violation there can only be fixed by editing one of the three new test files, so all three are listed even though two are expected to need no edit. src/ is inside complexipy's scan set but this DAG edits no src/ file (verified: no task in this DAG lists a src/ path).",
+        "Gate scoping: red_command/green_command are targeted to this task's three tests; the full suite is the Phase 5 gate.",
+        "git checkout -- uv.lock before every commit (P-42); commit locally, push nothing."
+      ],
+      "completion_gates": [
+        "RED observed on the red_command set before the artifact exists; recorded in docs/verification/structure-map.md.",
+        "AC-021 passes: `uv run python scripts/make_map.py --check` exits 0 with the committed STRUCTURE.md present.",
+        "NFR-002 passes: the committed map is ≤ 2 000 lines and its actual line count is recorded in docs/verification/structure-map.md.",
+        "NFR-005 passes: `uv run complexipy src tests --max-complexity-allowed 15` exits 0.",
+        "STRUCTURE.md is committed, the working tree is clean (`git status --porcelain` empty after `git checkout -- uv.lock`), and nothing is pushed.",
+        "The map's tree contains every literal directory path shown in the corrected AGENTS.md Project Structure block (the AC-024 cross-check against the real artifact).",
+        "uv run ruff check tests/acceptance/test_structure_map.py tests/unit/test_make_map.py tests/property/test_structure_map.py clean (only if this task touched a test file)."
+      ],
+      "dependencies": ["T-006"],
+      "status": "VERIFIED"
+    }
+  ]
+}

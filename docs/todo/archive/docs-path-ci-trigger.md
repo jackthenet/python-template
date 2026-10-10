@@ -4,8 +4,9 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
-- **Disposition:** **DROPPED** — user decision, 2026-10-04 (value triage 1/5). The `Status:` vocabulary has no value for a dead item; adding one is `value-triage-gate` Q-3, still unanswered, so the status line stays as-is and this line is the record.
+- **Status:** DROPPED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+  <!-- advanced 2026-10-07: `value-triage-gate` merged (PR #70, d77e833) and added `DROPPED` to the vocabulary, so the drop decision recorded below is now expressible in `Status:`; both records archived -->
+- **Disposition:** **DROPPED** — user decision, 2026-10-04 (value triage 1/5). At the time the `Status:` vocabulary had no value for a dead item (`value-triage-gate` Q-3, then unanswered); that change has since merged, so the status line now carries the decision.
 - **Change type:** DOCS/CHORE
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/docs-path-ci-trigger.md`

@@ -285,8 +285,13 @@ body** is not rendered — it is a statement inside a function, not a module- or
   `async def` keeps the `async ` prefix inside the backticked signature.
 - method line (two-space indent): `  - ` + decorators + backticked signature + `: ` + summary (no `def` keyword).
 - signatures are produced with `ast.unparse` for parameters, annotations and return annotation, so
-  formatting drift in the source cannot change the map; a parameter default is included **only when
-  its unparsed text is ≤ 20 characters**.
+  formatting drift in the source cannot change the map; a parameter default is rendered **only when
+  its unparsed text is ≤ 20 characters**, and a default that exceeds the threshold is abbreviated to
+  the single-character placeholder **`…` in its own slot** — the parameter is never removed from the
+  rendered list and never loses its `=` separator, so the rendered list preserves the source's
+  parameter names, their order, the positional-only / positional / keyword-only split, and **which
+  parameters carry a default**. The rule is **uniform** across positional, positional-only and
+  keyword-only defaults (EDGE-017, INV-007).
 - a nested class (a `class` statement directly in a class body) renders as a member line of its
   enclosing class (`  - class \`Inner\`: summary`) with its own members at the next indent level. No
   class is nested inside a class at the base commit — the 12 classes the base-commit scan finds under
@@ -421,7 +426,7 @@ Each AC is stated against the REQ it satisfies; the AC→REQ column is the cover
 | AC-011 | REQ-011 | **Given** the current tree, **Then** the Packages section has an entry for every `.py` under `src/`, `scripts/` and `migrations/`, **And** for each `conftest.py` and each `*_test_helpers.py` under `tests/`, **And** for no other `tests/` module. |
 | AC-012 | REQ-012 | **Given** the `backend.settings` package, **Then** exactly one header line shows `` `backend.settings` `` and `src/backend/settings/`, **And** its `exports:` line lists the sorted public names of its `__init__.py`, **And** no per-module import line appears. |
 | AC-013 | REQ-013 | **Given** a module with a docstring, **Then** its header is `#### <path> (<N> lines)` where `N` is the file's line count, followed by its summary line; **Given** a module without one, **Then** no summary line is rendered. |
-| AC-014 | REQ-014 | **Given** a module containing a class, a module-level function, methods, an `async def` and a nested class, **Then** each is rendered exactly once, in the REQ-014 group order (classes before functions, each group in source order), in the stated line form, **And** the signature text equals the `ast.unparse` rendering, **And** a parameter default of ≤ 20 characters is shown while a longer one is omitted. |
+| AC-014 | REQ-014 | **Given** a module containing a class, a module-level function, methods, an `async def` and a nested class, **Then** each is rendered exactly once, in the REQ-014 group order (classes before functions, each group in source order), in the stated line form, **And** the signature text equals the `ast.unparse` rendering **except that a parameter default whose unparsed text exceeds 20 characters renders as the `…` placeholder in its own slot**, **And** a parameter default of ≤ 20 characters is shown verbatim while a longer one is abbreviated to `…`, **And** the rendered parameter list, **with every `…` replaced by the literal `...`**, parses with `ast.parse` and yields the same parameter names, order, positional-only / positional / keyword-only split and set of defaulted parameters as the source. |
 | AC-015 | REQ-015 | **Given** symbols decorated with `@logged_class`, `@property` and `@pytest.fixture`, **Then** each decorator renders as a `@name` prefix before the `class`/`def`/signature token, in source order, **And** a decorator call renders as its `ast.unparse` text. |
 | AC-016 | REQ-016 | **Given** a module containing `_helper`, `_Private` and `__init__`, **Then** `__init__` is rendered with or without `--include-private`, **And** `_helper` and `_Private` are rendered only with the flag, **And** the set of rendered modules and packages is identical with and without it. |
 | AC-017 | REQ-017 | **Given** a class with annotated fields, a field with `Field(...)` and an unannotated assignment, **Then** each annotated field renders as `name: annotation` with no default and no `Field(...)` payload, **And** the unannotated assignment is absent, **And** a class with 17 annotated fields renders 15 field lines plus `… +2 fields`. |
@@ -446,6 +451,7 @@ Each AC is stated against the REQ it satisfies; the AC→REQ column is the cover
 | INV-004 | `--check` exits `0` if and only if the existing `--out` file's bytes equal a fresh render after `\r\n` → `\n` normalisation; any other difference (added, removed, reordered or whitespace-only) exits `1`. |
 | INV-005 | The generator writes no file other than `--out`, and only in generate mode (it creates `--out`'s parent directory when missing, EDGE-006, and no other directory); `--check` never modifies the working tree. |
 | INV-006 | For any generated map, the active `trailing-whitespace` and `end-of-file-fixer` hooks leave the file unchanged. |
+| INV-007 | For every rendered signature, the parameter list with each `…` placeholder replaced by the literal `...` parses with `ast.parse` and yields exactly the source's parameter names in order, the same positional-only / positional / keyword-only split, and exactly the set of parameters that carry a default; a `…` appears **only** where the source default's unparsed text exceeds the REQ-014 threshold. |
 
 ## 9. Edge Cases
 
@@ -467,6 +473,7 @@ Each AC is stated against the REQ it satisfies; the AC→REQ column is the cover
 | EDGE-014 | `--max-depth 0` or a negative value | Usage error, exit 2. |
 | EDGE-015 | The tree contains a top-level directory not in the role-label table | `<name>/ — <N> files`, no label; the directory is still counted. |
 | EDGE-016 | The checked-out `STRUCTURE.md` has CRLF line endings (no `.gitattributes` in this repository, `core.autocrlf=true` on Windows hosts) | `--check` normalises `\r\n` → `\n` before comparing and exits `0`; generate mode rewrites the file with LF (REQ-005). |
+| EDGE-017 | A parameter default whose unparsed text exceeds 20 characters, in a positional, positional-only or keyword-only slot — including a function whose **only** default is over-long, and a keyword-only parameter that has **no** default at all | The parameter is rendered in its own slot as `name: annotation=…`; the placeholder never shifts a neighbouring default onto an earlier parameter, a parameter with no default is never given one, and a parameter with a default is never rendered without one. |
 
 ## 10. Non-Functional Requirements
 
@@ -543,6 +550,7 @@ appears in the REQ column below, so each REQ is covered by the AC that cites it.
 | INV-004 | REQ-005 | property | `tests/property/test_structure_map.py` | `test_inv_004_check_matches_byte_equality` |
 | INV-005 | REQ-005 | property | `tests/property/test_structure_map.py` | `test_inv_005_check_writes_nothing` |
 | INV-006 | REQ-019 | property | `tests/property/test_structure_map.py` | `test_inv_006_output_is_hook_clean` |
+| INV-007 | REQ-014 | property | `tests/property/test_structure_map.py` | `test_inv_007_signature_fidelity_survives_default_abbreviation` |
 | EDGE-001 | REQ-013 | unit | `tests/unit/test_make_map.py` | `test_edge_001_missing_docstring_renders_no_summary` |
 | EDGE-002 | REQ-013 | unit | `tests/unit/test_make_map.py` | `test_edge_002_empty_file_renders_header_only` |
 | EDGE-003 | REQ-006 | unit | `tests/unit/test_make_map.py` | `test_edge_003_newer_syntax_is_hard_failure` |
@@ -559,6 +567,7 @@ appears in the REQ column below, so each REQ is covered by the AC that cites it.
 | EDGE-014 | REQ-002 | acceptance | `tests/acceptance/test_structure_map.py` | `test_edge_014_max_depth_below_one_is_usage_error` |
 | EDGE-015 | REQ-009 | acceptance | `tests/acceptance/test_structure_map.py` | `test_edge_015_unlabelled_dir_counted_without_label` |
 | EDGE-016 | REQ-005 | acceptance | `tests/acceptance/test_structure_map.py` | `test_edge_016_crlf_checkout_is_not_stale` |
+| EDGE-017 | REQ-014 | unit | `tests/unit/test_make_map.py` | `test_edge_017_over_long_default_keeps_its_slot` |
 | NFR-001 | REQ-001 | acceptance | `tests/acceptance/test_structure_map.py` | `test_nfr_001_full_run_under_two_seconds` |
 | NFR-002 | REQ-011 | acceptance | `tests/acceptance/test_structure_map.py` | `test_nfr_002_map_line_budget` |
 | NFR-003 | REQ-001 | acceptance | `tests/acceptance/test_structure_map.py` | `test_nfr_003_deptry_clean` |
@@ -630,6 +639,17 @@ evidence of this spec's coverage (see `docs/verification/structure-map.md`, find
 
 ## 15. Changelog
 
+- v2 (2026-10-10): REQ-014 amended — a parameter default is rendered only when its unparsed text is
+  ≤ 20 characters, and an over-long default is now abbreviated to the `…` placeholder in its own slot
+  instead of being dropped from the rendered parameter list, so parameter names, order, the
+  positional-only / positional / keyword-only split and which parameters carry a default are
+  preserved; the rule is uniform across the three slots. AC-014 amended — the signature text equals
+  the `ast.unparse` rendering except for the `…` placeholder, and the rendered parameter list, with
+  every `…` replaced by the literal `...`, must parse with `ast.parse` and yield the source's
+  parameter names, order, slot split and set of defaulted parameters. INV-007 (signature fidelity)
+  and EDGE-017 added, with their §11 witnesses. The 20-character threshold value is unchanged. No
+  existing ID was renumbered, restated or deleted. Change `map-default-drop-shift` (ISSUE, Spec
+  Amendment Workflow); see `docs/verification/map-default-drop-shift.md`.
 - v1 (2026-10-05): initial specification (P.4). P.5 self-consistency pass: exit-code precedence order,
   pinned missing-`--out` message, symbol group order, function-local classes excluded, INV-002 scoped to
   code dirs, `exports:`/docstring/hidden-symbol counts re-measured, NFR-002 projection recomputed with

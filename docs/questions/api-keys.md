@@ -27,6 +27,17 @@ Every question that needs user input is recorded HERE — never in a central fil
 
 ## Preparation questions (P.2)
 
+> **Re-scoped on 2026-10-08 (P.3, round 1).** Q-01…Q-04 are answered, and they change the shape of this
+> item: the user wants a real HTTP API for the backend (**FastAPI + uvicorn**), authenticated by the
+> backend's **own session tokens**, exposing **all 61 enforced catalog actions**, and they approved
+> amending `docs/specs/authentication.md` and `docs/specs/session-management.md`, which currently exclude
+> an HTTP layer. That boundary is its own change: **`backend-api`** (`docs/todo/backend-api.md`,
+> CROSS-CUTTING). This TODO now **depends on `backend-api`** and keeps only the machine-credential half
+> (a non-interactive credential + its usage audit). **Q-05…Q-31 stay PENDING** — most of them (scopes,
+> prefixes, key caps, audit vocabulary) only exist once the API exists, and several are answered by the
+> new change instead.
+
+
 | ID | Question (one line) | Blocking |
 |---|---|---|
 | Q-01 | Is the LLM-facing surface an HTTP server, or an in-process tool API + JSON-schema export (no server)? | yes (the central question; decides deps, ADRs, spec amendments) |
@@ -66,8 +77,11 @@ Every question that needs user input is recorded HERE — never in a central fil
 ### Q-01 — HTTP server, or in-process tool API + schema export?
 
 - **Step:** P.2 (Phase P)
-- **Status:** PENDING
-- **Incorporated:** no
+**Answer:** C — FastAPI + uvicorn. The user wants a real API interface: "I want to have an api interface so fastAPI + uvicorn seem to be a good choice." They also approved amending the two specs that exclude an HTTP layer. Consequence: the boundary is re-scoped as the new change `backend-api` (see the re-scope note), which owns it; api-keys becomes a consumer of it.
+- **Status:** ANSWERED
+- **Date:** 2026-10-08
+
+- **Incorporated:** yes — see the re-scope note at the head of this file
 
 **Context:** The TODO names this the central question. The repo has **no HTTP layer at all**: `grep -rni "fastapi|flask|starlette|uvicorn|aiohttp" pyproject.toml src` returns nothing, and the runtime dependencies (`pyproject.toml:8-24`) are pydantic, loguru, orjson, httpx (client only, unused in `src` — deptry `DEP002` ignore, `pyproject.toml:115`), sqlmodel, argon2-cffi, email-validator, filetype, pillow, ruamel-yaml. Existing specs exclude a server **normatively**: `docs/specs/authentication.md:15` ("Out of scope: … HTTP/REST/GraphQL API layer") and `docs/specs/session-management.md` Constraints ("Backend-only in-process service — no HTTP/REST layer, no frontend").
 
@@ -85,8 +99,11 @@ Every question that needs user input is recorded HERE — never in a central fil
 ### Q-02 — FEATURE or CROSS-CUTTING?
 
 - **Step:** P.2 (Phase P)
-- **Status:** PENDING
-- **Incorporated:** no
+**Answer:** Re-scoped — the change is now `backend-api` (CROSS-CUTTING). The user's answer: "Why is this feature called apikeys shouldn't it simply be the api of the backend?" — accepted. The backend's HTTP boundary is the change; the machine-credential (api-keys) part is deferred to a separate TODO that depends on `backend-api`.
+- **Status:** ANSWERED
+- **Date:** 2026-10-08
+
+- **Incorporated:** yes — see the re-scope note at the head of this file
 
 **Context:** P.1 classified FEATURE with a note that it is a strong escalation candidate. The Change Types table (#3) makes CROSS-CUTTING the label when a change "intentionally spans two or more features: new shared capability, architecture change, or shared-infrastructure change". The Impact Analysis below (see *Impact Analysis (P.2)*) shows intentional, deliberate touchpoints in **authentication** (token helpers), **user-roles-permissions** (new catalog actions + the enforcement seam), **user-management** (revocation-cascade events), **search** (a new source), **settings** (a new key family), **eventbus** (new events), **logging-coverage** (REQ-012 tracing policy), and the composition root `src/main.py`.
 
@@ -104,8 +121,11 @@ Every question that needs user input is recorded HERE — never in a central fil
 ### Q-03 — Which seam turns a raw key into an acting principal?
 
 - **Step:** P.2 (Phase P)
-- **Status:** PENDING
-- **Incorporated:** no
+**Answer:** Neither A nor B nor C as written — use the backend's own session tokens. The user's answer: "the api should use the tokens etc that the backend provides." That is the existing path: `AuthService.login()` issues a session token, the API puts it in `Principal(user_id, session_token)`, and `PermissionService._validate_session` validates it. **Correction to this entry's Context:** its "Important finding" is stale — `src/main.py:158` passes `session_lookup=_session_repository  # validates a provided session token (REQ-017, AC-020)`, so token validation is wired and live on `main`. No new seam, no `Principal` change.
+- **Status:** ANSWERED
+- **Date:** 2026-10-08
+
+- **Incorporated:** yes — see the re-scope note at the head of this file
 
 **Context:** `Principal` (`src/backend/shared/principal.py:21-29`) has exactly two fields, `user_id` and `session_token`. `@requires_permission` (`src/backend/shared/principal.py:51-70`) calls `checker.require_permission(principal.user_id, permission_key, session_token=principal.session_token)`. `PermissionService._validate_session` (`src/backend/permissions/service.py:399-418`) already validates a bearer token through the structural `SessionLookup` seam (`get_by_token_hash(token_hash) -> SessionRecord | None`, `src/backend/permissions/models.py:78-81`) — an API-key row has exactly that shape. **Important finding:** the composition root does **not** wire a lookup — `src/main.py:145-153` constructs `PermissionService(...)` with no `session_lookup` argument, so today any `Principal(session_token=...)` denies with `storage_error` (fail-closed, `src/backend/permissions/service.py:407-408`).
 
@@ -123,8 +143,11 @@ Every question that needs user input is recorded HERE — never in a central fil
 ### Q-04 — Which permission is checked on a key-driven call?
 
 - **Step:** P.2 (Phase P)
-- **Status:** PENDING
-- **Incorporated:** no
+**Answer:** A — the target action is the checked permission, via the owner's existing roles. After re-phrasing, the user's answer is that the backend's existing permissions decide access. There is **no per-key scope list in v1**: the API resolves the session token to its owner and calls the feature method with that `Principal`, so `@requires_permission` + the closed 61-action catalog decide. Scope-checking machinery is deferred with the api-keys credential change.
+- **Status:** ANSWERED
+- **Date:** 2026-10-08
+
+- **Incorporated:** yes — see the re-scope note at the head of this file
 
 **Context:** Every enforced method is decorated with its own action key (ADR-071), and the live catalog holds exactly 61 actions across 7 features (authentication 11, usermanagement 11, settings 19, filemanagement 10, sessionmanagement 6, mail 3, search 1). The TODO's acceptance signal is "a key scoped to `usermanagement.list_users` can perform that action but is denied `usermanagement.create_user`".
 

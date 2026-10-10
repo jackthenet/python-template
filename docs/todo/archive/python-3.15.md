@@ -4,8 +4,9 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** QUESTIONS-ANSWERED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED -->
-- **Disposition:** **DROPPED as satisfied** — user decision, 2026-10-04. Q-1 = (C) collapsed the scope to "record the measured blocker", and that record now lives in `docs/todo/python-3.15-upgrade.md` (framed the same day) together with the support window (Q-4) and the trigger. Running P.4–Phase 6 for three sentences is process overhead with no consumer. `Status:` stays as-is: `value-triage-gate` Q-3 adds `DROPPED` to the vocabulary and the `docs/todo/archive/` folders, but that change has not merged, so the move happens only after it lands.
+- **Status:** DROPPED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+  <!-- advanced 2026-10-07: `value-triage-gate` merged (PR #70, d77e833), so `DROPPED` and the archive folders now exist and the deferred move is performed -->
+- **Disposition:** **DROPPED as satisfied** — user decision, 2026-10-04. Q-1 = (C) collapsed the scope to "record the measured blocker", and that record now lives in `docs/todo/python-3.15-upgrade.md` (framed the same day) together with the support window (Q-4) and the trigger. Running P.4–Phase 6 for three sentences is process overhead with no consumer. The `Status:` advance and the archive move were deferred until `value-triage-gate` landed; it merged (PR #70, d77e833), so both are done now.
 - **Change type:** DOCS/CHORE  <!-- config/tooling only; escalates to REFACTOR if 3.15-only features are adopted in src/, or to ISSUE if an upgrade exposes a defect -->
 - **Created:** 2026-10-03
 - **Question file:** `docs/questions/python-3.15.md`

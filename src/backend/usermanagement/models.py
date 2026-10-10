@@ -25,7 +25,7 @@ _ROLE_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 
 
 class RoleListType(TypeDecorator):
-    """Persist a role list as JSON text in a ``VARCHAR`` column (REQ-026).
+    """Persist a role list as JSON text in a ``VARCHAR`` column (user-roles-permissions REQ-026).
 
     The role list is the user's self-contained set of roles (ADR-072); the
     column stores a JSON array (e.g. ``["admin", "user"]``) so the multi-role
@@ -37,11 +37,17 @@ class RoleListType(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value: Any, dialect: Dialect) -> Any:
+        """Bind hook: a role list is written as a JSON array string; ``None`` is stored as ``NULL``."""
         if value is None:
             return None
         return json.dumps(list(value))
 
     def process_result_value(self, value: Any, dialect: Dialect) -> Any:
+        """Load hook: a stored JSON string is decoded back to a list.
+
+        A value the driver already materialized as a list is copied rather
+        than re-decoded, and ``NULL`` stays ``None``.
+        """
         if value is None:
             return None
         if isinstance(value, str):
@@ -56,6 +62,11 @@ _DISPLAY_NAME_MAX_LEN = 64
 
 
 def _validate_password(value: str) -> str:
+    """The shared password rules (NFR-001): 8..128 characters, at least one letter and one digit.
+
+    Raises ``ValueError`` naming the violated rule, which pydantic wraps into
+    a ``ValidationError`` identifying the field (AC-005).
+    """
     if not _PASSWORD_MIN_LEN <= len(value) <= _PASSWORD_MAX_LEN:
         raise ValueError(f"password must be {_PASSWORD_MIN_LEN}..{_PASSWORD_MAX_LEN} characters")
     if not any(c.isalpha() for c in value):
@@ -66,6 +77,7 @@ def _validate_password(value: str) -> str:
 
 
 def _validate_display_name(value: str | None) -> str | None:
+    """``None`` passes through as "unset"; a blank (whitespace-only) or over-long value is rejected."""
     if value is None:
         return None
     if not value.strip():
@@ -76,6 +88,7 @@ def _validate_display_name(value: str | None) -> str | None:
 
 
 def _validate_profile_picture_url(value: str | None) -> str | None:
+    """Scheme check only: the value must start with ``http://`` or ``https://``; it is never fetched or parsed further."""
     if value is None:
         return None
     if not (value.startswith("http://") or value.startswith("https://")):
@@ -121,6 +134,7 @@ class UserCreate(BaseModel):
     @field_validator("username")
     @classmethod
     def _check_username(cls, value: str) -> str:
+        """3..32 characters, alphanumeric at both ends, ``.``/``_``/``-`` in between (AC-004)."""
         if not _USERNAME_RE.fullmatch(value):
             raise ValueError("username must match ^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]$")
         return value
@@ -128,16 +142,24 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def _check_password(cls, value: str) -> str:
+        """Delegate to the shared password rules so the two schemas cannot drift (ADR-023)."""
         return _validate_password(value)
 
     @field_validator("display_name")
     @classmethod
     def _check_display_name(cls, value: str | None) -> str | None:
+        """Shared display-name rule, identical to ``UserUpdate``'s."""
         return _validate_display_name(value)
 
     @field_validator("roles")
     @classmethod
     def _check_roles(cls, value: list[str]) -> list[str]:
+        """A non-empty list of role names matching the storage pattern (user-roles-permissions REQ-026).
+
+        Role *existence* is not checked here — that is the service's role
+        store's job (an unknown role is an ``InvalidRoleError``, not a
+        validation error).
+        """
         if not value:
             raise ValueError("roles must be non-empty")
         for role in value:
@@ -148,6 +170,7 @@ class UserCreate(BaseModel):
     @field_validator("profile_picture_url")
     @classmethod
     def _check_profile_picture_url(cls, value: str | None) -> str | None:
+        """Shared http/https rule: a non-web scheme is a validation error (AC-007)."""
         return _validate_profile_picture_url(value)
 
 
@@ -163,6 +186,7 @@ class NewPassword(BaseModel):
     @field_validator("password")
     @classmethod
     def _check_password(cls, value: str) -> str:
+        """The same rules as ``UserCreate.password``, so a change cannot accept what creation rejects (ADR-023)."""
         return _validate_password(value)
 
 
@@ -180,11 +204,13 @@ class UserUpdate(BaseModel):
     @field_validator("display_name")
     @classmethod
     def _check_display_name(cls, value: str | None) -> str | None:
+        """Same rule as on create; ``None`` means "leave unchanged", not "clear" (REQ-011)."""
         return _validate_display_name(value)
 
     @field_validator("profile_picture_url")
     @classmethod
     def _check_profile_picture_url(cls, value: str | None) -> str | None:
+        """Same rule as on create; ``None`` means "leave unchanged" (REQ-011)."""
         return _validate_profile_picture_url(value)
 
 

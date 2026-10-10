@@ -110,8 +110,12 @@ def _file_fields(record: FileRecord) -> dict[str, Any]:
 
 
 def _free_text_matches(fields: dict[str, Any], free_text: str) -> bool:
-    """A non-empty (normalized) free text matches if any searchable string
-    field contains it (REQ-005, D13)."""
+    """Whether the normalized free text matches any searchable string field.
+
+    Only string-valued fields can match, and an empty free text is a substring
+    of any of them — the ``None`` free-text case is short-circuited by the
+    caller (REQ-005, D13).
+    """
     for name in _SEARCHABLE:
         value = fields.get(name)
         if isinstance(value, str) and free_text in _normalize(value):
@@ -120,8 +124,10 @@ def _free_text_matches(fields: dict[str, Any], free_text: str) -> bool:
 
 
 def _eval_group(group: FilterGroup, fields: dict[str, Any]) -> bool:
-    """Evaluate a (nestable) AND/OR filter group over the field values
-    (REQ-006, D4)."""
+    """Evaluate a (nestable) AND/OR filter group over the field values.
+
+    Nested groups recurse through this same helper (REQ-006, D4).
+    """
     results = [
         _eval_group(cond, fields) if isinstance(cond, FilterGroup) else _eval_condition(cond, fields)
         for cond in group.conditions
@@ -130,9 +136,11 @@ def _eval_group(group: FilterGroup, fields: dict[str, Any]) -> bool:
 
 
 def _eval_condition(cond: FilterCondition, fields: dict[str, Any]) -> bool:
-    """Evaluate a single filter condition over the field values (REQ-006, D4):
-    string matching is case-insensitive (normalized); number/datetime are
-    exact (REQ-012)."""
+    """Evaluate a single filter condition over the field values (REQ-006, D4).
+
+    String matching is case-insensitive (normalized); number/datetime are exact
+    (REQ-012).
+    """
     value = fields.get(cond.field)
     if cond.operator is FilterOperator.IS_NULL:
         return value is None
@@ -158,7 +166,7 @@ def _apply_string_operator(value: str, op: FilterOperator, fv: Any) -> bool:
 
 
 def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
-    """number / datetime operators: exact (REQ-012)."""
+    """Number / datetime operators: exact comparison (REQ-012)."""
     if op is FilterOperator.EQUALS:
         return value == fv
     if op is FilterOperator.IN_LIST:
@@ -168,8 +176,11 @@ def _apply_exact_operator(value: Any, op: FilterOperator, fv: Any) -> bool:
 
 
 def _sort_key(value: Any) -> tuple:
-    """A sort key: ``None`` last, strings by their normalized value, others
-    exact (D8; deterministic)."""
+    """The sort key for a field value: ``None`` always sorts last.
+
+    Strings sort by their normalized value, everything else exactly (D8;
+    deterministic).
+    """
     if value is None:
         return (1, "")
     if isinstance(value, str):
@@ -178,11 +189,13 @@ def _sort_key(value: Any) -> tuple:
 
 
 def _query(repository: FileRepository, ctx: SourceQueryContext) -> SourcePage:
-    """The source's query function (REQ-021): over the existing
-    ``FileRepository.list_by_namespace`` (full fetch via
-    ``list_by_namespace(None, limit=<large>, offset=0)`` because the
-    repository applies the LIMIT in SQL); applies free text, filters, sort,
-    and pagination; the default ordering is ``created_at`` ascending."""
+    """The source's query function (REQ-021).
+
+    The whole store is fetched through ``FileRepository.list_by_namespace``
+    (``namespace=None``, a large ``limit``) because the repository applies the
+    LIMIT in SQL; free text, filters, sort and pagination are then applied in
+    memory. The default ordering is ``created_at`` ascending.
+    """
     records = repository.list_by_namespace(None, limit=_FULL_FETCH_LIMIT, offset=0)
     items = [SourceItem(item_id=str(record.id), fields=_file_fields(record)) for record in records]
     matched = [
@@ -204,8 +217,10 @@ def _query(repository: FileRepository, ctx: SourceQueryContext) -> SourcePage:
 
 
 def build_file_source(repository: FileRepository) -> SearchSource:
-    """Build the file-management search source over ``repository``
-    (REQ-021, D19, ADR-077): name ``filemanagement``, the field schema, and
-    the sync query function over the existing ``FileRepository.list_by_namespace``.
+    """Build the file-management search source over ``repository``.
+
+    The source is named ``filemanagement`` and pairs the declared field schema
+    with the sync query function over the existing
+    ``FileRepository.list_by_namespace`` (REQ-021, D19, ADR-077).
     """
     return SearchSource(name=_SOURCE_NAME, fields=list(_FIELDS), query=lambda ctx: _query(repository, ctx))

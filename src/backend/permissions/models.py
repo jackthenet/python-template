@@ -31,8 +31,10 @@ class Role(SQLModel, table=True):
 
 
 class RolePermission(SQLModel, table=True):
-    """A dynamic role->permission grant (a catalog action key or a feature
-    wildcard ``<feature>.*``)."""
+    """A dynamic role->permission grant.
+
+    The key is a catalog action or a feature wildcard ``<feature>.*``.
+    """
 
     __tablename__ = "role_permissions"
 
@@ -78,7 +80,14 @@ class SessionRecord(Protocol):
 class SessionLookup(Protocol):
     """Structural session-validation seam (D9)."""
 
-    def get_by_token_hash(self, token_hash: str) -> SessionRecord | None: ...
+    def get_by_token_hash(self, token_hash: str) -> SessionRecord | None:
+        """Look a session up by the SHA-256 hash of its token, never by the token itself (D9).
+
+        An unknown token is ``None``; a revoked or expired session is still
+        returned as a record, and the check turns either shape into
+        ``invalid_session`` (REQ-017).
+        """
+        ...
 
 
 # The built-in role names (seeded by the migration, REQ-007). These are always

@@ -51,6 +51,12 @@ class SmtpTransportImpl(SmtpTransport):
         use_tls: bool,
         timeout: float,
     ) -> None:
+        """Capture the SMTP endpoint and credentials; nothing connects here.
+
+        ``send`` opens its own connection each time and authenticates only when
+        ``username`` is non-empty. ``password`` never reaches the log records —
+        the class is traced with ``include_args=False`` (NFR-002).
+        """
         self._host = host
         self._port = port
         self._username = username
