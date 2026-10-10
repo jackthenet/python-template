@@ -234,11 +234,108 @@ All measurements below were taken at `main` (`d2d58a3`, 2026-10-10) in the prima
 - **Status:** PENDING
 - **Incorporated:** no
 
+## Q-18 — Absorb or separate: which change adds the three `register_settings` calls?
+
+- **Step:** P.2 Interrogate — Phase P
+- **Why needed:** `composition-root-factory` Q-14 was answered **C** on 2026-10-10 — against that step's recommendation — and it assigns **this TODO's entire scope** (the three never-called `register_settings` calls plus an acceptance test asserting the gap is closed) to that change. One of the two records must give way, or the fix is done twice, or never. This is the change's first open decision: nothing else in the batch (witness shape, placement, bump) matters if the calls are not this change's work.
+- **Context:** Overlap evidence, measured 2026-10-10 at `main` (`a60d109`):
+  - `docs/questions/composition-root-factory.md:206-216` — Q-14 **ANSWERED C**: "fix the three missing `register_settings` calls in this change, with a new acceptance test asserting the gap is closed", and its `Incorporated:` line already reads "the separate `docs/todo/startup-settings-registration-gaps.md` TODO (score 5/5) is now absorbed by this change — its disposition (merge into this change / keep separate) is the orchestrator's next backlog decision."
+  - `composition-root-factory` state: TODO `Status: WAITING`, type CROSS-CUTTING (reclassified at its P.3 Q-01 = A), **no spec, no worktree, no PR** (`ls docs/specs/composition-root-factory.md` → no such file; `git worktree list` → primary + `crosscut/settings-public-registry-setter` + `issue/map-default-drop-shift` only), and **22 of its 30 questions still PENDING** (8 `ANSWERED`). Its Q-02 = A makes `settings-public-registry-setter` a **hard gate** (its P.4 may not start before that change merges). Its Q-01 = A also plans a **Spec Amendment PR over `settings-coverage.md` REQ-002/AC-003** — the exact IDs this ISSUE cites — and its Q-12 (PENDING) proposes rewriting `test_main_wires_all_features` in-process, i.e. the very witness Q-04/Q-05/Q-06 here would strengthen.
+  - `composition-root-singleton-install` (PREPARING, 27 questions) assumes the **opposite** split: its Q-26 recommends its own witness assert *nothing* about which settings are registered "the registration gap is another change's work", and its Q-01 (absorb vs separate for the two service installs) is the same open question as `composition-root-factory` Q-15 (PENDING).
+  - `settings-public-registry-setter` (IN-WORKFLOW, `Status: WAITING`): spec PR #73 **MERGED**, 11/12 tasks `VERIFIED`, 1 `PENDING`, branch pushed, **no code PR open yet** (`gh pr list --state open` → only #80). Its approved REQ-011/AC-016 pin "the six `register_*_settings(...)` calls (`:173-178`)" — stale the moment any seventh call is added, whoever adds it (Q-13).
+  - Other live TODOs that edit the same startup block but add **their own** registrations, never these three: `api-keys` ("Startup wiring in `src/main.py`"), `backend-api` ("Wiring: `src/main.py`"), `notifications`.
+  - The gap itself, re-measured: nine `register_settings` definitions, six calls (`src/main.py:173-178`), 16 unregistered keys (filemanagement 5, mail 8, sessionmanagement 3), 34 keys total.
+  - This TODO: `Status: PREPARING`, value score **5/5**, and its `## Value triage` `Decision:` field is still the unfilled placeholder `<the user's answer + date>` — so under AGENTS.md it **may not pass P.4** (branch + worktree) until the user records an implement / merge / drop decision, which is this question.
+  - Measured consequences per option: **(A) absorb** — this TODO and its question file move to `docs/todo/archive/` + `docs/questions/archive/` with `Status: DROPPED`; the fix and its witness ride a CROSS-CUTTING PR that does not exist yet, behind a hard dependency on the setter and behind 22 unanswered P.3 questions; the `settings-coverage` REQ-002/AC-003 amendment and the 16-key behavior change are reviewed inside a 221-line wiring move; no version bump of its own (the factory bumps `minor`/`major`). **(B) separate, landing after the factory** — the calls would already exist, so no deviation from REQ-002/AC-003 would remain to triage: the ISSUE would have nothing to reproduce (no RED) and would have to be reclassified or dropped at P.4. **(C) separate, landing before the factory, with factory Q-14 re-answered out-of-scope at its P.3** — a 3-line fix + strengthened witness ships as a small ISSUE PR right after the setter merges (`patch` bump); the factory then moves already-correct wiring, its amendment to REQ-002/AC-003 shrinks to the wiring *mechanism*, and `composition-root-singleton-install` Q-26 stays coherent.
+- **Question:** (A) drop/merge this TODO into `composition-root-factory` (honoring its Q-14 = C), (B) keep it separate but only after that change lands, or (C) keep it separate, land it first, and re-answer `composition-root-factory` Q-14 as out-of-scope at that change's P.3?
+- **Options:** **(A)** absorb — this TODO `DROPPED` + archived, witness in the factory's PR · **(B)** separate but after the factory — no defect left to reproduce at P.4 · **(C)** separate and first — factory Q-14 re-answered A (out of scope) in the same P.3 round.
+- **Recommended:** **C** — the fix is three lines and a 5/5 quick win, while A parks it behind a hard dependency, a PR that does not exist and 22 unanswered questions; C only holds if `composition-root-factory` Q-14 is re-answered in that change's P.3, so both answers must be recorded in the same round.
+- **Answer:** **PENDING**
+- **Date:** 2026-10-10
+- **Status:** PENDING
+- **Incorporated:** no
+
+## Q-19 — `STRUCTURE.md` is stale on `main` and the map test is RED: does this change regenerate the map, and what is the recorded baseline?
+
+- **Step:** P.2 Interrogate — Phase P
+- **Why needed:** Phase 5's full-suite gate ◆ cannot pass over a pre-existing failure, and AGENTS.md requires `STRUCTURE.md` to be regenerated in the same commit as the `.py` change — this change edits `src/main.py`. The ISSUE's RED gate also has to distinguish its own reproduction failure from an inherited one.
+- **Context:** Measured at `main` (`a60d109`): `uv run python scripts/make_map.py --check` → `STRUCTURE.md is out of date — run uv run python scripts/make_map.py`, exit 1. `uv run pytest tests/ -q` → **1 failed, 815 passed, 1 skipped in 248.31s**; the single failure is `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render` (`docs/ — 225 files (process record)` committed vs `231` fresh — the planning records added since the last render). `STRUCTURE.md:1627` records `#### src/main.py (221 lines)`, so the map is stale for this change twice over: the inherited `docs/` count **and** the 3 lines this change adds. The staleness is not this change's defect, but the failing test is in the gate this change must pass.
+- **Question:** Regenerate `STRUCTURE.md` inside this change (which clears the inherited `test_ac_021` RED as a side effect), or leave the map alone and record `test_ac_021` as a pre-existing failure the Phase 5 gate tolerates?
+- **Recommended:** Regenerate it in the same commit as the `src/main.py` edit — AGENTS.md already mandates it for any `.py` change, it is a generated file that is never hand-merged, and it is the only way the Phase 5 full-suite gate can go GREEN; record the inherited staleness in the triage record as the baseline (1 failed / 815 passed).
+- **Answer:** **PENDING**
+- **Date:** 2026-10-10
+- **Status:** PENDING
+- **Incorporated:** no
+
+## Q-20 — Is registering the 16 keys value-neutral today, and is a registration-time exception a risk to guard?
+
+- **Step:** P.2 Interrogate — Phase P
+- **Why needed:** The triage must state the defect's blast radius — does the fix change any effective value, and can the three new calls break `import main`? — and Phase 5 needs to know what regression to expect (and what not to guard against).
+- **Context:** Measured: every fallback the three features pass to `_read_setting` is the **same** constant or literal as the registered default — `filemanagement/service.py:213,214,220,231,590,596` use the `DEFAULT_*` constants defined at `filemanagement/feature_settings.py:24-38`; `sessionmanagement/service.py:146,224,331` use `DEFAULT_MAX_SESSIONS_PER_USER` / `DEFAULT_MAX_LISTED_SESSIONS` / `DEFAULT_CLEANUP_BATCH_SIZE` (`service.py:49-51`, the same objects the registrations pass at `:39,:46,:53`); `mail/feature_settings.py:54-61` repeat the identical literals registered at `:74,:83,:94,:103,:112,:121,:130,:140`. So with nothing persisted, registering changes **no** effective value — only the ability to set one. Failure-mode probe (scratch script outside the repo, temp `YamlValueRepository`, all nine `register_settings` called into one registry): **34 keys, zero exceptions, 63.79 ms total, 0 events published** (`register()` publishes nothing; only `set_value` publishes `SettingChanged`). `register()` raises `SettingsRegistrationError` on a duplicate key (`registry.py:103-106`), and measured there are zero duplicate keys across the nine features — so the three added calls cannot raise on a fresh registry.
+- **Question:** Confirm the triage states "value-neutral until a value is persisted" (no default drift, no exception path, no events, ~64 ms) as the blast radius, with **no** defensive `try`/`except` around the three calls?
+- **Recommended:** Confirm, no guard — drift and duplicate-key risk are measured zero, and a `try`/`except` around registration would reintroduce exactly the silent-fallback class this change removes.
+- **Answer:** **PENDING**
+- **Date:** 2026-10-10
+- **Status:** PENDING
+- **Incorporated:** no
+
+## Q-21 — Version bump and `CHANGELOG.md` entry for an ISSUE whose behavior delta is 16 keys.
+
+- **Step:** P.2 Interrogate — Phase P
+- **Why needed:** Phase 6 requires a type-mapped bump and one changelog line in the reviewed PR; both depend on Q-18 (if the fix is absorbed, neither is this change's) and on which release the entry lands in.
+- **Context:** AGENTS.md Versioning: ISSUE → `patch`; `pyproject.toml:4` `version = "1.1.0"` is the single source of truth; `CHANGELOG.md:10` `## [Unreleased]` already carries entries from un-bumped changes, and the root changelog is hand-maintained (`bump-my-version` touches only `pyproject.toml`). The in-flight `settings-public-registry-setter` (CROSS-CUTTING, `minor`) and `composition-root-factory` (`minor`/`major`) have pending bumps too, so this change's entry may be swept into either release.
+- **Question:** `bump-my-version bump patch` in this change's PR with one `Fixed` line naming the 16 keys, or no bump/entry here because Q-18 = A moves the work to the factory's PR?
+- **Recommended:** `patch` + one `Fixed` line ("`src/main.py` now registers the filemanagement, mail and sessionmanagement settings; their 16 keys stop falling back to hardcoded defaults") — the mapping is fixed by the type, and the entry is traceable to what the diff does; if Q-18 = A, the same line rides that PR instead.
+- **Answer:** **PENDING**
+- **Date:** 2026-10-10
+- **Status:** PENDING
+- **Incorporated:** no
+
+## Q-22 — The strengthened witness runs `main` with `cwd=_REPO_ROOT`: must it isolate the settings/data directories?
+
+- **Step:** P.2 Interrogate — Phase P
+- **Why needed:** After the fix, the witness's own subprocess persists 34 values into the **repository root**, and REQ-011 feeds them back into the next run — the witness can go false-green or flaky, and it writes state into a developer's working tree. This decides the strengthened test's shape (Q-04/Q-05/Q-06).
+- **Context:** Measured: `tests/acceptance/settings_coverage/test_wiring.py` runs `python -c "…"` with `cwd=_REPO_ROOT` and pre-installs a temp-dir registry at `:18`, but `src/main.py:137-138` builds its own `SettingsRegistry(...)` and overwrites the singleton slot, so that pre-install does **not** isolate the value repository. Running the full suite on `main` just now created `settings/values.yaml` in the repository root containing **18 keys** (exactly the currently registered set); after this fix it would be 34, and a leftover value (e.g. `filemanagement.max_file_size: 999`) would win over the defaults by REQ-011 and change what the subprocess asserts. `data/` and `logs/` are likewise created in the repo root (gitignored at `.gitignore:225,230,231`). The isolation pattern already exists in the repo: `tests/acceptance/permissions/test_composition_wiring.py` runs its subprocess with `cwd=tmp_path`. Note the witness's `sys.path.insert(0, 'src')` is relative, so a `cwd=tmp_path` version must pass an absolute `src` path.
+- **Question:** Does the strengthened witness isolate (run with `cwd=tmp_path` + absolute `sys.path`, like the permissions wiring test), or keep `cwd=_REPO_ROOT` and accept the persisted-values coupling?
+- **Recommended:** Isolate — it is a two-line change to the same test this change already rewrites, and without it the witness's own run seeds the REQ-011 precedence that can make it pass or fail for reasons unrelated to the wiring.
+- **Answer:** **PENDING**
+- **Date:** 2026-10-10
+- **Status:** PENDING
+- **Incorporated:** no
+
+## Q-23 — Registering `sessionmanagement` makes a REQ-018/AC-023 violation visible in the views hierarchy. Confirm it stays out of scope.
+
+- **Step:** P.2 Interrogate — Phase P
+- **Why needed:** Q-15's out-of-scope list names "no category/group fixes" but the finding was never recorded as a question, and the triage must not silently absorb (or silently inherit) a second approved-spec violation.
+- **Context:** `docs/specs/settings-coverage.md:148` REQ-018: "Each feature's settings use `category` = domain (`application`/`security`) and `group` = feature name for the views hierarchy"; AC-023 (`:182`) is its Given/When/Then. Measured `category=` values across the nine `feature_settings.py`: 22 `application`, 8 `security`, **1 `category="permissions"` and 3 `category="sessionmanagement"`** — four keys outside the closed domain set, three of them in a feature this change registers, so after the fix `grouped_views()` renders a `sessionmanagement` category that REQ-018 does not allow. CI cannot see it: `tests/contract/settings_coverage/test_inventory.py::test_category_group` (`:65`) iterates only its 14-key `INVENTORY` and `_registry_with_all_features()` (`:40-52`) registers only the four original features, so registering the three in `main` cannot fail it; the spec's own test-strategy row (`:331`) still lists `test_category_group` as `PENDING`.
+- **Question:** Confirm the four out-of-domain `category` values stay out of scope (recorded as a finding + follow-up TODO against REQ-018/AC-023), rather than being fixed here or written into the triage as intended behavior?
+- **Recommended:** Out of scope, recorded as a finding — changing four definitions' `category` is a separate behavior change with its own AC-023 evidence, and fixing it here would widen a three-line ISSUE into a second spec's remediation (Q-15's boundary).
+- **Answer:** **PENDING**
+- **Date:** 2026-10-10
+- **Status:** PENDING
+- **Incorporated:** no
+
 <!-- PART3 -->
 
 ### Category coverage
 
-<one row per interrogation category this change uses: `covered (Q-nn / E-nn)` or `skipped — <reason>`. Required for every change type; it sits **on top of** the ≥ 20-question floor, never instead of it.>
+| Category | Coverage |
+|---|---|
+| Classification & Normative Basis (ISSUE vs amendment/feature, cited IDs) | covered (Q-01, Q-02, Q-03) |
+| Scope & Boundaries (non-goals — mandatory) | covered (Q-15, Q-14, Q-23) |
+| Overlap & Sequencing against other changes (mandatory) | covered (Q-16, Q-13, Q-18) |
+| Interfaces & Public API (which registry accessor the witness may use, `register_settings` shape) | covered (Q-07, Q-14) |
+| Behavior & Edge Cases (live reads, inert `storage_root`, default drift, registration failure) | covered (Q-09, Q-12, Q-20) |
+| Data & Persistence (`settings/values.yaml`, REQ-011 precedence, test-run side effects) | covered (Q-10, Q-12, Q-22) |
+| Security & Secrets (NFR-002 vs `mail.smtp_password`) | covered (Q-11) |
+| Ordering & Lifecycle (call position, construction-time reads) | covered (Q-08) |
+| Testing & Acceptance (strengthen vs new witness, assertion set, recurrence guard, category/file, isolation) | covered (Q-04, Q-05, Q-06, Q-17, Q-22) |
+| Traceability & Spec Drift (matrix rows, §3.5 inventory, CI referential integrity) | covered (Q-02, Q-03, Q-04) |
+| Quality Gates & Baseline (full-suite state, `STRUCTURE.md`, ruff/mypy) | covered (Q-19; ruff and mypy are unchanged-file gates here — the change adds no module, so no new gate applies) |
+| Release & Changelog (bump level, `CHANGELOG.md` entry) | covered (Q-21) |
+| Performance & NFRs (startup cost, events, dependencies) | covered (Q-20 — measured 63.79 ms for all nine registrations, 0 events, no dependency added) |
+| Architecture & Conventions (ADR, AGENTS.md capability note) | skipped — an ISSUE runs no Phase 2, so no ADR is required (AGENTS.md Phase Matrix: Decompose "— (skip; the triage is the plan)"), and the Phase 6 AGENTS.md note applies only to a reusable shared capability, which three call-site lines are not; the code-shape question the category would otherwise raise is asked as Q-14. |
+| UI / Accessibility | skipped — no frontend exists (measured: `find src/frontend -type f` → no output) and the change touches backend wiring only. |
 
 ## Late questions (Phases 2–6)
 
