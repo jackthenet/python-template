@@ -595,3 +595,18 @@ carried is gone, because the committed map is fresh at this commit.
 |---|---|---|
 | **F-17** | The first draft of the INV-007 strategy put the whole slot builder inside `_signature_module`, which pushed its cyclomatic complexity to **20** and broke `test_nfr_005_complexipy_threshold_holds` (NFR-005 analyses `tests/` too, max 15). | Fixed inside S3.1 (in-step fix-and-recheck): the strategy is split into `_slots`, `_slot_text` and `_signature_text`; `uv run complexipy --max-complexity-allowed 15 tests` → *All functions are within the allowed complexity*, and NFR-005 passes again. |
 | **F-18** | §4.2's `simple_template` expectation cannot be written as one f-string: `{{who}}` inside an f-string collapses to `{who}`, so the needle silently mismatched the committed map. | The constant is built as `plain + f"{_ELLIPSIS}" + plain` so the doubled braces survive; verified against the §5.2 probe rendering byte-for-byte. |
+
+### S3.2 gate re-check (2026-10-10)
+
+Independent re-run of the Phase 3 gate at HEAD `0ecf7bc` (`test(map-default-drop-shift): reproduction witnesses for EDGE-017/INV-007 + re-derived AC-014 (RED)`), working tree clean. Nothing was re-derived, implemented or regenerated here — verification only.
+
+| Check | Command | Result line |
+|---|---|---|
+| RED (§4.5 `red_command`, unchanged) | `uv run pytest tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place -v` | `4 failed in 1.73s` (exit 1) — **0 errors, 0 skipped, 0 xfail** |
+| Failure kind (AGENTS.md Phase 3 item 6) | same run with `--tb=line` | all four are `AssertionError` on **rendered signature text** at `tests/unit/test_make_map.py:1052`, `tests/unit/test_make_map.py:1025`, `tests/acceptance/test_structure_map.py:1534`, `tests/property/test_structure_map.py:665` — no `SyntaxError`, no `ValidationError`, no collection/setup error; the INV-007 fixture's own `pytest.fail`-on-`SyntaxError` guard never fired, so the generated test data is valid |
+| Ruff (changed paths) | `uv run ruff check tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py` | `All checks passed!` (exit 0) |
+| Ruff format (changed paths) | `uv run ruff format --check` on the same three paths | `3 files already formatted` (exit 0) — no in-step fix needed |
+| NFR-005 guard (F-17) | `uv run complexipy --max-complexity-allowed 15 tests` | `All functions are within the allowed complexity.` (exit 0) |
+| Branch scope | `git diff --name-status main...HEAD` | `M docs/verification/map-default-drop-shift.md`, `M tests/acceptance/test_structure_map.py`, `M tests/property/test_structure_map.py`, `M tests/unit/test_make_map.py` — `scripts/make_map.py` and `STRUCTURE.md` **untouched**, `docs/verification/traceability.md` untouched (F-09) |
+
+**Gate ◆ RED: confirmed.** Phase 3 is complete; Phase 4 (`S4.1`) may start. The pre-existing `test_ac_021_committed_map_matches_fresh_render` red (F-02/F-16) is untouched by this re-check and stays a Phase 4 regeneration concern, not a Phase 3 gate item.
