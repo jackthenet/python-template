@@ -544,7 +544,18 @@ The section stays §15 at the bottom of the file (the layout-preserving choice r
   rows and the updated REQ-014/AC-014 rows are therefore written in **PR B** (§4.6). The checker passes
   in PR A because rule (1) covers REQ/AC only and PR A adds no new REQ/AC ID.
 
-### A.7 New findings from PR A
+### A.7 CI on PR A (#79)
+
+All eleven required checks **pass** on the PR head (`gh pr checks 79`, merge state `CLEAN`):
+`spec-validation`, `traceability`, `tests` (full suite, 5m36s), `coverage`, `docs`, `type-check`,
+`complexity`, `dependencies`, `dependency-review`, `security`, `migrations`. `lint.yml` is **not
+triggered** — its path filter (`src/**`, `tests/**`, `pyproject.toml`, `.pre-commit-config.yaml`,
+`.github/workflows/lint.yml`, `.github/hooks/**`) matches none of this PR's three files, which is why
+the local `ruff check .` / `ruff format --check .` results in A.5 are recorded.
+This confirms the F-02 disposition: the pre-existing `test_ac_021` red that PR A would otherwise have
+carried is gone, because the committed map is fresh at this commit.
+
+### A.8 New findings from PR A
 
 | ID | Finding | Disposition |
 |---|---|---|
