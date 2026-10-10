@@ -521,15 +521,14 @@ _permission_service: list[PermissionService | None] = [None]
 _permission_service_lock = threading.Lock()
 
 
+@logged(slow_threshold_ms=5)
 def get_permission_service() -> PermissionService:
     """Return the shared PermissionService (module singleton, D19).
 
     The first call lazily creates the singleton, wired to the shared SQLite
     repositories and the shared user manager at construction; subsequent
-    calls return the existing instance.
-
-    Not traced on purpose (spec §13 follow-up): the singleton's read and clear
-    paths are untraced today, and tracing them is not this change.
+    calls return the existing instance. The read is traced as exactly one
+    entry/exit pair (AC-011); ``reset_permission_service()`` is untraced.
     """
     with _permission_service_lock:
         service = _permission_service[0]

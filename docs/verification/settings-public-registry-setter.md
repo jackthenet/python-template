@@ -6755,3 +6755,193 @@ T-010 is the DAG's only remaining task and its own `dependencies` (T-001..T-005,
 - **Files changed by this step (2):** `.github/task-runner/tasks.json` (`2 2`), `docs/tasks/settings-public-registry-setter.tasks.json` (`2 2`). No `src/`, no `tests/`, no spec, no `AGENTS.md`, no `pyproject.toml`, no `uv.lock`, no `docs/todo/` or `docs/questions/` (orchestrator-owned, `main`-only).
 - **Next: S4.1 (T-010)** once Q-31 is answered (T-010's RED is already recorded at `b3398e8`, so it re-enters at S4.2 with the answer); Phase 5 otherwise.
 
+
+## Phase 4 — T-010 GREEN (S4.2) — 2026-10-10
+
+**Step:** S4.2 (T-010) Implement + confirm GREEN · **Objective:** turn T-010's only open RED witness (`test_ac_011_lazy_path_emits_one_traced_pair`, REQ-007 / AC-011) GREEN with the minimum source change, and pass this step's gates. **Q-31 is ANSWERED — Option A** (`docs/questions/settings-public-registry-setter.md` on `main`, user decision 2026-10-10: trace `get_permission_service()`, AC-011 wins over §13), and the two spec amendments it required are already committed on this branch in `15b0aeb` (`docs/specs/logging-coverage.md` §3.1 row + v4 changelog + §3.1 note; `docs/specs/settings-public-registry-setter.md` §13 row withdrawn + v3 changelog). Branch verified with `git branch --show-current` → `crosscut/settings-public-registry-setter`, HEAD `15b0aeb`, working tree clean before the change. No refactor (S4.3), no commit (S4.4), no full suite / whole-repo ruff sweep / coverage (Phase 5 gates). All pytest runs sequential (the `tests/unit/test_settings_test_isolation.py` concurrency caveat).
+
+### RED re-confirmation at re-entry — `red_command` verbatim
+
+```
+uv run pytest tests/acceptance/singleton_install/test_concurrency.py::test_ac_009_concurrent_lazy_create tests/acceptance/singleton_install/test_concurrency.py::test_ac_010_concurrent_install_read_reset tests/acceptance/singleton_install/test_concurrency.py::test_nfr_003_slot_lock_is_short_lived tests/acceptance/singleton_install/test_install.py::test_ac_011_lazy_path_emits_one_traced_pair tests/acceptance/singleton_install/test_install.py::test_ac_012_install_then_reset_then_default tests/property/singleton_install/test_install_properties.py::test_inv_001_last_install_wins -v
+```
+
+→ **6 collected, 1 failed, 5 passed in 4.14 s** (`pytest-randomly 5.0.0` active). Identical single failure to the S4.1 record (`b3398e8`):
+
+```
+E  AssertionError: permissions: the lazy read emitted 0 entry / 0 exit record(s) of its own
+E  assert (0, 0) == (1, 1)
+tests\acceptance\singleton_install\test_install.py:244: AssertionError
+```
+
+**RED re-observed** — same node, same assertion, same reason (no `@logged` on `get_permission_service()`), no fixture/data error. The five witnesses T-001..T-005 already satisfied are still GREEN.
+
+### The change (minimum for AC-011)
+
+Two files, one behavior change. `src/backend/permissions/service.py` **is** in T-010's `allowed_files.source_files` (marked fix-only — the DAG anticipated a lock-scope repair; what the witness actually exposed is a missing decorator, and Q-31 Option A put that in scope).
+
+```diff
++@logged(slow_threshold_ms=5)
+ def get_permission_service() -> PermissionService:
+     """Return the shared PermissionService (module singleton, D19).
+
+     The first call lazily creates the singleton, wired to the shared SQLite
+     repositories and the shared user manager at construction; subsequent
+-    calls return the existing instance.
+-
+-    Not traced on purpose (spec §13 follow-up): the singleton's read and clear
+-    paths are untraced today, and tracing them is not this change.
++    calls return the existing instance. The lazy create writes the slot
++    directly under the lock instead of calling ``set_permission_service()``,
++    so it never emits the replace WARNING (REQ-007) and the read shows as
++    exactly one traced entry/exit pair (AC-011). ``reset_permission_service()``
++    stays untraced (out of scope).
+     """
+```
+
+- **Decorator form matches the four sibling singleton getters exactly** — `get_settings_registry` (`registry.py:400`), `get_event_bus` (`eventbus.py:248`), `get_search_service` (`search/service.py:565`), `get_session_service` (`sessionmanagement/service.py:366`) and the already-traced `set_permission_service` in the same module all use `@logged(slow_threshold_ms=5)`. `include_args` is left at the decorator default, exactly as the new §3.1 row specifies (`| get_permission_service() | permissions | module function | @logged | default | 5 |`); the getter takes no arguments, so nothing can enter the record.
+- **No new import** — the module already imports `logged` (`from backend.logging import get_logger, logged, logged_class`, used by `set_permission_service`).
+- **Docstring rewritten, not padded** — the stale "Not traced on purpose (spec §13 follow-up)" paragraph is now false and is deleted; the replacement states what the signature does not (the direct slot write under the lock, the absence of the replace WARNING, the traced-pair consequence, and that the reset stays untraced). Ruff `D` is clean on the path.
+- **`reset_permission_service()` untouched** — Q-31's answer and both amended specs keep it out of scope; the attribute probe below confirms it is still untraced.
+
+Attribute probe after the change (`PYTHONPATH=src uv run python -c …`):
+
+| Function | `__logged__` | `slow_threshold_ms` |
+|---|---|---|
+| `get_permission_service` | **True** (was False) | **5.0** |
+| `set_permission_service` | True | 5.0 |
+| `reset_permission_service` | **False** (unchanged — out of scope) | — |
+
+### Deviation from T-010's `allowed_files` (deliberate, for Phase 6 review)
+
+```diff
+-from backend.permissions.service import set_permission_service
++from backend.permissions.service import get_permission_service, set_permission_service
+@@ INVENTORY_MODULE_FUNCTIONS
++    "get_permission_service": get_permission_service,
+     "set_permission_service": set_permission_service,
+```
+
+`tests/logging_coverage_test_helpers.py` is **not** in T-010's `allowed_files.test_files` — it is listed under **T-011** (`"tests/logging_coverage_test_helpers.py (shared inventory helper — PROBLEMS.md P-55)"`), which is already `VERIFIED`. The entry is made here anyway because the amended `logging-coverage.md` v4 changelog requires it ("The executable inventory (`tests/logging_coverage_test_helpers.INVENTORY_MODULE_FUNCTIONS`) gains the matching entry") and because the row would otherwise be un-witnessed: `tests/acceptance/logging_coverage/test_inventory.py::test_inventory_covers_all_public_classes` asserts every inventory module function is traced, so the helper entry and the decorator are one atomic change — adding the entry without the decorator fails AC-001, and adding the decorator without the entry leaves the normative §3.1 row with no executable counterpart (the logging-coverage REQ-001 gap §13 used to accept).
+
+**Why T-010 and not a re-opened T-011:** the helper entry's only purpose is to make this task's own AC-011 witness non-vacuous and its evidence complete; T-011's witnesses (AC-014/AC-015) concern the five install operations and are unaffected (they pass — recorded below). Re-opening a `VERIFIED` task for a one-line helper entry that its own spec amendment mandates would be a larger, less traceable move than recording the deviation here. **Phase 6 review must read this as deliberate.**
+
+### GREEN gate — `green_command` verbatim
+
+```
+uv run pytest … (the same six nodes) … -v
+```
+
+→ **6 passed in 3.68 s** (`Using --randomly-seed=272126213`):
+
+| Node | Result |
+|---|---|
+| `test_concurrency.py::test_ac_009_concurrent_lazy_create` | PASSED |
+| `test_concurrency.py::test_ac_010_concurrent_install_read_reset` | PASSED |
+| `test_concurrency.py::test_nfr_003_slot_lock_is_short_lived` | PASSED |
+| `test_install.py::test_ac_011_lazy_path_emits_one_traced_pair` | **PASSED** (was FAILED) |
+| `test_install.py::test_ac_012_install_then_reset_then_default` | PASSED |
+| `test_install_properties.py::test_inv_001_last_install_wins` | PASSED |
+
+**The witness went GREEN from the source change alone.** No test file other than the inventory helper was touched, and no assertion was altered: `git diff` for `tests/acceptance/singleton_install/test_install.py` is empty, and `test_ac_011`'s three halves all still run for the permissions slot — `(entry, exit) == (1, 1)` for the getter, `hasattr(module, installer)` (anti-vacuity) true, installer entry count `== 0` (REQ-007's direct-write half). The lazy path still never calls `set_permission_service()`; only the getter's own pair was missing.
+
+### No flakiness — 4 runs of the targeted set, `pytest-randomly` active
+
+| Run | Seed | Result |
+|---|---|---|
+| 1 (the `green_command` `-v` run) | `272126213` | 6 passed (3.68 s) |
+| 2 | `3987302948` | 6 passed (3.61 s) |
+| 3 | `2448959866` | 6 passed (3.68 s) |
+| 4 | `3628340973` | 6 passed (3.45 s) |
+
+No node flipped, no setup/collection error, no sleep-based ordering in the concurrency witnesses (barriers and `threading.Event`s; NFR-003 carries its own `serialized=True` anti-vacuity control pass).
+
+**Final-state re-check** (after a docstring line re-wrap — whitespace only, no code change): the six-node set **6 passed in 3.61 s**, `tests/acceptance/logging_coverage/test_inventory.py` **2 passed in 0.40 s**, `uv run ruff check` / `ruff format --check` on the two changed paths clean, `uv run mypy src/` **Success: no issues found in 84 source files**, `uv run complexipy src tests --max-complexity-allowed 15` clean, `uv run python scripts/check_traceability.py` **PASS (822 / 136 / 817)**. The diff quoted above is the exact final state of the working tree.
+
+### Step gates
+
+| Gate | Command | Result |
+|---|---|---|
+| ruff (per-step, changed paths only) | `uv run ruff check src/backend/permissions/service.py tests/logging_coverage_test_helpers.py` | **All checks passed!** |
+| ruff format (per-step, changed paths only) | `uv run ruff format --check src/backend/permissions/service.py tests/logging_coverage_test_helpers.py` | **2 files already formatted** |
+| mypy (gate, `quality.yml:23`) | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+| complexipy (gate, `quality.yml:144`) | `uv run complexipy src tests --max-complexity-allowed 15` | **All functions are within the allowed complexity** |
+| traceability (`spec-validation.yml:68`) | `uv run python scripts/check_traceability.py` | **PASS** — 822 matrix rows, 136 spec IDs, 817 test functions (unchanged) |
+| logging-coverage inventory (`T-011` witness set, must stay GREEN with the new helper entry) | `uv run pytest tests/acceptance/logging_coverage/test_inventory.py -q` | **2 passed in 0.40 s** |
+
+No whole-repo `ruff check .` / `ruff format --check .` (P-6 — Phase 5 gate, matches CI exactly). `ty check src/` is informational (`quality.yml:26`, `continue-on-error: true`), not a gate.
+
+### Smoke beyond the targeted set (not the full suite — Phase 5)
+
+| Set | Result |
+|---|---|
+| `tests/acceptance/singleton_install` (the whole T-009..T-012 acceptance file set) | **13 passed in 4.24 s** |
+| `tests/acceptance/permissions` (the feature whose module was edited) | **36 passed in 3.75 s** |
+| `tests/acceptance/logging_coverage` (the suite that reads the edited helper) | **21 passed in 2.10 s** |
+| `tests/property/singleton_install tests/contract/singleton_install` | **12 passed in 5.40 s** |
+
+The new getter records are DEBUG entry/exit pairs on the `backend.permissions.service` logger; no nearby record-counting witness broke.
+
+### State for the next step
+
+- **T-010's GREEN gate is met:** all six `green_command` nodes pass, stably across four randomized runs; the AC-011 witness is satisfied for all four lazy features (settings, eventbus, permissions, search) with permissions now contributing its own traced pair.
+- **Files changed by this step (2, uncommitted):** `src/backend/permissions/service.py` (`+6 −4`: the decorator line + the docstring), `tests/logging_coverage_test_helpers.py` (`+2 −1`: the import + the inventory entry). `git status --porcelain` lists exactly these two plus this record — no `uv.lock` re-lock (P-42), no `pyproject.toml`, no spec, no test assertion, no DAG copy, no `AGENTS.md`, no `docs/todo/` / `docs/questions/`.
+- **Not touched:** `reset_permission_service()` (still untraced, per Q-31), every lock and the lazy slot write (already correct and witnessed), `tests/acceptance/singleton_install/*` (byte-identical to the S4.1 state).
+- **Open for S4.3:** nothing structural is expected — the change is one decorator and a docstring. If S4.3 is a no-op it may record that and skip the `green_command` re-run per the AGENTS.md no-op fast-path.
+- **Next: S4.3 (T-010) refactor (keep GREEN), then S4.4 commit + `VERIFIED`** — the DAG's last `PENDING` task; Phase 5 follows.
+
+
+
+## Phase 4 — T-010 refactor (S4.3) — 2026-10-10
+
+**Step:** S4.3 (T-010) Refactor (keep GREEN) · **Objective:** decide whether any restructuring improves the uncommitted T-010 change without altering specified behaviour, and record the decision. **Not a no-op: one docstring-only restructuring edit was made** (behaviour-preserving), then the targeted `green_command` and the per-step ruff gate were re-run. No commit (S4.4), no full suite / whole-repo ruff sweep / coverage (Phase 5 gates). Branch `crosscut/settings-public-registry-setter`, HEAD `15b0aeb`, working tree at entry = S4.2's two changed files plus this record.
+
+### Judgement of S4.2's state against the repo's conventions
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| Decorator form `@logged(slow_threshold_ms=5)` | **matches the siblings exactly** — no change | `get_settings_registry` (`settings/registry.py:400`), `get_event_bus` (`eventbus/eventbus.py:248`), `get_search_service` (`search/service.py:565`), `get_session_service` (`sessionmanagement/service.py:366`) and `set_permission_service` in the same module all use the identical form; the amended `logging-coverage.md` §3.1 row (`:68`) prescribes `@logged` / `include_args` default / `5` |
+| `include_args` left at the default | **correct** — the getter takes no arguments, so nothing can enter the record; the row says "default" | §3.1 row + its v4 note |
+| Threshold `5` | **correct** — the concrete sibling value, not an invented one | the four getters and the five `set_*` installers all use 5 |
+| Import placement in the test helper | **correct** — one `from backend.permissions.service import …` line, names in isort order, ruff/isort clean | `tests/logging_coverage_test_helpers.py:40` |
+| Inventory entry placement | **correct** — the dict's order mirrors the spec §3.1 table row order (permissions group: `get_permission_service` before `set_permission_service`) | helper `:89-90` vs spec table `:68-69` |
+| Docstring accuracy | **accurate, non-filler, but redundant** — see the refactor below | — |
+
+No structural problem exists in the change itself: it is one decorator line and a docstring, in the module the DAG allows (`allowed_files.source_files`), with no new import, no new abstraction, no duplicated logic introduced, and every lock and the lazy slot write untouched. The five singleton getters are superficially similar, but extracting a shared getter helper is **out of scope and would be wrong here** — the spec gives each feature its own module lock with a per-feature acquisition order (REQ-006/REQ-007, ADR-083/084, findings F-72/F-76), and `shared/` is deliberately small. Not attempted.
+
+### The refactor made (docstring only, behaviour-preserving)
+
+The S4.2 docstring restated, in prose, the rationale that the **inline comment six lines below it already carries verbatim** (`# REQ-007: the owner's lazy create writes its own slot directly and never calls set_permission_service() — it is not an install, so it must not emit the replace WARNING.` — the same comment the other four modules have at their slot write), and it closed with change-process language, ``stays untraced (out of scope)``, which is a fact about *this change* and reads as stale residue once the change is merged. AGENTS.md requires concise docstrings that do not restate what the code already says.
+
+```diff
+-    calls return the existing instance. The lazy create writes the slot
+-    directly under the lock instead of calling ``set_permission_service()``,
+-    so it never emits the replace WARNING (REQ-007) and the read shows as
+-    exactly one traced entry/exit pair (AC-011). ``reset_permission_service()``
+-    stays untraced (out of scope).
++    calls return the existing instance. The read is traced as exactly one
++    entry/exit pair (AC-011); ``reset_permission_service()`` is untraced.
+```
+
+- **What the docstring still states that the signature does not:** the lazy create's wiring (shared SQLite repositories + shared user manager), that the read is traced as exactly one entry/exit pair (AC-011), and that the reset is untraced — the last kept as a plain code fact, without the "(out of scope)" process framing.
+- **What moved to the code where it belongs:** the REQ-007 direct-write rationale stays only in the inline comment at the slot write, matching the sibling modules exactly.
+- **Behaviour delta: none.** Docstring text only — no statement, no signature, no decorator argument, no import, no test changed. `reset_permission_service()` still untraced; the lazy path still writes the slot directly and never calls the setter.
+- **Supersedes the diff quoted in the S4.2 record** ("The change (minimum for AC-011)" section): the decorator line and the import/inventory entry are unchanged; only the docstring paragraph differs. The final working-tree state of `src/backend/permissions/service.py` is the diff quoted above plus the unchanged decorator line.
+
+### Re-run gates after the refactor
+
+| Gate | Command | Result |
+|---|---|---|
+| **GREEN re-confirmed** (T-010 `green_command` verbatim) | `uv run pytest tests/acceptance/singleton_install/test_concurrency.py::test_ac_009_concurrent_lazy_create …tests/property/singleton_install/test_install_properties.py::test_inv_001_last_install_wins -v` | **6 passed in 3.64 s** (`--randomly-seed=2558377041`) — all six nodes PASSED |
+| ruff (per-step, changed paths only) | `uv run ruff check src/backend/permissions/service.py tests/logging_coverage_test_helpers.py` | **All checks passed!** |
+| ruff format (per-step, changed paths only) | `uv run ruff format --check src/backend/permissions/service.py tests/logging_coverage_test_helpers.py` | **2 files already formatted** |
+| mypy (gate, `quality.yml:23`) | `uv run mypy src/` | **Success: no issues found in 84 source files** |
+
+Not re-run (unchanged by a docstring edit, and already recorded at S4.2): `complexipy` (no function body touched), `check_traceability.py` (no test or spec ID touched). Not run (Phase 5 gates, P-6): the full suite, `ruff check .`, `ruff format --check .`, coverage.
+
+### State for the next step
+
+- **Files changed by this step (1 line-set, uncommitted):** `src/backend/permissions/service.py` — the T-010 diff is now `+3 −4` (decorator line + the trimmed docstring) instead of `+6 −4`. `tests/logging_coverage_test_helpers.py` unchanged by S4.3 (`+2 −1`).
+- **`git status --porcelain` after S4.3:** exactly `docs/verification/settings-public-registry-setter.md`, `src/backend/permissions/service.py`, `tests/logging_coverage_test_helpers.py` — no `uv.lock` (P-42), no `pyproject.toml`, no spec, no test assertion, no DAG copy, no `AGENTS.md`, no `docs/todo/` / `docs/questions/`.
+- **No test weakened, deleted, renamed or re-asserted; no new behaviour; nothing committed.**
+- **Next: S4.4 (T-010) commit + set `VERIFIED`** in `.github/task-runner/tasks.json` (sync to `docs/tasks/settings-public-registry-setter.tasks.json`), then Phase 5.

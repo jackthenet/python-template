@@ -37,7 +37,7 @@ from backend.authentication.tracker import InMemoryAttemptTracker
 from backend.authentication.webauthn import PyWebAuthnProvider
 from backend.eventbus.eventbus import EventBus, get_event_bus, reset_event_bus, set_event_bus
 from backend.logging import get_settings, setup_logger
-from backend.permissions.service import set_permission_service
+from backend.permissions.service import get_permission_service, set_permission_service
 from backend.search.service import set_search_service
 from backend.sessionmanagement.service import set_session_service
 from backend.settings.registry import (
@@ -86,6 +86,7 @@ INVENTORY_MODULE_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "get_settings_registry": get_settings_registry,
     "reset_settings_registry": reset_settings_registry,
     "set_settings_registry": set_settings_registry,
+    "get_permission_service": get_permission_service,
     "set_permission_service": set_permission_service,
     "set_search_service": set_search_service,
     "set_session_service": set_session_service,
