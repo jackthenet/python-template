@@ -4,7 +4,8 @@ Backlog item for one planned change, created at **P.1 Frame** from the template.
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+  <!-- IN-WORKFLOW -> WAITING 2026-10-10: the DAG's only remaining task **T-010** is BLOCKED-USER on **Q-31** (AC-011 requires a traced `get_permission_service()` while `docs/specs/settings-public-registry-setter.md` §13 and `logging-coverage.md` v3 put that getter's tracing out of scope — F-87). 11/12 tasks VERIFIED (T-012 at `3afd407`); T-010's RED is already recorded (`b3398e8`), so it re-enters at S4.2 with the answer. Phase 5 cannot close until then. -->
   <!-- gate cleared 2026-10-07: spec approval PR #73 merged into main (merge commit a1a15db, 2026-10-06) -> Phase 2 starts. The reviewer merged without widening `settings.md` AC-042 (install+read only), so the change's own AC-010 (install+read+reset, all five features) stays the stronger rule -->
   <!-- WAITING -> IN-WORKFLOW 2026-10-07: Q-30 answered (add `## Using the Permissions Feature` + `## Using the Session Management Feature` to `AGENTS.md`; D13's "no new section" clause amended in this change's own PR) -> T-012 unblocked, Phase 3 resumes -->
 - **Change type:** **CROSS-CUTTING**  <!-- reclassified from FEATURE at P.3 on 2026-10-06 (Q-2 = all five module singletons): the change intentionally spans five features and introduces a new shared pattern (a public install operation on a feature's module singleton) -->
