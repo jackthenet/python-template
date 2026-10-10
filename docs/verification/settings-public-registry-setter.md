@@ -7165,3 +7165,57 @@ A1 ran with a map that had been generated while a scratch `Temp/` directory stil
 **Phase 4 re-entry gate: PASS for the isolation defect.** Deterministic full suite `2 failed, 888 passed, 1 skipped` against `main`'s `1 failed, 818 passed, 1 skipped`; the branch's passed count is higher because it adds tests, and **zero** failures are isolation failures. The two remaining nodes are M1 (a real NFR-002 budget violation this change causes, needing a human/spec decision) and M3 (a load-sensitive hypothesis deadline that also fails before the fix).
 
 **Next:** re-run **S5.1** with a fresh subagent (full suite + `--cov` + acceptance/property/contract runs + coverage ≥ 92), and decide M1 before Phase 5 can pass.
+
+## Phase 5 re-entry — structure-map NFR-002 amendment (2026-10-10)
+
+**Trigger: FINDING M1** of the *Phase 4 re-entry* record. `tests/acceptance/test_structure_map.py::test_nfr_002_map_line_budget` fails on the branch: the regenerated, honest `STRUCTURE.md` is **2004** lines and `docs/specs/structure-map.md` NFR-002 caps the committed map at **2 000**. The two nodes are in tension — with a stale map `test_ac_021` fails and NFR-002 passes; with the honest map the reverse. Hand-editing `STRUCTURE.md` and weakening the budget witness are both prohibited, so the only lawful route is the **Spec Amendment Workflow** applied to NFR-002.
+
+### Measured numbers (re-verified in this step, not carried over)
+
+| Measurement | Command | Value |
+|---|---|---|
+| This branch's map | `uv run python scripts/make_map.py` → `wc -l STRUCTURE.md` | **2004 lines** |
+| The committed map is the generated one | `uv run python scripts/make_map.py --check` | exit **0** |
+| `main`'s committed map | `git show main:STRUCTURE.md \| wc -l` | **1941 lines** |
+| Growth this change causes | 2004 − 1941 | **+63** (7 new test directories, ~20 new test files, the newly traced install operations) |
+| Margin under the amended ceiling | 2200 − 2004 | **≈196 lines** |
+| Margin under the old ceiling | 2000 − 2004 | **−4 (violated)** |
+
+### The amendment (one ID, `structure-map.md` v3)
+
+- `docs/specs/structure-map.md` §10 **NFR-002**: ceiling **≤ 2 000 → ≤ 2 200 lines**; the projection sentence is rewritten so it is true for the post-change tree — it now cites the measured **2004** lines on this branch, the **1 941**-line `main` baseline, the **+63** this change adds, and the remaining **≈196**-line margin, and states why (the ceiling is a factual size claim about the current repository, and this change's witnesses grew the tree past it). The base-commit projection sentence, the REQ-017 safety-valve sentence and the **Deviation from Q-7** note are kept verbatim.
+- `docs/specs/structure-map.md` §15 Changelog: a **v3** entry added at the top, newest-first, in the file's own form, naming the change and its verification record (mirrors how the v2 entry cites `map-default-drop-shift`).
+- `tests/acceptance/test_structure_map.py`: the mirrored constant `_NFR_002_LINE_BUDGET = 2_000 → 2_200` and its trailing comment (plus the witness docstring's restatement of the ceiling, which the step-4 grep surfaced). **Nothing else in the file changed** — the assertion `len(lines) <= _NFR_002_LINE_BUDGET` and the non-vacuity guard `assert any(line.strip() …)` are untouched. Following the amended normative value is what the Spec Amendment Workflow requires ("re-run RED/GREEN for affected tasks"); the witness still asserts a ceiling and still fails if the map is empty or over it.
+- `docs/verification/traceability.md`: only the structure-map **NFR-002** row whose Test cell cites `test_nfr_002_map_line_budget` (matched on the test name — the file has several NFR-002 rows for other features). Test cell notes the v3 mirrored constant; Status cell appends this change's dated gate observation per decision Q-129. No other row touched.
+
+**RED before the amendment (the witness genuinely fails):** `uv run pytest tests/acceptance/test_structure_map.py -q` → `1 failed, 31 passed`, `AssertionError: NFR-002: the committed map is 2004 lines, over the 2000-line ceiling`.
+
+### Why the ceiling was amended, not REQ-017's per-class field cap
+
+- **One ID vs three.** Raising the ceiling amends **NFR-002** alone. Pulling the REQ-017 knob would amend **REQ-017** (normative at 15 fields per class) **plus AC-017 and EDGE-011** (`test_ac_017_class_fields_capped_untyped_omitted`, `test_edge_011_field_cap_marker`) — three normative IDs and two witnesses, to save 4 lines of margin.
+- **The cap is already applied.** The spec's own arithmetic counts "353 field lines **after the REQ-017 cap**", and `docs/verification/structure-map.md` records the cap as the safety valve that was already in force when the 1 941-line map was produced. There is no unspent cap to release; the growth is in tree entries and symbol lines, not in uncapped fields.
+- **The ceiling is the factual claim.** NFR-002 asserts a property of the current repository's size; the repository grew. The content policy (Q-8/Q-9/Q-19/Q-20) is untouched, so the map's information content is unchanged — only the numeric ceiling moved, by 200 lines against a 63-line growth.
+
+### Affected-task analysis (Spec Amendment Workflow step 4)
+
+**No task in this change's DAG is affected, so no DAG re-derivation is needed.** `docs/tasks/settings-public-registry-setter.tasks.json` and `.github/task-runner/tasks.json` contain **no** reference to `structure-map`, `STRUCTURE.md`, `make_map` or `test_nfr_002_map_line_budget` (grep: 0 matches). The `NFR-002` mentions in T-001 and T-009 are this change's **own** spec's NFR-002 (install latency < 1 ms, witnessed by `tests/contract/singleton_install/test_performance_contract.py`), a different ID in a different spec — unaffected by this amendment. The witness `test_nfr_002_map_line_budget` belongs to the **`structure-map` feature**, whose own spec, DAG and change are already merged; its amendment therefore re-runs that feature's witness (below), not a task of this change.
+
+### Where the amendment lands
+
+Per the user's answers to **Q-30** and **Q-31** on this change, a spec amendment made by this change rides **this change's own PR** (same merge gate as the change) rather than a separate approval PR. `docs/specs/structure-map.md` is edited on the change branch and reviewed as part of this change's PR; nothing is committed to `main` directly.
+
+### Records deliberately left alone (dated observations, not normative text)
+
+`git grep -n "2 000\|2_000"` also matches historical records that are **not** updated: `docs/verification/structure-map.md` (the structure-map change's own gate records, incl. "1 938 ≤ 2 000, margin 62"), `docs/verification/map-default-drop-shift.md`, `docs/tasks/structure-map.tasks.json` (that change's executed task definitions), `docs/decisions/ADR-085-…` (an accepted ADR describing the ceiling at its date), `docs/questions/complexipy-scripts.md`, `docs/questions/archive/map-default-drop-shift.md`, `docs/todo/archive/structure-map.md`, and `docs/workflow/PROBLEMS.md`. Each is a dated observation of the ceiling as it stood at that gate (decision Q-129: a dated record is a legal record of a past gate, not a defect to refresh). `tests/contract/logging/test_tracing_surface.py:63` (`_SLOW_WORK_ITEMS = 2_000_000`) is unrelated.
+
+### Gates
+
+| Gate | Command | Result |
+|---|---|---|
+| witness (RED → GREEN) | `uv run pytest tests/acceptance/test_structure_map.py -q` | **32 passed** (was `1 failed, 31 passed`) |
+| traceability | `uv run python scripts/check_traceability.py` | **PASS** (883 matrix rows, 136 spec IDs, 875 test functions) |
+| ruff (changed path) | `uv run ruff check tests/acceptance/test_structure_map.py` | `All checks passed!` |
+| ruff format | `uv run ruff format --check tests/acceptance/test_structure_map.py` | `1 file already formatted` |
+| map | `uv run python scripts/make_map.py --check` | exit **0** (map not hand-edited; unchanged by this step) |
+
+**Next:** re-run **S5.1** with a fresh subagent (full suite + `--cov` + acceptance/property/contract runs + coverage ≥ 92). M1 is resolved; M3 (load-sensitive hypothesis/latency nodes) still has to be read together with its isolation-free neighbours before classification.
