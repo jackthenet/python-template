@@ -769,6 +769,37 @@ The project version is a semantic version (major.minor.patch) stored in `pyproje
 
 ---
 
+## Using the Feature Singletons (install and reset)
+
+Five features expose their shared default as a module singleton — settings, event bus, permissions, search and session management. Each owns a private one-element slot and publishes the same trio; use the trio, never the slot (spec: `docs/specs/settings-public-registry-setter.md`, ADR-083 / ADR-084).
+
+- **The trio.** `get_*()` reads the shared default (constructing it lazily), `set_*()` installs an instance you built as the shared default, `reset_*()` clears the slot. The names are `set_settings_registry`, `set_event_bus`, `set_permission_service`, `set_search_service` and `set_session_service`, each re-exported from its own feature package root.
+- **Install, never write the slot.** Writing another package's private slot is banned twice: ruff `TID251` rejects the import of the slot's module, and the architecture scan test fails on the assignment — including inside the code strings handed to `subprocess`. A module still writes its **own** slot (that is how its lazy create works).
+- **Install semantics.** Replaces a non-empty default unconditionally and logs exactly one `WARNING` when it does; never retroactive (an object built earlier keeps the dependency it was given); lifecycle-neutral (it neither starts what it installs nor shuts down what it replaces); never accepts `None`; publishes no event.
+- **Test seam.** `reset_*()` stays the seam between tests. To swap in a scratch instance and put the original back, capture it with `get_*()`, re-install it in the `finally` with `set_*()`, and reset when the capture was `None`. `witness_slots` in `tests/singleton_install_test_helpers.py` does exactly that for all five slots and restores outer state on teardown.
+- **Session-management carve-out.** `get_session_service(repository=...)` needs a repository to construct a default, so observe the install/reset pair through `get_session_service(repository)`.
+
+```python
+from backend.settings import (
+    SettingsRegistry,
+    get_settings_registry,
+    reset_settings_registry,
+    set_settings_registry,
+)
+
+saved = get_settings_registry(required=False)  # required=False: capture without creating one
+set_settings_registry(SettingsRegistry(value_repository=YamlValueRepository(tmp_dir)))
+try:
+    ...  # the code under test reads get_settings_registry()
+finally:
+    if saved is not None:
+        set_settings_registry(saved)           # put the original instance back
+    else:
+        reset_settings_registry()              # the slot was empty; install never takes None
+```
+
+---
+
 ## Using the Logging Feature
 
 New backend features MUST use the shared logging feature at `src/backend/logging/` (spec: `docs/specs/logging.md`) instead of inventing their own logging.

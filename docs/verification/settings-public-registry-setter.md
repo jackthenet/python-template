@@ -7973,3 +7973,210 @@ left for the human reviewer.
 
 **Commit:** `9b2596a docs(ADR-083): correct lock claims to match shipped code (review M1)` — one file,
 `docs/decisions/ADR-083-public-install-operation-feature-singletons.md` (+19 / −8). Not pushed.
+
+---
+
+## Phase 6 — Review report (2026-10-10)
+
+**Step:** S6.3 (review skill, S6.3 section). **Type:** CROSS-CUTTING. **Objective:** consolidate the S6.1 and
+S6.2 findings into one review report and confirm it is **clean** — every finding resolved, or explicitly
+deferred with a reason and named for the human PR reviewer — then discharge AGENTS.md Phase 6 items 9
+(`AGENTS.md` shared-capability note) and 10 (`CHANGELOG.md` entry under `## [Unreleased]`).
+
+### Bounded-scope statement (P-27 compliance)
+
+Inputs used, exactly: the normative basis (`docs/specs/settings-public-registry-setter.md` v3 — its §13 tracing
+row withdrawn by the Q-31 amendment recorded in that file's Changelog — plus the companion amendments
+`docs/specs/logging-coverage.md` v4 and `docs/specs/structure-map.md` v3), this verification artifact
+(S5.1–S5.4, S6.1, S6.2, the S6.2 fix), `docs/verification/traceability.md`, `.github/task-runner/tasks.json`
+(12/12 `VERIFIED`), and the **final** state of the touched files at HEAD `be1fc57`. No commit-by-commit diff
+walk. **Nothing was re-run that Phase 5 already gated**: the full suite, `ruff check .`, `mypy`, coverage,
+`check_traceability.py` and `make_map --check` results are read from the record (S5.1 `99efbee`, S5.2 `b800e5b`,
+S5.3 `749cd3a`, S5.4 `6cbd551`). Commands run in this step were read-only and short (`sed -n`, `grep -n`,
+`git log --oneline`, `git show --stat`, `git diff --numstat`) plus the two markdown/pyproject reads below.
+
+### Check 1 — every REQ-XXX has at least one GREEN test
+
+**PASS.** The Phase 5 coverage table (S5.4, §"Specification coverage") resolves **53 / 53** of this spec's own
+normative IDs to a named GREEN witness — 16 REQ, 20 AC, 3 INV, 10 EDGE, 4 NFR, none missing — by three
+independent methods (the §10 table's function present in the named file; the ID sitting in a `GREEN` matrix row;
+`verify_spec.py` exit 0). The 12 further rows for the amended per-feature IDs are GREEN too. Acceptance coverage
+is 20/20 ACs GREEN in the category §10 assigns (13 in `tests/acceptance/`, acceptance suite standalone 430 + 1
+skip). Code coverage 93.85% ≥ `fail_under = 92` is recorded as the secondary signal it is, not as evidence.
+
+### Check 2 — every acceptance test traces to a normative requirement (no orphans)
+
+**PASS.** `uv run python scripts/check_traceability.py` → **PASS** (890 matrix rows / 136 spec IDs / 875 test
+functions): no missing row, no dangling ID, no cited test that no longer exists, no undeclared status value. The
+orphan direction the script does not check was done by hand in S6.2 check 1(b): all **71** test functions this
+branch adds were enumerated from the diff and each resolves in the matrix or in the spec's §10 table —
+**0 orphans**. The five names a naive grep flags (`test_edge_002…test_edge_006`) are range-notation artifacts of
+the matrix's EDGE row, not orphans (**S62-2**, Note), and `EDGE-010` has no separate node by design (finding
+**F-60**, asserted inside `test_ac_010_concurrent_install_read_reset` and `test_inv_001_last_install_wins`).
+
+### Check 3 — no behavior introduced that is not represented in the specification
+
+**PASS** — spot-checked against the final code state, not the diff:
+
+| Spec surface | Final state at HEAD | Verdict |
+|---|---|---|
+| The five install operations (§3.1, REQ-001/REQ-014) | `set_settings_registry` `settings/registry.py:447`, `set_event_bus` `eventbus/eventbus.py:292`, `set_permission_service` `permissions/service.py:571`, `set_search_service` `search/service.py:638`, `set_session_service` `sessionmanagement/service.py:421`; one annotated parameter, `-> None`, never `None`; each in its package `__all__` (`settings/__init__.py:70`, `eventbus/__init__.py:12`, `permissions/__init__.py:90`, `search/__init__.py:85`, `sessionmanagement/__init__.py:44`) | conform |
+| Replace + exactly one WARNING outside the lock (§3.2, REQ-002) | identical read-swap-then-warn shape in all five; the five messages match §3.2 verbatim; the WARNING names the shared default, never the instance | conform |
+| The `@logged` decorators (REQ-010) | `@logged(slow_threshold_ms=5)` on all five (`registry.py:446`, `eventbus.py:291`, `permissions/service.py:570`, `search/service.py:637`, `sessionmanagement/service.py:420`); `logging-coverage.md` §3.1 carries a `module function` row for each and `INVENTORY_MODULE_FUNCTIONS` carries the entry | conform |
+| The `TID251` ban (REQ-013, §3.4) | `pyproject.toml:197` selects `TID251`; `:225-230` carries the **five fully-qualified** keys with the trio-naming `msg`s, verbatim from §3.4; S5.2 reports zero `TID251` repo-wide | conform |
+| Nothing else | the added-definition scan over `git diff origin/main HEAD -- src/` (S6.2 check 5) → 7 definitions: the five install operations plus two module-private helpers (`_resolve_max_queue_size`, `_shared_settings_registry`) that add no behaviour (**S62-3**, Note). No removed public symbol, no new exception, no new event, no new permission-catalog action (REQ-005/REQ-009/REQ-016) | conform |
+
+### Check 4 — CROSS-CUTTING: per-feature traceability rows updated for every affected feature
+
+**PASS.** All **31** rows of the "Settings Public Registry Setter Matrix" section of
+`docs/verification/traceability.md` were written by this change and are `GREEN` (S5.3, commit `749cd3a`) — the 19
+rows of this change's own spec (REQ-001…REQ-016, INV, EDGE, NFR) plus the **12** per-feature CROSS-CUTTING rows of
+the six amended feature specs. No row of that file that this change did not touch was refreshed (convention B).
+(Record correction: the S6.2 handoff line "14 per-feature CROSS-CUTTING rows" miscounts — the split is 19 + 12 =
+31; the two extra are the impact-table rows for the composition root and the guidance file, which are not matrix
+rows.) The affected features and their rows:
+
+| Affected feature | Row(s) updated | Status |
+|---|---|---|
+| settings (`settings.md` v5) | REQ-026, INV-011, EDGE-030 … EDGE-033 (4 rows) | GREEN |
+| event bus (`event-bus.md` v2) | REQ-008, EDGE-011, EDGE-012 | GREEN |
+| permissions (`user-roles-permissions.md` v2) | REQ-030, EDGE-027, EDGE-028 | GREEN |
+| search (`search.md` v4) | REQ-024, EDGE-022, EDGE-023 | GREEN |
+| session management (`session-management.md` v2) | REQ-023, EDGE-013, EDGE-014 | GREEN |
+| logging coverage (`logging-coverage.md` v3 + v4) | the §3.1 inventory row (REQ-001, no ID changed) | GREEN |
+| structure map (`structure-map.md` v3) | the NFR-002 row (in that spec's own matrix section, `traceability.md:1139`, citing this change's amendment and the RED observed at the old ceiling) | GREEN |
+| composition root (`src/main.py`) + guidance (`AGENTS.md`) | change-spec REQ-011 / REQ-015 rows (no feature ID touched) | GREEN |
+
+### Check 5 — feature boundaries and architecture rules
+
+**PASS** (S6.2 checks 2–3). Install operation, slot and lock live in each of the five owning packages; one
+module-level lock per slot guards install + lazy create + reset; **zero** cross-feature private-slot references
+(the single grep hit is a docstring describing the banned pattern) and **zero** cross-feature imports of another
+feature's private module (the 10 `backend.<feature>._<module>` hits are all intra-feature `logging` plumbing);
+`git diff --stat origin/main HEAD -- src/backend/shared/` is **empty** — `shared/` is still `__init__.py` +
+`principal.py` and no slot mechanics were pushed into it (the S4.3 records for T-003/T-004/T-005 each reject a
+cross-module slot-swap helper for exactly this reason). No premature abstraction, no `model/`/`services/` folder
+exists to violate. ADR-083 and ADR-084 match the shipped structure — ADR-083 after the **M1** correction
+(`9b2596a`). Observability (review-skill check 7): the five install operations are traced and each emits its
+one WARNING naming the shared default; the composition-root install is witnessed by AC-016.
+
+### Check 6 — no acceptance test weakened or deleted to achieve GREEN
+
+**PASS.** Evidence, file side (S6.2 check 4) over all 41 touched test files: **0** deleted test functions (71
+added), **0** added or removed `skip`/`xfail`/`no cover`/deselect markers, and exactly **one** file with removed
+assertion lines — `tests/acceptance/logging_coverage/test_statements_via_feature.py`, where the three `assert not
+violations, "AC-009 / REQ-005 …"` statements were re-added with byte-identical bodies and only the message prefix
+namespaced to `structlog-logging`. The two numeric constants that moved were both **raised**, each pinned to
+amended spec text, assertion bodies untouched:
+
+- `_AC_009_TOTAL_STATEMENTS` 39 → 42 (per-file 18/11/11/2, re-counted in final source) follows
+  `structlog-logging.md` **v2**; the check is exact-equality, so a higher pin is stricter, and the sum-vs-total
+  guard is intact.
+- `_NFR_002_LINE_BUDGET` 2 000 → 2 200 follows `structure-map.md` **v3** NFR-002 (measured 2 004,
+  `make_map --check` exit 0, margin ≈196, REQ-017 field cap named as the safety valve). The witness diff is
+  **2 insertions / 2 deletions** — the mirrored constant and its docstring/comment; the assertion body is unchanged.
+
+The Phase 4 re-entry (`61a8ab1`) fixed **test isolation**, not an assertion: the fix is one place,
+`tests/singleton_install_test_helpers.py` (+629 lines across the branch, the `SingletonSlot.saver` /
+`save()` / `restore()` and `witness_slots` machinery), and in the five witness files it touched it adds only an
+import plus the `@witness_slots` decorator line — **no assertion body was changed**, so INV-001, INV-003,
+EDGE-010, AC-009, AC-010 and AC-012 assert exactly what they asserted before. The helper restores outer session
+state through the public trio only (this change's own REQ-012/REQ-013), which is the point of the fix.
+The migrated pre-existing helpers were read line by line for semantic equivalence (save → reset → install →
+restore order and the `saved is None` plain-reset case preserved).
+
+### Check 7 — the companion spec amendments are flagged for the human reviewer at the merge gate
+
+**Flagged (S61-1 / S62-4).** This PR carries three spec amendments of its own making, on the user's Q-30/Q-31
+decision pattern (the decision pattern is recorded in `docs/questions/settings-public-registry-setter.md`, whose
+late-question entries end at Q-31):
+
+1. `docs/specs/logging-coverage.md` **v4** — §3.1 inventory row for `get_permission_service()` (Q-31 = Option A,
+   explicitly chosen by the user; this spec's §13 out-of-scope row withdrawn for the getter, no ID changed).
+2. `docs/specs/structure-map.md` **v3** — NFR-002 ceiling 2 000 → 2 200 lines (`eaa2f72`), forced by this
+   change's own +63 map lines; **no question-file entry** — the human confirms it at the PR or asks for a split.
+3. `docs/specs/structlog-logging.md` **v2** — REQ-005 per-file counts and AC-009 total refreshed (39 → 42),
+   forced by the five REQ-002 WARNINGs; **no question-file entry** — same disposition.
+
+The five feature-spec amendments (`settings.md` v5, `event-bus.md` v2, `user-roles-permissions.md` v2,
+`search.md` v4, `session-management.md` v2) and `logging-coverage.md` v3 are **not** in this PR's spec diff —
+they reached `main` through spec-approval PR #73 (merge `a1a15db`, 2026-10-06).
+
+### Findings and resolutions (consolidated)
+
+| ID | Severity | Finding | Resolution |
+|---|---|---|---|
+| **S61-1** | Minor | Three spec amendments ride this change's implementation PR; only `logging-coverage.md` v4 has a recorded user decision (Q-31) | **Accepted with rationale, flagged for the human at the merge gate** (Check 7). Both unchosen amendments are forced consequences of this change, each versioned with a changelog line naming this change and the Spec Amendment Workflow, neither adds/renumbers an ID, and neither reaches `main` except through the human-reviewed PR |
+| **S61-2** | Minor | The `get_permission_service` entry in `tests/logging_coverage_test_helpers.py` was added in a T-010-scoped step although the DAG lists that path under T-011 | **Accepted with rationale.** The decorator and the inventory entry are one atomic change (either half alone breaks AC-001 or leaves the normative §3.1 row unwitnessed); widening both committed DAG copies for two lines would add no enforcement. Disclosed in the step record |
+| **S61-3** | Minor | After F-80 the AC-005 witness excludes the five install operations from its bare-call probe, so `logging-coverage.md`'s single-witness cell for AC-005 is narrower than reality | **Accepted with rationale, left to the human reviewer.** Mechanism-only: the bare-call probe cannot reach a function that takes the object it installs; all 13 inventory rows stay present (AC-015 intact) and each install operation's entry/exit pair is witnessed per function by this change's AC-014. Closing the cell would be a fourth amendment to another change's spec for a documentation nicety |
+| **S61-4** | Note | `structlog-logging.md` v2's changelog reads as if five WARNINGs should move AC-009 by +5, but the total moves +3 | **No action** — AC-009's scope is four named files (18/11/11/2 = 42); `search` and `sessionmanagement` each hold one statement outside that scope. Recorded so the reviewer does not read it as arithmetic |
+| **S61-5** | Note | Four standing findings unchanged since P.4/S1.4 (`settings.md` AC-042 narrower than AC-010; the stale `get_settings_registry()` signature block in `settings.md` §3; `reset_permission_service()` and the search / session-management getters still outside the logging inventory; `structure-map.md`'s header still `Status: DRAFT`) | **No action** — none is this change's spec or code; all remain recorded follow-up candidates |
+| **S62-1 (M1)** | Minor | `ADR-083` mis-described the locks: it called ADR-017's **instance** lock an `RLock` (it is a plain `threading.Lock`, `registry.py:101`) and rejected "an `RLock`" outright, while the settings **slot** lock this change ships is a deliberate `RLock` (`registry.py:62`) | **RESOLVED** — commit `9b2596a` corrected the ADR to match the shipped code (never the reverse): Consequences now states the instance lock as a plain `Lock` and the slot lock as `Lock` in the four leaf modules / `RLock` in `settings/registry.py` with the F-57 cold-start re-entrancy reason; Alternatives narrowed to per-operation locks or lock-free. One file, +19 / −8; no code, test, spec or other ADR touched; REQ-006's normative substance unchanged and no test asserts the lock class |
+| **S62-2** | Note | Five EDGE witnesses are not spelled out in the matrix (range notation), so a name-based orphan scan flags them | **No action** — not orphans; the range row's own cell and the spec's §10 table enumerate all ten; house style; `check_traceability.py` passes |
+| **S62-3** | Note | Two new module-private helpers (`_resolve_max_queue_size`, `_shared_settings_registry`) are named by no spec ID | **No action** — private, unexported, behaviour-free, each with a docstring naming the finding (F-72) or requirement (REQ-011) that forced it |
+| **S62-4** | Note | The only two numeric test constants this change moved were both **raised** — the shape a reviewer must not read as a loosened bound | **Folded into S61-1** — both pinned to amended spec text, bodies unchanged, guards intact (Check 6); the human confirms the two amendments at the PR |
+| **Carried, pre-existing** | Note (out of this change's scope) | `docs/decisions/ADR-017-*.md:17` and the code comment at `src/backend/settings/registry.py:54` still call the `SettingsRegistry` **instance** lock an `RLock`, while the shipped instance lock is a plain `threading.Lock` (`registry.py:101`) | **Explicitly deferred, listed for the PR reviewer.** ADR-017's own record, not this change's spec, code or ADR; fixing it here would edit another change's decision without an amendment. Recorded in the S6.2 fix section so it is not lost |
+
+### Known flakes — recorded as pre-existing, not attributed to this change
+
+Confirmed against the Phase 5 record (S5.1 re-run, `99efbee`, evidence E1–E10). None of the four is a regression
+from this change, and the branch is strictly better than `origin/main` on the identical command (**890 passed /
+0 failed** vs **818 passed / 1 failed**):
+
+| Flake | Classification in the record |
+|---|---|
+| `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` (306.36 ms vs the 300 ms budget) | Environment/host/load-dependent, pre-existing; the repo's own **P-86** names this node and this median, P-35/P-36 the same budget under CI load; witness file byte-identical to `origin/main` (E1), measured query path not in this change's diff (E2) |
+| `tests/property/settings/test_settings_properties.py::test_inv_005_slider_grid_valid` (Hypothesis `DeadlineExceeded` 298.51 ms > 200 ms inside `FlakyFailure`) | Same class; node identical to `main` (E1b); mechanism named — O(maxv) YAML `set_value` calls at ≈1.5–1.7 ms each put the default 200 ms deadline inside the example's normal cost band (E10); `docs/verification/mail-service.md` already names this exact node as a pre-existing one-off flake |
+| `test_stdlib_decorator_pipeline` order dependence | **M2 — did not recur** in any of the six S5.1 runs nor the E5 re-run; it is an `origin/main` order dependence, not a branch defect |
+| `test_ac_021_committed_map_matches_fresh_render` on a `core.autocrlf=true` checkout | Host-dependent false failure, fails on `origin/main` too with equal line counts while `make_map --check` exits 0; logged as branch **P-103**; the branch's own map was genuinely stale and was regenerated (`61a8ab1`), so the node passes here |
+
+Four full-suite orders (random auto-seed ×2, `-p no:randomly`, pinned `--randomly-seed=20261010`) produced **0
+isolation failures**; the two timing witnesses appeared in 1 of 4 runs and never in a targeted run.
+
+### Phase 6 items 9 and 10 discharged in this step
+
+- **Item 10 — `CHANGELOG.md`.** Entries appended under the existing (previously empty) `## [Unreleased]` section:
+  4 `Added`, 4 `Changed`, 1 `Fixed`, 1 `Removed`, each traced to what this change actually did — the five install
+  operations, the two guards, the two new `AGENTS.md` sections, the composition-root migration, the raised
+  `structure-map.md` NFR-002 line budget, the traced `get_permission_service()`, the refreshed
+  `structlog-logging.md` statement counts, the closed singleton create race, and the removal of the 12
+  outside-owner private-slot writes. No existing entry was duplicated or reordered.
+- **Item 9 — `AGENTS.md` shared-capability note.** This change **is** a reusable shared capability (five features
+  already use it, and the `TID251` ban plus the architecture scan test make the wrong way a lint/test failure), so
+  a short note was added: a new `## Using the Feature Singletons (install / reset)` section at the head of the
+  "Using the …" block — the trio, the ban on writing another package's slot, the install semantics, the test seam,
+  the session-management carve-out, and one small code block. It does not restate the spec and does not touch the
+  five per-feature "Install the shared default" bullets AC-019 witnesses (those stay where REQ-015 puts them).
+  `AGENTS.md` prose is test-guarded, so the witnesses that read it were re-run **targeted** after the edit
+  (5 nodes in 3 files:
+  `tests/contract/singleton_install/test_guidance_contract.py`,
+  `tests/contract/logging/test_dependency_contract.py`, and `test_ac_026_map_hook_is_advisory` plus
+  `test_ac_027_freshness_policy_documented_twice` from `tests/acceptance/test_structure_map.py`):
+  **5 passed in 0.65 s** — the new section neither breaks the AC-019 install/reset bullets nor trips the REQ-026
+  rule that no map machinery may be wired into `AGENTS.md` (the section names no generated map, no generator, no
+  skill). Output captured to `../s63-scratch/agents-witness.txt`, outside the worktree, so no scratch file can
+  reach the map render or the quality gate. No map regeneration is required: `AGENTS.md` and `CHANGELOG.md` are
+  bare tree entries in the committed map (no line count), and the map itself is unchanged at 2 004 lines.
+- **Item 11 — version bump: not this step.** CROSS-CUTTING → `minor`: `1.1.1` → **1.2.0** at S6.4 with a clean
+  working tree, and the `## [Unreleased]` entries move into `## [1.2.0] - <date>` in the bump commit
+  (`CHANGELOG.md` is hand-maintained; `bump-my-version` does not touch it).
+
+### Review report verdict
+
+**CLEAN.** Every Phase 6 check for a CROSS-CUTTING change passes: 53/53 normative IDs with a GREEN witness;
+0 orphaned tests and `check_traceability.py` PASS; no behaviour beyond the specification (the only added public
+symbols are the five install operations, each named by this spec and by its feature's amended spec);
+per-feature traceability rows updated for every affected surface (the 12 per-feature CROSS-CUTTING rows of this
+change's 31-row matrix, all GREEN, plus the amended `structure-map.md` NFR-002 row in that spec's own section);
+feature boundaries
+and architecture rules respected with `shared/` unchanged and both guards green on the final tree; no acceptance
+test weakened, converted, deleted, skipped or deselected. **One finding was resolved in this phase (S62-1 / M1,
+commit `9b2596a`)**; the remaining nine entries (S61-1 … S61-5, S62-2 … S62-4, and the carried pre-existing
+lock-wording note) are Minor/Note findings resolved by acceptance-with-rationale or no
+action, and **four items are explicitly listed for the human PR reviewer**: the `structure-map.md` v3 and
+`structlog-logging.md` v2 amendments (S61-1 / S62-4), the narrower AC-005 witness cell (S61-3), and the
+pre-existing ADR-017 / `registry.py:54` lock-wording note.
+
+**Next:** **S6.4** — bump `minor` (1.1.1 → 1.2.0), move the `## [Unreleased]` entries into
+`## [1.2.0] - 2026-10-10` in the bump commit, open the PR to `main`, present it for human merge, then STOP
+(human governance — the agent does not merge).
