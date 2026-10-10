@@ -484,7 +484,7 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Options:**
   - **(Recommended) Trace the getter (Option A).** Add `@logged(slow_threshold_ms=5)` to `get_permission_service()` — one line, `src/backend/permissions/service.py` is already in T-010's `allowed_files`. No existing test breaks: the logging-coverage inventory witnesses assert "inventory row ⇒ traced", never the reverse. Requires a **`logging-coverage.md` §3.1 inventory row** for the getter, added as a Spec Amendment in this change's own PR (same merge gate as the change).
   - **Narrow AC-011 to the three traced getters (Option B).** Amends `docs/specs/settings-public-registry-setter.md` AC-011 first, then narrows the witness. Narrowing the test **without** the amendment first is a prohibited acceptance-test weakening, so the amendment PR must land before the test changes. Leaves permissions' lazy read untraced, which is what §13 says today.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-08
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Option A — trace the getter** (user decision, 2026-10-10). `get_permission_service()` gets `@logged(slow_threshold_ms=5.0)`, matching the four other `get_*()` getters; AC-011 wins over §13.
+- **Date:** 2026-10-08 (asked) / 2026-10-10 (answered)
+- **Status:** ANSWERED
+- **Incorporated:** in progress — per the chosen option, the two `docs/specs/` edits are made **on the change branch and ride in this change's own PR** (same merge gate as the change), not a separate amendment PR: (1) `docs/specs/logging-coverage.md` §3.1 gains a `get_permission_service()` inventory row, the §3.1 note at `:55` is corrected, and a v4 changelog line is added; (2) `docs/specs/settings-public-registry-setter.md` §13's "Tracing `get_permission_service()` / `reset_permission_service()`" out-of-scope row is withdrawn, with a changelog line. `reset_permission_service()` stays out of scope (AC-011 names only the getter). No ID is added, removed or renumbered; AC-011 and its witness are unchanged. T-010 re-enters at **S4.2** with its RED already recorded (`b3398e8`).
