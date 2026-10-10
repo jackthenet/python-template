@@ -1122,3 +1122,119 @@ the reverse would be a finding.
 **Gate ◆ S5.3: passed** — `INV-007` and `EDGE-017` rows added and the touched `REQ-014 / AC-014` row
 updated, all citing test functions that exist in this worktree; `check_traceability.py` exits **0**
 (`PASS (883 matrix rows, 136 spec IDs, 804 test functions)`). Next: **S5.4 Verification report**.
+
+## Phase 5 — S5.4 verification report (2026-10-10)
+
+HEAD at entry: `d1fa73f` (`docs(map-default-drop-shift): S5.3 traceability rows for INV-007/EDGE-017 +
+REQ-014/AC-014`), `git status --porcelain` **empty** (checked before writing anything). This step writes
+**only this file**: no `src/`, no `tests/`, no spec, no `docs/verification/traceability.md` (S5.3 owns it),
+no `CHANGELOG.md`, no `pyproject.toml`, no `STRUCTURE.md`, no `docs/todo/` or `docs/questions/`, no PR, no
+version bump. **No test was run beyond the targeted re-runs named in 5.4.2; the full `tests/` suite was
+deliberately not run** (light tier, §6 — it is the S6.4 pre-merge gate, 5.4.3). No test was modified,
+weakened, deleted or deselected at any point in Phase 5.
+
+Normative basis for the report: the triage record (§1–§6) + the **amended** spec
+`docs/specs/structure-map.md` **v2** (Spec Amendment PR A #79, merged `d8ba07f`) — amended **REQ-014**
+(`:270`, rule text `:287-294`) and **AC-014** (`:429`), new **INV-007** (§8, `:454`) and new **EDGE-017**
+(§9, `:476`). The fix is `0c73790` (`scripts/make_map.py`) with the S4.3 comment-only refactor `db425ae`,
+and the regenerated `STRUCTURE.md` committed **in the same commit** as the `.py` change (REQ-023).
+
+### 5.4.1 Affected-ID coverage (spec coverage)
+
+One row per normative ID **this change owns** — the two IDs PR A amended and the two it added. Witness
+functions and their line numbers were re-read from the tree at `d1fa73f`; statuses are the S5.1 gate
+(§5.1.1) re-confirmed by this step's targeted re-run (5.4.2 #1).
+
+| ID (spec location) | Witnessing test function(s) | Category | Observed status |
+|---|---|---|---|
+| **REQ-014** — amended by PR A v2 (`:270`, rule text `:287-294`) | `test_ac_014_symbol_inventory_and_unparsed_signatures` (`tests/unit/test_make_map.py:996`, re-derived in place for the amended wording) **and** `test_ac_014_committed_map_renders_over_long_default_in_place` (`tests/acceptance/test_structure_map.py:1506`, new witness on the committed artifact) | **unit + acceptance** | **GREEN** — both pass (this step: `4 passed in 3.10s`, exit 0; S5.1 §5.1.1 `4 passed in 3.31s`) |
+| **AC-014** — amended by PR A v2 (`:429`) | the same two witnesses (the AC-014 row cites both) | **unit + acceptance** | **GREEN** — same run; the re-derived unit witness keeps every pre-existing needle and adds three positive `=…` needles, so it is strictly stronger than the pre-amendment witness, never weaker (§4.4, F-05) |
+| **INV-007** — added by PR A v2 (§8 Invariants, `:454`) | `test_inv_007_signature_fidelity_survives_default_abbreviation` (`tests/property/test_structure_map.py:628`) | **property** (Hypothesis over default length × parameter slot — the category the spec's §11 row `:553` requires for an invariant) | **GREEN** — same run; property module 7 passed (§5.1.3) |
+| **EDGE-017** — added by PR A v2 (§9 Edge Cases, `:476`) | `test_edge_017_over_long_default_keeps_its_slot` (`tests/unit/test_make_map.py:1028`) | **unit** | **GREEN** — same run; unit module 19 passed (§5.1.3). Covers all three slots plus the two branches unreachable in the tree today (F-12) |
+
+**Spec coverage: 4 / 4 affected IDs have at least one GREEN witness = 100%.** Every witness named above is
+also a matrix row in `docs/verification/traceability.md` (S5.3 §5.3.2: the `REQ-014 / AC-014` row updated
+in place, `INV-007` and `EDGE-017` rows added), each Status cell starting with the declared value `GREEN`
+and carrying this change's name and date inside the cell (Q-129 convention B). The matrix citations match
+the spec's own §11 Test Strategy rows (`structure-map.md:533`, `:553`, `:570`) exactly; the acceptance
+witness is an **extra** witness this change wrote (§4.2), which is permitted.
+
+**Not counted in the coverage figure** — the IDs this change only had to leave unbroken (§2), each green in
+the same runs: `REQ-021 / AC-021` (`test_ac_021_committed_map_matches_fresh_render` — red on `main` at
+triage, green since the Phase 4 regeneration), `REQ-019 / INV-001` (determinism — `make_map.py --check`
+exit 0, idempotent placeholder), `INV-006` (hook cleanliness — `…` is mid-line), `NFR-002`
+(`test_nfr_002_map_line_budget`, map still 1 941 lines ≤ 2 000), `REQ-023 / AC-023` (the map is regenerated
+in the same commit as the `.py` change).
+
+### 5.4.2 Gate set actually run (light tier)
+
+Every result below is copied verbatim from the S5.1 / S5.2 / S5.3 sections of this file, except the two
+rows marked *re-run here*, which this step executed at `d1fa73f`.
+
+| # | Gate (light-tier ISSUE) | Command | Result | Exit | Source |
+|---|---|---|---|---|---|
+| 1 | Reproduction witnesses GREEN (the four §4.5 node ids) | `uv run pytest tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place -v` | **`4 passed in 3.10s`** — 0 failed, 0 skipped, 0 xfail, 0 errors | **0** | *re-run here* (S5.1 §5.1.1: `4 passed in 3.31s`) |
+| 2 | Covering tests named in §6, each module on its own | `uv run pytest tests/unit/test_make_map.py -v` / `… tests/property/test_structure_map.py -v` / `… tests/acceptance/test_structure_map.py -v` | **`19 passed`** / **`7 passed`** / **`32 passed`** — reconciles against the §3.5 baseline with no test lost (§5.1.3) | 0 / 0 / 0 | S5.1 §5.1.3 |
+| 3 | Affected feature's test directory (structure-map: unit + property + acceptance) | `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -v` | **`58 passed in 44.77s`** — 0 failed, 0 skipped, 0 deselected; includes AC-021 and NFR-002 green | **0** | S5.1 §5.1.2 |
+| 4 | Smoke sweep | `uv run pytest tests/acceptance -q` | **`396 passed, 1 skipped in 62.93s`** — the single skip is the pre-existing host-dependent `test_ac_031_symlink_rejected` guard (F-22) | **0** | S5.1 §5.1.4 |
+| 5 | Lint — the one whole-repo sweep of the change (matches `lint.yml`) | `uv run ruff check .` | `All checks passed!` | **0** | S5.2 5.2.1 #1 |
+| 6 | Formatting | `uv run ruff format --check .` | `343 files already formatted` | **0** | S5.2 5.2.1 #2 |
+| 7 | Types (CI gate, `quality.yml`) | `uv run mypy src/` | `Success: no issues found in 84 source files` | **0** | S5.2 5.2.1 #3 |
+| 8 | Types over the tree the change edits | `uv run mypy scripts/` | `Success: no issues found in 4 source files` | **0** | S5.2 5.2.1 #4 |
+| 9 | Traceability referential integrity (ISSUE Phase 5 obligation 11) | `uv run python scripts/check_traceability.py` | `Traceability: PASS (883 matrix rows, 136 spec IDs, 804 test functions)` | **0** | *re-run here* (identical to S5.3's post-edit run, §5.3.3) |
+| 10 | Map freshness (check only, P-94) | `uv run python scripts/make_map.py --check` | no output, `STRUCTURE.md` unmodified | **0** | S5.1 §5.1.5 / S4.4 |
+| 11 | Cognitive complexity, CI scope | `uv run complexipy src tests --max-complexity-allowed 15` | `All functions are within the allowed complexity.` (tightest function this branch adds: 14 / limit 15, §5.2.3) | **0** | S5.2 5.2.1 #6 |
+| 12 | Dependencies | `uv run deptry .` | `Success! No dependency issues found.` (no dependency was added; `pyproject.toml`/lock not in the diff) | **0** | S5.2 5.2.1 #7 |
+| 13 | Security | `uv run bandit -q -r src/` | no issue report; 48 pre-existing `nosec`-comment warnings only (F-23) | **0** | S5.2 5.2.1 #8 |
+
+**ruff: clean. mypy: clean (`src/` and `scripts/`). check_traceability: exit 0.** Zero findings were
+introduced by this branch (S5.2 5.2.1 classification column).
+
+### 5.4.3 What the light tier defers — open item for S6.4
+
+Under the light-tier qualification (§6, AGENTS.md "Light ISSUE tier"), Phase 5 ran **targeted + smoke**
+instead of the full regression suite. Therefore:
+
+- **OPEN ITEM → S6.4 (Phase 6 pre-merge gate):** `uv run pytest tests/ -v` — the **full regression suite**
+  — MUST pass **before the PR opens**, and its result MUST be recorded in the Phase 6 review report
+  (AGENTS.md Phase 5 ISSUE item 9 / Light ISSUE tier; skill "MUST → ISSUE"). It was **not** run in Phase 5
+  by design, and it is the only light-tier gate not yet green.
+- Reading the S6.4 count correctly: on this host the acceptance category reports **1 skipped**
+  (`test_ac_031_symlink_rejected`, F-22) — a host capability, not a deselected or weakened test.
+- If `test_ac_021_committed_map_matches_fresh_render` is red at that gate, the cause is the map, not the
+  fix: regenerate (`uv run python scripts/make_map.py`) and re-commit the map with the `.py` change, never
+  hand-edit `STRUCTURE.md`; the second, CRLF-dependent cause of that test is F-03 (mitigation: regenerate
+  immediately before the full-suite run).
+- Also owed at S6.4 (not Phase 5, recorded here per the verify skill "All types"): the `CHANGELOG.md`
+  entry under `## [Unreleased]` → `Fixed` (F-20; it does **not** exist at this phase) and the `patch`
+  version bump `1.1.0 → 1.1.1` with the entries moved to `## [1.1.1] - <date>` in the bump commit.
+
+### 5.4.4 Phase 5 findings ledger (F-21…F-25)
+
+| ID | Recorded at | Finding (short) | Disposition | Open after Phase 5? |
+|---|---|---|---|---|
+| **F-21** | S4.2 | The map diff is **6** lines, not the predicted 5: the map renders its own per-module line count (`scripts/make_map.py` 567 → 581 lines), which the out-of-repo probe could not predict. | Expected, not a defect — generated content of the artifact; total stays 1 941 lines so NFR-002 holds, and no signature line outside the §5.3 set changed. Recorded so S6.x reviewers do not read the sixth line as scope creep. | **no** |
+| **F-22** | S5.1 | The acceptance smoke sweep reports **1 skipped** (`test_ac_031_symlink_rejected`) — the test's own `os.symlink` platform guard on a Windows host without symlink privilege. | No action; pre-existing and outside this branch's diff. Recorded so the S6.4 full-suite count is read correctly (a skip there is not a weakened test). | **no** (carried into the S6.4 reading note, 5.4.3) |
+| **F-23** | S5.2 | `bandit -q -r src/` emits 48 redundant-`nosec` warnings (exit 0, CI green). | No action in this change (`src/` untouched, out of scope). Candidate for a future chore / Problem Log. | **no** (out of scope, recorded) |
+| **F-24** | S5.2 | `check_traceability.py` cannot flag a missing `INV-`/`EDGE-` matrix row (it enforces rows for `REQ-`/`AC-` only), so its PASS is not evidence for INV-007/EDGE-017. | The written AGENTS.md rule is the gate, and it is satisfied: S5.3 added both rows with GREEN witnesses (§5.3.2, §5.3.4). Script weakness recorded for the after-workflow-optimization; nothing in `scripts/` was changed. | **no** |
+| **F-25** | S5.3 | The matrix sub-headings hard-code row counts (`INV (6 rows)` / `EDGE (16 rows)`), and no CI check polices prose counts. | Corrected in S5.3 to `7 rows` / `17 rows` with the change and date annotated; the section preamble keeps its 2026-10-09 record plus a dated amendment note (85 IDs, 58 rows). Recorded for the after-workflow-optimization. | **no** |
+
+**No finding is open.** F-23/F-24/F-25 are pre-existing or tooling observations handed to the
+after-workflow-optimization; F-21/F-22 are explanations, not defects. The pre-existing items carried from
+Phase P (`F-01`/`F-02` resolved by the Phase 4 regeneration — AC-021 green since `0c73790`; `F-03` CRLF
+fragility, out of scope, mitigation noted at 5.4.3; `F-09` closed by S5.3) are unchanged by this step.
+
+### 5.4.5 Phase 5 gate verdict
+
+**◆ S5.4: passed.** Exit criterion met: **spec coverage = 100%** (4/4 affected IDs — `REQ-014`, `AC-014`,
+`INV-007`, `EDGE-017` — each with at least one GREEN witness, each with a GREEN matrix row citing a test
+function that exists in this worktree) **and** every light-tier gate green (5.4.2 rows 1–13, all exit 0).
+`verify_spec.py` is not a gate for ISSUE (FEATURE/CROSS-CUTTING only); the ISSUE obligation 11 —
+`check_traceability.py` re-run — exits **0** (`PASS (883 matrix rows, 136 spec IDs, 804 test functions)`).
+
+**Phase 5 is closed.** State machine: `REFACTORED` (S4.4) → **`VERIFIED`** (traceability updated in S5.3,
+spec coverage 100%, light-tier gate set green). The one deferred gate — the full regression suite — is
+recorded as the **S6.4 pre-merge gate** (5.4.3) and must be green in the Phase 6 review report before the
+PR opens.
+
+**Gate ◆ Phase 5: passed.** Next: **S6.1 Review vs. normative basis** (Phase 6, REVIEW).
