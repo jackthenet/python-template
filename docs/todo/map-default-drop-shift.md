@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
   <!-- QUESTIONS-ANSWERED 2026-10-09: all 19 questions in docs/questions/map-default-drop-shift.md ANSWERED + incorporated (4 rounds); value-triage decision recorded (implement, 3/5) -> P.4 gate open -->
 - **Change type:** ISSUE  <!-- likely needs a Spec Amendment first: see "Why" -->
 - **Created:** 2026-10-09
