@@ -4,7 +4,8 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** MERGED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+  <!-- MERGED 2026-10-10: PR #80 merged into main (merge commit 82de8de), S7.1 cleanup done. -->
   <!-- IN-WORKFLOW -> WAITING 2026-10-10: Phase 5 closed (S5.1–S5.4, spec coverage 100% of the 4 affected IDs) and Phase 6 review report CLEAN (S6.1 `87f2ad4`, S6.2 `1b0da55`, S6.3 `081082c`); **PR #80** opened (`issue/map-default-drop-shift` -> `main`, 1.1.0 -> 1.1.1, all 12 CI checks SUCCESS, mergeable). Human gate S6.4: waiting for the merge, then S7.1 cleanup. -->
   <!-- QUESTIONS-ANSWERED 2026-10-09: all 19 questions in docs/questions/map-default-drop-shift.md ANSWERED + incorporated (4 rounds); value-triage decision recorded (implement, 3/5) -> P.4 gate open -->
 - **Change type:** ISSUE  <!-- likely needs a Spec Amendment first: see "Why" -->
