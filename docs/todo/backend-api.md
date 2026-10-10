@@ -10,7 +10,7 @@ This is a **planning record, not normative**: like `docs/questions/`, it is comm
 - **Question file:** `docs/questions/backend-api.md`
 - **Spec:** `docs/specs/backend-api.md`
 - **Worktree:** <created at P.4> `../python-template_kopie-worktrees/crosscut/backend-api`
-- **Depends on:** none (it **blocks** `api-keys`, which was re-scoped to depend on this change)
+- **Depends on:** **`composition-root-factory`** (added 2026-10-10 at P.3 round 1, Q-07 = B: the HTTP app is built on that change's `create_app()`, so this change may not pass P.4 until it is merged; that change is itself gated on `settings-public-registry-setter` (IN-WORKFLOW) and has 29 unanswered P.2 questions) — it **blocks** `api-keys`, which depends on this change
 - **Related specs:** `docs/specs/authentication.md` (its §Out of scope line 15 excludes an HTTP/REST/GraphQL API layer — **amendment required**), `docs/specs/session-management.md` (Constraints: "Backend-only in-process service — no HTTP/REST layer, no frontend" — **amendment required**), `docs/specs/user-roles-permissions.md` (the 61-action catalog + `@requires_permission` enforcement, consumed unchanged), `docs/specs/logging-coverage.md` (REQ-012 tracing policy for the new module), `docs/specs/settings.md` (a new `api.*` settings family)
 
 ## Goal (one line)
@@ -22,7 +22,7 @@ The user asked for machine access to this backend (`api-keys`). Answering the fi
 ## In scope
 - A new boundary package (`src/backend/api/`) hosting a **FastAPI** app served by **uvicorn**.
 - Authentication by the backend's **existing session tokens** (Bearer) — no new credential type.
-- Routes for **all 61 enforced catalog actions** (authentication 11, usermanagement 11, settings 19, filemanagement 10, sessionmanagement 6, mail 3, search 1), each calling the feature method with the caller's `Principal`.
+- Routes for the enforced catalog actions — **60 of the 61** (P.3 round 1, Q-02 = 2026-10-10: `usermanagement.verify_password` is **withheld** from the HTTP surface; the deviation from the "all 61" decision is recorded in the spec's not-exposed list), each calling the feature method with the caller's `Principal`.
 - Request/response models derived from the existing Pydantic/SQLModel models; error → HTTP status mapping from the existing exception hierarchies.
 - Feature-owned `api.*` settings (bind host/port, and whatever P.2 shows is needed) via the settings registry.
 - Tracing per the logging-coverage policy (`@logged_class` / `@logged`, `include_args=False` where tokens are involved).

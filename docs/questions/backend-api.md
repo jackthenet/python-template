@@ -7,7 +7,7 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **Spec:** `docs/specs/backend-api.md`  <!-- created at P.4 -->
 - **Opened:** 2026-10-08
 - **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Answer rounds:** 1 (2026-10-10: Q-01, Q-02, Q-03, Q-07 answered)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -43,10 +43,10 @@ These are settled and MUST NOT be re-asked; P.2 builds on them:
 ### Q-01 — Does the HTTP surface return the raw password-reset token?
 
 - **Step:** P.2 (Phase P)
-- **Answer:** PENDING
-- **Status:** PENDING
-- **Date:** 2026-10-08
-- **Incorporated:** no
+- **Answer:** **A** — `POST /auth/password-resets` returns **202 with no body**; the boundary suppresses the returned token. Delivery stays with `MailService.send_password_reset_email`; `complete_password_reset` stays callable with a token the client obtained out-of-band. No new cross-feature call, no new setting, no spec-ID change.
+- **Status:** ANSWERED
+- **Date:** 2026-10-10
+- **Incorporated:** yes — to be written at P.4 as an EDGE + INV ("a reset token never appears in an HTTP response") and in the authentication Impact Analysis
 - **Context:** Decision 5 puts `authentication.request_password_reset` in the v1 surface. `AuthService.request_password_reset` returns the **raw reset token to the caller** (authentication REQ-010/REQ-011; AGENTS.md: "returns the raw token exactly once for a registered email"), and the operation is one of the 7 **exempt** actions — `src/backend/authentication/service.py:243` takes `principal: Principal = _SYSTEM_PRINCIPAL`, so no permission is checked in-process.
 - **Why needed:** Over HTTP that is account takeover by design: any caller who knows a registered email calls the endpoint, gets the reset token from the response body, and calls `complete_password_reset` (also exempt) with a new password. The in-process contract ("the token is returned once so the caller can deliver it out-of-band") silently becomes a public capability at the boundary. This is the single highest-risk mapping decision in the change.
 - **Options:** A. expose `POST /auth/password-resets` as **202 with no body** — the boundary drops the returned token; delivery is only ever through the mail feature (`MailService.send_password_reset_email`), and `complete_password_reset` stays callable with a token the client obtained out-of-band. B. same, **plus** the API itself calls the mail feature on reset request (new cross-feature call, new behaviour not in either spec). C. return the token in the response (in-process parity; dev convenience). D. return the token only when a new setting `api.expose_reset_token` is true (default false). E. keep both reset actions out of the v1 HTTP surface (a documented exception to decision 5).
@@ -55,10 +55,10 @@ These are settled and MUST NOT be re-asked; P.2 builds on them:
 ### Q-02 — Is `usermanagement.verify_password` exposed over HTTP?
 
 - **Step:** P.2 (Phase P)
-- **Answer:** PENDING
-- **Status:** PENDING
-- **Date:** 2026-10-08
-- **Incorporated:** no
+- **Answer:** **B** — **withheld** from the HTTP surface. The deviation from decision 5 is recorded explicitly as an "not exposed over HTTP" list in the spec, with the reason (no lockout on an arbitrary `user_id` → password oracle) next to the endpoint table. No second authorization path is introduced.
+- **Status:** ANSWERED
+- **Date:** 2026-10-10
+- **Incorporated:** yes — narrows decision 5 ("all 61 actions") to 60 exposed actions; to be written at P.4 in the v1-surface section
 - **Context:** `UserManager.verify_password(user_id, password)` (`src/backend/usermanagement/services/usermanager.py:193`) is one of the 11 enforced usermanagement actions, so decision 5 puts it on the wire. The brute-force lockout (`AttemptTracker`, `authentication.max_failed_attempts`, authentication REQ-004) guards **`AuthService.login` only** — it keys on the login identifier, not on an arbitrary `user_id`.
 - **Why needed:** `POST /users/{id}/verify-password` is a password oracle for **any** user id with **no** lockout, no tracker, and no rate limit (Q-14), reachable by any caller holding `usermanagement.verify_password`. It is a strictly better attack surface than `/auth/login`.
 - **Options:** A. expose it (strict catalog parity). B. **withhold it from the HTTP surface** and record the deviation from decision 5 explicitly in the spec (an explicit "not exposed over HTTP" list). C. expose it only for the caller's own user id (a boundary rule the catalog cannot express — risks a second authorization path, which `docs/todo/backend-api.md` forbids). D. expose it but route the attempt through the authentication tracker.
@@ -67,10 +67,10 @@ These are settled and MUST NOT be re-asked; P.2 builds on them:
 ### Q-03 — What does the boundary do about the 9 declared-but-unenforced actions?
 
 - **Step:** P.2 (Phase P)
-- **Answer:** PENDING
-- **Status:** PENDING
-- **Date:** 2026-10-08
-- **Incorporated:** no
+- **Answer:** **A** — every route requires a **valid session** except the session-establishment set (`login`, `begin_passkey_login`, `complete_passkey_login`, the two password-reset actions); `filemanagement.download` and `filemanagement.list_files` additionally call the **same** `PermissionService.require_permission(user_id, "filemanagement.download" | "filemanagement.list_files")` at the boundary — same checker, same catalog action string, not a second path.
+- **Status:** ANSWERED
+- **Date:** 2026-10-10
+- **Incorporated:** yes — to be written at P.4 as the boundary authentication rule (INV candidate) + per-route table
 - **Context:** 9 of the 61 declared catalog actions carry **no** `@requires_permission`: the 7 exempt authentication operations (`login`, `logout`, `session_info`, `request_password_reset`, `complete_password_reset`, `begin_passkey_login`, `complete_passkey_login` — `docs/specs/user-roles-permissions.md:358` D13/REQ-024/AC-030/EDGE-023; verified in `src/backend/authentication/service.py:198,230,237,243`) **plus** `filemanagement.download` and `filemanagement.list_files` (`src/backend/filemanagement/service.py:726` and `:810` cite ADR-071/AC-029: download performs no permission check; `list_files` returns `[]` under a denying checker). In-process that is safe because the caller is trusted code.
 - **Why needed:** Over HTTP those two file actions become readable by **any** authenticated caller (or any caller at all, if the route is anonymous), and the exempt authentication actions become anonymously reachable endpoints. The TODO forbids a second authorization path, so the fix must be a deliberate, specified rule, not an ad-hoc guard.
 - **Options:** A. **every route requires a valid session** except the session-establishment set (`login`, `begin_passkey_login`, `complete_passkey_login`, the two password-reset actions); the two filemanagement routes additionally call the same `PermissionService.require_permission(user_id, "filemanagement.download" | "filemanagement.list_files")` at the boundary (same checker, same catalog action — not a second path). B. session required as in A, but **no** boundary check for the two file actions (any authenticated user may download/list any key). C. mirror the service exactly (those two routes anonymous). D. withhold `filemanagement.download` / `list_files` from v1.
@@ -115,10 +115,10 @@ These are settled and MUST NOT be re-asked; P.2 builds on them:
 ### Q-07 — Where does the app factory live, given `src/main.py`'s import side effects?
 
 - **Step:** P.2 (Phase P)
-- **Answer:** PENDING
-- **Status:** PENDING
-- **Date:** 2026-10-08
-- **Incorporated:** no
+- **Answer:** **B** — **wait for `composition-root-factory`** and build on its `create_app()`. A `Depends on:` edge is added to `docs/todo/backend-api.md`; `backend-api` may not pass P.4 until that change is merged. The recommendation against this (a 4/5 blocker waiting behind a 3/5 REFACTOR) was presented and the user chose the sequencing anyway — no duplicate container, one composition root.
+- **Status:** ANSWERED
+- **Date:** 2026-10-10
+- **Incorporated:** yes — `docs/todo/backend-api.md` `Depends on:` now lists `composition-root-factory`; Q-07's shape is that change's, not this one's
 - **Context:** `src/main.py` is 221 lines of **module-level** wiring (`_catalog` :82, cycle proxies :130-131, `_settings_registry` :137, service globals :145,153,181,186,194,201,202,212) that opens SQLite repositories and creates files under `./data/` at **import** time — which is why `tests/acceptance/settings_coverage/test_wiring.py` runs `main.py` in a subprocess. `docs/todo/composition-root-factory.md` (PREPARING, REFACTOR) wants exactly a `create_app()`/`build_services()` there, and may need a `docs/specs/settings-coverage.md` REQ-002/AC-003 amendment.
 - **Why needed:** A FastAPI app needs the object graph (services, registry, permission service, search sources) without importing a module that writes to disk, and tests need a graph built from in-memory repositories. This is the direct collision point with the `composition-root-factory` TODO.
 - **Options:** A. `create_app(deps)` inside `src/backend/api/` taking an explicit dependency container; `src/main.py` stays the only production wiring and calls it; tests build their own container. B. wait for `composition-root-factory` (add a `Depends on:` edge) and build on its `create_app()`. C. build the graph inside the api package (duplicates `main.py` — two graphs, drift guaranteed). D. put `create_app()` in `src/main.py` (keeps one graph, but the api package then depends on `main`).
@@ -464,4 +464,5 @@ CROSS-CUTTING: the change spans **seven** existing features plus one new package
 
 ## Prep log
 
+- **P.3 Answer round 1 (2026-10-10):** Q-01 = A, Q-02 = B, Q-03 = A, Q-07 = **B (against the recommendation)**. Q-07 makes `composition-root-factory` a hard predecessor: `backend-api` is now gated behind a REFACTOR that is itself `WAITING` on 29 unanswered questions and on `settings-public-registry-setter` (IN-WORKFLOW). Consequence for scheduling: `composition-root-factory`'s P.3 batch is now the critical path for `backend-api`, and through it for `api-keys`.
 - **P.2 Interrogate (2026-10-08):** 28 questions recorded (CROSS-CUTTING floor is 20), ordered most blocking first: Q-01 reset-token exposure, Q-02 the `verify_password` oracle and Q-03 the 9 unenforced actions are the security-critical three. Evidence read: the authentication/filemanagement/permissions/sessionmanagement/settings/search/mail/usermanagement service signatures and models, the eight exception hierarchies, `pyproject.toml` (coverage floor 92, deptry ignores, no TID251 config), the three CI workflows, the logging-coverage and settings-coverage contract tests, and `git worktree list` / `gh pr list` for the overlap check. Dependency set resolved for Python 3.14 with `uv pip compile` (no install, no lock change). Two facts in the launch brief did **not** hold on `main` and are corrected here: there is no ruff `TID251` / `flake8-tidy-imports.banned-api` configuration (so no `fastapi.Depends` exemption exists yet — it belongs to the `public-api-import-boundary` TODO), and `docs/workflow/PROBLEMS.md` ends at P-62.
