@@ -1,0 +1,414 @@
+# map-default-drop-shift — Triage Record (ISSUE)
+
+- **Change:** `map-default-drop-shift` · **Type:** **ISSUE** (classified at P.1, first matching criterion: "fixes a deviation from approved spec behavior") — **with a Spec Amendment PR (PR A) first**, the user's recorded decision at Q-1.
+- **Defect against:** the approved spec **`docs/specs/structure-map.md`** (v1, merged; `## 15. Changelog` at `:631`). This change authors **no** spec; it amends an existing one (Spec Amendment Workflow) and then fixes the code.
+- **Branch / worktree:** `issue/map-default-drop-shift` @ base `7299108` (`main`, `pyproject.toml:4` version `1.1.0`), worktree `../python-template_kopie-worktrees/issue/map-default-drop-shift` — created at **P.4** from `main` (git skill, "Create change worktree (P.4)"), so the branch carries the TODO file and the answered question file as of P.3.
+- **Date:** 2026-10-10 (all commands below were re-run in this worktree at this commit; nothing here is quoted from the TODO unchecked).
+- **Phase Matrix for this type:** Phase P → triage record (this file) · Phase 1–2 skipped · **Phase 3** reproduction tests → RED · **Phase 4** minimal fix → GREEN · **Phase 5** targeted + smoke (**light tier**, §6) · **Phase 6** review + PR + `patch` bump (`1.1.0 → 1.1.1`, AGENTS.md Versioning).
+- **P.5 does not run for ISSUE** (AGENTS.md, Phase P table: "P.5 Verify self-consistency — **FEATURE/CROSS-CUTTING only**"). **The READY gate for this change is this verified triage record** plus the fully answered question file; the orchestrator advances the TODO to `Status: READY` on `main` after verifying this handoff.
+- **Two-PR shape (Q-1/Q-4/Q-17):** **PR A** = Spec Amendment to `docs/specs/structure-map.md` only, **no version bump**, merged **before Phase 3 starts**. **PR B** = this change (`issue/map-default-drop-shift`): reproduction tests → fix → regenerated `STRUCTURE.md` → `patch` bump.
+
+## Phase P record
+
+| Step | Date | Result |
+|---|---|---|
+| P.1 Frame (orchestrator, `main`) | 2026-10-09 | `docs/todo/map-default-drop-shift.md` + `docs/questions/map-default-drop-shift.md` created on `main`; type ISSUE; value triage recorded |
+| P.2 Interrogate | 2026-10-09 | 18 questions recorded in one `BLOCKED-USER` batch |
+| P.3 Answer (orchestrator ⏸, `main`) | 2026-10-09 | **19/19 ANSWERED + incorporated** (4 rounds; Q-19 derived from Q-15); value-triage decision **IMPLEMENT** (3/5) recorded → P.4 gate open |
+| P.4 Draft triage + create branch/worktree | 2026-10-10 | **this file** — worktree + branch created from `main` `7299108`; every claim re-verified by executed commands in this worktree (§3) |
+| P.5 Self-consistency | n/a | ISSUE — P.5 runs for FEATURE/CROSS-CUTTING only |
+
+---
+
+## 1. Classification rationale (and why an amendment comes first)
+
+ISSUE, not FEATURE: the map already promises a signature rendering (REQ-014/AC-014) and the shipped artifact renders a signature that misrepresents the source function — a deviation from specified behavior at the artifact level. It is **not a plain ISSUE** either: the *required* rendering (which parameter keeps which default after an over-long default is abbreviated) is **not stated anywhere in the approved spec** (§3.4), so AGENTS.md ISSUE item 13 and the Spec Amendment Workflow apply — the wording is written first (PR A), the code follows (PR B). It is not a FEATURE (no new capability: the map's signature line already exists) and not CROSS-CUTTING (one artifact, one generator, no `src/` feature).
+
+## 2. Affected requirements and acceptance criteria
+
+All IDs are from the existing approved spec **`docs/specs/structure-map.md`** (line numbers verified at `7299108`).
+
+| ID | Spec line | Required behavior **as written today** |
+|---|---|---|
+| **REQ-014** | `:270`, signature bullet `:287-289` | "signatures are produced with `ast.unparse` for parameters, annotations and return annotation, so formatting drift in the source cannot change the map; **a parameter default is included only when its unparsed text is ≤ 20 characters**." |
+| **AC-014** | `:424` | "…**Then** each is rendered exactly once, in the REQ-014 group order…, in the stated line form, **And** the signature text equals the `ast.unparse` rendering, **And** a parameter default of ≤ 20 characters is shown **while a longer one is omitted**." |
+| **REQ-021** | `:339` | `STRUCTURE.md` is committed, produced only by running the generator, "its content is the fresh render for the commit it is recorded at" — **forces the regeneration in PR B** |
+| **AC-021** | `:431` | "**Given** the `STRUCTURE.md` committed by this change, **When** `uv run python scripts/make_map.py --check` runs at that commit, **Then** it exits `0`" — the freshness gate PR B must leave green |
+| **REQ-019 / INV-001** | `:325` / `:443` | Determinism of the render — must keep holding (the placeholder rule is deterministic and idempotent; verified §5) |
+| **INV-006** | `:448` | Hook cleanliness of the generated file — unaffected (`…` is mid-line; verified §5) |
+| **NFR-002** | `:476` | Generated map ≤ 2 000 lines — unaffected: the fix changes line **content**, not line count (measured: 1 941 → 1 941, §5) |
+| **NFR-005** | `:479` | "`scripts/` is **not** analyzed by complexipy" — confirmed: CI runs `uv run complexipy src tests --max-complexity-allowed 15` (`.github/workflows/quality.yml:146`); the extension to `scripts/` is `chore/complexipy-scripts`, not this change |
+| **REQ-023 / AC-023** | `:344` / `:433` | The local `structure-map-check` hook (`files: \.py$`, check-only) — it is why PR B must regenerate in the same commit as the `.py` change (AGENTS.md "Structure Map") |
+
+**IDs to be added by PR A** (per Q-9; they do not exist in the spec today — `grep -n "INV-007\|EDGE-017" docs/specs/structure-map.md` returns nothing):
+
+| ID | Section | Status |
+|---|---|---|
+| **INV-007** (signature fidelity) | §8 Invariants (`:439`, after INV-006 at `:448`) | **to be added by PR A** |
+| **EDGE-017** (over-long default in a positional / positional-only / keyword-only slot) | §9 Edge Cases (`:450`, after EDGE-016 at `:469`) | **to be added by PR A** |
+
+Both IDs are **already defined by other specs** (`settings.md`, `file-management.md`, `authentication.md`, `search.md`) and already have matrix rows elsewhere — the matrix is a bare-ID namespace (structure-map's own §12 and `docs/verification/structure-map.md` finding 2), which is why PR B's rows must name the change inside the Status cell (Q-14).
+
+---
+
+## 3. Defect confirmation (observed vs required)
+
+Everything below was executed in this worktree at `7299108`. Line numbers in `STRUCTURE.md` are given as observed **now** and drift with any regeneration — locate by content, not by number (finding F-11).
+
+### 3.1 The generator drops over-long defaults from the parameter list
+
+`scripts/make_map.py` (anchors verified at this commit; re-find by content):
+
+- `_DEFAULT_MAX_CHARS = 20` — `:74`
+- `_drop_long_defaults(args)` — `:375`, the two filters at `:382-385`:
+
+  ```python
+  args.defaults = [d for d in args.defaults if len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS]
+  args.kw_defaults = [
+      d if d is not None and len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS else None for d in args.kw_defaults
+  ]
+  ```
+
+- `_signature(node)` — `:388`, calls `_drop_long_defaults(node.args)` at `:396` before `ast.unparse(node.args)`.
+
+A positional default is removed **from the list**, so the remaining defaults shift onto earlier parameters; a keyword-only default is replaced by `None`, which `ast.unparse` renders as a parameter **with no default at all**. The generator's own docstring for `_drop_long_defaults` states both effects. That is the mechanism; the spec never sanctions the effect (§3.4).
+
+### 3.2 Witness 1 — the positional shift (the TODO's witness)
+
+Source, `tests/mail_test_helpers.py:70-75` — four positional parameters, defaults on all four, `body_html`'s default is 21 characters:
+
+```python
+def simple_template(
+    name: str = "test",
+    subject: str = "Test {{who}}",
+    body_html: str = "<p>Test {{who}}</p>",
+    body_text: str = "Test {{who}}",
+) -> EmailTemplate:
+```
+
+Rendered in the committed map at `STRUCTURE.md:1816` (observed):
+
+```text
+- def `simple_template(name: str, subject: str='test', body_html: str='Test {{who}}', body_text: str='Test {{who}}') -> EmailTemplate`: Build an EmailTemplate for a test.
+```
+
+**Observed:** `name` reads as **required**; `subject` carries `name`'s default (`'test'`); `body_html` carries `subject`'s default; `body_text` carries `body_html`'s default. Every default in the line is attached to the wrong parameter, and the line is a valid-looking signature that no reader can distinguish from correct.
+
+**Required (Q-2, normative after PR A):** `simple_template(name: str='test', subject: str='Test {{who}}', body_html: str=…, body_text: str='Test {{who}}')` — the over-long default is abbreviated **in its own slot**, so names, order and the defaults-set are preserved.
+
+**Verified by rendering, not by reading:** applying the placeholder rule to the same source produces exactly the required line (probe in §5.2).
+
+### 3.3 Witness 2 — keyword-only defaults rendered as required parameters
+
+The same rule damages the map wherever a keyword-only default is over-long. A read-only AST scan of **all 342 tracked `.py` modules in the four code dirs** the map renders (`src/`, `tests/`, `scripts/`, `migrations/`) found **exactly 8** over-long defaults — 1 positional, 7 keyword-only (a narrower Packages-scope scan of 119 modules gives the same 8):
+
+| Source | Function | Kind | Parameters (default length) |
+|---|---|---|---|
+| `src/backend/authentication/service.py:108` | `AuthService.__init__` | keyword-only | `reset_token_ttl` (21), `lockout_duration` (21), `origin` (23) |
+| `tests/authentication_test_helpers.py:177` | `build_auth_service` | keyword-only | `lockout_duration` (21), `reset_token_ttl` (21) |
+| `tests/authentication_test_helpers.py:205` | `build_memory_auth_service` | keyword-only | `lockout_duration` (21), `reset_token_ttl` (21) |
+| `tests/mail_test_helpers.py:70` | `simple_template` | positional | `body_html` (21) |
+
+All three keyword-only cases are live in the committed map — `STRUCTURE.md:686` (`AuthService.__init__`), `:1675` and `:1676` (the two helpers). Observed at `:686` (excerpt):
+
+```text
+…, session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta, max_failed_attempts: int=5, lockout_duration: timedelta, rp_id: str='localhost', rp_name: str='Python Template', origin: str, permission_service: PermissionChecker | None=None) -> None
+```
+
+**Observed:** `reset_token_ttl`, `lockout_duration` and `origin` render with **no default**, so a reader of the map concludes they are **required** keyword arguments — the opposite of the source, where all three are optional with defaults. AGENTS.md documents those very parameters as optional keyword arguments with defaults (`max_failed_attempts` (default 5), `lockout_duration` (default 15 minutes), `rp_id`/`rp_name`/`origin`), so the map contradicts the published contract.
+
+**Required (Q-6/Q-7, uniform rule):** `reset_token_ttl: timedelta=…, lockout_duration: timedelta=…, origin: str=…`.
+
+Both witnesses are required by Q-10; both are live in the committed artifact, so the defect is not hypothetical.
+
+### 3.4 Why the approved spec does not settle it (the Spec Amendment stop)
+
+AGENTS.md ISSUE item 13: *if the fix requires behavior the spec does not state, STOP — Spec Amendment PR or reclassify as FEATURE.* The current wording **prescribes the defective behavior** and is silent on the consequence:
+
+- REQ-014 (`:288-289`): "a parameter default is included **only when** its unparsed text is ≤ 20 characters" — dropping is literally what the code does.
+- AC-014 (`:424`): "a parameter default of ≤ 20 characters is shown **while a longer one is omitted**" — "omitted" is the current, shifting behavior, and the existing unit witnesses assert exactly that (`tests/unit/test_make_map.py`, `_AC014_DEFAULTS` at `:675` and the `_AC014_LINES` expectations at `:654`).
+
+Nothing in REQ-014, AC-014, INV-001…INV-006 or EDGE-001…EDGE-016 states that the rendered parameter list must keep the parameter in its slot, must preserve which parameters have defaults, or must stay grammatically coherent. The fix therefore **changes specified behavior** (the map's rendered text changes for 4 lines), which the approved spec does not currently authorize. Per the Escalation Rules this is not a reclassification (still ISSUE: no new capability), so the route is the **Spec Amendment Workflow**: PR A amends REQ-014/AC-014 and adds INV-007 + EDGE-017, merges first, then PR B implements (§7).
+
+The existing AC-014 witnesses assert the old behavior, so they **must** be re-derived from the amended spec — authorized by Q-11, and never weakened: the re-derived assertions are strictly stronger (they pin the placeholder **and** the parameter/defaults correspondence, §4.4).
+
+### 3.5 Gate state observed on `main` (baseline, not caused by this change)
+
+| Command (run in this worktree) | Result |
+|---|---|
+| `uv run python scripts/make_map.py --check` | **exit 1** — `STRUCTURE.md is out of date — run uv run python scripts/make_map.py` |
+| `uv run pytest tests/acceptance/test_structure_map.py -q -p no:randomly` | **1 failed, 30 passed** — the failure is `test_ac_021_committed_map_matches_fresh_render` |
+| `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py -q` | **24 passed** |
+
+The `--check` failure and the AC-021 failure are **pre-existing on `main`** and are a single line: committed `docs/ · 223 files (process record)` (`STRUCTURE.md:452`) vs a fresh render of `224` — the map was last regenerated at `8ec73ee`, when `git ls-files docs` returned 223; `main` now tracks 224 because the Phase P planning records were committed directly to `main`, and no CI job runs `--check` (REQ-023/REQ-026 keep it local). PR B's regeneration absorbs it (finding F-01/F-02); a second, host-dependent cause is recorded as F-03.
+
+---
+
+## 4. Reproduction plan (Phase 3)
+
+Four witnesses, all required by Q-10 (both symptoms) and Q-9 (the property test is mandatory because PR A adds INV-007). All follow the **established pattern of this test suite**: the generator is driven as a **subprocess** over a throwaway tree, never imported, so its absence is a test failure and not a collection error (a setup error is not a valid RED) — stated in the headers of both `tests/unit/test_make_map.py` and `tests/property/test_structure_map.py`.
+
+### 4.1 Unit witness — the new EDGE-017 rule (RED on the current generator)
+
+`tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot`
+
+A synthetic module written into `src/edge017.py` under `tmp_path` (the `_t004_tree` helper the AC-014 witness at `:937` already uses), covering every slot the amended EDGE-017 names, including the two shapes that do not occur in the tree today (F-12):
+
+```python
+def shift(a: int = 1, b: str = "xy", c: list[int] = [1, 2, 3, 4, 5, 6, 7]) -> None: ...
+def only(pool: list[int] = [1, 2, 3, 4, 5, 6, 7]) -> None: ...
+def posonly(a: int = 1, b: str = "0123456789abcdefghij0", /) -> None: ...
+def keys(*, need: int, k: int = 1, m: str = "0123456789abcdefghij0") -> None: ...
+def edge(exact: str = "0123456789abcdefgh") -> None: ...
+```
+
+Assertions on the rendered `- def` lines (each is RED today):
+
+| Case | Required rendering | What it pins |
+|---|---|---|
+| `shift` | `shift(a: int=1, b: str='xy', c: list[int]=…) -> None` | no shift: the two short defaults stay on their own parameters |
+| `only` | `only(pool: list[int]=…) -> None` | the sole default of a function keeps its slot (the parameter is not rendered as required) |
+| `posonly` | `posonly(a: int=1, b: str=…, /) -> None` | positional-only slot, and the `/` marker survives |
+| `keys` | `keys(*, need: int, k: int=1, m: str=…) -> None` | keyword-only slot **and** a genuinely required keyword-only parameter (`need`, which must come first — a default may not precede it in Python) stays default-free: the F-08 trap |
+| `edge` | `edge(exact: str='0123456789abcdefgh') -> None` | the `_DEFAULT_MAX_CHARS = 20` boundary is unchanged (Q-8): exactly 20 characters renders verbatim |
+
+Both the fixture and every expected string above were **measured**, not assumed: the module parses (valid test data, AGENTS.md Phase 3 item 6), and the current generator renders it as `shift(a: int, b: str=1, c: list[int]='xy')`, `only(pool: list[int])`, `posonly(a: int, b: str=1, /)`, `keys(*, need: int, k: int=1, m: str)`, `edge(exact: str='0123456789abcdefgh')` — the shift is visible in the first three, and the placeholder rule produces exactly the required column.
+
+### 4.2 Acceptance witness — the committed map must not misrepresent the source
+
+`tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place`
+
+Reads the committed `STRUCTURE.md` (module constant `_MAP_FILE`) — the same pattern `test_ac_021_committed_map_matches_fresh_render` (`:1468`) and `test_nfr_002_map_line_budget` (`:1484`) already use, because REQ-021/AC-021 make the committed artifact itself the object under test. It locates the two live witnesses **by content** (never by line number, F-11) and asserts:
+
+- the `simple_template` line is `- def \`simple_template(name: str='test', subject: str='Test {{who}}', body_html: str=…, body_text: str='Test {{who}}') -> EmailTemplate\`: …` — i.e. `name` is not rendered required and no default sits on the wrong parameter;
+- the `AuthService.__init__` line contains `reset_token_ttl: timedelta=…`, `lockout_duration: timedelta=…` and `origin: str=…`, and still contains `session_ttl: timedelta=timedelta(days=7)` and `max_failed_attempts: int=5` unharmed.
+
+It is RED against the map committed at `7299108` and goes GREEN only when Phase 4 regenerates the map in the same commit as the generator fix (REQ-021/AC-021).
+
+### 4.3 Property witness — INV-007 (mandatory, Q-9)
+
+`tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation`
+
+Name is deliberately distinct: `test_inv_007_*` already exists in other features' property files (`test_inv_007_key_containment`, `test_inv_007_load_scope_valid`) because the matrix is a bare-ID namespace (§2).
+
+Hypothesis generates a module of functions whose parameters vary over: name, annotation, default length (short / exactly 20 / over-long), and slot (positional-only, positional, keyword-only, keyword-only **without** a default). Each example writes the module into a fresh `TemporaryDirectory` git tree (the file's existing reason for a fresh tree per example), runs the generator with `--out`, extracts the `- def` lines, and asserts the INV-007 fidelity property against the source AST:
+
+1. the rendered parameter **names in order** equal the source's;
+2. the **set of parameters that carry a default** equals the source's (this is the clause the defect breaks, and the clause F-08's naive fix would break in the other direction);
+3. the positional-only / positional / keyword-only **split** is preserved (`/` and `*` markers present as in the source);
+4. every over-long default renders exactly as `…`, every default of ≤ 20 characters renders verbatim;
+5. the rendered parameter list, **with every `…` replaced by the literal `...`**, parses with `ast.parse` and re-unparses to the source parameter list with the over-long defaults replaced by `...`.
+
+Clause 5 is the only workable form of "the signature still parses": `…` in a default position is a `SyntaxError` (F-06), so the invariant is stated over the placeholder-substituted text, and PR A's wording must say so.
+
+### 4.4 Re-derived existing AC-014 witnesses (authorized by Q-11, never weakened)
+
+`tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures` (`:937`) and its fixtures `_AC014_MODULE` (`:584`), `_AC014_LINES` (`:654`), `_AC014_DEFAULTS` (`:675`). The fixture already carries three over-long defaults, so **no fixture source change is needed** — only the expectations, which today assert the old dropping behavior:
+
+| Fixture default | Today's expectation | Re-derived expectation |
+|---|---|---|
+| `pool: list[int] = [1, 2, 3, 4, 5, 6, 7]` (21, positional, sole default) | `- def \`items(pool: list[int]) -> None\`` | `- def \`items(pool: list[int]=…) -> None\`` |
+| `data: dict[str, int] = {"alpha": 1, "beta": 2}` (23, keyword-only) | `data: dict[str, int]` (no default) | `data: dict[str, int]=…` |
+| `over: str = "0123456789abcdefghi"` (21, keyword-only) | `over: str` (no default) | `over: str=…` |
+| `exact: str = "0123456789abcdefgh"` (20) | shown verbatim | **unchanged** (Q-8) |
+| `step: int = 4`, `b: str = "xy"` | shown verbatim | **unchanged** |
+
+`_AC014_DEFAULTS` keeps every existing needle (the literal over-long default text must still be absent — that assertion is unchanged and still meaningful) and **adds** positive needles `pool: list[int]=…`, `data: dict[str, int]=…`, `over: str=…`: strictly more assertions than before, never fewer. The comment block at `:649-653` ("the 21-character defaults of `data`/`over`/`pool` are omitted") is corrected to the placeholder rule. Spec §11 gains the two new rows (§7.5); the existing AC-014 row (`:526`) keeps its function name because the witness is re-derived in place, not renamed.
+
+**Correction to Q-11's premise (F-05):** the question file states the `resize(...)` line is unaffected because "`step`/`exact` defaults are both ≤ 20 chars". True for those two, but `resize` also carries the over-long keyword-only defaults `data` (23) and `over` (21), so under the uniform rule (Q-7) **its rendered line does change**. The authorized witness-edit list must include it.
+
+### 4.5 RED / GREEN commands (targeted — AGENTS.md "Targeted GREEN")
+
+```text
+red_command:   uv run pytest tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot
+                          tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures
+                          tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation
+                          tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place -v
+green_command: the same four node ids, plus
+               uv run python scripts/make_map.py && uv run python scripts/make_map.py --check   # exit 0
+               uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q
+```
+
+**Test-data validity (AGENTS.md Phase 3 item 6).** Every fixture above is a syntactically valid module the generator parses; the witnesses fail on **behavior** (rendered text), never on a construction error. The RED run must show assertion failures on the rendered signature text — if it shows a `SyntaxError`/collection error, the test data is wrong and RED is not valid.
+
+### 4.6 Traceability rows (Phase 3 writes RED, Phase 5 writes GREEN)
+
+Rows for **REQ-014/AC-014** (updated in place, with this change named inside the Status cell per Q-129 convention B) and new rows for **INV-007** and **EDGE-017** go into `docs/verification/traceability.md` **in PR B**, never in PR A — `scripts/check_traceability.py` rule (3) fails any row citing a backticked test function that does not exist under `tests/`, and those functions do not exist until Phase 3 (F-09).
+
+---
+
+## 5. Fix scope (Phase 4)
+
+### 5.1 The one implementation change
+
+`scripts/make_map.py::_drop_long_defaults` (`:375`) — the two filters at `:382-385` become a **substitution** instead of a deletion, uniformly over both lists:
+
+```python
+args.defaults = [d if len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS else _PLACEHOLDER for d in args.defaults]
+args.kw_defaults = [
+    None if d is None else (d if len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS else _PLACEHOLDER)
+    for d in args.kw_defaults
+]
+```
+
+Two clauses are load-bearing:
+
+- **`None` stays `None`.** `ast.arguments.kw_defaults` is positionally aligned with `kwonlyargs` and holds `None` for a keyword-only parameter that has **no** default. A rule that substitutes every entry renders required parameters as optional (measured in F-08: a first attempt added `=…` to `username`, `password`, `use_tls`, `timeout` in `SmtpTransportImpl.__init__`, `STRUCTURE.md:1039`, which are required in the source). The §4.1 `keys(*, need: int, …)` case is the witness that locks this.
+- **`_DEFAULT_MAX_CHARS = 20` is untouched** (Q-8). Only the treatment of a default that exceeds it changes.
+
+The function's docstring (which currently describes the shifting/`None` effects as intended) is corrected to state the placeholder rule and why dropping is wrong.
+
+### 5.2 How the `…` placeholder is rendered (verified probe)
+
+`ast.unparse` cannot produce `…` from a real AST node — `ast.unparse(ast.Constant(...))` renders `...`, not `…` (F-07). Verified in this worktree: `ast.unparse(ast.Name(id="…"))` renders `…`, and because the placeholder is 1 character it survives a second pass of `_drop_long_defaults` unchanged, so the rule is **idempotent** and INV-001 (determinism, `:443`) is unaffected. The concrete injection mechanism (sentinel node vs. string-level substitution on the rendered signature) is a Phase 4 decision; it introduces no new dependency and no new pattern, so **no ADR** (Phase 2 is skipped for ISSUE; AGENTS.md ADR threshold not met).
+
+Probe (read-only, scratch copy of the generator outside the repository, run against this worktree as `--root`):
+
+| Subject | Today (committed map) | With the placeholder rule |
+|---|---|---|
+| `simple_template` | `simple_template(name: str, subject: str='test', body_html: str='Test {{who}}', body_text: str='Test {{who}}')` | `simple_template(name: str='test', subject: str='Test {{who}}', body_html: str=…, body_text: str='Test {{who}}')` |
+| `_AC014_MODULE` `items` | `items(pool: list[int])` | `items(pool: list[int]=…)` |
+| `_AC014_MODULE` `resize` | `resize(self, size: int, *, step: int=4, data: dict[str, int], exact: str='0123456789abcdefgh', over: str)` | `resize(self, size: int, *, step: int=4, data: dict[str, int]=…, exact: str='0123456789abcdefgh', over: str=…)` |
+
+### 5.3 Regenerated `STRUCTURE.md` (required by REQ-021/AC-021, same commit as the `.py` change per REQ-023)
+
+Measured diff of the placeholder-rule render against the map committed at `7299108` — **4 signature lines** change from the fix, plus 1 line from the pre-existing staleness:
+
+| Line (as observed now) | Content |
+|---|---|
+| `:452` | `docs/ · 223 files (process record)` → `224 files` — **pre-existing staleness, not this fix** (F-01) |
+| `:686` | `AuthService.__init__` — `reset_token_ttl`, `lockout_duration`, `origin` gain `=…` |
+| `:1675` | `build_auth_service` — `lockout_duration`, `reset_token_ttl` gain `=…` |
+| `:1676` | `build_memory_auth_service` — same two |
+| `:1816` | `simple_template` — the positional shift is corrected |
+
+Line count is unchanged (**1 941 → 1 941**), so NFR-002 (`:476`, ≤ 2 000) is unaffected; `…` is mid-line, so INV-006 hook cleanliness (`:448`) is unaffected. Regeneration must be the **last** step of the commit (AGENTS.md "Structure Map"; spec §14 Sequencing) and must be re-run if any `.py` file changes afterwards — the pre-commit `structure-map-check` hook is check-only and will otherwise block the commit.
+
+### 5.4 Files expected to change in PR B
+
+| File | Role |
+|---|---|
+| `scripts/make_map.py` | the fix (the only implementation file) |
+| `STRUCTURE.md` | regenerated artifact (never hand-edited) |
+| `tests/unit/test_make_map.py` | new EDGE-017 witness + re-derived AC-014 witnesses |
+| `tests/acceptance/test_structure_map.py` | new committed-map witness |
+| `tests/property/test_structure_map.py` | new INV-007 property witness |
+| `docs/verification/map-default-drop-shift.md` | this record (RED/GREEN evidence appended by Phases 3–5) |
+| `docs/verification/traceability.md` | REQ-014/AC-014 rows updated, INV-007/EDGE-017 rows added |
+| `pyproject.toml` | `patch` bump `1.1.0 → 1.1.1` (S6.4, `bump-my-version bump patch`) |
+
+Non-test, non-generated implementation files touched: **1** (`scripts/make_map.py`).
+
+### 5.5 What the fix must not do
+
+No change to `_signature`'s other outputs, to `_class_name` (`:403`, class bases/keywords — REQ-016, out of scope), to `type_params` handling (REQ-017, out of scope), to the threshold value, to any `src/` module, to any spec file (PR A owns those), and no compatibility flag or setting (Q-18). No new dependency.
+
+---
+
+## 6. Light-tier ISSUE qualification (AGENTS.md "Light ISSUE tier")
+
+| Criterion | Result |
+|---|---|
+| Single feature | **yes** — the structure-map generator and its artifact; no `src/` feature is touched |
+| ≤ 3 files excluding tests | **yes** — `scripts/make_map.py` + the generated `STRUCTURE.md` = 2 |
+| No new dependency | **yes** — stdlib `ast` only |
+| No new public interface | **yes** — the generator CLI is unchanged; only rendered text changes |
+| No cross-feature change | **yes** — nothing under `src/backend/` changes |
+| Existing suite covers the area | **yes** — the triage names the covering tests: `tests/unit/test_make_map.py` (24 passed with `tests/property/test_structure_map.py` at this commit), `tests/property/test_structure_map.py`, `tests/acceptance/test_structure_map.py` (30 passed, 1 pre-existing failure, §3.5) |
+
+**Phase 5 runs targeted + smoke:** the four §4 witnesses, the three structure-map test modules (`uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -v`), `uv run ruff check .` and `uv run mypy src/` (plus `uv run mypy scripts/` since `scripts/make_map.py` changes), and `uv run python scripts/check_traceability.py`.
+
+**Full regression suite runs at the Phase 6 pre-merge gate (S6.4)** before the PR opens — `uv run pytest tests/ -v` — and must pass; the result is recorded in the review report. Baseline note: `test_ac_021_committed_map_matches_fresh_render` is red on `main` today (§3.5, F-01/F-02/F-03); PR B's regeneration is what makes it green, so a red AC-021 at the S6.4 gate means the map was not regenerated after the last `.py` change (or the CRLF cause of F-03 re-appeared — re-run the generator, never hand-edit the map).
+
+---
+
+## 7. Spec Amendment PR A plan (must merge before Phase 3 starts)
+
+**Branch/PR:** PR A is opened from this same change branch (`issue/map-default-drop-shift`) and contains **only** `docs/specs/structure-map.md`. It carries **no version bump** (Q-3/Q-4: the bump belongs to the change as a whole and is taken in PR B at S6.4; a docs-only change would get none anyway). It must be **merged before Phase 3** (AGENTS.md Spec Amendment Workflow item 6: merge the spec PR before resuming implementation), i.e. before the reproduction tests are written against the amended wording. The Spec Approval Gate applies to a spec **authored** by a change; an amendment reaches the spec through its own PR to `main` exactly as the Workflow requires — direct edits to `docs/specs/` on `main` are rejected.
+
+### 7.1 REQ-014 (`:287-289`) — replace the last sentence
+
+> …so formatting drift in the source cannot change the map; a parameter default is rendered **only when its unparsed text is ≤ 20 characters**, and a default that exceeds the threshold is abbreviated to the single-character placeholder **`…` in its own slot** — the parameter is never removed from the rendered list and never loses its `=` separator, so the rendered list preserves the source's parameter names, their order, the positional-only / positional / keyword-only split, and **which parameters carry a default**. The rule is **uniform** across positional, positional-only and keyword-only defaults.
+
+### 7.2 AC-014 (`:424`) — amend the last two clauses
+
+> …**And** the signature text equals the `ast.unparse` rendering **except that a parameter default whose unparsed text exceeds 20 characters renders as the `…` placeholder in its own slot**, **And** a parameter default of ≤ 20 characters is shown verbatim while a longer one is abbreviated to `…`, **And** the rendered parameter list, **with every `…` replaced by the literal `...`**, parses with `ast.parse` and yields the same parameter names, order, positional-only / positional / keyword-only split and set of defaulted parameters as the source.
+
+The "with every `…` replaced by the literal `...`" qualifier is **mandatory**, not stylistic: `…` in a default position is a `SyntaxError` (F-06), so a literal "the rendered list parses" clause would be unsatisfiable and the witness unimplementable.
+
+### 7.3 §8 Invariants (`:439`, after INV-006 at `:448`) — add one row
+
+> | INV-007 | For every rendered signature, the parameter list with each `…` placeholder replaced by the literal `...` parses with `ast.parse` and yields exactly the source's parameter names in order, the same positional-only / positional / keyword-only split, and exactly the set of parameters that carry a default; a `…` appears **only** where the source default's unparsed text exceeds the REQ-014 threshold. |
+
+### 7.4 §9 Edge Cases (`:450`, after EDGE-016 at `:469`) — add one row (3 columns)
+
+> | EDGE-017 | A parameter default whose unparsed text exceeds 20 characters, in a positional, positional-only or keyword-only slot — including a function whose **only** default is over-long, and a keyword-only parameter that has **no** default at all. | The parameter is rendered in its own slot as `name: annotation=…`; the placeholder never shifts a neighbouring default onto an earlier parameter, a parameter with no default is never given one, and a parameter with a default is never rendered without one. |
+
+### 7.5 §11 Test Strategy — add two rows (the spec table is not checked against `tests/`)
+
+> | INV-007 | REQ-014 | property | `tests/property/test_structure_map.py` | `test_inv_007_signature_fidelity_survives_default_abbreviation` |
+> | EDGE-017 | REQ-014 | unit | `tests/unit/test_make_map.py` | `test_edge_017_over_long_default_keeps_its_slot` |
+
+The AC-014 row (`:526`) keeps its function name (the witness is re-derived in place, not renamed).
+
+### 7.6 §15 Changelog (`:631`) — prepend above the v1 entry
+
+> - v2 (2026-10-10): REQ-014/AC-014 amended — an over-long parameter default is now abbreviated to the `…` placeholder **in its own slot** instead of being dropped from the rendered parameter list; INV-007 (signature fidelity) and EDGE-017 added. The `_DEFAULT_MAX_CHARS` threshold value (20) is unchanged.
+
+(Other amended specs in this repo put `## Changelog` at the **top** of the file, newest first — `docs/specs/settings.md:3`, `docs/specs/authentication.md:3`. `structure-map.md` numbers its changelog as §15 at the bottom with a single v1 entry at `:633-636`. The minimal, layout-preserving choice is to prepend v2 above v1 in §15; relocating the section to the top would be an unrelated restructure of an approved spec and is out of scope for PR A.)
+
+### 7.7 PR A gates (verified against the workflow files at `7299108`)
+
+| Gate | Effect of PR A |
+|---|---|
+| `.github/workflows/spec-validation.yml` (paths include `docs/specs/**`) — `verify_spec.py` per spec | **passes.** The `✗ INV-007 has property test` line is printed but is cosmetic: the script appends failures only when a whole test category is missing, not per ID (F-10) |
+| same workflow — `uv run python scripts/check_traceability.py` | **passes without touching `docs/verification/traceability.md`**: rule (1) requires a matrix row only for **REQ/AC** IDs, PR A adds no new REQ/AC, and INV-007/EDGE-017 are already defined by other specs with existing rows (F-09) |
+| same workflow — `uv run pytest tests/ -v` | **fails on the pre-existing `test_ac_021` red** (§3.5) — identical on `main`, not caused by the amendment; see F-02 for the decision the orchestrator/human must take |
+| `.github/workflows/quality.yml` (no path filter → runs on every PR) | `type-check` (`mypy src/` + `mypy scripts/`) unaffected; `docs` job runs `mkdocs build --strict` — unaffected, because `mkdocs.yml` sets `docs_dir: userdocs` and `docs/specs/` is the internal process record, not the site (F-13); `coverage` job runs `pytest tests/ --cov` → same pre-existing AC-021 failure; `complexity` runs `complexipy src tests` — unaffected (`scripts/` not analyzed, NFR-005); `security`, `dependencies`, `dependency-review`, `migrations` unaffected |
+| `.github/workflows/lint.yml` | **not triggered** — its path filter is `src/**`, `tests/**`, `pyproject.toml`, `.pre-commit-config.yaml`, `.github/workflows/lint.yml`, `.github/hooks/**`; a docs-only PR matches none |
+| pre-commit `structure-map-check` hook (`files: \.py$`) | not triggered (no `.py` change) — PR A therefore does **not** regenerate the map |
+
+**Sequencing note (resolved, not a blocker):** spec §14 requires `STRUCTURE.md` to be regenerated after `chore/remove-spec-tdd-driver` (PR #62) merged. That merge (`a2000c2`) predates the map's last regeneration (`8ec73ee`), and the measured diff in §5.3 shows no `.github/` count line — the requirement is already satisfied.
+
+---
+
+## 8. Explicitly out of scope (Q-16 hard boundary: the parameter-default rule only)
+
+| Out of scope | Why |
+|---|---|
+| The rest of the REQ-015…REQ-018 symbol layer — `_class_name` (`scripts/make_map.py:403`) class bases and keywords (unfiltered today), `type_params` (ignored today) | Not the parameter-default rule; a separate change if wanted |
+| The threshold value `_DEFAULT_MAX_CHARS = 20` (`:74`) | Q-8: untouched; only the treatment of an over-long default changes |
+| Any `src/` change | The defect is in the generator; no backend behavior is involved |
+| Extending complexipy to `scripts/` | Separate change `chore/complexipy-scripts` (Q-15/Q-19) |
+| A compatibility flag / setting to keep the old rendering | Q-18: none |
+| `test_ac_021_committed_map_matches_fresh_render`'s raw-byte comparison (CRLF fragility, F-03) and the `check_traceability.py` bare-ID namespace weakness (F-09) | Pre-existing, unrelated to the default rule; candidates for their own ISSUEs — recorded, not fixed here |
+| Renaming the placeholder character | Q-2 fixes `…` as normative |
+
+---
+
+## 9. Findings (recorded at P.4; each verified by execution in this worktree)
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-01** | `uv run python scripts/make_map.py --check` exits **1 on `main`**: committed `docs/ · 223 files (process record)` (`STRUCTURE.md:452`) vs a fresh render of `224`. The map was last regenerated at `8ec73ee`, when `git ls-files docs` returned 223; `main` now tracks 224 because Phase P planning records are committed directly to `main` — and no CI job runs `--check` (REQ-023/REQ-026 keep it local). | PR B's regeneration absorbs it; recorded so it is not hidden. Structural cause (planning records make the map stale with no way to regenerate on `main`) is a workflow observation for the after-workflow-optimization. |
+| **F-02** | Consequence: `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render` is **RED on `main`** (acceptance module: 1 failed, 30 passed). So the full suite is not green on `main`, and **PR A's CI will show it red** (`spec-validation.yml` tests job, `quality.yml` coverage job). | PR B's regeneration makes it green. For PR A the orchestrator/human choose: merge with the known pre-existing red (recommended — it is red on `main` too), or add a one-line map regeneration to PR A. Not this step's decision; flagged in the handoff. |
+| **F-03** | `test_ac_021` compares **raw bytes** (`committed == fresh`) while the working tree has CRLF (`git ls-files --eol STRUCTURE.md` → `i/lf w/crlf`, `core.autocrlf=true`), so on this host it has a **second, OS-dependent** failure cause that regeneration fixes only until the next checkout. EDGE-016 covers `--check` normalization, not this test. | Out of scope here (F-03 is a witness-quality ISSUE). Mitigation for the S6.4 gate: regenerate immediately before the full-suite run. |
+| **F-04** | The defect is **not confined to positional defaults**: 7 of the 8 over-long defaults in the tree are keyword-only, and the committed map renders `reset_token_ttl`, `lockout_duration` and `origin` as **required** parameters (`STRUCTURE.md:686`, `:1675`, `:1676`) — contradicting AGENTS.md's own documented defaults. The uniform rule changes **4** map lines, not 1. | Both witnesses are in the reproduction plan (§4.1/§4.2); the amended EDGE-017 covers all three slots. |
+| **F-05** | Q-11's answer claims the `resize(...)` witness line is unaffected. It is **not**: `resize` carries the over-long keyword-only defaults `data` (23) and `over` (21), so its line changes under the uniform rule. | The authorized witness-edit list in §4.4 includes it; the question file's statement is corrected here (the question file is orchestrator-owned and is not edited from this worktree). |
+| **F-06** | `…` in a parameter-default position is a **`SyntaxError`** (`invalid character '…' (U+2026)`), so INV-007 / AC-014 cannot literally require the rendered parameter list to parse. | PR A wording uses "with every `…` replaced by the literal `...`" (§7.2/§7.3); verified that the substitution preserves names, order, the slot split and the defaults-set. |
+| **F-07** | `ast.unparse` cannot emit `…` from a real node (`ast.unparse(ast.Constant(...))` → `...`). | The placeholder must be injected (sentinel node or string-level substitution). Verified: `ast.unparse(ast.Name(id="…"))` → `…`, and the rule stays idempotent (1 char ≤ 20), so INV-001 holds. Phase 4 picks the mechanism. |
+| **F-08** | `ast.arguments.kw_defaults` holds `None` for keyword-only parameters **without** a default. A placeholder rule that substitutes every entry renders required parameters as optional — measured on a first attempt: `SmtpTransportImpl.__init__` (`STRUCTURE.md:1039`) gained `username: str=…, password: str=…, use_tls: bool=…, timeout: float=…`. | §5.1 keeps `None` as `None`; §4.1's `keys(*, need: int, …)` case is the witness that locks it. |
+| **F-09** | Q-14's rationale ("`check_traceability.py` fails any defined ID with no matrix row") is **inaccurate for INV/EDGE IDs**: rule (1) matches REQ/AC only (`REQ_OR_AC_RE`); the structure-map spec's own §12 and `docs/verification/structure-map.md` finding 2 already state that all 54 of its REQ/AC IDs are covered by other specs' rows in the shared bare-ID namespace. Rule (2) fails rows citing undefined IDs and rule (3) fails rows citing a test function that does not exist under `tests/`. | The INV-007/EDGE-017 matrix rows are a **workflow** obligation, written in **PR B** after the witnesses exist (§4.6), not in PR A. The namespace collision risk (several specs define `INV-007`) is recorded as pre-existing and out of scope. |
+| **F-10** | `scripts/verify_spec.py` prints `✗ INV-007 has property test` once PR A adds the ID, yet **exits 0** — the failure list is populated only when a category has no test functions at all. | PR A's spec-validation job stays green; the `✗` line disappears when Phase 3 adds the property witness. |
+| **F-11** | Line-number citations drift: the TODO cites `STRUCTURE.md:1813`, the defective line is `:1816` at `7299108`. The `scripts/make_map.py` anchors in the TODO (`:74`, `:375-386`) are accurate. | All map locations in this record are content-locatable, and §4.2 forbids line-number assertions on the map. |
+| **F-12** | The scan of all 342 tracked code-dir modules found **no** positional-only over-long default and **no** real module function whose only default is over-long (the only such case in the tree is the `_AC014_MODULE` fixture string). Those two EDGE-017 branches are unreachable in the current tree. | Covered by the synthetic unit witness (§4.1) and the property witness (§4.3), not by the map. |
+| **F-13** | `mkdocs.yml` sets `docs_dir: userdocs`; `docs/specs/` is the internal process record and is **not** in the site nav, so `uv run --group docs mkdocs build --strict` (and the `docs` CI job) is unaffected by PR A — it still runs, because `quality.yml` has no path filter. | No action; recorded so the PR A gate list is not over-read. |
+| **F-14** | Environment hazard (already in the Problem Log as **P-94**): `uv run python scripts/make_map.py` **without** `--check` rewrites `STRUCTURE.md` in place. Evidence gathering at P.4 must use `--check` or `--out <temp>`; recovery is `git checkout -- STRUCTURE.md`. | Honored throughout this step (no repository file other than this record was written; scratch probes live outside the repository). |
+
+---
+
+## 10. READY gate (for the orchestrator)
+
+- TODO `Status: READY` may be set on `main` once this record is verified: the triage cites existing approved IDs (REQ-014, AC-014, REQ-021, AC-021, REQ-019/INV-001, INV-006, NFR-002, NFR-005, REQ-023), confirms observed-vs-required deviation with executed evidence and **two** live witnesses in the committed artifact, records the Spec Amendment stop (item 13) with PR A's exact wording and gates, names the reproduction tests with RED/GREEN commands, and qualifies the change for the **light tier** with the covering tests named.
+- No P.5 step runs for ISSUE; no spec-approval PR is opened for this change beyond PR A itself.
+- Next atomic step when PR A is merged: **S3.1 Derive tests** (Phase 3) in this worktree.
