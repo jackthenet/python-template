@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
 - **Change type:** REFACTOR  <!-- first-match #4: restructures existing code without altering externally observable behavior; the CI-invocation line is chore-like and rides along — P.2 may re-examine, Escalation Rules apply -->
 - **Created:** 2026-10-09
 - **Question file:** `docs/questions/complexipy-scripts.md`
