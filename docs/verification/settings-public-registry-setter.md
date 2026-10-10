@@ -7326,3 +7326,61 @@ Four full-suite orders were run (run 1 random auto-seed, run 5 deterministic, ru
 Nothing was fixed, weakened, skipped, xfailed or deselected; no source or test file was edited by this step; scratch output stayed outside the worktree (`../s51-scratch/`); the primary worktree was used read-only and is clean.
 
 **Next:** **S5.2** — lint (`uv run ruff check .`, the one full-repo sweep) + types (`uv run mypy src/`).
+
+---
+
+## Phase 5 — S5.2 lint + types (2026-10-10)
+
+**Objective:** run the **one whole-repo lint sweep** plus every other quality gate CI runs, on the merged tree, and record each result (AGENTS.md: the whole-repo `uv run ruff check .` sweep is a Phase 5 gate — per-task steps linted only their changed paths). No test suite was run here (S5.1 is recorded above, `99efbee`).
+
+Tree at start: `git status --porcelain` empty, HEAD `99efbee`, branch `crosscut/settings-public-registry-setter`. Toolchain resolved from the worktree's own `uv` environment: **ruff 0.16.10, mypy 2.4.0, ty 0.0.84, deptry 0.25.1, complexipy 8.0.1** (ruff matches the `ruff-pre-commit` pin `v0.16.10` in `.pre-commit-config.yaml`).
+
+### Gate set (matched to CI exactly)
+
+| # | Command | CI job / hook it matches | Result |
+|---|---|---|---|
+| 1 | `uv run ruff check .` | `lint.yml` → `lint` step "Run ruff" | **PASS** — `All checks passed!`, exit 0. Whole repo: config resolved from this worktree's `pyproject.toml`, `.gitignore` respected (verified with `ruff check . -v`). A separate `ruff check tests/ scripts/ .github/ userdocs/ docs/` is also clean, so the sweep is not silently skipping the non-`src` trees |
+| 2 | `uv run ruff format --check .` | `lint.yml` → `lint` step "Check formatting" | **PASS** — `362 files already formatted`, exit 0 |
+| 3 | `uv run mypy src/` | `quality.yml` → `type-check` step "Run mypy (gate)" | **PASS** — `Success: no issues found in 84 source files`, exit 0 |
+| 4 | `uv run mypy scripts/` | `quality.yml` → `type-check` step "Run mypy scripts/ (gate)" | **PASS** — `Success: no issues found in 4 source files`, exit 0. Added to this step's gate set because CI runs it as a gate (the task-definition list omitted it) — the gate set must match CI exactly |
+| 5 | `uv run ty check src/` | `quality.yml` → `type-check` step "Run ty (informational)", `continue-on-error: true` | **FAIL — not a gate** (exit 1, 159 diagnostics). Classified below: a pre-existing diagnostic class, with **+6 instances** of that class from this change |
+| 6 | `uv run deptry .` | `quality.yml` → `dependencies` step "Run deptry (gate)" | **PASS** — `Success! No dependency issues found.`, exit 0 (91 files scanned; the three `Assuming the corresponding module name …` lines are deptry's notices about the `docs`-group mkdocs plugins, not findings) |
+| 7 | `uv run complexipy src tests --max-complexity-allowed 15` | `quality.yml` → `complexity` step "Run complexipy (gate)" | **PASS** — `All functions are within the allowed complexity.`, exit 0 |
+| 8 | `uv run --group docs mkdocs build --strict` | `quality.yml` → `docs` step "Run mkdocs build (gate)"; also the `mkdocs-build` pre-push hook | **PASS** — built in 3.39 s, zero warnings under `--strict`, exit 0. The Material-for-MkDocs "MkDocs 2.0" advisory banner is vendor marketing text, not a build warning. The generated `site/` build dir is gitignored and was removed after the run |
+| 9 | `uv run alembic upgrade head` with `ALEMBIC_DATABASE_URL=sqlite:///../s52-scratch/alembic-s52.db` | `quality.yml` → `migrations` step "Run alembic upgrade head (gate)" | **PASS** — applied `eace2f772150` → `d94b7f2e6a31`, exit 0, against a throwaway DB **outside** the worktree. Why it ran: see "alembic scope" below |
+| 10 | `uv run python scripts/check_traceability.py` | `spec-validation.yml` → `traceability` step "Check traceability matrix referential integrity" | **PASS** — `Traceability: PASS (883 matrix rows, 136 spec IDs, 875 test functions)`, exit 0 |
+| 11 | `uv run python scripts/make_map.py --check` | pre-commit hook `structure-map-check` (no CI job runs it) | **PASS** — exit 0, silent (a mismatch exits non-zero). `STRUCTURE.md` = **2 004 lines**, inside the amended NFR-002 ceiling of 2 200 (`eaa2f72`) |
+
+### The TID251 singleton-slot ban actually holds on the merged tree (T-008 / ADR-084)
+
+This change's own T-008 added the banned-api config, so the sweep was checked against the config, not only by its exit code:
+
+- `ruff check --show-settings src/main.py` lists `banned-api (TID251)` among the selected rules and prints the loaded map — `linter.flake8_tidy_imports.banned_api` = the **5 fully qualified keys** (`backend.settings.registry._registry`, `backend.eventbus.eventbus._default_bus`, `backend.permissions.service._permission_service`, `backend.search.service._singleton`, `backend.sessionmanagement.service._session_service`), each with its install/get/reset message.
+- The whole-repo sweep over the merged tree reports **zero** TID251 violations: no module outside its own owning module references a private singleton slot. The lint half of the ADR-084 two-guard pair is green; the runtime half (the scan test) is green in the S5.1 suite.
+
+### ty (informational) — classification, not papered over
+
+`ty` exits 1 on this branch **and** on `origin/main`; it is `continue-on-error: true` in CI and is not a gate. Evidence that it is a pre-existing diagnostic class rather than a new defect:
+
+| Run | Diagnostics | `invalid-type-form` |
+|---|---|---|
+| branch `99efbee` (change worktree) | 159 | 101 |
+| `origin/main` `801e107` (primary worktree, read-only, `git status --porcelain` empty before and after) | 153 | 95 |
+
+Delta = **+6**, all `invalid-type-form`, one each in `backend/eventbus/eventbus.py`, `backend/permissions/service.py`, `backend/search/service.py`, `backend/sessionmanagement/service.py`, `backend/settings/registry.py`, `src/main.py` — all files this change touched. The message is always "Variable of type `type` is not allowed in a type expression / parameter annotation / return type annotation": ty cannot use a `@logged_class`-decorated class (or the `@logged`-wrapped module function it returns) as an annotation, because for ty the decorator evaluates to a plain `type` variable. That is exactly the pattern the 95 pre-existing occurrences on `main` come from, and it is a ty limitation, not a typing error: **mypy — the CI gate — reports no issue in any of those files** (rows 3/4). This change adds install-operation singletons and setter signatures over `@logged_class` classes, so it adds six more instances of the same known class. No `noqa`, no `# type: ignore`, no config change was made for ty, and none is warranted for a non-gate tool.
+
+### alembic scope — why the migrations job ran
+
+`git diff --name-only ff48e90 HEAD -- 'src/backend/**/models.py' migrations/` is **not** empty: `mail/models.py`, `permissions/models.py`, `search/models.py`, `usermanagement/models.py`. Reading the diff, every hunk is a **docstring-only** change (the ruff `D` docstring reflow this change performed) — no table, column, index or constraint changed, and no new revision under `migrations/versions/`. So there is **no table schema change** and no migration is owed; the job was still run (row 9) because it is a CI gate and costs seconds, and it passes end-to-end against a fresh SQLite file.
+
+### Notes
+
+- `origin/main` (`801e107`) carries one commit the branch does not have (a docs-only Phase 4 close + Problem-Log renumber); the branch merged `origin/main` at `427dfd0` (`f50519a`). That commit touches only `docs/`, so no gate in this table is affected by it.
+- Nothing was fixed in this step: **every gate was already clean on the merged tree**, so no source, test or config file was edited. No `noqa` was added, no ruff ignore widened, no `pyproject.toml` config touched.
+- Scratch stayed outside the worktree (`../s52-scratch/`: the two `ty` outputs, the throwaway `alembic-s52.db`); the primary worktree was used read-only for the `ty` cross-check and is clean.
+
+### S5.2 gate
+
+**S5.2 PASSES.** Lint is clean on the whole repo (`ruff check .`, matching `lint.yml` exactly, including the TID251 banned-api map this change introduced), formatting is clean, **mypy passes on both `src/` and `scripts/`**, and deptry, complexipy, `mkdocs build --strict`, `alembic upgrade head`, `check_traceability.py` and `make_map --check` all pass. The only non-clean command is `ty`, which is informational in CI, already failing on `origin/main` with the same diagnostic class, and is classified above as a tool limitation rather than a defect.
+
+**Next:** **S5.3** — update the traceability matrix with this change's evidence rows (CROSS-CUTTING: every affected feature's rows).
