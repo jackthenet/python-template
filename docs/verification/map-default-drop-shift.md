@@ -701,3 +701,87 @@ uv run python scripts/make_map.py && uv run python scripts/make_map.py --check  
 The second command pair is the map-regeneration pair (write, then verify exit 0); the acceptance witness and `test_ac_021_committed_map_matches_fresh_render` go GREEN only after the regeneration, so the generator run must come **after** every `.py` edit in the commit (P-94: never run the write form while collecting evidence — `--check` or `--out <temp>` only).
 
 **Gate ◆ S4.1: task picked, RED re-observed, fix target located by content, §5.1 confirmed against the live code shape.** Next: **S4.2 Implement + confirm GREEN**.
+
+## Phase 4 — minimal fix (S4.2 GREEN, 2026-10-10)
+
+HEAD at entry: `785da7a` (`docs(map-default-drop-shift): S4.1 fix-target re-location`), working tree clean.
+**Files written by this step: `scripts/make_map.py` (the fix) and the regenerated `STRUCTURE.md`** — plus
+this record. Nothing else: `tests/` untouched (the four witnesses are the contract),
+`docs/verification/traceability.md` untouched (S5.3), `pyproject.toml` / `CHANGELOG.md` untouched (S6.4),
+`docs/specs/`, `docs/todo/`, `docs/questions/` untouched.
+
+### The fix (§5.1, the only implementation change)
+
+`scripts/make_map.py` — the `:382-385` filter pair became a **substitution in the default's own slot**,
+and the docstring that documented the shifting/`None` effects as intended was corrected (INV-007):
+
+```python
+def _abbreviate_default(default: ast.expr) -> ast.expr:
+    """REQ-014 v2: `default` when its unparsed text fits the threshold, the `…` placeholder when it
+    does not — a substitution, never a deletion."""
+    return default if len(ast.unparse(default)) <= _DEFAULT_MAX_CHARS else ast.Name(id=_DEFAULT_MARKER)
+
+
+def _drop_long_defaults(args: ast.arguments) -> None:
+    """REQ-014/EDGE-017: abbreviate a parameter default to `…` when its unparsed text is > 20 characters.
+    ... (docstring now states the placeholder rule and why dropping misrepresents the signature) ...
+    `kw_defaults` is aligned one-to-one with `kwonlyargs` and holds None for a keyword-only
+    parameter that has **no** default: None stays None, so a required parameter never gains `=…`."""
+    args.defaults = [_abbreviate_default(d) for d in args.defaults]
+    args.kw_defaults = [None if d is None else _abbreviate_default(d) for d in args.kw_defaults]
+```
+
+- **F-19 resolved as §5.2 predicted:** a new module constant `_DEFAULT_MARKER = "…"` sits next to
+  `_DEFAULT_MAX_CHARS` (mirroring `_SUMMARY_MARKER` / `_FIELD_MARKER`), injected as
+  `ast.Name(id=_DEFAULT_MARKER)` — `ast.unparse` renders a `Name`'s `id` verbatim, and at 1 character
+  the placeholder stays under the threshold, so the rule is idempotent (INV-001). The §5.1 `else
+  _PLACEHOLDER` form was not usable: a bare `str` cannot live in `ast.arguments.defaults` (F-07).
+- **F-08 trap held:** `None if d is None else …` keeps a required keyword-only parameter default-free
+  — the `keys(*, need: int, …)` unit witness and the INV-007 clause-2 property witness both lock it,
+  and the regenerated map adds **no** `=…` to any parameter that has no default in the source (the
+  `SmtpTransportImpl.__init__` line at `:1039` is unchanged).
+- **`_DEFAULT_MAX_CHARS = 20` untouched** (Q-8): `edge(exact: str='0123456789abcdefgh')` still renders
+  verbatim (unit + EDGE-017 witnesses).
+- No rename (`_drop_long_defaults` keeps its name), no other change to the file, no new dependency,
+  no new pattern → **no ADR** (AGENTS.md ADR threshold not met; Phase 2 is skipped for ISSUE).
+- `_signature`, `_class_name`, `type_params` and every other generator output are untouched (§5.5).
+
+### GREEN (targeted, §4.5 `green_command`)
+
+| Check | Command | Result line |
+|---|---|---|
+| The four §4 witnesses | `uv run pytest tests/unit/test_make_map.py::test_edge_017_over_long_default_keeps_its_slot tests/unit/test_make_map.py::test_ac_014_symbol_inventory_and_unparsed_signatures tests/property/test_structure_map.py::test_inv_007_signature_fidelity_survives_default_abbreviation tests/acceptance/test_structure_map.py::test_ac_014_committed_map_renders_over_long_default_in_place -v` | **`4 passed in 2.64s`** (exit 0) — EDGE-017 unit, AC-014 unit (re-derived), INV-007 property, AC-014 acceptance |
+| The three structure-map modules | `uv run pytest tests/unit/test_make_map.py tests/property/test_structure_map.py tests/acceptance/test_structure_map.py -q` | **`58 passed in 45.25s`** (exit 0) — includes `test_ac_021_committed_map_matches_fresh_render` (green only because the map was regenerated here) and `test_nfr_002_map_line_budget` |
+| Map regeneration (last step, after every `.py` edit — P-94) | `uv run python scripts/make_map.py` then `uv run python scripts/make_map.py --check` | **exit 0 / exit 0** |
+| Ruff (changed paths) | `uv run ruff check scripts/make_map.py` | `All checks passed!` (exit 0) |
+| Ruff format (changed paths) | `uv run ruff format --check scripts/make_map.py` | `1 file already formatted` (exit 0) |
+| Types | `uv run mypy scripts/make_map.py` | `Success: no issues found in 1 source file` (exit 0) — `mypy scripts/` **is** a CI gate (`quality.yml` type-check job runs `mypy src/` + `mypy scripts/`), so this is the gate, not only a local check |
+| Complexity | `uv run complexipy --max-complexity-allowed 15 scripts/make_map.py` | `All functions are within the allowed complexity.` (exit 0) — `_abbreviate_default` 1, `_drop_long_defaults` 4, `_signature` 3 |
+
+The full `tests/` suite was **not** run here (light tier: Phase 5 targeted + smoke, full regression at the
+S6.4 pre-merge gate).
+
+### The regenerated `STRUCTURE.md` (REQ-021/AC-021, same commit as the `.py` change per REQ-023)
+
+`git diff --numstat STRUCTURE.md` → `6 6` — **six** changed lines, line count **1 941 → 1 941** (NFR-002
+unaffected), `…` mid-line so INV-006 hook cleanliness unaffected. Five are the §5.3 set; the sixth is new
+and expected (finding **F-21** below).
+
+| Map line | Before | After |
+|---|---|---|
+| `:452` | `docs/ — 225 files (process record)` | `docs/ — 231 files (process record)` — pre-existing staleness only (F-01/F-16: `main` moved with new planning records), **not** this fix |
+| `:487` | `#### scripts/make_map.py (567 lines)` | `#### scripts/make_map.py (581 lines)` — the map's own per-module line count for the file the fix edits (**F-21**) |
+| `:686` | `… session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta, max_failed_attempts: int=5, lockout_duration: timedelta, rp_id: str='localhost', rp_name: str='Python Template', origin: str, …` | `… session_ttl: timedelta=timedelta(days=7), reset_token_ttl: timedelta=…, max_failed_attempts: int=5, lockout_duration: timedelta=…, rp_id: str='localhost', rp_name: str='Python Template', origin: str=…, …` — `session_ttl` and `max_failed_attempts` unharmed |
+| `:1675` | `build_auth_service(..., lockout_duration: timedelta, ..., reset_token_ttl: timedelta, ...)` | `build_auth_service(..., lockout_duration: timedelta=…, ..., reset_token_ttl: timedelta=…, ...)` |
+| `:1676` | `build_memory_auth_service(..., lockout_duration: timedelta, ..., reset_token_ttl: timedelta, ...)` | `build_memory_auth_service(..., lockout_duration: timedelta=…, ..., reset_token_ttl: timedelta=…, ...)` |
+| `:1816` | ``simple_template(name: str, subject: str='test', body_html: str='Test {{who}}', body_text: str='Test {{who}}')`` | ``simple_template(name: str='test', subject: str='Test {{who}}', body_html: str=…, body_text: str='Test {{who}}')`` — the positional shift is corrected |
+
+`STRUCTURE.md` was **regenerated, never hand-edited**, as the last step after the only `.py` edit, and
+verified with `--check` (exit 0) — the local `structure-map-check` pre-commit hook (`files: \.py$`,
+check-only, REQ-023) is satisfied because the map is regenerated **in the same commit** as the `.py` change.
+
+### New findings from S4.2
+
+| ID | Finding | Disposition |
+|---|---|---|
+| **F-21** | §5.3/S4.1 predicted a **5-line** map diff. The actual diff is **6 lines**: the map renders a per-module line count (`#### scripts/make_map.py (567 lines)` → `(581 lines)`), and the fix adds 14 lines to that module. The S4.1 probe could not predict it — it ran a **scratch copy of the generator outside the repository** against the unmodified tree, so `make_map.py`'s own count never changed there. | Expected, not a defect: the line-count line is generated content of the artifact, and the map must be regenerated for the edited file (REQ-021). No signature line outside the §5.3 set changed, and the total stays 1 941, so NFR-002 holds. Recorded so the S5.1/S6.x reviewers do not read the sixth line as scope creep. |

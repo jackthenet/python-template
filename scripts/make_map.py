@@ -73,6 +73,12 @@ _SUMMARY_MARKER = "…"
 # REQ-014: a parameter default is rendered only when its ast.unparse text is at most this long.
 _DEFAULT_MAX_CHARS = 20
 
+# REQ-014 v2 / EDGE-017: the `…` an over-long default is abbreviated to, in its own slot — the same
+# character REQ-018 uses for a long summary. Injected as an `ast.Name` node because `ast.unparse`
+# renders a node's `id` verbatim and cannot emit `…` from a real default (a `Constant(...)` renders
+# `...`). At 1 character it stays under the threshold, so the rule is idempotent (INV-001).
+_DEFAULT_MARKER = "…"
+
 # REQ-017: the number of class fields rendered per class (the NFR-002 safety valve), and the `…`
 # marker that reports the elided count — the same character REQ-018 uses for a long summary.
 _FIELD_CAP = 15
@@ -372,17 +378,25 @@ def _group_header(directory: str, init: Module | None) -> str:
     return f"### `{relative.replace('/', '.')}` \u2014 {path}"
 
 
-def _drop_long_defaults(args: ast.arguments) -> None:
-    """AC-014: keep a parameter default only when its unparsed text is <= 20 characters.
+def _abbreviate_default(default: ast.expr) -> ast.expr:
+    """REQ-014 v2: `default` when its unparsed text fits the threshold, the `…` placeholder when it
+    does not — a substitution, never a deletion."""
+    return default if len(ast.unparse(default)) <= _DEFAULT_MAX_CHARS else ast.Name(id=_DEFAULT_MARKER)
 
-    Mutates the parsed tree (each module is rendered once, and the filter is idempotent). The
-    positional defaults are one list aligned to the tail of the argument list, so dropping an entry
-    shifts the kept ones onto the earlier parameters; the keyword defaults align one-to-one with
-    `kwonlyargs`, so a dropped entry becomes None rather than being removed."""
-    args.defaults = [d for d in args.defaults if len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS]
-    args.kw_defaults = [
-        d if d is not None and len(ast.unparse(d)) <= _DEFAULT_MAX_CHARS else None for d in args.kw_defaults
-    ]
+
+def _drop_long_defaults(args: ast.arguments) -> None:
+    """REQ-014/EDGE-017: abbreviate a parameter default to `…` when its unparsed text is > 20 characters.
+
+    Mutates the parsed tree (each module is rendered once, and the substitution is idempotent).
+    The abbreviation happens **in the default's own slot**: deleting a positional default instead
+    shifts the kept ones onto earlier parameters and deleting a keyword-only one renders that
+    parameter as required, so the map misrepresents the source signature — a reader concludes a
+    parameter is mandatory, or reads a default that belongs to another parameter (INV-007).
+
+    `kw_defaults` is aligned one-to-one with `kwonlyargs` and holds None for a keyword-only
+    parameter that has **no** default: None stays None, so a required parameter never gains `=…`."""
+    args.defaults = [_abbreviate_default(d) for d in args.defaults]
+    args.kw_defaults = [None if d is None else _abbreviate_default(d) for d in args.kw_defaults]
 
 
 def _signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
