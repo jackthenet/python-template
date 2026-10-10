@@ -42,6 +42,7 @@ from singleton_install_test_helpers import (
     non_tracing_warnings,
     record_constructions,
     widened_lazy_create_window,
+    witness_slots,
 )
 
 # The spec's AC-010 shape: 8 installers, 8 readers, 2 resets, one barrier.
@@ -56,6 +57,7 @@ _BARRIER_TIMEOUT = 5.0
 _LIVENESS_TIMEOUT = 2.0
 
 
+@witness_slots
 def test_ac_009_concurrent_lazy_create(monkeypatch: pytest.MonkeyPatch) -> None:
     """AC-009 (REQ-006, ADR-084): 8 barrier-released reads of an empty slot build exactly one default."""
     with isolated_event_bus():
@@ -88,6 +90,7 @@ def test_ac_009_concurrent_lazy_create(monkeypatch: pytest.MonkeyPatch) -> None:
                 slot.clear()
 
 
+@witness_slots
 def test_ac_010_concurrent_install_read_reset(log_records: list[Any]) -> None:
     """AC-010 (REQ-006, EDGE-010): installs, reads and resets from barrier-released threads never tear the slot."""
     with isolated_event_bus():
@@ -95,6 +98,7 @@ def test_ac_010_concurrent_install_read_reset(log_records: list[Any]) -> None:
             _witness_install_read_reset(slot, log_records)
 
 
+@witness_slots
 def test_nfr_003_slot_lock_is_short_lived() -> None:
     """NFR-003: the module lock covers only the slot swap — a reset's ``shutdown()`` does not block a concurrent install."""
     with isolated_event_bus():

@@ -30,6 +30,7 @@ from singleton_install_test_helpers import (
     SingletonSlot,
     concurrent_installs,
     non_tracing_warnings,
+    witness_slots,
 )
 
 from backend.eventbus import get_event_bus
@@ -103,6 +104,7 @@ def _count_installs_on_nonempty_slot(
         slot.clear()
 
 
+@witness_slots
 def test_inv_002_warning_count_matches_nonempty_installs(log_records: list[Any]) -> None:
     """INV-002: for any install sequence the WARNING count equals the number of installs applied to a non-empty slot — no more, no fewer."""
 
@@ -179,6 +181,7 @@ def _assert_holder_keeps_instance(slot: SingletonSlot, sequence: list[bool]) -> 
         slot.clear()
 
 
+@witness_slots
 def test_inv_003_no_events_and_no_rebinding() -> None:
     """INV-003: for any install sequence no bus receives an install-caused event, and every constructed holder keeps its instance."""
 
@@ -198,6 +201,7 @@ def test_inv_003_no_events_and_no_rebinding() -> None:
         inner()
 
 
+@witness_slots
 def test_inv_001_last_install_wins(log_records: list[Any]) -> None:
     """INV-001: for any install/reset/read sequence a read returns the most recent install's instance, and concurrent installs are last-writer-wins with no install lost silently.
 

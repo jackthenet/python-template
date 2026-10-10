@@ -28,6 +28,7 @@ from singleton_install_test_helpers import (
     SETTINGS_SLOT,
     SLOTS,
     non_tracing_warnings,
+    witness_slots,
 )
 
 from backend.settings import get_settings_registry
@@ -46,6 +47,7 @@ def _bus_workers() -> int:
     return sum(1 for thread in threading.enumerate() if thread.name == "eventbus-worker")
 
 
+@witness_slots
 def test_edge_001_install_over_nonempty(log_records: list[Any]) -> None:
     """EDGE-001: installing over a non-empty slot raises nothing, logs exactly one WARNING, and leaves the replaced instance usable."""
     with isolated_event_bus():  # these installs replace the slot's bus; park the suite's live bus
@@ -70,6 +72,7 @@ def test_edge_001_install_over_nonempty(log_records: list[Any]) -> None:
                 slot.clear()
 
 
+@witness_slots
 def test_edge_002_same_instance_twice(log_records: list[Any]) -> None:
     """EDGE-002: installing the same instance twice logs a WARNING the second time (the slot was non-empty) and the slot holds it."""
     with isolated_event_bus():
@@ -88,6 +91,7 @@ def test_edge_002_same_instance_twice(log_records: list[Any]) -> None:
                 slot.clear()
 
 
+@witness_slots
 def test_edge_003_session_service_repository_rule() -> None:
     """EDGE-003 (session-management.md AC-042): the no-repository read still raises ValueError, and after an install it returns the installed instance."""
     SESSIONMANAGEMENT_SLOT.clear()
@@ -101,12 +105,13 @@ def test_edge_003_session_service_repository_rule() -> None:
             "EDGE-003: after set_session_service() the no-repository read must return the installed instance"
         )
     finally:
-        SESSIONMANAGEMENT_SLOT.clear()
+        SESSIONMANAGEMENT_SLOT.clear()  # this witness needs the slot left empty for the assertion below
 
     with pytest.raises(ValueError):
         SESSIONMANAGEMENT_SLOT.read()  # the install did not weaken the repository rule
 
 
+@witness_slots
 def test_edge_004_required_false_after_install_and_reset() -> None:
     """EDGE-004 (settings-coverage.md REQ-012 / EDGE-011 preserved): required=False sees the installed instance, and None after a reset."""
     SETTINGS_SLOT.clear()
@@ -119,7 +124,7 @@ def test_edge_004_required_false_after_install_and_reset() -> None:
             "EDGE-004: required=False does not return the installed registry"
         )
     finally:
-        SETTINGS_SLOT.clear()
+        SETTINGS_SLOT.clear()  # this witness needs the slot left empty for the two assertions below
 
     assert get_settings_registry(required=False) is None, "EDGE-004: required=False created a registry after the reset"
     assert get_settings_registry(required=False) is None, "EDGE-004: the second required=False read created a registry"
@@ -189,6 +194,7 @@ def test_edge_005_install_in_subprocess(tmp_path: Path) -> None:
     assert payload["warnings"] == 1, f"EDGE-005: the child's sink logged {payload['warnings']!r} WARNING records"
 
 
+@witness_slots
 def test_edge_006_live_bus_not_shut_down() -> None:
     """EDGE-006 (event-bus.md REQ-005): installing over a live bus leaves it dispatching; the installed bus starts only on its first publish()."""
     with isolated_event_bus():
@@ -217,6 +223,7 @@ def test_edge_006_live_bus_not_shut_down() -> None:
             EVENTBUS_SLOT.clear()
 
 
+@witness_slots
 def test_edge_007_reset_event_bus_still_shuts_down(log_records: list[Any]) -> None:
     """EDGE-007 (event-bus.md REQ-005): reset_event_bus() still shuts the instance down; the WARNING rule applies to install only."""
     with isolated_event_bus():

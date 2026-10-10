@@ -28,6 +28,17 @@ Two things live here because more than one test category needs them:
   every bus a witness touches. ``SingletonSlot.stamp_identity`` is the identity
   form of the same marking, for the witness whose claim is literally "that exact
   instance" (INV-003) rather than "still behaves as constructed" (AC-005).
+* ``SingletonSlot.save`` / ``SingletonSlot.restore`` and the ``witness_slots``
+  decorator — the teardown half of the table (PROBLEMS.md P-104). A witness that
+  ends by clearing a slot leaves the **suite's** singleton gone, and the next
+  read lazily builds a bare one: the session's settings registry (installed by
+  ``tests/conftest.py::_logging_session_setup``, holding ``logging.log_file`` and
+  ``logging.log_level = DEBUG``) is discarded, so every later ``setup_logger()``
+  reconfigures from the hardcoded fallbacks and the ``logging_coverage`` witnesses
+  then lose their DEBUG records. ``witness_slots`` saves what each of the five
+  slots holds before the witness and puts **that exact object** back after it, so
+  a witness's own ``reset_*()`` assertions keep their full strength while the
+  outer session state survives.
 
 The trio is resolved by attribute name at call time, never imported: a feature
 whose install operation does not exist yet then fails **inside** the test with
@@ -44,12 +55,13 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import wraps
 from types import ModuleType
 from typing import Any, NamedTuple
 from uuid import uuid4
 
 import pytest
-from eventbus_test_helpers import wait_for
+from eventbus_test_helpers import isolated_event_bus, wait_for
 from search_test_helpers import demo_source
 from sessionmanagement_test_helpers import make_session
 
@@ -110,6 +122,7 @@ class SingletonSlot(NamedTuple):
     reset: str
     factory: Callable[[], Any]
     stamper: Callable[[], tuple[Any, Probe]]
+    saver: Callable[[], Any]
     dispose: Callable[[Any], None] = _keep
     warning_keyword: str = ""
     reader_args: Callable[[], tuple[Any, ...]] = _no_reader_args
@@ -125,6 +138,34 @@ class SingletonSlot(NamedTuple):
     def clear(self) -> None:
         """Call the feature's public reset operation."""
         getattr(self.module, self.reset)()
+
+    def save(self) -> Any:
+        """What the slot holds right now — the object ``restore`` puts back after the witness.
+
+        The settings save is the non-creating ``required=False`` read: building a
+        default here would *be* the leak this prevents. The other four getters
+        create on an empty slot (their public API has no non-creating form), which
+        is harmless — an empty slot has nothing to restore, and the created default
+        is what the next read would have built anyway. Same save/restore pair as
+        ``eventbus_test_helpers.isolated_event_bus`` and
+        ``settings_test_helpers.restore_singleton``, and like them only the
+        feature's public API: never an import of, or a write to, the private slot
+        (change REQ-012 / REQ-013, AC-017 / AC-018).
+        """
+        return self.saver()
+
+    def restore(self, instance: Any) -> None:
+        """Put ``instance`` back as the shared default; an empty save stays a plain reset.
+
+        The install replaces the slot contents without touching either instance's
+        lifecycle (``event-bus.md`` EDGE-011), so restoring never shuts the saved
+        instance down — the mistake that would reintroduce the suite-wide dead-bus
+        failure ``isolated_event_bus`` exists to prevent.
+        """
+        if instance is None:
+            self.clear()
+        else:
+            self.install(instance)
 
     def new(self) -> Any:
         """Build a fresh, isolated instance of the feature's singleton class."""
@@ -198,6 +239,11 @@ def _stamp_settings() -> tuple[Any, Probe]:
     return registry, probe
 
 
+def _save_settings() -> Any:
+    """The settings slot's current registry — the non-creating read (``required=False``)."""
+    return backend.settings.get_settings_registry(required=False)
+
+
 SETTINGS_SLOT = SingletonSlot(
     module=backend.settings,
     installer="set_settings_registry",
@@ -205,6 +251,7 @@ SETTINGS_SLOT = SingletonSlot(
     reset="reset_settings_registry",
     factory=_new_settings_registry,
     stamper=_stamp_settings,
+    saver=_save_settings,
     warning_keyword="settings",
 )
 
@@ -236,6 +283,7 @@ EVENTBUS_SLOT = SingletonSlot(
     reset="reset_event_bus",
     factory=EventBus,
     stamper=_stamp_eventbus,
+    saver=backend.eventbus.get_event_bus,
     dispose=EventBus.shutdown,
     warning_keyword="bus",
 )
@@ -274,6 +322,7 @@ PERMISSIONS_SLOT = SingletonSlot(
     reset="reset_permission_service",
     factory=_new_permission_service,
     stamper=_stamp_permissions,
+    saver=backend.permissions.get_permission_service,
     warning_keyword="permission",
 )
 
@@ -307,6 +356,7 @@ SEARCH_SLOT = SingletonSlot(
     reset="reset_search_service",
     factory=_new_search_service,
     stamper=_stamp_search,
+    saver=backend.search.get_search_service,
     warning_keyword="search",
 )
 
@@ -349,6 +399,11 @@ def _session_reader_args() -> tuple[Any, ...]:
     return (SqliteSessionRepository("sqlite:///:memory:"),)
 
 
+def _save_sessionmanagement() -> Any:
+    """The session slot's current service; the getter needs a repository to create one (EDGE-003)."""
+    return backend.sessionmanagement.get_session_service(SqliteSessionRepository("sqlite:///:memory:"))
+
+
 SESSIONMANAGEMENT_SLOT = SingletonSlot(
     module=backend.sessionmanagement,
     installer="set_session_service",
@@ -356,6 +411,7 @@ SESSIONMANAGEMENT_SLOT = SingletonSlot(
     reset="reset_session_service",
     factory=_new_session_service,
     stamper=_stamp_sessionmanagement,
+    saver=_save_sessionmanagement,
     warning_keyword="session",
     reader_args=_session_reader_args,
 )
@@ -370,6 +426,39 @@ SLOTS: tuple[SingletonSlot, ...] = (
     SEARCH_SLOT,
     SESSIONMANAGEMENT_SLOT,
 )
+
+
+def witness_slots(test: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator: the decorated witness leaves every slot holding what it held before it.
+
+    The save/restore is the outer half of the isolation the witnesses need: their own
+    ``reset_*()`` calls (INV-001, EDGE-010, AC-009/010/012) run at full strength inside
+    the block, and the suite's own singletons are put back afterwards, so the order the
+    suite runs in stops mattering (PROBLEMS.md P-103: five witness files left the
+    settings slot empty and 12 ``logging``/``settings`` tests downstream failed).
+
+    The event bus is **parked** for the whole witness, not merely saved: ``reset_event_bus()``
+    shuts the instance it resets down, so a witness that clears the bus slot would
+    otherwise kill the live bus the session's settings registry publishes on — the
+    suite-wide dead-bus failure ``isolated_event_bus`` documents (main-ci-green item H).
+    Parking first also means the saved bus is always a live one, so ``restore`` can put it
+    back without ever shutting it down.
+
+    Nesting is safe: a witness that parks the bus itself parks the scratch bus and hands it
+    back, and the outer park then shuts the scratch down and reinstalls the real one.
+    """
+
+    @wraps(test)
+    def _witness(*args: Any, **kwargs: Any) -> Any:
+        with isolated_event_bus():
+            saved = [(slot, slot.save()) for slot in SLOTS]
+            try:
+                return test(*args, **kwargs)
+            finally:
+                for slot, instance in saved:
+                    slot.restore(instance)
+
+    return _witness
 
 
 class _CreateWindow:

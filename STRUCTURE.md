@@ -186,11 +186,13 @@ tests/
       tests/acceptance/permissions/test_errors.py
       tests/acceptance/permissions/test_events.py
       tests/acceptance/permissions/test_role_management.py
+      tests/acceptance/permissions/test_singleton_install.py
       tests/acceptance/permissions/test_system_principal.py
     tests/acceptance/search/
       tests/acceptance/search/__init__.py
       tests/acceptance/search/test_feature_sources.py
       tests/acceptance/search/test_search.py
+      tests/acceptance/search/test_singleton_install.py
     tests/acceptance/sessionmanagement/
       tests/acceptance/sessionmanagement/__init__.py
       tests/acceptance/sessionmanagement/conftest.py
@@ -217,6 +219,10 @@ tests/
       tests/acceptance/settings_coverage/test_registration.py
       tests/acceptance/settings_coverage/test_setup_logger.py
       tests/acceptance/settings_coverage/test_wiring.py
+    tests/acceptance/singleton_install/
+      tests/acceptance/singleton_install/__init__.py
+      tests/acceptance/singleton_install/test_concurrency.py
+      tests/acceptance/singleton_install/test_install.py
     tests/acceptance/usermanagement/
       tests/acceptance/usermanagement/__init__.py
       tests/acceptance/usermanagement/test_multi_role.py
@@ -267,6 +273,12 @@ tests/
     tests/contract/settings_coverage/
       tests/contract/settings_coverage/test_inventory.py
       tests/contract/settings_coverage/test_value_repository.py
+    tests/contract/singleton_install/
+      tests/contract/singleton_install/__init__.py
+      tests/contract/singleton_install/test_api_contract.py
+      tests/contract/singleton_install/test_guidance_contract.py
+      tests/contract/singleton_install/test_lint_contract.py
+      tests/contract/singleton_install/test_performance_contract.py
     tests/contract/usermanagement/
       tests/contract/usermanagement/__init__.py
       tests/contract/usermanagement/test_usermanagement_contracts.py
@@ -308,6 +320,9 @@ tests/
     tests/integration/settings/
       tests/integration/settings/__init__.py
       tests/integration/settings/test_settings_integration.py
+    tests/integration/singleton_install/
+      tests/integration/singleton_install/__init__.py
+      tests/integration/singleton_install/test_composition_root.py
     tests/integration/usermanagement/
       tests/integration/usermanagement/__init__.py
       tests/integration/usermanagement/test_usermanagement_integration.py
@@ -353,6 +368,9 @@ tests/
     tests/property/settings/
       tests/property/settings/__init__.py
       tests/property/settings/test_settings_properties.py
+    tests/property/singleton_install/
+      tests/property/singleton_install/__init__.py
+      tests/property/singleton_install/test_install_properties.py
     tests/property/usermanagement/
       tests/property/usermanagement/__init__.py
       tests/property/usermanagement/test_multi_role_invariants.py
@@ -362,6 +380,9 @@ tests/
     tests/property/test_settings_coverage.py
     tests/property/test_structure_map.py
   tests/unit/
+    tests/unit/architecture/
+      tests/unit/architecture/__init__.py
+      tests/unit/architecture/test_singleton_slots.py
     tests/unit/authentication/
       tests/unit/authentication/__init__.py
       tests/unit/authentication/conftest.py
@@ -413,6 +434,9 @@ tests/
       tests/unit/settings/__init__.py
       tests/unit/settings/test_repository_roundtrip.py
       tests/unit/settings/test_settings_edges.py
+    tests/unit/singleton_install/
+      tests/unit/singleton_install/__init__.py
+      tests/unit/singleton_install/test_edges.py
     tests/unit/usermanagement/
       tests/unit/usermanagement/__init__.py
       tests/unit/usermanagement/test_usermanagement_edges.py
@@ -431,6 +455,7 @@ tests/
   tests/search_test_helpers.py
   tests/sessionmanagement_test_helpers.py
   tests/settings_test_helpers.py
+  tests/singleton_install_test_helpers.py
   tests/tooling_test_helpers.py
   tests/usermanagement_test_helpers.py
 scripts/
@@ -449,7 +474,7 @@ migrations/
 .agents/ — 17 files (skills)
 .github/ — 9 files (CI and tooling)
 .vscode/ — 2 files
-docs/ — 231 files (process record)
+docs/ — 234 files (process record)
 userdocs/ — 2 files (published docs)
 
 ## Packages
@@ -716,10 +741,10 @@ WebAuthn (passkey) provider wrapping py-webauthn (T-006, ADR-031).
   - `verify_authentication_response(self, credential_id: str, response: dict[str, Any]) -> VerifiedAssertion`: Verify an assertion and report the sign count it presents (REQ-015).
 
 ### `backend.eventbus` — src/backend/eventbus/
-exports: EventBus, get_event_bus, register_settings, reset_event_bus
+exports: EventBus, get_event_bus, register_settings, reset_event_bus, set_event_bus
 #### src/backend/eventbus/__init__.py (12 lines)
 Public API for the event bus feature.
-#### src/backend/eventbus/eventbus.py (257 lines)
+#### src/backend/eventbus/eventbus.py (322 lines)
 In-memory, asynchronous event bus for decoupled backend communication.
 - @logged_class(slow_threshold_ms=250) class `EventBus`: A bounded, thread-safe, asynchronous in-memory event bus.
   - `__init__(self, max_queue_size: int | None=None) -> None`: Build a bus with a bounded pending-event queue; no worker thread yet.
@@ -735,7 +760,8 @@ In-memory, asynchronous event bus for decoupled backend communication.
   - `__enter__(self) -> EventBus`: Enter the context-manager form: the bus itself, still without a worker.
   - `__exit__(self, *exc: object) -> None`: Leave the context manager: drain queued events, then stop.
 - @logged(slow_threshold_ms=5) def `get_event_bus() -> EventBus`: Return the shared default event bus (singleton).
-- @logged(slow_threshold_ms=5) def `reset_event_bus() -> None`: Reset the shared default event bus (for tests).
+- @logged(slow_threshold_ms=5) def `set_event_bus(bus: EventBus) -> None`: Install bus as the shared default event bus (singleton).
+- @logged(slow_threshold_ms=5) def `reset_event_bus() -> None`: Reset the shared default event bus (for tests) — still shuts it down.
 #### src/backend/eventbus/feature_settings.py (27 lines)
 Feature-owned settings registration for the event bus (REQ-001).
 - @logged(slow_threshold_ms=5) def `register_settings(registry: SettingsRegistry) -> None`: Register the event bus feature's settings with registry (REQ-001).
@@ -1040,8 +1066,8 @@ The SMTP transport ABC and the smtplib-backed implementation (D1, ADR-043/046).
   - `send(self, message: EmailMessage) -> None`: Connect, authenticate when credentials are present, send, close.
 
 ### `backend.permissions` — src/backend/permissions/
-exports: AuthorizationError, BOOTSTRAP_SYSTEM_PERMISSIONS, EventPublisher, GrantRepository, MemoryGrantRepository, MemoryRoleRepository, MemorySystemPrincipalRepository, PermissionCatalog, PermissionDenied, PermissionDeniedError, PermissionEvent, PermissionRead, PermissionService, Role, RoleAlreadyExistsError, RoleCreated, RoleDeleted, RoleInUseError, RoleNotFoundError, RolePermission, RolePermissionsChanged, RoleProtectedError, RoleRead, RoleRepository, SqliteGrantRepository, SqliteRoleRepository, SqliteSystemPrincipalRepository, SystemPrincipalPermission, SystemPrincipalRepository, UnknownPermissionError, get_permission_service, register_settings, reset_permission_service
-#### src/backend/permissions/__init__.py (89 lines)
+exports: AuthorizationError, BOOTSTRAP_SYSTEM_PERMISSIONS, EventPublisher, GrantRepository, MemoryGrantRepository, MemoryRoleRepository, MemorySystemPrincipalRepository, PermissionCatalog, PermissionDenied, PermissionDeniedError, PermissionEvent, PermissionRead, PermissionService, Role, RoleAlreadyExistsError, RoleCreated, RoleDeleted, RoleInUseError, RoleNotFoundError, RolePermission, RolePermissionsChanged, RoleProtectedError, RoleRead, RoleRepository, SqliteGrantRepository, SqliteRoleRepository, SqliteSystemPrincipalRepository, SystemPrincipalPermission, SystemPrincipalRepository, UnknownPermissionError, get_permission_service, register_settings, reset_permission_service, set_permission_service
+#### src/backend/permissions/__init__.py (91 lines)
 Public API of the permissions feature (module: backend.permissions).
 #### src/backend/permissions/catalog.py (74 lines)
 The static permission catalog (docs/specs/user-roles-permissions.md, D3).
@@ -1160,7 +1186,7 @@ Persistence contract and concrete repositories (docs/specs/user-roles-permission
   - `__init__(self) -> None`: A fresh store, empty — the bootstrap system set is seeded by the migration, not here (REQ-022).
   - `set_permissions(self, permissions: Iterable[str]) -> None`: Rebuild the whole mapping (a replacement, not a merge): keys not listed are dropped.
   - `get_permissions(self) -> frozenset[str]`: Snapshot copy: mutating the returned set cannot change the store.
-#### src/backend/permissions/service.py (552 lines)
+#### src/backend/permissions/service.py (593 lines)
 The permission service foundation (docs/specs/user-roles-permissions.md, D19, REQ-023).
 - @logged_class(include_args=False) class `PermissionService`: The RBAC use-case service (constructor DI, REQ-023).
   - `__init__(self, role_repository: RoleRepository, grant_repository: GrantRepository, system_repository: SystemPrincipalRepository, user_manager: UserManager, session_lookup: SessionLookup | None=None, catalog: PermissionCatalog | None=None, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None) -> None`: Construction is the only wiring point (constructor DI, REQ-023, D19).
@@ -1179,12 +1205,13 @@ The permission service foundation (docs/specs/user-roles-permissions.md, D19, RE
   - `add_role(self, user_id: UUID, role: str) -> UserRead`: Add role to user_id (append semantics) via the UserManager.
   - `remove_role(self, user_id: UUID, role: str) -> UserRead`: Remove role from user_id via the UserManager.
   - `set_roles(self, user_id: UUID, roles: Iterable[str]) -> UserRead`: Replace user_id's roles with roles via the UserManager.
-- def `get_permission_service() -> PermissionService`: Return the shared PermissionService (module singleton, D19).
+- @logged(slow_threshold_ms=5) def `get_permission_service() -> PermissionService`: Return the shared PermissionService (module singleton, D19).
+- @logged(slow_threshold_ms=5) def `set_permission_service(service: PermissionService) -> None`: Install service as the shared default PermissionService (singleton).
 - def `reset_permission_service() -> None`: Reset the shared PermissionService (for test isolation, D19).
 
 ### `backend.search` — src/backend/search/
-exports: EventPublisher, FieldType, FilterCondition, FilterGroup, FilterOperator, InMemorySource, MalformedQueryError, SearchError, SearchQuery, SearchResult, SearchResultItem, SearchService, SearchSource, Sort, SourceFailure, SourceField, SourceItem, SourcePage, SourceQueryContext, SourceQueryFailed, SourceQueryFailedError, SourceRegistered, SourceUnregistered, UnknownSourceError, get_search_service, register_actions, register_settings, reset_search_service
-#### src/backend/search/__init__.py (84 lines)
+exports: EventPublisher, FieldType, FilterCondition, FilterGroup, FilterOperator, InMemorySource, MalformedQueryError, SearchError, SearchQuery, SearchResult, SearchResultItem, SearchService, SearchSource, Sort, SourceFailure, SourceField, SourceItem, SourcePage, SourceQueryContext, SourceQueryFailed, SourceQueryFailedError, SourceRegistered, SourceUnregistered, UnknownSourceError, get_search_service, register_actions, register_settings, reset_search_service, set_search_service
+#### src/backend/search/__init__.py (86 lines)
 Search feature — cross-feature search over registered sources.
 #### src/backend/search/errors.py (77 lines)
 The domain SearchError hierarchy (docs/specs/search.md, D10, REQ-010).
@@ -1270,7 +1297,7 @@ Data structures for the search feature (docs/specs/search.md, section 3).
   - `offset: int`
   - `limit: int`
   - `failures: list[SourceFailure]`
-#### src/backend/search/service.py (623 lines)
+#### src/backend/search/service.py (662 lines)
 The search service (docs/specs/search.md).
 - @logged_class(slow_threshold_ms=100, include_args=False) class `SearchService`: The search service: the thread-safe source registry and the query entry point.
   - `__init__(self, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`: Store the collaborators without doing any eager work.
@@ -1283,11 +1310,12 @@ The search service (docs/specs/search.md).
   - `__init__(self, name: str, fields: list[SourceField], items: list[SourceItem]) -> None`: Snapshot the source definition for repeated in-memory queries.
   - `to_source(self) -> SearchSource`: A SearchSource over this in-memory source's items.
 - @logged(slow_threshold_ms=5) def `get_search_service(event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> SearchService`: The module singleton SearchService (REQ-017).
+- @logged(slow_threshold_ms=5) def `set_search_service(service: SearchService) -> None`: Install service as the shared default SearchService (REQ-024).
 - @logged(slow_threshold_ms=5) def `reset_search_service() -> None`: Clear the module singleton (tests) (REQ-017).
 
 ### `backend.sessionmanagement` — src/backend/sessionmanagement/
-exports: AllSessionsRevoked, EventPublisher, ExpiredSessionsDeleted, SessionEntry, SessionRevoked, SessionService, SessionsListed, build_session_source, get_session_service, register_actions, register_settings, reset_session_service
-#### src/backend/sessionmanagement/__init__.py (36 lines)
+exports: AllSessionsRevoked, EventPublisher, ExpiredSessionsDeleted, SessionEntry, SessionRevoked, SessionService, SessionsListed, build_session_source, get_session_service, register_actions, register_settings, reset_session_service, set_session_service
+#### src/backend/sessionmanagement/__init__.py (45 lines)
 Public API of the session-management feature (module: backend.sessionmanagement).
 #### src/backend/sessionmanagement/events.py (63 lines)
 Typed events for the session-management feature (docs/specs/session-management.md).
@@ -1324,7 +1352,7 @@ Representations for the session-management feature (docs/specs/session-managemen
 #### src/backend/sessionmanagement/search_source.py (206 lines)
 The session-management search source (docs/specs/search.md, REQ-022, D19).
 - def `build_session_source(repository: SessionRepository) -> SearchSource`: Build the session-management search source over repository.
-#### src/backend/sessionmanagement/service.py (385 lines)
+#### src/backend/sessionmanagement/service.py (446 lines)
 The SessionService use-case service (docs/specs/session-management.md).
 - @logged_class(slow_threshold_ms=100, include_args=False) class `SessionService`: Manages the sessions owned by the authentication feature (REQ-001..REQ-018).
   - `__init__(self, repository: SessionRepository, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None, permission_service: PermissionChecker | None=None) -> None`: Store the injected seams and subscribe the lifecycle handlers.
@@ -1335,11 +1363,12 @@ The SessionService use-case service (docs/specs/session-management.md).
   - @requires_permission('sessionmanagement.revoke_all_sessions') `revoke_all_sessions(self, user_id: UUID, exclude_session_id: UUID | None=None, principal: Principal=_SYSTEM_PRINCIPAL) -> int`: Revoke all sessions for the user except the excluded one (REQ-011).
   - @requires_permission('sessionmanagement.cleanup_expired') `cleanup_expired(self, principal: Principal=_SYSTEM_PRINCIPAL) -> int`: Delete expired session rows and return the number deleted (REQ-012).
 - @logged(slow_threshold_ms=5) def `get_session_service(repository: SessionRepository | None=None, event_bus: EventPublisher | None=None, settings_registry: SettingsRegistry | None=None) -> SessionService`: Return the shared SessionService (module singleton, REQ-020, ADR-065).
+- @logged(slow_threshold_ms=5) def `set_session_service(service: SessionService) -> None`: Install service as the shared default SessionService (REQ-023, ADR-083).
 - @logged(slow_threshold_ms=5) def `reset_session_service() -> None`: Reset the shared SessionService (for test isolation, REQ-020, ADR-065).
 
 ### `backend.settings` — src/backend/settings/
-exports: ListSpec, MemoryTemplateRepository, SelectOption, SelectSpec, SettingChanged, SettingDefinition, SettingKind, SettingStatus, SettingView, SettingsError, SettingsNotFoundError, SettingsRegistrationError, SettingsRegistry, SettingsValidationError, SliderSpec, Template, TemplateNotFoundError, TemplateRepository, TemplateStorageError, TemplateValidationError, ValueRepository, ValueStorageError, YamlTemplateRepository, YamlValueRepository, get_settings_registry, register_actions, reset_settings_registry
-#### src/backend/settings/__init__.py (69 lines)
+exports: ListSpec, MemoryTemplateRepository, SelectOption, SelectSpec, SettingChanged, SettingDefinition, SettingKind, SettingStatus, SettingView, SettingsError, SettingsNotFoundError, SettingsRegistrationError, SettingsRegistry, SettingsValidationError, SliderSpec, Template, TemplateNotFoundError, TemplateRepository, TemplateStorageError, TemplateValidationError, ValueRepository, ValueStorageError, YamlTemplateRepository, YamlValueRepository, get_settings_registry, register_actions, reset_settings_registry, set_settings_registry
+#### src/backend/settings/__init__.py (71 lines)
 Public API of the settings feature (module: backend.settings).
 #### src/backend/settings/exceptions.py (35 lines)
 Exception hierarchy for the settings feature.
@@ -1417,7 +1446,7 @@ Frozen Pydantic models for the settings feature.
 - def `is_valid_value(kind: SettingKind, value: Any, *, slider_min: float | None=None, slider_max: float | None=None, slider_step: float | None=None, select_options: tuple[str, ...] | None=None, pattern: str | None=None, min_length: int | None=None, max_length: int | None=None, min_value: float | None=None, max_value: float | None=None, list_spec: ListSpec | None=None) -> bool`: Return True iff value is valid for kind with the given params.
 - def `value_valid_for(d: SettingDefinition, value: Any) -> bool`: Return True iff value is valid for the setting d.
 - def `is_template_name_valid(name: str) -> bool`: Return True iff name matches the template name format.
-#### src/backend/settings/registry.py (433 lines)
+#### src/backend/settings/registry.py (467 lines)
 The settings registry.
 - @logged_class(slow_threshold_ms=250) class `SettingsRegistry`: Central registry of typed settings with template support.
   - `__init__(self, event_bus: EventBus | None=None, template_repository: TemplateRepository | None=None, value_repository: ValueRepository | None=None, permission_service: PermissionChecker | None=None) -> None`: Build a registry over the injected seams, falling back to the shared defaults.
@@ -1442,6 +1471,7 @@ The settings registry.
   - @requires_permission('settings.has_template') `has_template(self, name: str, principal: Principal=_SYSTEM_PRINCIPAL) -> bool`: Return True iff a template of name exists.
   - @requires_permission('settings.list_templates') `list_templates(self, principal: Principal=_SYSTEM_PRINCIPAL) -> list[Template]`: Return all stored templates, name-ordered.
 - @logged(slow_threshold_ms=5) def `get_settings_registry(required: bool=True) -> SettingsRegistry | None`: Return the shared default registry (singleton).
+- @logged(slow_threshold_ms=5) def `set_settings_registry(registry: SettingsRegistry) -> None`: Install registry as the shared default registry (singleton).
 - @logged(slow_threshold_ms=5) def `reset_settings_registry() -> None`: Reset the shared default registry (for tests).
 #### src/backend/settings/repository.py (372 lines)
 Template storage (repository pattern).
@@ -1624,7 +1654,7 @@ The user-management service (use cases, domain rules, events).
   - @requires_permission('usermanagement.deactivate_user') `deactivate_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Clear is_active, guarded first: the last active admin raises :class:LastAdminError (AC-018).
 
 ### src/
-#### src/main.py (221 lines)
+#### src/main.py (239 lines)
 Application entrypoint (the composition root).
 
 ### `tests.acceptance.authentication` — tests/acceptance/authentication/
@@ -1682,7 +1712,7 @@ Shared helpers for the authentication test suite.
 Shared fixtures for the logging feature test suite.
 - @pytest.fixture(scope='session') def `session_settings(_logging_session_setup: Any) -> Any`: The Settings instance used for the session's real setup.
 - @pytest.fixture def `log_records() -> Iterator[list[Any]]`: Capture log records for the duration of a test.
-#### tests/eventbus_test_helpers.py (86 lines)
+#### tests/eventbus_test_helpers.py (94 lines)
 Shared helpers for the event bus test suite.
 - class `BaseEvent`: Base event class used for isinstance-matching tests.
 - class `UserCreated(BaseEvent)`: A sample event (subclass of BaseEvent).
@@ -1747,7 +1777,7 @@ Shared helpers for the file-management test suite.
 - def `db_url(tmp_path: Path, name: str='files.db') -> str`: A cross-platform absolute SQLite file URL under tmp_path.
 - def `isolated_registry() -> SettingsRegistry`: A fresh settings registry backed by a temp-dir value repository.
 - def `make_service(repository: object, backend: StorageBackend | None=None, event_bus: object | None=None, registry: SettingsRegistry | None=None, register: bool=True) -> FileService`: Build a FileService with the given wiring.
-#### tests/logging_coverage_test_helpers.py (300 lines)
+#### tests/logging_coverage_test_helpers.py (327 lines)
 Shared helpers for the logging-coverage test suite.
 - class `CaptureRecord`: One captured log record, presented the way the suite reads records.
   - `__init__(self, text: str, level: str, fields: dict[str, Any]) -> None`
@@ -1770,7 +1800,7 @@ Shared helpers for the logging-coverage test suite.
 - @contextmanager def `failing_sink_attached() -> Iterator[None]`: Attach a :class:FailingHandler to the pipeline logger for a block (REQ-013 witness).
 - @contextmanager def `pipeline_capture(records: list[Any], level: str='DEBUG') -> Iterator[None]`: Attach a :class:PipelineCaptureHandler to the pipeline logger for a block.
 - @contextmanager def `capture_records(level: str='DEBUG') -> Iterator[_LiveMessages]`: Capture log records for the duration of the with block.
-#### tests/logging_test_helpers.py (397 lines)
+#### tests/logging_test_helpers.py (396 lines)
 Plain helper functions for the logging feature test suite.
 - def `wait_for_file_content(path: Path, predicate: Callable[[str], bool], timeout: float=15.0) -> bool`: Wait for a file written by an enqueued sink to satisfy predicate(content).
 - def `managed_handlers(logger: logging.Logger) -> list[logging.Handler]`: The handlers the pipeline owns on logger (harness handlers filtered out).
@@ -1847,7 +1877,7 @@ Shared helpers for the sessionmanagement test suite.
 - @pytest.fixture def `collector() -> EventCollector`
 - @pytest.fixture def `settings_registry() -> SettingsRegistry`
 - @pytest.fixture def `session_service(session_repository, collector, settings_registry)`
-#### tests/settings_test_helpers.py (195 lines)
+#### tests/settings_test_helpers.py (200 lines)
 Shared helpers for the settings test suite.
 - class `EventCollector`: A synchronous event publisher for exact event counting in tests.
   - `__init__(self) -> None`
@@ -1858,6 +1888,39 @@ Shared helpers for the settings test suite.
 - def `install_isolated_registry() -> SettingsRegistry`: Install a fresh isolated registry into the module singleton.
 - @contextmanager def `isolated_registry(install: bool=True) -> Iterator[None]`: Save the settings singleton, reset it, and restore it on exit (no leak).
 - def `restore_singleton(saved: SettingsRegistry | None) -> None`: Restore a previously saved singleton into the module singleton slot.
+#### tests/singleton_install_test_helpers.py (629 lines)
+Shared helpers for the singleton install witnesses (settings-public-registry-setter).
+- class `SingletonSlot(NamedTuple)`: One singleton-owning feature: its public module, its trio, and a fresh instance.
+  - `module: ModuleType`
+  - `installer: str`
+  - `getter: str`
+  - `reset: str`
+  - `factory: Callable[[], Any]`
+  - `stamper: Callable[[], tuple[Any, Probe]]`
+  - `saver: Callable[[], Any]`
+  - `dispose: Callable[[Any], None]`
+  - `warning_keyword: str`
+  - `reader_args: Callable[[], tuple[Any, ...]]`
+  - `install(self, instance: Any) -> Any`: Call the feature's public install operation (AttributeError until it exists).
+  - `read(self, *args: Any) -> Any`: Call the feature's public getter (args for a getter that needs them).
+  - `clear(self) -> None`: Call the feature's public reset operation.
+  - `save(self) -> Any`: What the slot holds right now — the object restore puts back after the witness.
+  - `restore(self, instance: Any) -> None`: Put instance back as the shared default; an empty save stays a plain reset.
+  - `new(self) -> Any`: Build a fresh, isolated instance of the feature's singleton class.
+  - `read_args(self) -> tuple[Any, ...]`: The arguments this feature's getter needs on a bare read.
+  - `stamp(self) -> tuple[Any, Probe]`: Build a fresh instance carrying a marker only that instance has.
+  - `stamp_identity(self) -> tuple[Any, Probe]`: Build a fresh instance and a probe recognizing exactly it, by identity.
+  - `name(self) -> str`: The feature's short name, for assertion messages.
+- class `EventWatcher`: Collect every event published on every bus a witness touches (change AC-013, INV-003).
+  - `__init__(self) -> None`
+  - `watch(self, instance: Any) -> None`: Subscribe the collector to instance once, if it is a bus (has subscribe).
+  - `drain(self) -> None`: Shut every watched bus down so its queued events are delivered first.
+- def `witness_slots(test: Callable[..., Any]) -> Callable[..., Any]`: Decorator: the decorated witness leaves every slot holding what it held before it.
+- @contextmanager def `widened_lazy_create_window(monkeypatch: pytest.MonkeyPatch, cls: type, hold_seconds: float=0.05) -> Iterator[_CreateWindow]`: Hold a creating thread inside cls.__init__ so a second reader can race it.
+- def `concurrent_reads(slot: SingletonSlot, count: int, args: tuple[Any, ...]=(), timeout: float=5.0) -> list[Any]`: slot.read(*args) from count threads released by one barrier.
+- def `non_tracing_warnings(records: list[Any]) -> list[Any]`: Captured WARNING records that are not the tracing decorator's own output.
+- def `concurrent_installs(slot: SingletonSlot, instances: list[Any], timeout: float=5.0) -> list[BaseException]`: slot.install(instance) for every instance, each from its own barrier-released thread.
+- @contextmanager def `record_constructions(cls: type) -> Iterator[list[Any]]`: Every cls instance whose **constructor completed** inside the block.
 #### tests/tooling_test_helpers.py (67 lines)
 Shared helpers for the test tooling (polyfactory, time-machine, respx).
 - def `model_factory[T: BaseModel](model: type[T]) -> type[ModelFactory[T]]`: A polyfactory factory class for model (valid default test data).

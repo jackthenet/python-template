@@ -23,7 +23,7 @@ import time
 from typing import Any
 
 from eventbus_test_helpers import isolated_event_bus
-from singleton_install_test_helpers import SLOTS, SingletonSlot, non_tracing_warnings
+from singleton_install_test_helpers import SLOTS, SingletonSlot, non_tracing_warnings, witness_slots
 
 # NFR-002: "under 1 ms (median)". The margin is generous: the install is a slot
 # write plus one log record, so the assertion fails only on a real regression, not
@@ -73,6 +73,7 @@ def _install_median(slot: SingletonSlot, *, replacing: bool, log_records: list[A
     return sorted(timings)[len(timings) // 2]
 
 
+@witness_slots
 def test_nfr_002_install_latency(log_records: list[Any]) -> None:
     """NFR-002 (settings-public-registry-setter.md): both install paths install in under 1 ms (median), with the pipeline at DEBUG."""
     measured: dict[str, dict[str, float]] = {}

@@ -25,7 +25,7 @@ import importlib
 import inspect
 from typing import Any, Final
 
-from singleton_install_test_helpers import SLOTS
+from singleton_install_test_helpers import SLOTS, witness_slots
 
 from backend.permissions.catalog import PermissionCatalog
 
@@ -283,6 +283,7 @@ def _install_error(slot: Any, instance: Any) -> BaseException | None:
     return None
 
 
+@witness_slots
 def test_ac_007_signature_takes_concrete_instance() -> None:
     """AC-007 (REQ-004, REQ-014): each install operation is exported and takes exactly one concretely annotated parameter."""
     for slot in SLOTS:
@@ -309,6 +310,7 @@ def test_ac_007_signature_takes_concrete_instance() -> None:
         slot.dispose(instance)
 
 
+@witness_slots
 def test_ac_008_no_runtime_type_check_no_new_error() -> None:
     """AC-008 (REQ-005): a valid instance installs without an exception, no type check guards the parameter, no new error type appears."""
     for slot in SLOTS:
