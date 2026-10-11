@@ -474,7 +474,7 @@ migrations/
 .agents/ — 17 files (skills)
 .github/ — 9 files (CI and tooling)
 .vscode/ — 2 files
-docs/ — 234 files (process record)
+docs/ — 236 files (process record)
 userdocs/ — 2 files (published docs)
 
 ## Packages
@@ -496,7 +496,7 @@ usermanagement multi-role amendment (member to user; role column to roles list)
 - def `downgrade() -> None`
 
 ### scripts/
-#### scripts/check_traceability.py (153 lines)
+#### scripts/check_traceability.py (190 lines)
 Check referential integrity of the traceability matrix (docs/verification/traceability.md).
 - @dataclass class `MatrixRow`: One data row of a matrix table.
   - `line: int`
@@ -506,7 +506,16 @@ Check referential integrity of the traceability matrix (docs/verification/tracea
 - def `spec_files(spec_dir: Path) -> list[Path]`: Spec files that define normative IDs (the template's IDs are formatting examples).
 - def `defined_ids(spec_dir: Path) -> set[str]`: Every normative ID defined by any spec.
 - def `test_names(test_dir: Path) -> set[str]`: Every test function name defined anywhere under tests/.
+- def `table_blocks(matrix_path: Path) -> list[list[tuple[int, list[str]]]]`: Every pipe-table in the matrix as (line number, cells); the prose between tables is dropped.
+- def `status_index(header: list[str]) -> int`: Index of a table's Status column, or -1 when the table has none (such tables are not rows).
+- def `matrix_row(line_no: int, cells: list[str], status_idx: int) -> MatrixRow`: One data row: the normative IDs and backticked test names it cites, plus its Status cell.
+- def `table_rows(block: list[tuple[int, list[str]]]) -> list[MatrixRow]`: Data rows of one block; a block too short to be a table, or without a Status column, has none.
 - def `matrix_rows(matrix_path: Path) -> list[MatrixRow]`: Parse the matrix tables, keeping only tables that have a Status column.
+- def `ids_without_row(matrix_path: Path, rows: list[MatrixRow], specs: set[str]) -> list[str]`: Rule 1: every REQ/AC defined by a spec has at least one matrix row.
+- def `rows_citing_undefined_ids(matrix_path: Path, rows: list[MatrixRow], specs: set[str]) -> list[str]`: Rule 2: no matrix row references an ID that no spec defines.
+- def `rows_citing_missing_tests(matrix_path: Path, rows: list[MatrixRow], tests: set[str]) -> list[str]`: Rule 3: every backticked test function cited by a matrix row exists under tests/.
+- def `status_token(status: str) -> str`: The vocabulary token a Status cell starts with; the cell itself when it starts with no letters.
+- def `rows_with_undeclared_status(matrix_path: Path, rows: list[MatrixRow]) -> list[str]`: Rule 4: every Status cell uses a declared value.
 - def `check(matrix_path: Path, rows: list[MatrixRow], specs: set[str], tests: set[str]) -> list[str]`: Return one message per referential-integrity violation.
 - def `main() -> int`
 #### scripts/make_map.py (581 lines)
@@ -517,19 +526,27 @@ Generate the repository structure map (spec: docs/specs/structure-map.md).
   - `tree: ast.Module`
   - `line_count: int`
 - def `main(argv: Sequence[str] | None=None) -> int`: Run the generator and return its exit code.
-#### scripts/validate_task_dag.py (134 lines)
+#### scripts/validate_task_dag.py (161 lines)
 Validate task DAG: acyclicity, well-formedness, and sync.
 - def `load_tasks(path: Path) -> list[dict]`: Load tasks from a JSON task DAG file.
 - def `check_well_formed(tasks: list[dict]) -> list[str]`: Check that every task has required fields.
+- def `build_graph(tasks: list[dict]) -> dict[str, list[str]]`: Map each task id to its dependency ids; a task without an id contributes nothing.
+- def `cycle_message(path: list[str], neighbor: str) -> str`: The one 'Cycle detected: ...' line a back edge to a GRAY neighbor produces.
+- def `visit(graph: dict[str, list[str]], node: str, color: dict[str, int], path: list[str], failures: list[str]) -> bool`: Walk the dependency graph from node and return True once a cycle has been recorded.
 - def `check_acyclic(tasks: list[dict]) -> list[str]`: Check that the dependency graph is acyclic using DFS.
 - def `check_sync(docs_path: Path, runner_path: Path) -> list[str]`: Check that docs/tasks and .github/task-runner are in sync.
 - def `main() -> int`
-#### scripts/verify_spec.py (123 lines)
+#### scripts/verify_spec.py (151 lines)
 Verify specification traceability against test functions.
 - def `parse_spec(spec_path: Path) -> dict[str, list[str]]`: Extract stable IDs from a spec file.
 - def `find_test_functions(test_dir: Path) -> dict[str, list[str]]`: Map test category directories to test function names.
 - def `check_traceability(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> list[str]`: Run traceability checks and return failure messages.
-- def `main() -> int`
+- def `configure_stdout() -> None`: Force UTF-8 stdout so the box-drawing/check-mark characters print on Windows.
+- def `print_requirement_lines(spec_ids: dict[str, list[str]]) -> None`: Print one line per requirement.
+- def `print_acceptance_criterion_lines(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> None`: Print one line per acceptance criterion: matched by its number against every test name.
+- def `print_invariant_lines(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> None`: Print one line per invariant: matched by its number against the property-test names only.
+- def `print_traceability_summary(failures: list[str]) -> int`: Print the FAIL block (one indented line per failure) or the PASS line, and return the exit code.
+- def `main() -> int`: Run the spec checks and print the report, then the traceability summary.
 
 ### `backend.authentication` — src/backend/authentication/
 exports: AttemptTracker, AuthEvent, AuthService, AuthenticationError, InMemoryAttemptTracker, InvalidCredentialsError, InvalidPasskeyResponseError, InvalidResetTokenError, InvalidSessionError, LoginFailed, LoginRequest, LoginResult, LoginSucceeded, Logout, PasskeyCredentialNotFoundError, PasskeyDeleted, PasskeyHijackError, PasskeyLoginBegin, PasskeyLoginComplete, PasskeyRegistered, PasskeyRegistrationBegin, PasskeyRegistrationComplete, PasswordReset, PasswordResetComplete, PasswordResetCompleted, PasswordResetRepository, PasswordResetRequest, PasswordResetRequested, PyWebAuthnProvider, Session, SessionInfo, SessionRepository, SqlitePasswordResetRepository, SqliteSessionRepository, SqliteWebAuthnCredentialRepository, VerifiedAssertion, VerifiedCredential, WebAuthnCredential, WebAuthnCredentialRead, WebAuthnCredentialRepository, WebAuthnProvider, hash_token, new_token, register_settings

@@ -483,7 +483,7 @@ Each AC is stated against the REQ it satisfies; the AC→REQ column is the cover
 | NFR-002 | Size | The generated `STRUCTURE.md` for the current repository is **≤ 2 200 lines**. Measured projection for the base-commit tree with the REQ-016 default visibility applied: **≈1 845 lines** — tree 424 (9 root files + 332 code-dir entries + 78 code dirs + 5 count lines) + Packages 1 413 (117 module headers + 116 summaries + 11 `exports:` lines + 32 group headers + 222 public class headers + 353 field lines after the REQ-017 cap + 399 public method lines + 163 public function lines) + ≈8 lines of document chrome. The committed map is generated for the **post-change** tree and maps itself: `scripts/make_map.py` is in Packages scope (REQ-011) and adds ≈25 lines, and the three new test files add 3 tree entries — projected **≈1 875** at the structure-map change's own commit. The ceiling is a **factual size claim about the current repository**, so it is restated against the measured map rather than a projection: `main`'s committed map measures **1 941 lines**, `settings-public-registry-setter` adds **+63** (7 new test directories, ≈20 new test files, the newly traced install operations), and this branch's map measures **2 004 lines** with `make_map --check` exiting 0 — margin **≈196 lines**. The growth is what pushed the tree past the 2 000-line ceiling, so the ceiling is amended and the content policy is left unchanged. The per-class field cap (REQ-017) is the safety valve. **Deviation from Q-7:** the ~900–1 000 line budget in the question file is arithmetically incompatible with Q-8/Q-9/Q-19/Q-20 at this repository size; the content policy is implemented and the ceiling raised. The knobs that would reach ~1 000 are recorded in `docs/verification/structure-map.md`. |
 | NFR-003 | Dependency | `uv run deptry .` reports no unused, missing or misplaced dependency after the change (the generator is stdlib-only). |
 | NFR-004 | Quality gates | `uv run mypy scripts/` and `uv run mypy src/` are clean; `uv run ruff check .` and `uv run ruff format --check .` are clean (both clean at the base commit; `mypy scripts/` has the one REQ-025 error). |
-| NFR-005 | Complexity | The new test files stay under `[tool.complexipy] max-complexity-allowed = 15` (`paths = ["src", "tests"]`); `scripts/` is not analyzed by complexipy. |
+| NFR-005 | Complexity | The new test files stay under `[tool.complexipy] max-complexity-allowed = 15`. The gate analyses `paths = ["src", "tests", "scripts"]` — widened to include `scripts/` by the `complexipy-scripts` change (v4, ADR-087), so `scripts/` **is** analyzed by complexipy; the CI `complexity` job repeats the three paths explicitly so a bad config fails loudly. |
 | NFR-006 | Maintainability | `scripts/make_map.py` targets ≈250 lines. This is a **target, not a gate**: Phase 5 records the actual line count. |
 | NFR-007 | Portability | The **render** is byte-identical on Windows and on `ubuntu-latest` for the same tree (REQ-020, LF newlines); the checked-out file's line endings may differ (EDGE-016) and `--check` tolerates exactly that. |
 
@@ -639,6 +639,15 @@ evidence of this spec's coverage (see `docs/verification/structure-map.md`, find
 
 ## 15. Changelog
 
+- v4 (2026-10-11): NFR-005 amended — the descriptive tail "`scripts/` is not analyzed by complexipy" is
+  replaced by the widened gate scope: `[tool.complexipy] paths = ["src", "tests", "scripts"]` with the
+  ceiling unchanged at `max-complexity-allowed = 15`, mirrored in the explicit positional args of the
+  `complexity` job in `.github/workflows/quality.yml`. The normative clause — the structure-map test
+  files stay under 15 — is unchanged, and its witness `test_nfr_005_complexipy_threshold_holds` is
+  neither weakened nor amended (it keeps pinning its own `src`/`tests` pair, so it still passes). No ID
+  renumbered, restated or deleted. Change `complexipy-scripts` (DOCS/CHORE, Spec Amendment Workflow,
+  amendment rides the change PR); see `docs/verification/complexipy-scripts.md` and
+  `docs/decisions/ADR-087-complexipy-scope-extended-to-scripts.md`.
 - v3 (2026-10-10): NFR-002 amended — ceiling raised 2 000 → 2 200 lines; projection recomputed against
   the measured 2 004-line post-change map (main 1 941 + 63 from settings-public-registry-setter). No ID
   renumbered, restated or deleted. Change `settings-public-registry-setter` (CROSS-CUTTING, Spec
