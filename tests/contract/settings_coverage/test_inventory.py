@@ -185,14 +185,20 @@ def test_no_secret_settings() -> None:
     the full name check, and a string value never carries a scheme-prefixed connection string
     (an empty value is the absence of a value, not a secret — mail registers ``smtp_username``
     and ``smtp_password`` with the empty-string default).
+
+    The keys are read from **the registry this guard built**, not from ``INVENTORY`` (S6.2
+    finding F-2): a credential-named key registered by a feature that has no ``INVENTORY`` row
+    would otherwise pass NFR-002 and every inventory guard, because both sides of the check
+    would be the same hand-written table.
     """
     reg = _registry_with_all_features()
-    named = {key for key in INVENTORY if any(part in key.lower() for part in _SECRET_NAME_PARTS)}
+    keys = {view.key for view in reg.views()}
+    named = {key for key in keys if any(part in key.lower() for part in _SECRET_NAME_PARTS)}
     assert named == set(NFR_002_CREDENTIAL_EXEMPTIONS), (
         "NFR-002: a settings key named like a password/secret/credential must be an exempted "
         f"credential setting by name; found {sorted(named)}, exempted {sorted(NFR_002_CREDENTIAL_EXEMPTIONS)}"
     )
-    for key in INVENTORY:
+    for key in keys:
         value = reg.get_value(key)
         if isinstance(value, str) and value:
             assert "://" not in value[:4], f"NFR-002: {key} holds a connection string"
