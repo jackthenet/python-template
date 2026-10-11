@@ -114,10 +114,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: no `if __name__ == "__main__"` block in `src/main.py` (file ends at `:221` with `setup_logger()`), no `[project.scripts]` in `pyproject.toml`, and `README.md:39` says "There is no app or CLI entry point to run yet — `src/main.py` is startup wiring, not a command."
 - **Question:** Add `if __name__ == "__main__": build_composition_root()` (so running the file keeps doing what it does today), or add nothing and let the file become import-only?
 - **Recommended:** Add the two-line `__main__` guard calling the factory — it preserves the current "run the file → the app is wired" behavior at zero design cost, and inventing a CLI/`[project.scripts]` entry point is out of scope (YAGNI, README would need a rewrite).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Add the `__main__` guard** — the recommendation, accepted. `src/main.py` keeps `if __name__ == "__main__": build_composition_root()`, so `python src/main.py` keeps doing what it does today; no CLI, no `[project.scripts]` entry point (that stays a Q-25 non-goal).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 5, 2026-10-11)
 
 ## Q-07 — Where does the composition root live: `src/main.py`, `src/backend/shared/`, or a new module?
 
@@ -150,10 +150,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured order (see preamble). Ordering constraints stated in the code/specs: the registry install (`:138`) must precede the six `register_*_settings` calls (`settings-public-registry-setter` REQ-011: "the install therefore precedes the registrations, which is what makes `settings-coverage.md` REQ-002 … literally true"); the `PermissionService` is "created (and set on the proxy) **before** the settings registration, so the registry's enforced methods resolve the real service" (`:150-151`); the session repository is built before the `PermissionService` which takes it as `session_lookup` (`:140-143`, REQ-017/ADR-073); `setup_logger()` reads the logging settings live so it must follow `register_logging_settings` (`:165-169`); AGENTS.md: "`setup_logger()` exactly once … before any feature code runs", "Feature-owned registration … Call it at startup to register the feature's settings. The feature then reads its settings live"; `search.md` §12.8: "feature settings, feature actions, then the three `register_source` calls **after the repositories exist**".
 - **Question:** Declare the exact current order an invariant (INV: the factory performs the same calls in the same order, with the four load-bearing precedences named), or only the four precedences, allowing the rest to be re-grouped?
 - **Recommended:** Declare the full order invariant with the four precedences named as the reason — re-grouping buys nothing (the diff is a move, not a redesign) and every un-named freedom is a silent behavior change the suite cannot see.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Full order invariant, and the loop's element order is part of it** — the user chose the third option, going beyond the recommendation. INV: the factory performs the same calls in the same order, with the four load-bearing precedences named, **and** the registration loop's element order is normative. This is required by the `startup-settings-registration-gaps` **Q-14** decision (the six `register_*_settings` one-liners become an ordered collection of the nine `register_settings` callables iterated once), so the factory moves a loop, not six lines, and the list order is now part of the wiring contract. The **Q-24** guard asserts it (see that entry).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 4, 2026-10-11)
 
 ## Q-10 — Is the factory safe to call twice, and what must the caller reset?
 
@@ -162,10 +162,21 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured in one process: `importlib.reload(main)` succeeds, but the second pass leaves `get_search_service()` returning the **first** instance (`search singleton identical: True`) whose `_settings_registry` is the **old** registry (`search service registry is the NEW one: False`) — because `get_search_service` "ignores its arguments" after the first call (`src/backend/search/service.py:599-617`). `register_settings` twice on one registry raises `SettingsRegistrationError` (measured; ADR-036 states it). `register_source` same-name re-registration replaces atomically / is a no-op when identical. Reset helpers that exist: `reset_settings_registry()`, `reset_event_bus()`, `reset_search_service()`, `reset_permission_service()`, `reset_session_service()`. Each call also opens 4 SQLite engines and creates files.
 - **Question:** Specify the factory as **single-shot per process** (a second call requires the caller to reset the five singletons first, documented in the docstring and used by the test fixture), or make it idempotent/self-resetting?
 - **Recommended:** Single-shot, documented, with the test fixture calling the five `reset_*` helpers — auto-resetting inside the factory would hide the stale-singleton hazard from every other caller and would silently discard instances other code may still hold.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Idempotent / self-resetting** — the user chose the second option, **against** the recommendation, refined by **Q-10b** below: a second `build_composition_root()` call resets the shared defaults itself, so the caller does not have to. The docstring states exactly which slots are reset and which are reused.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 5 → Q-10b, 2026-10-11)
+
+### Q-10b — What exactly does a second factory call reset (follow-up to Q-10)
+
+- **Step:** P.3 Answer — round 5 follow-up (raised by the orchestrator from the Q-10 answer)
+- **Why needed:** `reset_event_bus()` is specified to **shut the bus down** (`src/backend/eventbus/eventbus.py:312-320`, event-bus REQ-005 / EDGE-007), so a factory that resets all five slots would drain and stop a running event bus on every second build and leave already-subscribed handlers attached to a dead bus.
+- **Question:** Reset all five slots, reset the four non-bus slots and reuse the live bus, or go back to single-shot?
+- **Recommended:** Reset the four non-bus slots (settings, permissions, search, session) and reuse the live event bus — self-resetting without ever draining a running bus.
+- **Answer:** **Self-reset, but never the bus** — the recommendation, accepted. A second call resets `settings`, `permissions`, `search` and `session` slots and **reuses the existing event bus** (no `reset_event_bus()` call, so no drain and no shutdown); handlers subscribed to the live bus keep their bus. The test fixture no longer needs the five `reset_*` calls for the factory's own state (it still uses them for its own isolation), and the docstring names the four reset slots and the reused bus.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 5, 2026-10-11)
 
 ## Q-11 — How does an in-process wiring test isolate the filesystem?
 
@@ -174,10 +185,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: `import main` in an empty temp dir creates `data/{authentication,permissions,filemanagement}.db`, `data/usermanagement/users.db`, `logs/app.log`, `settings/values.yaml`. `tests/acceptance/settings_coverage/test_wiring.py` runs its subprocess with `cwd=_REPO_ROOT`, so today it writes those paths **into the repository root** (they exist there and are gitignored at `.gitignore:225` `/settings/`, `:230` `/data/`, `:231` `/logs/`); `tests/acceptance/permissions/test_composition_wiring.py` instead uses `cwd=tmp_path`. AGENTS.md (settings feature): "Test registries MUST pass an explicit isolated value repository (e.g. `YamlValueRepository(tempfile.mkdtemp())`) to avoid cross-test contamination". Note the existing AC-003 test pre-installs a temp-dir registry at `test_wiring.py:18` but `main.py:138` replaces it, so that pre-install does **not** isolate the value directory (measured: `settings/values.yaml` still created).
 - **Question:** Isolate by parameters (tmp-path DB URLs + tmp storage root + `YamlValueRepository(tmp_path)` per Q-05), or by `monkeypatch.chdir(tmp_path)` around a zero-parameter call?
 - **Recommended:** Parameters for the DB URLs/storage root/value repository (they are needed anyway for the container to be embeddable) plus `monkeypatch.chdir(tmp_path)` as a belt-and-braces guard for the paths that stay hardcoded (`logs/`, the `settings` default) — chdir alone leaves the singleton-collision problem of Q-10 unsolved.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Parameters + `chdir` belt-and-braces** — the recommendation, accepted. Factory parameters carry the tmp-path DB URLs, the tmp storage root and `YamlValueRepository(tmp_path)`; `monkeypatch.chdir(tmp_path)` additionally guards the paths that stay hardcoded (`logs/`, the `settings` default).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 6, 2026-10-11)
 
 ## Q-12 — Rewrite the two subprocess wiring tests, or keep them and add new ones?
 
@@ -186,10 +197,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** `tests/acceptance/settings_coverage/test_wiring.py::test_main_wires_all_features` (settings-coverage AC-003) and `tests/acceptance/permissions/test_composition_wiring.py::test_ac_020_composition_root_validates_session_token` (user-roles-permissions AC-020, added by issue `session-lookup-unwired`). Matrix rows: `docs/verification/traceability.md` Settings Coverage Matrix `| REQ-002 | AC-003 | test_main_wires_all_features | GREEN … |` and the `## Issue: session-lookup-unwired` section row. `scripts/check_traceability.py` (CI `traceability` job) "fails when a row cites a test function that no longer exists under `tests/`". The AC-020 test reaches `main._user_repository`, `main._session_repository`, `main._permission_service` — private globals that disappear with the factory.
 - **Question:** Rewrite both tests to call `build_composition_root()` in-process (and update the two matrix rows in the same commit), or keep them as subprocess tests that run `import main; build_composition_root()`?
 - **Recommended:** Rewrite both in-process against the returned container and update the two traceability rows in the same commit — the tests assert the wiring, not the import mechanism, and keeping a subprocess per wiring assertion is the exact cost this change removes; leaving the rows stale fails the `traceability` CI job.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Rewrite both in-process** — the recommendation, accepted. Both existing subprocess wiring tests call `build_composition_root()` in-process and assert on the returned container; the two `docs/verification/traceability.md` rows are updated in the same commit. Note the interaction with `startup-settings-registration-gaps` **Q-22**: that change's strengthened witness keeps its subprocess form (it asserts `main`'s module-level wiring, which still exists until this change lands) and carries the repo-root `settings/` hygiene fixture; this change converts the wiring assertions to in-process calls.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 5, 2026-10-11)
 
 ## Q-13 — What new tests does this change require (and is a test the point of it)?
 
@@ -198,10 +209,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** 815 test functions exist under `tests/` (measured `grep -rho "def test_" tests --include=*.py | wc -l`). Nothing today can assert the object graph without a subprocess. AGENTS.md REFACTOR Phase 5: "the full suite MUST be GREEN, zero test changes"; the light-tier and fast-path rules do not apply to a REFACTOR.
 - **Question:** Accept that this change **must** change tests (the two wiring tests) and add exactly two new ones — (a) the factory returns a fully wired graph (the six features' settings registered, `session_lookup` wired, the three search sources registered), (b) importing `main` creates no files/directories — or a larger matrix?
 - **Recommended:** Exactly those two new tests plus the two rewritten ones — (a) pins the wiring the refactor must preserve, (b) pins the acceptance signal in the TODO; anything more (per-service assertions) duplicates the features' own suites (ponytail: smallest check that fails if the logic breaks).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Two new + two rewritten** — the recommendation, accepted. (a) the factory returns a fully wired graph (every wired feature's settings registered, `session_lookup` wired, the three search sources registered), (b) importing `main` creates no files or directories. No per-service matrix. Test-side note: the Q-15 install decision adds one assertion to (a) — `get_permission_service()` / `get_session_service()` are the instances the factory returned — recorded there rather than as a third new test.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 6, 2026-10-11)
 
 ## Q-14 — Do the three never-called `register_settings` calls get added by this change?
 
@@ -223,10 +234,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: `src/main.py:153` builds `PermissionService` and `:202` builds `SessionService` **directly**; neither is installed into its module singleton (`get_permission_service()` at `src/backend/permissions/service.py:529` would lazily build a *different* instance with its own `SqliteRoleRepository`/`SqliteGrantRepository`/`UserManager`; `get_session_service()` raises `ValueError` without a repository). No `src/` code calls those two getters today (measured), so the divergence is latent. `settings-public-registry-setter` owns the install mechanism for five singletons and its REQ-011 covers only the settings registry site in `main.py`.
 - **Question:** Preserve today's non-install (out of scope, record as a follow-up), or install both through the setters as part of the factory?
 - **Recommended:** Preserve the non-install and record a follow-up TODO — installing them changes which instance other code resolves (observable), and the install mechanism is owned by the in-flight `settings-public-registry-setter`; a REFACTOR/CROSS-CUTTING extraction must not smuggle it in.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Install both in the factory now** — the user asked back ("why should they be installed — is it a better architecture?"), was answered with the measurements (`src/main.py:171` builds `PermissionService` and injects it at `:200,:210,:216,:217,:219,:223,:233`; **no** `src/` call site of `get_permission_service()` / `get_session_service()` exists today, so the second-instance defect is latent; three of the five singletons **are** installed today — `set_settings_registry` at `:156`, `get_event_bus()` at `:178`/`:231`, `get_search_service(...)` at `:230` — so the composition root is inconsistent 3-installed / 2-not), and chose to install both. Consequences: the factory calls `set_permission_service(...)` and `set_session_service(...)`; `get_permission_service()` / `get_session_service()` start returning the wired instances (an observable change, so this change is not a pure REFACTOR — consistent with its **Q-01** CROSS-CUTTING classification); the install is not retroactive and logs one WARNING when it replaces a non-empty slot; and `composition-root-singleton-install` is **absorbed** — see **Q-30**.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 5 → Q-30, 2026-10-11)
 
 ## Q-16 — Do the two lazy cycle proxies move unchanged, or is the cycle re-designed?
 
@@ -331,10 +342,22 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** `settings-coverage.md` REQ-005: "Reading an unregistered key falls back to the feature's original hardcoded default and logs a warning (the feature works without wiring)"; AC-006 the same. Measured: after `import main`, the three never-registered features' keys are `False` and everything still runs — proof that a missing registration does not fail the suite. ADR-036 consequence: "Feature code run outside `main.py` … has unregistered settings — but the spec's fallback (REQ-005) makes features work without wiring."
 - **Question:** Require the new acceptance test to assert the **exact registered-key set** for the six wired features (so a dropped `register_*` call fails the test), or only the four keys the current subprocess test checks (`logging.log_level`, `authentication.session_ttl`, `usermanagement.roles`, `eventbus.max_queue_size`)?
 - **Recommended:** Assert the exact set of registered keys for the six wired features (one assertion, derived from the current behavior, with the three unregistered features asserted absent) — it is the only guard that turns the silent-fallback failure mode into a RED test, and it also pins Q-14's out-of-scope decision.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Full set + loop order assertion** — the user chose the third option, going beyond the recommendation. The acceptance test asserts the **exact registered-key set** the factory produces — re-derived from `main` after `startup-settings-registration-gaps` lands, i.e. **all nine features / 34 keys**, not six — **and** that the registration loop's element order matches the **Q-09** ordering invariant. The "three unregistered features asserted absent" half of the recommendation is void: after that ISSUE merges, all nine are registered.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 6, 2026-10-11)
+
+## Q-30 — `composition-root-singleton-install` is absorbed by the Q-15 decision
+
+- **Step:** P.3 Answer — round 6 follow-up (raised by the orchestrator from the Q-15 answer)
+- **Why needed:** The user's Q-15 answer takes over the entire scope of a live TODO, and AGENTS.md's backlog-overlap rule requires the absorbed TODO's disposition to be recorded before either change proceeds.
+- **Context:** `docs/todo/composition-root-singleton-install.md` (FEATURE, PREPARING, 28 open questions): Goal = "Have `src/main.py` install the `PermissionService` and `SessionService` it wires as the shared defaults"; In scope = the install calls + an acceptance witness that `get_*_service()` returns the wired instance; Out of scope = the factory extraction itself. Nothing else is in its scope.
+- **Question:** Drop it as absorbed, keep it as the witness owner, or reverse Q-15 and leave the installs to it?
+- **Recommended:** Drop it as absorbed — its whole scope is now this change's work; its records move to the archive folders and its 28 questions never need answering.
+- **Answer:** **Drop it as absorbed** — the recommendation, accepted. `composition-root-singleton-install` gets `Status: DROPPED` with the absorb decision recorded in its `## Value triage` section, and its TODO + question records move to `docs/todo/archive/` and `docs/questions/archive/`. This change owns both halves: the two install calls and the witness assertion that `get_permission_service()` / `get_session_service()` return the factory's instances.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 6, 2026-10-11)
 
 ## Q-25 — Scope boundary: what is explicitly NOT in this change (non-goals)?
 
@@ -379,10 +402,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** The AC-020 test needs the user repository, the session repository and the permission service; the AC-003 test needs the settings registry; the search wiring needs the search service (and its registered sources). Today's globals are 12 objects (`_catalog`, `_settings_registry`, `_session_repository`, `_permission_service`, `_user_repository`, `_user_manager`, `_auth_service`, `_file_repository`, `_file_service`, `_mail_service`, `_session_service`, `_search_service`) plus the two proxies (internal, never read outside the module).
 - **Question:** Expose all 12 objects (plus the event bus?) as `App` fields, or only the subset the tests and an embedder need (registry, permission service, user manager + repository, session repository/service, file repository/service, auth service, mail service, search service, catalog, event bus), keeping the lazy proxies private?
 - **Recommended:** Expose the 12 wired objects plus the event bus, keep the two proxies and the internal ordering private — every field is either read by a test or is a service an embedder must reach, and the proxies are a wiring detail, not API.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **All 14 including the proxies** — the user chose the third option, **against** the recommendation. The container exposes every wired object including the two lazy cycle proxies (`_LazyPermissionService` and the session-lookup proxy), so the two-phase cycle wiring is visible and reachable from outside. Consequences to carry into P.4: the proxies become public API (they need docstrings and types under ruff `D` / mypy, and the `type: ignore` comments of **Q-17** stay), and the Q-16 verbatim-move answer now preserves a public surface, not a private detail.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 4, 2026-10-11)
 
 ## Q-29 — If reclassified: branch, spec, and approval PR consequences
 

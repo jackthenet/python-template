@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** PREPARING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** DROPPED  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
 - **Change type:** FEATURE  <!-- P.2 must confirm: ISSUE if an approved spec already requires the composition root to install the shared defaults, FEATURE if it only says the getters are "for application use" -->
 - **Created:** 2026-10-10
 - **Question file:** `docs/questions/composition-root-singleton-install.md`
@@ -44,7 +44,7 @@ Measured at `main` (2026-10-10): `src/main.py` constructs the permission and ses
 - **Beneficiary:** future feature consumers (`backend-api`, `api-keys`, `notifications`) get one correctly-configured service per process instead of an accidental second one — the class of bug where a permission check uses a different principal store than the wiring.
 - **Score: 3/5** — real value and small diff, but the defect is latent today (no `src/` caller of the getters) and it partly overlaps two other changes that must land first.
 - **Recommendation:** implement (after `settings-public-registry-setter` merges; P.2 should decide whether it is cheaper as an extension of that change's REQ-011)
-- **Decision:** <the user's answer + date>  <!-- recorded when the user answers; a dropped TODO moves to docs/todo/archive/ with its question file -->
+- **Decision:** **drop — absorbed by `composition-root-factory`** (user, 2026-10-11, `composition-root-factory` **Q-15** + **Q-30**). The user answered factory Q-15 against P.2's recommendation and had the factory install `set_permission_service(...)` / `set_session_service(...)` itself; Q-30 then confirmed this TODO's whole scope (the two install calls + the identity witness) is now that change's work, so it is dropped rather than kept as a witness-only change. Its acceptance signal moves verbatim into `composition-root-factory`'s new wiring test. Both records move to the archive folders; its 28 unanswered questions are never answered.  <!-- recorded when the user answers; a dropped TODO moves to docs/todo/archive/ with its question file -->
 
 ## Acceptance signal (plain language)
 After running the composition root, `get_permission_service()` and `get_session_service()` return the very objects `src/main.py` built (identity check), and a test fails if a later change drops an install.
