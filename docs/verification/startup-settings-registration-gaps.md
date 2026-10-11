@@ -735,3 +735,122 @@ AGENTS.md: *"Spec coverage = 100% is required. Code coverage is a secondary qual
 - **Boundaries and architecture rules hold** (feature-owned `feature_settings` modules, package-root imports in the composition root, `shared/` untouched, no new dependency).
 
 **Findings: 9 — 0 blockers, 4 minor (2 open for S6.3: findings 1 and 2), 5 notes.** **Blockers open: 0** — the change may proceed to S6.2/S6.3; the two open minors must be either fixed in this PR or recorded as follow-ups in the S6.3 review report, and §13.5's D-4 evidence row must be corrected either way.
+
+---
+
+## 15. Review — traceability + boundaries (S6.2) — 2026-10-11, HEAD `8a2939d`, read-only
+
+**Inputs (bounded, per AGENTS.md Phase 6 / P-27):** the 11 matrix rows §7.4 lists this change updated plus the
+Settings Coverage section note; this record's §2, §4, §7.4, §13.4, §14; the final code state (`src/main.py`,
+`src/backend/settings/registry.py`, `src/backend/permissions/feature_settings.py`,
+`src/backend/sessionmanagement/feature_settings.py`) and the five test modules this change wrote or re-derived; the
+six amended specs. **No `src/` or `tests/` file was touched; the full suite was not re-run** (Phase 5 §7.1 owns it).
+Targeted run of the cited witnesses (`tests/acceptance/settings_coverage`, `tests/contract/settings_coverage`,
+`tests/acceptance/sessionmanagement/test_settings.py`, `tests/acceptance/logging_coverage`,
+`tests/integration/singleton_install/test_composition_root.py`,
+`tests/acceptance/filemanagement/test_filemanagement.py::test_ac_029_default_local_backend`,
+`tests/acceptance/permissions/test_system_principal.py::test_system_set_settings_alias_sync`) →
+**44 passed in 8.84s** (S6.1's 43 plus the permissions alias test added to this run).
+
+### 15.1 Traceability — the 11 updated rows, row by row
+
+Programmatic audit (parse `docs/verification/traceability.md`, resolve every cited function against the function
+names collected from `tests/` by the same rule `scripts/check_traceability.py` uses):
+
+| # | Matrix line | Row | Cited witness | Exists | Cell carries change name + date + measured run | ID defined in the section's spec |
+|---|---|---|---|---|---|---|
+| 1 | 374 | `settings-coverage.md` REQ-002 / AC-003 | `test_main_wires_all_features` | yes | yes — name + 2026-10-11 + `891 passed, 1 skipped in 273.91s at 736a24c` + S5.1 | yes |
+| 2 | 393 | REQ-017 / AC-022 | `test_key_prefix` | yes | yes (same) | yes |
+| 3 | 394 | REQ-018 / AC-023 | `test_category_group` | yes | yes (same) | yes |
+| 4 | 395 | REQ-019 / AC-024 | `test_inventory_matches` | yes | yes (same) | yes |
+| 5 | 399 | REQ-023 / AC-028 | `test_ac_028_persisted_override_warns` | yes | yes (same) | yes — new ID of this change's `settings-coverage.md` v3 |
+| 6 | 418 | NFR-002 / — | `test_no_secret_settings` | yes | yes (same) | yes |
+| 7 | 419 | NFR-003 / — | `test_inventory_backward_compatible` | yes | yes (same) | yes |
+| 8 | 516 | `file-management.md` REQ-015 / AC-029 | `test_ac_029_default_local_backend` | yes | yes (same) | yes |
+| 9 | 625 | `session-management.md` REQ-019 / AC-039 | `test_ac_039_register_settings_defaults` | yes | yes (same) | yes |
+| 10 | 696 | `user-roles-permissions.md` REQ-019 / AC-023 | `test_system_set_settings_alias_sync` | yes | yes (same) | yes |
+| 11 | 911 | `structlog-logging.md` REQ-005 / AC-009 | `test_ac_009_settings_statements_go_through_get_logger` | yes | yes (same) | yes |
+
+**11 / 11 pass all three checks.** Every REQ this change touched has at least one GREEN witness, and every witness
+named in an updated row is a real function under `tests/`.
+
+**Tool gate.** `uv run python scripts/check_traceability.py` → `Traceability: PASS (891 matrix rows, 136 spec IDs,
+876 test functions)`, **exit 0** — the same figures as the S4.1/S4.2 baseline in this worktree, i.e. this change
+added no matrix row beyond REQ-023/AC-028 and no test function beyond `test_ac_028_persisted_override_warns`. The
+script enforces four checks only — spec ID with no row, row citing an undefined ID, row citing a missing test,
+undeclared Status token — and its own header says it "never asserts that a row's status is current". Orphaned tests
+are therefore **not** tool-enforced; §15.2 does that check by hand.
+
+### 15.2 Reverse mapping — every test this change touched traces to a normative ID
+
+Diff-hunk → enclosing-function mapping over `git diff main HEAD -- tests/` (5 files, +214 / −50):
+
+| Test function | What the change did to it | Normative ID it asserts | ID in a spec | Matrix row |
+|---|---|---|---|---|
+| `test_main_wires_all_features` | body re-derived: expected key set derived from every `backend.<feature>.feature_settings` module; the original four-key check kept verbatim | AC-003 / REQ-002 (`settings-coverage.md`) | yes | line 374 |
+| `test_ac_028_persisted_override_warns` | **new function** | AC-028 / REQ-023 | yes | line 399 |
+| `test_no_secret_settings` | body re-derived: set equality against the documented exemption; connection-string check narrowed to non-empty strings (§5.2) | NFR-002 | yes | line 418 |
+| `test_inventory_matches` | body re-derived: `_same_default` for order-unstable `LIST` defaults | AC-024 / REQ-019 | yes | line 395 |
+| `test_key_prefix`, `test_category_group`, `test_inventory_backward_compatible` | bodies untouched; the module-level `INVENTORY` (14 → 34 keys) and `_registry_with_all_features()` (4 → 9 features) they iterate were widened | AC-022 / REQ-017, AC-023 / REQ-018, NFR-003 | yes | lines 393, 394, 419 |
+| `test_ac_039_register_settings_defaults` | re-derived from the amended `session-management.md` model block: `category == "security"`, `group == "sessionmanagement"` | AC-039 / REQ-019 | yes | line 625 |
+| `test_ac_009_settings_statements_go_through_get_logger`, `test_ac_009_statements_go_through_get_logger`, `test_ac_009_eventbus_statements_go_through_get_logger` | constants and docstrings only; the guard mechanism (`_AC_009_STATEMENTS` table, `sum == _AC_009_TOTAL_STATEMENTS`) is byte-for-byte unchanged | AC-009 / REQ-005 (`structlog-logging.md`) | yes | line 911 |
+| helpers `_no_repo_root_settings_dir` (autouse fixture), `_same_default`, `_registry_with_all_features` | test scaffolding, asserts nothing on its own | n/a | n/a | n/a |
+
+**Orphans: 0.** Every test function this change added or modified names its normative ID in its docstring or first
+assertion, and each maps to a spec-defined ID and a matrix row. The spec → test direction also holds: the amended
+`settings-coverage.md` §10 test-strategy tables cite the same functions (`:280`, `:299-301`, `:305`, `:324-325`), and
+`file-management.md` `:542` / `:582` cite theirs. No test was deleted, marked or weakened — the two assertion changes
+are the recorded re-derivations §5.2 and §6.1.1, and S6.1 §14 audited the test diff for lost force.
+
+### 15.3 Untouched rows were not refreshed (decision Q-129, convention B)
+
+`git diff main HEAD -- docs/verification/traceability.md` = **10 removed rows, 11 added rows, 11 added note lines, 0
+other changed lines**. The 11 added rows are exactly the 11 of §15.1 (REQ-023/AC-028 is the one with no removed
+counterpart — it is new). Measured in the Settings Coverage section (`:366-436`, 51 rows): **38 rows still carry the
+search change's dated record** (`7bbc05a`, base `e8dd2bc`) untouched and **7** carry this change's; the other four
+updated rows sit in the file-management, session-management, user-roles-permissions and structlog-logging sections.
+No row this change did not re-validate was refreshed.
+
+The section note was **appended, not rewritten**: the pre-existing note at `:372` is unchanged context in the diff and
+this change's dated note sits at `:424`, naming exactly these 11 rows (7 in this matrix + 4 elsewhere).
+
+### 15.4 Feature boundaries and architecture rules (final code state, measured)
+
+| Rule | Measurement | Verdict |
+|---|---|---|
+| Change lives in the correct feature package | `src/` diff = 4 files, +40 / −25: `main.py` (composition root), `settings/registry.py` (REQ-023 warning), `permissions/feature_settings.py`, `sessionmanagement/feature_settings.py`. Each edit sits in the package that owns the setting it fixes. | pass |
+| No cross-feature import of a private module | `grep -rnE '^from backend\.[a-z_]+\.[a-z_.]*\.[_]\|^from backend\.[a-z_]+\._' src/` → 7 hits, **all inside `backend/logging/`** (`__init__.py`, `_pipeline.py`, `_settings.py`, `feature_settings.py`) — owner-internal and pre-existing. Cross-feature: **0**. | pass |
+| Composition root imports features' public roots only | `src/main.py` import diff vs `main`: `+ from collections.abc import Callable` (stdlib) and three new package-root imports (`backend.filemanagement`, `backend.mail`, `backend.sessionmanagement`), each `… import register_settings as register_<feature>_settings`. `LocalDiskStorageBackend` no longer appears in `src/main.py` except in the explanatory comment at `:236-237`. The pre-existing `backend.<feature>.feature_actions` imports are public modules (the documented `register_actions` seam) and are unchanged. | pass |
+| `shared/` deliberately small, gained nothing feature-owned | `git diff main HEAD -- src/backend/shared/` → **empty**. | pass |
+| No premature layers | `find src -type d -name model -o -type d -name services -o -type d -name models` → **empty**; feature packages flat; the only nested dir under `src/` is `backend/filemanagement/assets/`. | pass |
+| New log statement uses the feature's own logger at a semantic level | `src/backend/settings/registry.py:43` `_logger = get_logger("settings")`; `:122-126` one `_logger.warning("persisted value overrides setting default: key=…", key=…)` on the override branch — `WARNING` (recoverable, operator-visible), payload is the **key only**, never the persisted value or the default (amended NFR-002, Q-28). | pass |
+| Registrations precede the services that read them | `src/main.py`: `set_settings_registry(…)` `:165` → `_SETTINGS_REGISTRATIONS` `:207-217` → `for register_settings in _SETTINGS_REGISTRATIONS: register_settings(_shared_settings_registry())` `:218-219` → services `_user_manager` `:223`, `_auth_service` `:227`, `_file_service` `:239`, `_mail_service` `:244`, `_session_service` `:245`, `_search_service` `:255`. The six pre-existing registrations keep their exact relative order, the three new ones are appended before the services that read their keys, and the pre-existing `PermissionService` construction at `:180` (before the registrations) is unchanged from `main`. | pass |
+| No new dependency, no new pattern needing an ADR | `pyproject.toml` is not in the branch diff; the ruff `TID251` banned-api table is unchanged; `_SETTINGS_REGISTRATIONS` is data over the existing REQ-011 `register_settings` seam. | pass |
+| Loop-variable name is load-bearing | `for register_settings in …` keeps `main.register_settings` bound; `tests/integration/singleton_install/test_composition_root.py::_consumer_sites_passing_the_handle()` classifies consumer sites by the `register_*_settings` name pattern, so the name must stay (S6.1 finding 9). | deliberate |
+
+### 15.5 Findings
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| **F-1** | **D-4's fix is unguarded — restated with the exact missing evidence (S6.1 finding 1).** Spec IDs that would go un-witnessed if `LocalDiskStorageBackend("./data/files")` returned to `src/main.py`: **`file-management.md` REQ-015** (`docs/specs/file-management.md:377`, v3 clause "the composition root passes **no** backend, so the storage root it writes to is the live `filemanagement.storage_root` value and never a hard-coded path") and **AC-029** (`:424`, v3 "**which is what the composition root uses**, since `src/main.py` passes no `StorageBackend`"). Why the cited witnesses do not cover it: `test_ac_029_default_local_backend` (`tests/acceptance/filemanagement/test_filemanagement.py:331-342`) builds its **own** `FileService(…, backend=None, settings_registry=registry)` and never imports `main`; `tests/integration/singleton_install/test_composition_root.py` does AST-parse `src/main.py` but only for `_private_slot_imports()` (`:146`) and `_consumer_sites_passing_the_handle()` (`:158`), and its subprocess witness spies six `register_settings` modules against four `_FEATURE_KEYS` (`:38-45`) — nothing about `FileService`. Measured: the only five test modules that read or import `main` are `tests/acceptance/logging_coverage/test_setup_logger.py`, `tests/acceptance/permissions/test_composition_wiring.py`, `tests/acceptance/settings_coverage/test_wiring.py`, `tests/integration/singleton_install/test_composition_root.py`, `tests/unit/logging_coverage/test_edge_cases.py`; none asserts the backend argument, and `test_main_wires_all_features` checks only registered keys. Consequence: re-adding the literal leaves the whole suite GREEN (the registered default is the same `./data/files`) while REQ-015's live-read clause is inert again — the vacuous-guard class this change made a requirement (REQ-019). §13.5's D-4 evidence row cites `test_composition_root.py` and overstates the evidence; it must be corrected either way. | **minor — OPEN** | carried to S6.3: fix in this PR by extending the existing AST scan in `test_composition_root.py`, or record a follow-up TODO and state the gap in the review report |
+| **F-2** | **The NFR-002 guard is inventory-scoped, not registry-scoped — restated with the exact missing evidence (S6.1 finding 2).** `tests/contract/settings_coverage/test_inventory.py:190` derives the credential-named set as `{key for key in INVENTORY if any(part in key.lower() for part in _SECRET_NAME_PARTS)}` and `:197` loops `for key in INVENTORY` — both over the test's own 34-key `INVENTORY` (`:28-96`), never over the registry it just built (`reg.views()`). Measured consequence for a tenth feature registering e.g. `foo.api_secret` with no matching `INVENTORY` row: `named` still equals `NFR_002_CREDENTIAL_EXEMPTIONS = {"mail.smtp_password"}` → NFR-002 passes; `test_key_prefix` / `test_category_group` / `test_inventory_matches` / `test_inventory_backward_compatible` iterate `INVENTORY` → pass; `test_main_wires_all_features` compares the set derived from the `feature_settings` modules against main's registry, so both sides grow together → passes. The amended NFR-002 ("no credential or token … outside the named exemption") is therefore enforced over the 34 listed keys, not over what the features actually register. The exemption mechanism itself is sound and stronger than the pre-change three-name check. | **minor — OPEN** | one-line test-only hardening (`named` built from `reg.views()`); S6.3 decides fix vs follow-up |
+| **F-3** | **Orphan detection is manual in this repo.** `scripts/check_traceability.py` enforces referential integrity and the status vocabulary only; it never reports a test function with no spec reference. The orphan check in §15.2 is a review-side check — done, 0 orphans. | note | resolved (recorded, no action) |
+| **F-4** | **`settings-coverage.md` §11's in-spec matrix rows still read `PENDING`** (39 `PENDING` cells in that file) while the live gate record — `docs/verification/traceability.md` — carries the dated GREEN cells. `PENDING` is a declared value so the tool passes; the spec's own §11 keeps the template default and is not the gate record. | note | resolved (no action, convention) |
+| **F-5** | **The Settings Coverage section note was appended, not rewritten** (`:372` unchanged in the diff, this change's note at `:424`), and it names exactly the 11 rows §15.1 audits. The S6.2 input description ("the section note it rewrote") overstates the edit. | note | resolved (corrected here) |
+| **F-6** | **`main.register_settings` stays bound as a module global after import** — deliberate: the AC-016 witness classifies consumer sites by that name pattern (S6.1 finding 9). Nothing reads the leftover binding. | note | resolved (accepted) |
+
+### 15.6 Traceability + boundaries verdict
+
+- **Traceability: clean.** 11/11 updated rows cite a witness that exists and carry this change's name, date and a
+  measured run, and each references an ID defined in its section's spec; every REQ/AC/NFR this change touched has at
+  least one GREEN witness; every test it added or re-derived maps to a normative ID (0 orphans); no untouched row was
+  refreshed (38 rows in the Settings Coverage matrix still carry the search change's dated record).
+- **Boundaries and architecture: clean.** All measured rules in §15.4 hold — correct package ownership, zero
+  cross-feature private imports, package-root-only imports in the composition root, `shared/` untouched, no new
+  layers, the new `WARNING` on the settings feature's own logger with a key-only payload, registrations before the
+  services that read them, no new dependency.
+- **Two minors stay open, and neither is a traceability or boundary defect:** F-1 (D-4 unguarded) and F-2 (NFR-002
+  guard inventory-scoped) are both **witness-completeness** gaps — the specified behaviour is correct in the final
+  state but under-guarded. S6.3 must resolve each as fix-in-PR or recorded follow-up, and §13.5's D-4 evidence row
+  must be corrected either way.
+- **Blockers: 0.** The change may proceed to S6.3.
