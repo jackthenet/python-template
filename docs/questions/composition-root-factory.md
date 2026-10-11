@@ -6,8 +6,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **TODO file:** `docs/todo/composition-root-factory.md`
 - **Spec:** n/a (REFACTOR) — `docs/specs/settings-coverage.md` REQ-002 / AC-003 and `docs/specs/logging-coverage.md` REQ-011 / AC-011 need an amendment (Q-01); `docs/specs/settings-public-registry-setter.md` REQ-011 / AC-016 collide (Q-02)
 - **Opened:** 2026-10-06
-- **Status:** OPEN  <!-- OPEN | ALL ANSWERED -->
-- **Answer rounds:** 2 (round 1: Q-01, Q-02, Q-03, Q-04 · round 2: Q-05, Q-07, Q-08, Q-14)
+- **Status:** ALL ANSWERED  <!-- OPEN | ALL ANSWERED -->
+- **Answer rounds:** 9 (rounds 1–2 on 2026-10-10 · rounds 3–9 on 2026-10-11 — 30 entries Q-01…Q-30 incl. the Q-10b/Q-16b follow-ups, 0 PENDING)
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -246,10 +246,22 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** `_LazyPermissionService` (`:93-114`, with `# type: ignore[union-attr]` on the two check methods) and `_LazyUserManager` (`:117-127`); instances at `:130-131`; `set_service` at `:163`, `set_manager` at `:183`. The TODO's out-of-scope already says the cycle is real (`PermissionService` ↔ `UserManager`, `SettingsRegistry` ↔ `PermissionService`) and the proxies stay. complexipy scores these 8 methods at 0 today.
 - **Question:** Move the two classes and their `set_*` calls verbatim into the factory (same two-phase order), or restructure the cycle handling?
 - **Recommended:** Move them verbatim — the proxies are already tested by the AC-020 composition test, the cycles are documented in the module docstring and ADR-070, and any redesign widens the diff without removing a requirement.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Re-design the cycle handling** — the user chose the second option, **against** the recommendation; the concrete shape is **Q-16b** below.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7 → Q-16b, 2026-10-11)
+
+### Q-16b — Which cycle redesign (follow-up to Q-16)
+
+- **Step:** P.3 Answer — round 6 follow-up (raised by the orchestrator from the Q-16 answer)
+- **Why needed:** "Re-design" has three very different shapes, and one edge must stay lazy: the settings registry is constructed before `PermissionService` and needs a checker (`src/main.py:156`), so at least one proxy remains.
+- **Context:** Measured: the cycle is `PermissionService` ↔ `UserManager`, broken today by `_LazyPermissionService` (`src/main.py:112`) and `_LazyUserManager` (`:136`) plus three `type: ignore` comments (`:124`, `:127`, `:175`). ADR-070 records the no-circular-import rule; `tests/acceptance/permissions/test_composition_wiring.py` (AC-020) pins the `session_lookup` edge.
+- **Question:** Drop the `UserManager` proxy by reordering; replace both proxies with typed late-binding adapters; use one generic proxy in `backend/shared/`; or reverse Q-16?
+- **Recommended:** One proxy — build the `UserManager` first with the permission proxy, then `PermissionService` with the real `UserManager`; `_LazyUserManager`, its `set_manager` call and one `type: ignore` disappear.
+- **Answer:** **One proxy: drop `_LazyUserManager`** — the recommendation, accepted. The factory builds `UserManager` first (injecting `_LazyPermissionService` as its checker), then `PermissionService` with the **real** `UserManager`, then `set_service(...)` on the proxy. `_LazyUserManager` and its `set_manager` call are deleted, one `type: ignore[arg-type]` goes away, and the two `type: ignore[union-attr]` in the permission proxy stay (Q-17). The **Q-09** order invariant is restated for this order, and the AC-020 composition witness is updated in the same commit.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-17 — Typing obligations for the new function and container
 
@@ -258,10 +270,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: `uv run mypy src/main.py` → "Success: no issues found in 1 source file"; `pyproject.toml` `[tool.mypy] disallow_untyped_defs = true`, `check_untyped_defs = true`; `src/main.py` carries `# type: ignore[arg-type]` (`:157`) and two `# type: ignore[union-attr]` (`:108`, `:111`). `ty` is the fast local tool (`uv run ty check src/`).
 - **Question:** Confirm the gate: fully typed `App` fields (concrete classes, not `Any`), typed keyword parameters, and the three existing `type: ignore` comments preserved unchanged — and is `mypy src/` (not just `main.py`) the Phase 5 gate?
 - **Recommended:** Yes to all — the container's value is that mypy checks the wiring, and the `type: ignore` comments encode the proxy contract, so removing them would fail the build; `mypy src/` is the CI/Phase 5 gate (`quality_check` in `pyproject.toml`).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Confirm all four** — the recommendation, accepted: `App` fields are concrete classes (not `Any`), the keyword parameters are typed, the remaining `type: ignore` comments are preserved unchanged, and `mypy src/` (not just the changed file) is the Phase 5 / CI gate. Count correction from **Q-16b**: after `_LazyUserManager` is dropped, **two** `type: ignore[union-attr]` comments remain (both in the permission proxy), not three.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-18 — Docstring obligations for the new public objects (ruff `D` over `src/`)
 
@@ -270,10 +282,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** `src/main.py`'s module docstring (lines 1-18) already carries the wiring rationale (ADR-069, the two cycles, REQ-005/REQ-011 references); `uv run ruff check src/main.py` and `ruff format --check` are clean today.
 - **Question:** Move the module docstring's wiring rationale into the function docstring (and what stays at module level), or duplicate it?
 - **Recommended:** Move it — the rationale describes the wiring, which now lives in the function; the module docstring shrinks to one line, and the function docstring must additionally state the single-shot caveat (Q-10) and the ordering invariant (Q-09), which is exactly the "something its signature does not" the review rule demands.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Move it, don't duplicate** — the recommendation, accepted. The wiring rationale moves into `build_composition_root()`'s docstring; `src/main.py`'s module docstring shrinks to one line. The function docstring states the **Q-10b** reset caveat (four slots reset, the event bus reused — never `reset_event_bus()`), the **Q-09** ordering invariant including the registration-loop element order, and the single-proxy two-phase cycle (**Q-16b**). Because **Q-28** made the proxies public container fields, the two proxy classes also need docstrings that say something their signature does not (ruff `D` over `src/`).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-19 — complexipy: the wiring becomes measured once it is a function
 
@@ -281,11 +293,11 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Why needed:** CI runs `uv run complexipy src tests --max-complexity-allowed 15`; today the 17 executable module-level statements are **not** measured at all, so the change moves code into the gate's view.
 - **Context:** Measured: `uv run complexipy src/main.py --max-complexity-allowed 15` lists only the 8 proxy methods (all 0) — module-level code is not scored. `[tool.complexipy] paths = ["src", "tests"]`, `max-complexity-allowed = 15`. A branch-free function body scores 0 on the same scale (every scored method with no control flow scores 0).
 - **Question:** Accept that the factory is now complexipy-measured (and that a straight-line body passes), or split the factory into sub-builders (`_build_repositories()`, `_build_services()`, …) to keep each small?
-- **Recommended:** Accept one function, no split — the body is branch-free so it scores 0, and splitting it would create six new private functions and six more ordering seams to review for no gate benefit; re-run complexipy at Phase 5 as evidence.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Recommended:** Accept one function, no split — the body is branch-free so it scores 0, and splitting would create six new private functions and six more ordering seams to review for no gate benefit; re-run complexipy at Phase 5 as evidence.
+- **Answer:** **One function, no split** — the recommendation, accepted. `build_composition_root()` stays one straight-line body in `src/backend/composition/root.py` (**Q-07** / **Q-20c**); complexipy is re-run at Phase 5 as evidence. The **Q-16b** reorder shortens the body (one proxy, one `set_*` call less), which does not change the score.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-20 — Coverage: does the moved code enter the 92% gate?
 
@@ -294,10 +306,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: `[tool.coverage.run] source = ["src/backend", "src/frontend"]` and `[tool.coverage.report] fail_under = 92`; a `--cov` run's report contains **no** `src/main.py` row (module-level wiring is currently invisible to coverage). `.github/workflows/quality.yml:47-60` runs pytest with coverage and honors `fail_under`. `src/main.py` has 37 executable module-level statements plus 8 methods.
 - **Question:** Confirm the Q-07 decision with this in mind (keep it in `src/main.py`, outside the coverage source), or, if it moves under `src/backend/`, require the new in-process tests to cover the factory to the project floor?
 - **Recommended:** Keep it in `src/main.py` (Q-07) — it avoids a coverage-source change entirely; if the user chooses a `src/backend/` home, the two new tests must cover the factory's lines and the coverage total must be re-measured at Phase 5 before the PR opens.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Move it under `src/backend/`, and amend the pinned specs** — the user first chose the move (Q-07 = B, re-confirmed here) and then, on the measured breakage, chose **"Move + amend the pinned specs"**. Measured breakage: `tests/acceptance/logging_coverage/test_setup_logger.py:13` (`_MAIN = Path("src/main.py")`, AC-011), `tests/unit/logging_coverage/test_edge_cases.py:106-107` (counts `setup_logger(` in `src/main.py`), `tests/integration/singleton_install/test_composition_root.py:31` (`_MAIN = _SRC / "main.py"`, AC-016 private-slot scan), and the AC-003 subprocess run of `src/main.py`. Handling: `logging-coverage.md` AC-011/REQ-011 and `settings-public-registry-setter` REQ-011/AC-016 are amended in this change's amendment batch to name the composition module instead of the entrypoint; the three witnesses and their traceability rows are updated in the same commit; `src/main.py` keeps a thin entrypoint that imports and calls the factory, so the AC-003 subprocess run still works. Coverage: `[tool.coverage.run] source = ["src/backend", "src/frontend"]` (`pyproject.toml:108`) with `fail_under = 92` (`:112`), so the new package is measured and the two new tests must cover it; the total is re-measured at Phase 5 before the PR opens.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-21 — STRUCTURE.md regeneration and the map tests
 
@@ -306,10 +318,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: `STRUCTURE.md:118` (tree entry) and `STRUCTURE.md:1627` (`#### src/main.py (221 lines)`); the map is checked by `uv run python scripts/make_map.py --check` and by `tests/acceptance/test_structure_map.py` / `tests/property/test_structure_map.py` / `tests/unit/test_make_map.py`; skill `code-structure-map`. `scripts/` itself needs no change (no script references `main.py` — measured `grep -rn "main.py" scripts/*.py` → no output).
 - **Question:** Confirm the map is regenerated in the same commit as the `src/main.py` edit (and again if a new module is created), with `scripts/` untouched?
 - **Recommended:** Yes — regenerate with `uv run python scripts/make_map.py` in the same commit; it is mandatory either way and costs one command.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Yes, same commit** — the recommendation, accepted. `STRUCTURE.md` is regenerated with `uv run python scripts/make_map.py` in the same commit as the code move (it gains the new `src/backend/composition/` package, and `src/main.py`'s line count drops), and again if a further module is created; `scripts/` is untouched. Same rule as `startup-settings-registration-gaps` **Q-19**.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-22 — Interaction with the planned `public-api-import-boundary` change
 
@@ -318,10 +330,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured in `src/main.py`: 7 cross-package module-path imports (`:32`, `:41`, `:45`, `:65`, `:67`, `:77` — the six `feature_actions` modules plus `:68` `from backend.settings.registry import _registry`, the private slot the in-flight change removes) out of 24 `from backend…` imports. `docs/todo/public-api-import-boundary.md` (Status: PREPARING) plans "ruff `TID251` banned-api entries for cross-package module-path imports, with a self-import exemption" and depends on `settings-public-registry-setter` landing first.
 - **Question:** Run this change before `public-api-import-boundary` (so the boundary change migrates the factory's imports once), or wait for it (so the factory is born boundary-clean)?
 - **Recommended:** Run this change first (only `settings-public-registry-setter` is a hard dependency) — the boundary change is still PREPARING and its own risk note says import-path edits are its work; duplicating that migration here would grow this diff and collide with its guard.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **This change first** — the recommendation, accepted. The hard dependency (`settings-public-registry-setter`) merged on 2026-10-10 (PR #81), so nothing blocks this change except `startup-settings-registration-gaps` (see **Q-27**); `public-api-import-boundary` stays PREPARING and owns the import-path migration.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-23 — NFRs: startup cost, no new dependency, no subprocess in tests
 
@@ -330,10 +342,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: `import main` ≈ **1.04 s** warm (timed with `time.perf_counter()` around the import in a temp dir); it opens 4 SQLite engines and creates 4 DB files + `logs/app.log` + `settings/values.yaml`. Each subprocess wiring test pays a fresh interpreter plus that full import. No new third-party dependency is needed for a dataclass + function.
 - **Question:** Confirm the NFRs: NFR-001 no new runtime dependency; NFR-002 the factory performs exactly the same calls as today — 13 `register_*` calls, 8 repository constructions (`:145`, `:154-156`, `:181`, `:190-191`, `:194`), 6 service constructions (`PermissionService`, `UserManager`, `AuthService`, `FileService`, `MailService`, `SessionService`), 3 `register_source` calls and `setup_logger()` — with no added startup work and the same ≈ 1.04 s wall time; NFR-003 the rewritten wiring tests run in-process with no subprocess — or add a hard startup budget?
 - **Recommended:** Confirm those three, with **no** hard startup budget — the change adds no calls, so a numeric budget would restate today's 1.04 s measurement without constraining anything (and the self-consistency rule on budgets only applies to an observability table this change does not add).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Confirm, with the inventory re-derived at P.4** — the recommendation, accepted. NFR-001 no new runtime dependency; NFR-002 the factory performs the same calls, with the call inventory **re-derived from `main` at P.4** (after `startup-settings-registration-gaps` lands: 9 settings registrations driven by the ordered loop + 7 action registrations, 8 repository constructions, 6 service constructions, 3 `register_source` calls, `setup_logger()`, **plus the two new installs from Q-15 and minus the dropped proxy from Q-16b**); NFR-003 no subprocess in the new tests. **No numeric startup budget** — the measurement quoted by P.2 (≈ 1.04 s) predates the loop, the installs and the proxy removal, so it would restate a number that is about to change.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 7, 2026-10-11)
 
 ## Q-24 — Failure mode: a dropped registration fails silently. How is it guarded?
 
@@ -366,10 +378,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Candidates found by measurement: the three missing `register_settings` calls (Q-14), the two uninstalled singletons (Q-15), a `__main__` guard / CLI (Q-06), splitting into sub-builders (Q-19), migrating cross-package imports (Q-22), and any change to `scripts/` (none needed, Q-21). No feature package's public API is touched by the extraction itself; `src/main.py` imports features, never the reverse.
 - **Question:** Confirm the non-goals: (a) no new registrations, (b) no singleton installs beyond what happens today, (c) no new CLI/`[project.scripts]` entry point, (d) no feature public-API change, (e) no `scripts/` change, (f) no import-boundary migration — with parameters limited to what the tests need (Q-05)?
 - **Recommended:** Confirm all six as non-goals — each is either a behavior change (a, b), an unrequested capability (c), or another change's owned work (d, e, f); the change is the move plus the two tests.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Five non-goals confirmed; (b) narrowed, not kept verbatim.** The user first answered "keep (b) verbatim", which contradicts **Q-15** ("install both in the factory now"); asked to break the tie, they asked for the architectural judgment, and accepted the recommendation to **install**. Final boundary: (a) no new settings registrations (the `startup-settings-registration-gaps` ISSUE owns them), (c) no new CLI / `[project.scripts]` entry point, (d) no feature public-API change, (e) no `scripts/` change, (f) no import-boundary migration — and **(b) reads "no singleton installs beyond the two decided at Q-15"** (`set_permission_service` / `set_session_service`). In scope by the same answers: the `src/backend/composition/` package move with the coverage-source consequence (Q-20), the spec amendments it forces, and the cycle simplification (Q-16b).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 9, 2026-10-11)
 
 ## Q-26 — Overlap check against every live TODO and every spec
 
@@ -378,10 +390,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: 12 live TODOs in `docs/todo/` (`api-keys`, `backend-api`, `complexipy-scripts`, `composition-root-factory`, `docstrings-tests`, `map-default-drop-shift`, `notifications`, `public-api-import-boundary`, `python-3.15-upgrade`, `settings-public-registry-setter`, `tenacity-rich-cachetools`) plus `archive/`. None specifies a composition root. `settings-public-registry-setter` explicitly defers this to this TODO (its D10 and its out-of-scope row "A `create_app()` / composition-root factory … Explicitly deferred by Q-11 … TODO `composition-root-factory`"). No existing factory/container exists in `src/` (`grep -rn "container|bootstrap|wire|def build_|def create_" src/` → only `build_*_source` factories and unrelated `bootstrap` docstrings).
 - **Question:** Confirm this proceeds as its own change (no merge into `settings-public-registry-setter` or `public-api-import-boundary`)?
 - **Recommended:** Proceed as its own change — it is the deferred target of the in-flight change, not a duplicate of it, and the only overlap (import paths) is owned by a different TODO (Q-22).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Proceed as its own change** — the recommendation, accepted. Overlap state as of 2026-10-11: `settings-public-registry-setter` merged (this change is its deferred target, not a duplicate); `composition-root-singleton-install` **dropped as absorbed** by this change (**Q-30**); `public-api-import-boundary` owns the import-path migration (**Q-22**); `startup-settings-registration-gaps` owns the registrations and lands first (**Q-27**).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 9, 2026-10-11)
 
 ## Q-27 — Dependency list correction: `structlog-logging` is already merged
 
@@ -390,10 +402,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** Measured: the TODO says "`structlog-logging` (IN-WORKFLOW — it touches startup logging setup)", but `docs/todo/structlog-logging.md` is in `docs/todo/archive/`, and `git log --oneline --merges` shows `c7a9119 Merge pull request #74 from jackthenet/crosscut/structlog-logging`; `docs/specs/logging-coverage.md` already carries the v2 amendment from that change. The live worktree list shows only `crosscut/settings-public-registry-setter` and `issue/map-default-drop-shift`.
 - **Question:** Record the dependency as: hard dependency = `settings-public-registry-setter` (must merge first, Q-02); `structlog-logging` = satisfied (merged 2026-10-07, PR #74)?
 - **Recommended:** Yes — the TODO's `Depends on:` line is stale and should be corrected by the orchestrator when it advances the status; only the settings change blocks this one.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Record both merged dependencies as satisfied and add the ISSUE as the live blocker** — the recommendation, accepted. `Depends on:` becomes: `settings-public-registry-setter` **satisfied** (merged 2026-10-10, PR #81, merge commit `2115faa`); `structlog-logging` **satisfied** (merged 2026-10-07, PR #74); **`startup-settings-registration-gaps` is a hard sequencing dependency** — it must merge first because the factory's expected registered-key set (**Q-24**, nine features / 34 keys) and the NFR-002 call inventory (**Q-23**) are re-derived from `main` after it lands, and it replaces the six one-liners with the ordered loop whose element order this change pins (**Q-09**).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 9, 2026-10-11)
 
 ## Q-28 — What does the returned container expose?
 
@@ -414,10 +426,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** AGENTS.md Escalation Rules: on reclassification keep the worktree, `git branch -m <old> <new>`, re-run the new type's Phase P from P.1, record the reclassification in `docs/verification/composition-root-factory.md`. CROSS-CUTTING adds: a spec at `docs/specs/composition-root-factory.md` with an Impact Analysis, ADRs if a new pattern is introduced, S1.4 approval PR (human merge) before Phase 2, a task DAG, spec coverage = 100% at Phase 5, and a `minor` version bump at S6.4 (REFACTOR gets none).
 - **Question:** If Q-01 is CROSS-CUTTING: confirm the branch becomes `crosscut/composition-root-factory`, a spec + Impact Analysis + amendment PR for `settings-coverage.md` REQ-002/AC-003 and `logging-coverage.md` REQ-011/AC-011 are produced at P.4, and the version bump is `minor` — and does the amendment ride in the same PR as the implementation, or a separate spec PR merged first (AGENTS.md: "Merge the spec PR before resuming implementation")?
 - **Recommended:** Same change branch, but the spec amendment is committed with the spec at P.4 and reaches `main` through the change's own PR only if the reviewer accepts it; safest is the repo's established pattern (as `settings-public-registry-setter` did: the spec + the six amended specs committed at P.4/P.5 on the change branch, one approval PR at S1.4, then implementation on the same branch) — one PR, spec first in the commit order.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **One branch, one approval PR** — the recommendation, accepted. Branch `crosscut/composition-root-factory`; spec `docs/specs/composition-root-factory.md` with an Impact Analysis (per affected feature: what changes, which REQ/AC IDs are touched) drafted at P.4 and self-checked at P.5; the amendment batch rides the same branch — `settings-coverage.md` REQ-002/AC-003, `logging-coverage.md` REQ-011/AC-011 (the `setup_logger` scan target, Q-08/Q-20), `settings-public-registry-setter` REQ-011/AC-016 (Q-02), plus the new REQs for the composition module's public interface and the two installs absorbed from `composition-root-singleton-install` (Q-15/Q-30). One S1.4 approval PR carries spec + amendments; implementation follows on the same branch after the human merges. Version bump: **minor** (CROSS-CUTTING, non-breaking).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (P.3 round 9, 2026-10-11)
 
 ### Category coverage
 
