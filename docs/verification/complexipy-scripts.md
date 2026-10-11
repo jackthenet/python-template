@@ -547,5 +547,129 @@ path that walk built.
 | types | `uv run mypy scripts/` | **Success: no issues found in 4 source files** |
 | map | `uv run python scripts/make_map.py` + `--check` | regenerated in this commit; `--check` exit **0**; `STRUCTURE.md` **2 016** lines (was 2 013, +3 signatures) — NFR-002 ceiling 2 200, headroom **184** |
 
-- **Next:** S4.2 unit 3 — `scripts/verify_spec.py::main` **22 → ≤ 12** (the `docs/specs/template.md` report stays
-  byte-identical to AC-025's `_VERIFY_SPEC_REPORT_BEFORE_FIX`; the `verify_spec_*` golden pairs must not change).
+## Phase 4 unit 3 — `scripts/verify_spec.py` (S4.2, 2026-10-11)
+
+Scope item **#5** only. `main` **22** was restructured to the **Q-13** target (≤ 12) with a **byte-identical
+stdout + exit-code contract** (**Q-07**) — including the AC-025-pinned `docs/specs/template.md` report. Files
+touched by this unit: `scripts/verify_spec.py`, the regenerated `STRUCTURE.md`, and this record — nothing else
+(no `pyproject.toml`, no workflow, no spec, no ADR, no `CHANGELOG.md`, **no test file**, no
+`docs/verification/traceability.md` row, per **Q-12** / **Q-15**).
+
+### Shape chosen (permitted by Q-09, Q-10, Q-11)
+
+**Pure extraction — every statement kept verbatim**, so the report cannot drift by construction. `main` was one
+22-point blob holding the stdout fix, the two missing-input guards, the three report loops (each with a nested
+ternary and an `any(...)` probe) and the FAIL block; complexipy scores the nesting, so the ternaries inside the
+loops were the bulk of the cost. Splitting one function per printed block removes the nesting without touching
+what is printed:
+
+- `configure_stdout` — the `contextlib.suppress` + `hasattr` + `reconfigure` block, verbatim (the comment about
+  cp1252 became its docstring).
+- `print_requirement_lines` / `print_acceptance_criterion_lines` / `print_invariant_lines` — the three report
+  loops, each taking the raw `spec_ids` / `test_funcs` it reads, so the flattening (`all_test_funcs`) and the
+  `test_funcs.get("property", [])` lookup moved with the loop that uses them. The `\u2713`/`\u2717` ternaries and the
+  `ac.lower().replace("ac-", "") in f` number-substring match are unchanged statements.
+- `print_traceability_summary` — the FAIL block **and** the PASS line, returning the exit code, so `main` ends in
+  one `return` and the `if failures:` / `for` nesting lives once, here.
+- `main` — guards, the three pure calls, the header, the three print calls, the summary return.
+
+All five are **public, module-level, same file** (**Q-10**); no `scripts/_common.py`. Existing names and
+signatures kept (`parse_spec`, `find_test_functions`, `check_traceability`, `main`) — renaming was **allowed**
+(**Q-11**) but was not needed, so the map grows by 5 signature lines. `check_traceability` (10) and
+`find_test_functions` (10) were **not** restructured: they are already under the target and are not in the
+refactor set (the scope table). Statement order inside `main` is unchanged (`failures` is still computed before
+the report prints — `check_traceability` is pure, so the order is not observable, but keeping it costs nothing).
+
+### Per-function complexity, before → after
+
+`uv run complexipy scripts --max-complexity-allowed 15` (ANSI-stripped), this file only:
+
+| Function | Before | After |
+|---|---|---|
+| `main` | **22** ✗ | **3** ✅ |
+| `parse_spec` | 0 | 0 |
+| `find_test_functions` | 10 | 10 |
+| `check_traceability` | 10 | 10 |
+| `configure_stdout` | — (new) | 1 ✅ |
+| `print_requirement_lines` | — (new) | 3 ✅ |
+| `print_traceability_summary` | — (new) | 3 ✅ |
+| `print_invariant_lines` | — (new) | 5 ✅ |
+| `print_acceptance_criterion_lines` | — (new) | 7 ✅ |
+
+The file is now **9 functions, max 10** — `verify_spec.py` contributes **no** FAILED line to the gate any more,
+and its highest score (10) is the pre-existing `check_traceability` / `find_test_functions`, not new code.
+
+### Whole-`scripts/` gate state after this unit — the refactor set is complete
+
+`uv run complexipy scripts --max-complexity-allowed 15` → **exit 0**, **67 functions analysed, 0 FAILED**
+(baseline at `eddf94f`: 50 functions, **4 FAILED** at 17 / 19 / 22 / 22). All four named functions of the scope
+table are done, so this is the first time in the change the command succeeds. It is run **explicitly** here —
+`scripts/` is not yet in the *config* gate; that widening is **unit 4** and is not widened by this commit.
+
+### Golden-output re-run (the primary no-behavior-delta evidence, Q-03)
+
+`bash capture.sh <this worktree> /c/workspace/active-projects/complexipy-scratch/golden-after-unit3`
+(absolute, outside every worktree), then `diff -r golden-before golden-after-unit3` — **21 files compared, 19
+byte-identical, 2 differ, and both are the complexity measurement**:
+
+| Witness (18 files) | Result |
+|---|---|
+| `verify_spec_all.stdout` (31 708 B, sha `9d3d3cdc…7b58`) / `.stderr` (0 B) / `.exit` (475 B, sha `8b4c99ea…fb18`) — all 15 specs, exit 0 each | **identical** |
+| `verify_spec_template.stdout` (363 B, sha `0f8ec58e…4a0b`) / `.stderr` / `.exit` — the AC-025 byte-pinned report | **identical** |
+| `check_traceability.stdout` (72 B, sha `e13c5631…4c3f`) / `.stderr` / `.exit` | **identical** |
+| `validate_task_dag.stdout` (61 B, sha `9234e830…1158`) / `.stderr` / `.exit` | **identical** |
+| `complexipy_ci_form.*`, `complexipy_config.*` | **identical** (they analyse `src` + `tests` only) |
+| `complexipy_scripts.stdout` (3 774 → 5 017 B) **and `complexipy_scripts.exit` (1 → 0)** | **differ — expected**: the complexity **measurement**, not a witness (§Complexity baseline files). The ANSI-stripped diff is *only* score lines: the four `FAILED` lines (`check 17`, `matrix_rows 19`, `check_acyclic 22`, `main 22`) removed, the fourteen new helpers (`0…9`) added, plus the `All functions are within the allowed complexity.` summary line the report prints only on a clean run. The exit flip **1 → 0** is the change's own acceptance signal |
+
+`uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts -q` → **1 passed** — the
+test that byte-pins this report was **not touched** (**Q-12**) and still passes against the refactored script.
+
+### Spec-fixture differential (closes the §Known ceiling of the witness gap for this file)
+
+The golden set only reaches the PASS paths of the per-spec report; the `\u2717` lines and the
+`Traceability: FAIL (n issue(s))` block are exactly what this unit moved. So the pre-refactor script
+(`git show 4dd3d78:scripts/verify_spec.py`) and the post-refactor one were run over the **same** inputs —
+`complexipy-scratch/unit3/faildiff.sh`, fixtures under `complexipy-scratch/unit3/fixtures/` (outside the
+worktree, nothing added to the repository — **Q-12**). Each case is run once per script; stdout, stderr and the
+exit code are compared byte-for-byte. **33 runs, 0 mismatches** — every stdout sha matches, every stderr is
+0 bytes, every exit code matches.
+
+| Case | What it witnesses | exit | result |
+|---|---|---|---|
+| 15 real `docs/specs/*.md` (all of them, incl. `template.md`) | the PASS report of every spec in the repo, as CI runs it | 0 | identical |
+| `default-argv-worktree` | the no-argv branch (`docs/specs/template.md` relative to CWD) — stdout sha `0f8ec58e…`, i.e. AC-025's pinned report again | 0 | identical |
+| `fix-01-req-no-ac` | REQs with **no AC anywhere** → `\u2717 … has no acceptance criteria` report lines **and** the FAIL block | **1** | identical |
+| `fix-08-all-branches` | REQ + INV + EDGE + NFR, no AC → mixed `\u2717`/`\u2713` report and the FAIL block (2 issues) | **1** | identical |
+| `fix-02-ac-no-test` | ACs no test name matches → `\u2717 AC-9001 has no executable test` **without** a FAIL block (the report line and the check are different rules) | 0 | identical |
+| `fix-03-inv-no-property-test` | INVs no property test matches → `\u2717 … has no property test`, still exit 0 | 0 | identical |
+| `tests-dir-no-test-functions` | `tests/` exists but yields **no** test functions → `test_funcs` empty → every AC and INV fails **both** the report line and the check (FAIL block, 4 issues) | **1** | identical |
+| `unit-only-matching-ac` | a `tests/` tree with one unit test whose **name matches an AC number** → the `\u2713` branch of the AC line, `\u2717` for the INV (no property tests) | 0 | identical |
+| `no-tests-dir` | missing-input branch → `Test directory not found: tests/` | **1** | identical |
+| `missing-spec-path` | missing-input branch → `Spec file not found: <argv>` | **1** | identical |
+| `default-argv-no-specs` | no-argv branch with no `docs/specs/` → `Spec file not found: docs\specs\template.md` | **1** | identical |
+| `fix-04-no-ids` / `fix-05-empty` | a spec with **no IDs at all** and a **0-byte** file → header + `Traceability: PASS`, no report lines | 0 | identical |
+| `fix-06-orphan-ids` | **orphan ID references** (`REQ-9999`/`AC-9998` cited, never defined) + EDGE/NFR-only spec — `parse_spec` regexes the whole text, so they are collected identically | 0 | identical |
+| `fix-07-malformed-table` | a **malformed table** (unbalanced pipes, missing separator row, an ID inside a code span) — the parser is regex-based, so the fixture proves the table shape is neutral | 0 | identical |
+| `fix-09-number-forms` | the number-substring match: `AC-1`, `AC-01`, `AC-0001`, `AC-10`, `AC-100`, `INV-1`, `INV-01` — which ones match a test name is identical in both versions (one `\u2717`, six `\u2713`) | 0 | identical |
+| `fix-10-unicode-crlf` | CRLF + non-ASCII + emoji in the spec (the UTF-8 stdout path) | 0 | identical |
+| `fix-11-no-trailing-newline` | a file with no trailing newline | 0 | identical |
+
+Branch coverage across the 33 runs (count of each emitted marker over all captured stdouts): `has acceptance
+criteria` 321 / `has no acceptance criteria` **12**, `has executable test` 495 / `has no executable test` **5**,
+`has property test` 91 / `has no property test` **6**, `Traceability: PASS` 27 / `Traceability: FAIL` **3**,
+`Spec file not found` **2**, `Test directory not found` **1** — i.e. every `\u2713`/`\u2717` pair and both summary lines
+and both missing-input messages were emitted, identically, by both versions.
+
+### Gates run for this unit
+
+| Gate | Command | Result |
+|---|---|---|
+| complexity (this file) | `uv run complexipy scripts --max-complexity-allowed 15` | `verify_spec.py` — **9/9 PASSED, max 10**; whole command **exit 0**, 67 functions analysed, **0 FAILED** (the whole refactor set is done) |
+| lint | `uv run ruff check scripts/verify_spec.py` | **All checks passed!** |
+| format | `uv run ruff format --check scripts/verify_spec.py` | **1 file already formatted** |
+| types | `uv run mypy scripts/` | **Success: no issues found in 4 source files** |
+| pinned test (untouched) | `uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts -q` | **1 passed** |
+| map | `uv run python scripts/make_map.py` + `--check` | regenerated in this commit; `--check` exit **0**; `STRUCTURE.md` **2 021** lines (was 2 016, +5 signatures) — NFR-002 ceiling 2 200, headroom **179** |
+
+- **Next:** S4.2 unit 4 — widen the gate (`pyproject.toml` `[tool.complexipy] paths` + the `complexity` job in
+  `.github/workflows/quality.yml`), the NFR-005 amendment + ADR-087, and the `CHANGELOG.md` entry.

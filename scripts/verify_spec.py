@@ -66,13 +66,63 @@ def check_traceability(spec_ids: dict[str, list[str]], test_funcs: dict[str, lis
     return failures
 
 
-def main() -> int:
-    # Force UTF-8 stdout so the box-drawing/check-mark characters below print on
-    # Windows (the Windows console defaults to cp1252, which can't encode them,
-    # crashing the verify phase with a UnicodeEncodeError).
+def configure_stdout() -> None:
+    """Force UTF-8 stdout so the box-drawing/check-mark characters print on Windows.
+
+    The Windows console defaults to cp1252, which cannot encode them and would crash the
+    verify phase with a UnicodeEncodeError. A stream that cannot be reconfigured at all
+    (a redirected pipe, a captured stream) is left alone.
+    """
     with contextlib.suppress(AttributeError, ValueError, OSError):
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8")
+
+
+def print_requirement_lines(spec_ids: dict[str, list[str]]) -> None:
+    """Print one line per requirement.
+
+    The check is spec-wide, not per requirement: every requirement is reported as having
+    acceptance criteria exactly when the spec defines at least one AC anywhere.
+    """
+    for req in spec_ids["requirements"]:
+        print(
+            f"\u2713 {req} has acceptance criteria"
+            if spec_ids["acceptance_criteria"]
+            else f"\u2717 {req} has no acceptance criteria"
+        )
+
+
+def print_acceptance_criterion_lines(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> None:
+    """Print one line per acceptance criterion: matched by its number against every test name."""
+    all_test_funcs = [f for funcs in test_funcs.values() for f in funcs]
+    for ac in spec_ids["acceptance_criteria"]:
+        has_test = any(ac.lower().replace("ac-", "") in f for f in all_test_funcs)
+        print(f"\u2713 {ac} has executable test" if has_test else f"\u2717 {ac} has no executable test")
+
+
+def print_invariant_lines(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> None:
+    """Print one line per invariant: matched by its number against the property-test names only."""
+    property_funcs = test_funcs.get("property", [])
+    for inv in spec_ids["invariants"]:
+        has_prop = any(inv.lower().replace("inv-", "") in f for f in property_funcs)
+        print(f"\u2713 {inv} has property test" if has_prop else f"\u2717 {inv} has no property test")
+
+
+def print_traceability_summary(failures: list[str]) -> int:
+    """Print the FAIL block (one indented line per failure) or the PASS line, and return the exit code."""
+    if failures:
+        print(f"\nTraceability: FAIL ({len(failures)} issue(s))")
+        for failure in failures:
+            print(f"  \u2717 {failure}")
+        return 1
+
+    print("\nTraceability: PASS")
+    return 0
+
+
+def main() -> int:
+    """Run the spec checks and print the report, then the traceability summary."""
+    configure_stdout()
 
     spec_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("docs/specs/template.md")
     if not spec_path.exists():
@@ -90,33 +140,11 @@ def main() -> int:
 
     print("Specification validation")
     print("\u2500" * 25)
+    print_requirement_lines(spec_ids)
+    print_acceptance_criterion_lines(spec_ids, test_funcs)
+    print_invariant_lines(spec_ids, test_funcs)
 
-    for req in spec_ids["requirements"]:
-        print(
-            f"\u2713 {req} has acceptance criteria"
-            if spec_ids["acceptance_criteria"]
-            else f"\u2717 {req} has no acceptance criteria"
-        )
-
-    all_test_funcs = [f for funcs in test_funcs.values() for f in funcs]
-    property_funcs = test_funcs.get("property", [])
-
-    for ac in spec_ids["acceptance_criteria"]:
-        has_test = any(ac.lower().replace("ac-", "") in f for f in all_test_funcs)
-        print(f"\u2713 {ac} has executable test" if has_test else f"\u2717 {ac} has no executable test")
-
-    for inv in spec_ids["invariants"]:
-        has_prop = any(inv.lower().replace("inv-", "") in f for f in property_funcs)
-        print(f"\u2713 {inv} has property test" if has_prop else f"\u2717 {inv} has no property test")
-
-    if failures:
-        print(f"\nTraceability: FAIL ({len(failures)} issue(s))")
-        for f in failures:
-            print(f"  \u2717 {f}")
-        return 1
-
-    print("\nTraceability: PASS")
-    return 0
+    return print_traceability_summary(failures)
 
 
 if __name__ == "__main__":

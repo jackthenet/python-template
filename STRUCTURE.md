@@ -536,12 +536,17 @@ Validate task DAG: acyclicity, well-formedness, and sync.
 - def `check_acyclic(tasks: list[dict]) -> list[str]`: Check that the dependency graph is acyclic using DFS.
 - def `check_sync(docs_path: Path, runner_path: Path) -> list[str]`: Check that docs/tasks and .github/task-runner are in sync.
 - def `main() -> int`
-#### scripts/verify_spec.py (123 lines)
+#### scripts/verify_spec.py (151 lines)
 Verify specification traceability against test functions.
 - def `parse_spec(spec_path: Path) -> dict[str, list[str]]`: Extract stable IDs from a spec file.
 - def `find_test_functions(test_dir: Path) -> dict[str, list[str]]`: Map test category directories to test function names.
 - def `check_traceability(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> list[str]`: Run traceability checks and return failure messages.
-- def `main() -> int`
+- def `configure_stdout() -> None`: Force UTF-8 stdout so the box-drawing/check-mark characters print on Windows.
+- def `print_requirement_lines(spec_ids: dict[str, list[str]]) -> None`: Print one line per requirement.
+- def `print_acceptance_criterion_lines(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> None`: Print one line per acceptance criterion: matched by its number against every test name.
+- def `print_invariant_lines(spec_ids: dict[str, list[str]], test_funcs: dict[str, list[str]]) -> None`: Print one line per invariant: matched by its number against the property-test names only.
+- def `print_traceability_summary(failures: list[str]) -> int`: Print the FAIL block (one indented line per failure) or the PASS line, and return the exit code.
+- def `main() -> int`: Run the spec checks and print the report, then the traceability summary.
 
 ### `backend.authentication` — src/backend/authentication/
 exports: AttemptTracker, AuthEvent, AuthService, AuthenticationError, InMemoryAttemptTracker, InvalidCredentialsError, InvalidPasskeyResponseError, InvalidResetTokenError, InvalidSessionError, LoginFailed, LoginRequest, LoginResult, LoginSucceeded, Logout, PasskeyCredentialNotFoundError, PasskeyDeleted, PasskeyHijackError, PasskeyLoginBegin, PasskeyLoginComplete, PasskeyRegistered, PasskeyRegistrationBegin, PasskeyRegistrationComplete, PasswordReset, PasswordResetComplete, PasswordResetCompleted, PasswordResetRepository, PasswordResetRequest, PasswordResetRequested, PyWebAuthnProvider, Session, SessionInfo, SessionRepository, SqlitePasswordResetRepository, SqliteSessionRepository, SqliteWebAuthnCredentialRepository, VerifiedAssertion, VerifiedCredential, WebAuthnCredential, WebAuthnCredentialRead, WebAuthnCredentialRepository, WebAuthnProvider, hash_token, new_token, register_settings
