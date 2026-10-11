@@ -170,12 +170,12 @@ _EVENTBUS_STATEMENT_MESSAGES = ("event bus: published event type", "event bus: s
 
 
 def test_ac_009_settings_statements_go_through_get_logger(log_records: list[Any]) -> None:
-    """AC-009 (settings half): the 18 statements in ``registry.py`` and the 11 in
+    """AC-009 (settings half): the 19 statements in ``registry.py`` and the 11 in
     ``repository.py`` are written through ``get_logger()``, and neither module — nor
     any other module of the settings feature — imports a logging backend."""
     # structlog-logging REQ-005 fixes the statement count per file; logging-coverage REQ-010 v2 keeps each of them a statement.
     violations = [
-        *_statement_violations("src/backend/settings/registry.py", 18),
+        *_statement_violations("src/backend/settings/registry.py", 19),
         *_statement_violations("src/backend/settings/repository.py", 11),
     ]
 
@@ -211,30 +211,35 @@ def test_ac_009_eventbus_statements_go_through_get_logger(log_records: list[Any]
 
 # structlog-logging AC-009's four named files, with the statement count its REQ-005 fixes in each
 # (refreshed from the 17/11/10/1 migration snapshot to the post-change state by change
-# settings-public-registry-setter: each install operation adds one one-off WARNING, REQ-002).
+# settings-public-registry-setter: each install operation adds one one-off WARNING, REQ-002;
+# refreshed again by change startup-settings-registration-gaps: settings-coverage REQ-023 adds
+# the persisted-override WARNING to registry.py, 18 → 19).
 _AC_009_STATEMENTS: dict[str, int] = {
-    "src/backend/settings/registry.py": 18,
+    "src/backend/settings/registry.py": 19,
     "src/backend/settings/repository.py": 11,
     "src/backend/eventbus/eventbus.py": 11,
     "src/backend/permissions/service.py": 2,
 }
 
-# structlog-logging REQ-005 / AC-009 state the total explicitly ("each of the 42 one-off statements").
-_AC_009_TOTAL_STATEMENTS = 42
+# structlog-logging REQ-005 / AC-009 state the total explicitly ("each of the 42 one-off
+# statements"); 43 is that total plus the one-off WARNING settings-coverage REQ-023 adds to
+# registry.py — the structlog-logging count is one behind and is recorded as a finding in
+# docs/verification/startup-settings-registration-gaps.md.
+_AC_009_TOTAL_STATEMENTS = 43
 
 
 def test_ac_009_statements_go_through_get_logger() -> None:
     """AC-009 (the spec-named all-four witness): none of the four files REQ-005 names imports a
-    logging backend, and each of the 42 one-off statements is written through ``get_logger()``.
+    logging backend, and each of the 43 one-off statements is written through ``get_logger()``.
 
     The two witnesses above cover one feature each; this is the criterion as the spec states it —
-    the four files and the 42 statements together — so it goes green only when the last of them
+    the four files and the 43 statements together — so it goes green only when the last of them
     (``src/backend/permissions/service.py``) is migrated. REQ-001's repo-wide half ("no module
     under ``src/`` or ``tests/`` imports one") is AC-001's witness, not this one's.
     """
-    # Guards the table against drifting from REQ-005's per-file counts (18 + 11 + 11 + 2).
+    # Guards the table against drifting from REQ-005's per-file counts (19 + 11 + 11 + 2).
     assert sum(_AC_009_STATEMENTS.values()) == _AC_009_TOTAL_STATEMENTS, (
-        "structlog-logging REQ-005 fixes 42 one-off statements across the four named files"
+        "structlog-logging REQ-005 fixes 43 one-off statements across the four named files"
     )
 
     violations = [v for path, count in _AC_009_STATEMENTS.items() for v in _statement_violations(path, count)]

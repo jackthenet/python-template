@@ -28,7 +28,7 @@ def register_settings(registry: SettingsRegistry) -> None:
             kind=SettingKind.LIST,
             default=list(BOOTSTRAP_SYSTEM_PERMISSIONS),
             list_spec=ListSpec(item_pattern=r"^[a-z0-9_-]+\.[a-z0-9_-]+$"),
-            category="permissions",
+            category="security",
             group="permissions",
         )
     )

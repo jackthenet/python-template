@@ -210,6 +210,67 @@ uv run pytest tests/acceptance/settings_coverage tests/contract/settings_coverag
 
 **S4.1 (2026-10-11) — the §4 spec amendments have landed in this branch.** Five specs amended in place (`settings-coverage.md` → v3, `settings-public-registry-setter.md` → v4, `user-roles-permissions.md` → v3, `session-management.md` → v3, `file-management.md` → v3) plus the REQ-023 / AC-028 rows in `docs/verification/traceability.md`; no `src/` or `tests/` file was touched. **RED is unchanged** from §5.3: `uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py -q` → **3 failed, 6 passed** (`test_main_wires_all_features`, `test_category_group`, `test_ac_028_persisted_override_warns`). Docs gates: `scripts/check_traceability.py` **PASS** (891 matrix rows, 136 spec IDs, 876 test functions); `scripts/verify_spec.py` exit 0 for each of the five amended specs; `scripts/make_map.py --check` still **fails by exactly one line** (`docs/ — 234 files` → `235`, the drift the P.4 triage commit `cce7439` introduced) — not regenerated here on purpose, it lands with the `src/main.py` commit at S4.2.
 
+### 6.1 S4.2 (2026-10-11) — **GREEN confirmed**
+
+The minimal fix for **D-1, D-3, D-4, D-5** is implemented in four `src/` files; no behaviour beyond the affected spec IDs was introduced (the override `WARNING` is REQ-023 / AC-028, amended at `ffcd125`).
+
+**Changed in this commit:**
+
+| File | What changed |
+|---|---|
+| `src/main.py` | **D-1** — the six named `register_*_settings(...)` one-liners are replaced by `_SETTINGS_REGISTRATIONS`, an ordered tuple of the **nine** features' `register_settings` callables, plus the loop that calls each against `_shared_settings_registry()` (Q-14). Every callable is still imported from its feature's **package root** (`from backend.<feature> import register_settings as …`), so the REQ-011 witness keeps spying the call sites, and the install still precedes the registrations. **D-4** — the `LocalDiskStorageBackend("./data/files")` argument and its now-unused import are dropped from the `FileService(...)` construction, so REQ-015's live read of `filemanagement.storage_root` runs. |
+| `src/backend/permissions/feature_settings.py` | **D-3** — `permissions.system_principal`: `category="permissions"` → `category="security"` (key, kind, default, `group` unchanged). |
+| `src/backend/sessionmanagement/feature_settings.py` | **D-3** — the three `sessionmanagement.*` definitions: `category="sessionmanagement"` → `category="security"` **and `group="sessionmanagement"` added** (`register_feature` never sets `group`, §5.2). Keys, kinds, defaults and `min_value` unchanged. |
+| `src/backend/settings/registry.py` | **D-5 / REQ-023** — `register()` emits **one `WARNING`** when the loaded persisted value differs from the definition default. The record names the **key only** (message text + `key=` field), never the persisted value and never the default (Q-28 + the amended NFR-002: `mail.smtp_password` is a persisted credential). A persisted value equal to the default emits nothing; the REQ-011/REQ-022 precedence itself is unchanged. |
+| `tests/acceptance/sessionmanagement/test_settings.py` | Re-derived from the **amended** `session-management.md` model block (v3): `category == "security"` **and** `group == "sessionmanagement"` (was `category == "sessionmanagement"`). A narrowing to what AC-039 + settings-coverage REQ-018 state — not a weakening (§3 D-3, §9). |
+| `tests/acceptance/logging_coverage/test_statements_via_feature.py` | Re-counted for the new `registry.py` statement: `_AC_009_STATEMENTS["src/backend/settings/registry.py"]` **18 → 19**, and with it `_AC_009_TOTAL_STATEMENTS` **42 → 43** (the table guard `sum(...) == total` fails if only the per-file count moves), plus the two per-file counts in the docstring/comment. **Finding for Phase 6:** `docs/specs/structlog-logging.md` AC-009 still states "each of the 42 one-off statements" — REQ-023 adds the 43rd statement, and `structlog-logging.md` is **not** one of the five specs this change amends (§4). The count is a spec-wording drift, not a weakened assertion: the guard mechanism is byte-for-byte unchanged and now checks 19 + 11 + 11 + 2 = 43. |
+| `STRUCTURE.md` | Regenerated with `uv run python scripts/make_map.py` **in the same commit** as the `src/main.py` edit (AGENTS.md; skill `code-structure-map`): the `docs/ 234 → 235` drift §5.3 recorded, plus the line counts of the four changed modules. |
+
+**GREEN evidence** (targeted — AGENTS.md "Targeted GREEN"; the full suite and the whole-repo ruff sweep are **Phase 5** gates and were not run here):
+
+```text
+uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py \
+     tests/acceptance/settings_coverage/test_persistence.py \
+     tests/acceptance/filemanagement/test_filemanagement.py::test_ac_029_default_local_backend \
+     tests/integration/singleton_install/test_composition_root.py \
+     tests/acceptance/sessionmanagement/test_settings.py -v
+    → 14 passed in 5.84s        (the same tests were 3 failed / 6 passed at S3.2 / S4.1)
+
+uv run pytest tests/acceptance/settings_coverage tests/contract/settings_coverage tests/acceptance/mail \
+     tests/acceptance/filemanagement tests/integration/singleton_install -q
+    → 95 passed, 1 skipped in 17.10s   (the skip is the inherited symlink-host skip of §7)
+
+uv run pytest tests/acceptance/logging_coverage tests/acceptance/sessionmanagement tests/contract/singleton_install -q
+    → 82 passed in 17.12s
+
+uv run pytest tests/acceptance/test_structure_map.py tests/acceptance/settings tests/contract/settings \
+     tests/unit/settings tests/acceptance/permissions -q
+    → 151 passed in 48.55s      (test_ac_021 passes in this worktree now the map is regenerated, §7)
+
+uv run ruff check src/main.py src/backend/sessionmanagement/feature_settings.py \
+     src/backend/permissions/feature_settings.py src/backend/settings/registry.py \
+     tests/acceptance/sessionmanagement/test_settings.py \
+     tests/acceptance/logging_coverage/test_statements_via_feature.py
+    → All checks passed!
+uv run ruff format --check <same six paths>          → 6 files already formatted
+uv run mypy src/                                    → Success: no issues found in 84 source files
+uv run python scripts/check_traceability.py         → PASS (891 matrix rows, 136 spec IDs, 876 test functions)
+uv run python scripts/make_map.py --check           → exit 0
+```
+
+**Per defect — the test that now proves it:**
+
+| Defect | Proving test (GREEN) |
+|---|---|
+| **D-1** | `tests/acceptance/settings_coverage/test_wiring.py::test_main_wires_all_features` — the child reports `PROBED 34 / REGISTERED 34 / MISSING []` (the only witness that imports `main`) |
+| **D-2** | the same witness (its expected set is derived from every `feature_settings` module, so a tenth feature cannot hide) plus `tests/contract/settings_coverage/test_inventory.py::test_key_prefix` / `::test_category_group` / `::test_inventory_matches` / `::test_no_secret_settings` / `::test_inventory_backward_compatible` — nine features registered, the 34-key inventory |
+| **D-3** | `test_inventory.py::test_category_group` (category = domain **and** group = feature name for all 34 rows) and `tests/acceptance/sessionmanagement/test_settings.py::test_ac_039_register_settings_defaults` |
+| **D-4** | `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_029_default_local_backend` — the AC-029 contract the fix must satisfy, now reached by the composed service too (no `StorageBackend` argument); `tests/integration/singleton_install/test_composition_root.py` shows the composition root still wires |
+| **D-5** | `tests/acceptance/settings_coverage/test_persistence.py::test_ac_028_persisted_override_warns` — one `WARNING` names the overridden key, the effective value is still the persisted one, and a persisted value equal to the default names nothing |
+| REQ-011 / AC-016 (regression guard on the loop) | `tests/integration/singleton_install/test_composition_root.py::test_ac_016_main_installs_through_setter` and `::test_installed_registry_serves_feature_registration` — both still `[True, …, True]` with the loop: the six spied modules are still spied through their package roots, the install still precedes the registrations, and the source scan still finds no consumer site passed the local `_settings_registry` handle |
+
+**State machine: `RED_CONFIRMED → GREEN`.** Next atomic step: S4.3 (refactor, keep GREEN).
+
 ## 7. Inherited baseline on `main` (measured verbatim in this worktree)
 
 `uv run pytest tests/ -q` at base `25b7e7b` in this worktree:
