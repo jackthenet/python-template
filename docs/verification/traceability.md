@@ -396,6 +396,7 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | REQ-020 | AC-025 | `test_tracing` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-021 | AC-026 | `test_no_env_vars` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | REQ-022 | AC-027 | `test_settings_registers_nothing` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
+| REQ-023 | AC-028 | `test_ac_028_persisted_override_warns` (written at S3.1 by startup-settings-registration-gaps; the IDs are defined by this change's own `settings-coverage.md` v3 amendment, landed at S4.1) | RED (S3.2, 2026-10-11, startup-settings-registration-gaps — no `WARNING` names a key whose persisted value overrode its definition default, defect D-5; the code fix is S4.2) |
 | INV-001 | — | `test_get_value_valid_for_kind` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | INV-002 | — | `test_list_round_trip`; `test_yaml_value_roundtrip_nel` (issue main-ci-green item A) | RED (reproduction GREEN after the fix; row status predates the fix) |
 | INV-003 | — | `test_live_read_after_set` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
@@ -420,12 +421,13 @@ The settings-coverage feature (`docs/specs/settings-coverage.md`) uses its own R
 | NFR-005 | — | `test_atomic_write` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 | NFR-006 | — | `test_thread_safety` | GREEN (full suite: 727 passed, 1 skipped ×3 runs, zero failures — search S5.1 re-run on base `e8dd2bc`, 2026-10-02, commit `7bbc05a`) |
 
-**Rows this change adds later (Phase 4/5, not at S3.2).** The startup override diagnostic becomes a new
-requirement of `docs/specs/settings-coverage.md`, and its IDs are not defined until this change's own spec
-amendment merges — `scripts/check_traceability.py` fails any row that references an undefined ID, so the
-row is added together with the amendment. Its witness `test_ac_028_persisted_override_warns`
-(`tests/acceptance/settings_coverage/test_persistence.py`) is RED at S3.2 and is recorded in
-`docs/verification/startup-settings-registration-gaps.md` §5.3 until then. The `sessionmanagement`
+**Row added with the spec amendment (S4.1, 2026-10-11).** The startup override diagnostic became a new
+requirement of `docs/specs/settings-coverage.md` — REQ-023 / AC-028 — and its IDs are defined by this
+change's own in-PR amendment (Q-02, Q-28, Q-29), so the row above landed in the same commit as the
+amendment: `scripts/check_traceability.py` fails any row that references an undefined ID. Its witness
+`test_ac_028_persisted_override_warns` (`tests/acceptance/settings_coverage/test_persistence.py`) stays RED
+until the S4.2 fix; the RED gate is recorded in
+`docs/verification/startup-settings-registration-gaps.md` §5.3. The `sessionmanagement`
 category/group rows of that feature's own matrix are updated in Phase 4, when the amended model block
 re-derives `test_ac_039_register_settings_defaults`.
 

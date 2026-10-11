@@ -1,6 +1,7 @@
 # Spec: User Roles & Permissions (RBAC, Cross-Cutting)
 
 ## Changelog
+- v3 (2026-10-11): Amendment (change `startup-settings-registration-gaps`, ISSUE, decision Q-25) — `permissions.system_principal` moves to `category="security"` (it was `category="permissions"`, a category outside the `application` / `security` domain set `docs/specs/settings-coverage.md` REQ-018 defines). The key, kind, default, `ListSpec` and `group="permissions"` are unchanged, and no requirement wording changes: the model block in §3 is the only normative text that stated the category. No ID was added, renumbered or removed.
 - v2 (2026-10-06): REQ-030 added — public install operation for the shared default permission service (`set_permission_service()`), with REQ-023's singleton-surface enumeration and the §3 Public API list extended to name it, and AC-041..AC-044, EDGE-027, EDGE-028 added. Change `settings-public-registry-setter` (CROSS-CUTTING); see `docs/specs/settings-public-registry-setter.md`. No existing ID was renumbered, restated or deleted; the static permission catalog (REQ-004, REQ-005, AC-006) is unchanged.
 
 ## 1. Overview & Objectives
@@ -285,7 +286,7 @@ def register_settings(registry: SettingsRegistry) -> None:
         key="permissions.system_principal",
         kind=SettingKind.LIST,
         default=list(BOOTSTRAP_SYSTEM_PERMISSIONS),
-        category="permissions",
+        category="security",
         # item pattern ^[a-z0-9_-]+\.[a-z0-9_-]+$; the set is validated against the catalog
     ))
 ```
