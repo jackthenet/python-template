@@ -922,3 +922,110 @@ it records that the citation overstated the evidence at S5.4 and names the witne
 
 **Findings F-1 and F-2: resolved in this PR** (fix, not follow-up). §15.6's two open witness-completeness
 gaps are closed; findings 3–9 of §14 and F-3…F-6 of §15 stay as recorded (accepted / notes).
+
+---
+
+## 16. Review report (S6.3) — 2026-10-11, HEAD `87717bf`, clean tree
+
+**Bounded inputs (nothing else, per AGENTS.md Phase 6 / P-27):** this record (§2 affected IDs, §3 D-1…D-6, §4 the
+six amendments, §5.1 LQ-01, §5.2 the S3.1 corrections, §6/§6.1/§6.1.1 fix + GREEN, §7/§7.1/§7.2/§7.3 baseline +
+gates + branch refresh, §7.4 + §13.4 traceability, §13 verification report, §14 S6.1 findings, §15 + §15.7 S6.2
+findings and their resolution); the six amended specs exactly as this PR carries them; and the **final code state**
+— `src/main.py`, `src/backend/settings/registry.py`, `src/backend/permissions/feature_settings.py`,
+`src/backend/sessionmanagement/feature_settings.py`, and the seven test modules this change wrote, re-derived or
+extended (`test_wiring.py`, `test_inventory.py`, `test_persistence.py`, `sessionmanagement/test_settings.py`,
+`logging_coverage/test_statements_via_feature.py`, `singleton_install/test_composition_root.py`, plus the
+`filemanagement` AC-029 witness it must not break). **Not** the commit-by-commit diff.
+
+**This step changed no `src/`, no `tests/`, no `CHANGELOG.md`, no `pyproject.toml`, no `docs/todo/`, no
+`docs/questions/`, no spec.** The full suite was **not** re-run — §7.1 (891 passed / 1 skipped / 0 failed) and
+§13.2 (93.85 % ≥ 92, twice) stand; the **full-suite + coverage re-confirmation on the final tree is the S6.4
+pre-merge gate** (AGENTS.md Phase 5 ISSUE 9 / skill `review` MUST, §13.8 item 2).
+
+**Spot-checks run here** (targeted, to confirm the final tree carries what §15.7 reports — not re-measurement):
+
+| Check | Result |
+|---|---|
+| `git status --porcelain` | empty — the F-1/F-2 fixes are committed (`87717bf`), nothing in the buffer |
+| `uv run pytest tests/integration/singleton_install/test_composition_root.py tests/contract/settings_coverage tests/acceptance/settings_coverage -q` | **18 passed in 5.60s** — the F-1 guard, the rewritten F-2 guard and the reproduction witnesses are GREEN on the committed final tree |
+| `uv run python scripts/check_traceability.py` | **PASS** — 891 matrix rows, 136 spec IDs, **877** test functions (= 876 + the one witness §15.7 added) |
+| F-1 guard present | `tests/integration/singleton_install/test_composition_root.py:203` `_file_service_calls()` + `:217` `test_file_management_req_015_composition_root_passes_no_backend()` — asserts exactly one `FileService` construction and no backend in the positional slot or as a keyword; `src/main.py` contains `StorageBackend` only in the explanatory comment (`:236-237`) |
+| F-2 guard present | `tests/contract/settings_coverage/test_inventory.py::test_no_secret_settings` builds `keys = {view.key for view in reg.views()}` from the registry `_registry_with_all_features()` built and runs **both** clauses over it; `INVENTORY` is no longer an input |
+| Bite evidence recorded | §15.7 — F-1: the literal re-added at `src/main.py:242` → **1 failed, 2 passed**, only the new witness failed; F-2: `foo.api_secret` with no `INVENTORY` row → **1 failed, 4 passed**, and the **control** (old `keys = set(INVENTORY)` derivation, same defect) → **1 passed**, proving the pre-fix guard was vacuous |
+| Matrix rows carry the new evidence | `docs/verification/traceability.md:516` (REQ-015/AC-029 cites both witnesses and records the clause was un-guarded until S6.3) and `:418` (NFR-002 states the key set is read from the registry, not the table) |
+| Six spec changelog lines | all present at `:3-4` of each file: `settings-coverage.md` v3, `settings-public-registry-setter.md` v4, `user-roles-permissions.md` v3, `session-management.md` v3, `file-management.md` v3, `structlog-logging.md` v3 |
+
+### 16.1 Phase 6 checks 1–8 (ISSUE)
+
+| # | Check | Verdict | Evidence |
+|---|---|---|---|
+| 1 | **Changes match the ISSUE normative basis** (triage record + affected spec IDs) — no more, no less | **pass** | All six defects closed in the final state (§13.5): D-1 the nine-callable `_SETTINGS_REGISTRATIONS` tuple + loop (`src/main.py:207-219`, measured `PROBED 34 / REGISTERED 34 / MISSING []`); D-2 both guards derived from source; D-3 `category="security"` + `group="sessionmanagement"` (S6.1 measured 0 category/group mismatches over all 34 keys); D-4 no `StorageBackend` argument or import in `src/main.py`; D-5 one key-only `WARNING` (`registry.py:122-126`); D-6 resolved by the NFR-002 wording amendment + set-equality guard. `src/` diff = 4 files, +40 / −25 — exactly the §6 fix-scope table, nothing else |
+| 2 | **Traceability** — every touched REQ/AC has ≥ 1 GREEN test; every acceptance test traces to a normative ID | **pass** | §15.1: 11/11 updated rows cite a witness that exists and carry this change's name + date + a measured run; §15.2 reverse mapping: 0 orphans, every added/re-derived test names its ID; §13.4: touched IDs with no GREEN test — **none**, REQ-023/AC-028 covered; `check_traceability.py` PASS (891 rows / 136 IDs / 877 functions) |
+| 3 | **Feature boundaries** — code lives in the owning package, no cross-feature internal imports | **pass** | §15.4 rows 1–3, re-read in the final tree: each edit sits in the package that owns the setting; the cross-feature private-import grep returns 0 (the 7 hits are all inside `backend/logging/`, owner-internal and pre-existing); `src/main.py` imports only feature **package roots** |
+| 4 | **Architecture rules as this repo defines them** — flat feature packages, no `model/`/`services/` folders, `shared/` small, no cross-feature private imports | **pass** | §15.4: `find src -type d -name model -o -type d -name services -o -type d -name models` → **empty**; the only nested dir under `src/` is `backend/filemanagement/assets/`; `git diff main HEAD -- src/backend/shared/` → **empty**; no new dependency (`pyproject.toml` not in the branch diff) and no new pattern needing an ADR (§10) |
+| 5 | **No acceptance test weakened or deleted to reach GREEN** | **pass** | The test diff removes **no** test function and adds no `skip`/`xfail`/marker. The 8 removed `assert` lines, each read: (a) `sessionmanagement/test_settings.py:58` `category == "sessionmanagement"` → `category == "security"` **plus** a new `group == "sessionmanagement"` assertion — a re-derivation from the amended `session-management.md` v3 model block that **adds** a check (§3 D-3, §9); (b) the NFR-002 three-name substring check → set equality against the documented exemption, and the connection-string clause narrowed to non-empty strings (§5.2) — a **widening**, widened again at F-2 to the registry's real key set; (c) `d.default == default` → `_same_default` (order-insensitive for `LIST`, §14-6); (d) the four-key `[True, True, True, True]` check is **kept verbatim** (`test_wiring.py:102`) with the derived 34-key report **added** on top. The F-2 rewrite is a strict widening: the §15.7 control run shows the pre-rewrite guard passed a defect the post-rewrite guard catches |
+| 6 | **No behaviour changed beyond the type's contract** | **pass** | The only new behaviour is the REQ-023 / AC-028 `WARNING`, and it is **key-only** — `_logger.warning(f"persisted value overrides setting default: key={definition.key}", key=definition.key)`, never the persisted value or the default (Q-28 + the amended NFR-002, since `mail.smtp_password` is persisted); `test_ac_028_persisted_override_warns` also pins the negative case (a persisted value equal to the default names nothing) and that REQ-022 / AC-027 precedence is unchanged. The category/group move and the dropped backend argument are each represented by an amendment in this same PR (`session-management.md` v3, `user-roles-permissions.md` v3, `file-management.md` v3). Nothing in the final state lacks a spec ID (§14.2) |
+| 7 | **The report itself** — every §14/§15 finding closed or explicitly accepted with a pointer | **pass** | §16.2: 12 distinct findings — 2 closed by fix, 1 carried to S6.4 as a required action, 9 accepted as notes/follow-ups, **0 open** |
+| 8 | **Clean-or-not verdict** | **CLEAN** | §16.4 |
+
+### 16.2 Findings close-out (§14 findings 1–9, §15 findings F-1…F-6)
+
+12 distinct findings — §14's 9 plus §15's 6, with F-1 = §14-1, F-2 = §14-2 and F-6 = §14-9 recorded once each.
+**Open: 0.**
+
+| Finding | Severity | Resolution | Status |
+|---|---|---|---|
+| **§14-1 / F-1** — D-4's fix unguarded; REQ-015 / AC-029's composition-root clause had no witness, and §13.5's evidence row overstated it | **minor** | **Fixed in this PR** (§15.7): `_file_service_calls()` + `test_file_management_req_015_composition_root_passes_no_backend()` in the module that already AST-parses `src/main.py`; RED with the literal re-added (only that witness failed), GREEN on the final tree; matrix row `:516` and §13.5's D-4 row corrected. Spot-checked present at `:203` / `:217` | **closed (fix)** |
+| **§14-2 / F-2** — the NFR-002 guard was inventory-scoped, so a credential-named key with no `INVENTORY` row passed every guard | **minor** | **Fixed in this PR** (§15.7): the checked key set is read from `reg.views()`; RED on `foo.api_secret`, and the **control** (old derivation, same defect) passed — the hardening is what closes it; matrix row `:418` updated. Spot-checked present | **closed (fix)** |
+| **§14-3** — the AC-016 witness spies six of the nine registration call sites | minor | **Accepted with rationale** (§14): the amended wording's two halves are covered **in combination** — the whole-file AST scan (`_consumer_sites_passing_the_handle()` returns `[]` and matches the loop's call by the `register_*_settings` name pattern) and `test_main_wires_all_features` (`PROBED 34 / REGISTERED 34 / MISSING []` against the registry `import main` installed). **Follow-up:** widen the `_INSTRUMENT` spy tuple from six to the nine call sites — no TODO exists; a test-only tightening, not a gate gap | accepted (note + follow-up) |
+| **§14-4** — AC-028's "exactly one `WARNING`" is witnessed as "at least one" | minor | **Accepted with rationale**: the code emits exactly one (`registry.py:122-126` is a single `_logger.warning` on the override branch, and a re-`register()` of the same key raises `SettingsRegistrationError` at `:117-118` before the override check, so a duplicate per-key record is unreachable). **Follow-up:** count the records instead of matching one — test-only tightening | accepted (note + follow-up) |
+| **§14-5** — AC-009's total is still a hard-coded constant in the witness | note | **Accepted, and the split is the point of the amendment**: the **spec** no longer carries a normative constant (that is what went stale at S4.3), the **witness** keeps the count as an explicit drift guard that also catches a deleted statement or a returning backend import. Ruling recorded for future changes: an AC-009 count edit is a **re-derivation** (the §5.2 pattern), never a weakening | accepted (note) |
+| **§14-6** — `_same_default` relaxes `LIST` order for every list default, not only the order-unstable one | note | **Accepted**: no requirement fixes list order (REQ-019 fixes key/kind/default/parameters/category/group; §3.5 states values, not order) and the guard still compares the full value set. Narrowing the helper to `permissions.system_principal` is optional polish; no follow-up opened | accepted (note) |
+| **§14-7** — two spec-wording drifts: (a) `user-roles-permissions.md` v3's changelog says `group="permissions"` is "unchanged" though its §3 block never stated a group; (b) `session-management.md` §3 still shows `registry.register(...)` where the code uses `register_feature(...)` | note | **Accepted, no action.** (a) is true of the code state (the definition does carry `group="permissions"`) and the group is normative through settings-coverage REQ-018 + §3.5, which code and guard match; (b) is **inherited** pre-existing drift this amendment never touched, already implied by §13.7's "`register_feature` never sets `group`" row. Measured: code matches §3.5 exactly on category and group for all four keys. A late docs-only edit would reopen a spec file already amended in this PR for zero behavioural effect — deliberately not made | accepted (note) |
+| **§14-8** — the operator-visible consequence of D-1 + D-4 is not spelled out in the changelog plan | note | **Carried to S6.4 as a required action** (§13.8 item 3): `CHANGELOG.md` `## [Unreleased]` carries no entry from this change yet, and it must state that `filemanagement.*`, `mail.*` and `sessionmanagement.*` are registered for the first time — so a value already persisted in `settings/values.yaml` now wins (REQ-011, warned by REQ-023) and `filemanagement.storage_root` now actually moves the storage directory — so the entry is not read as a no-op | carried to S6.4 (action) |
+| **§14-9 / F-6** — the loop leaves `main.register_settings` bound as a module global | note | **Accepted and deliberate**: the name is load-bearing — `_consumer_sites_passing_the_handle()` classifies consumer sites by the `register_*_settings` pattern, so renaming the loop variable would silently drop all nine call sites out of the AC-016 scan. Nothing reads the leftover binding (§6.1.1, §15.4 last row). F-6 is the same item, recorded once | accepted (note) |
+| **F-3** — orphan detection is manual in this repo (`check_traceability.py` enforces referential integrity and the status vocabulary only) | note | **Recorded, no action**: the §15.2 reverse mapping is the review-side orphan check — 0 orphans. Not this change's tooling scope | accepted (note) |
+| **F-4** — `settings-coverage.md` §11's in-spec matrix rows still read `PENDING` | note | **No action, convention**: `PENDING` is a declared value so the tool passes, and the live gate record is `docs/verification/traceability.md` (decision Q-129, convention B); the spec's own §11 keeps the template default | accepted (note) |
+| **F-5** — the Settings Coverage section note was **appended**, not rewritten (`:372` unchanged in the diff, this change's note at `:424`) | note | **Corrected in the record** (§15.5) — the S6.2 input description overstated the edit; the note names exactly the 11 rows §15.1 audits | accepted (corrected) |
+
+**Residual / inherited items** (§13.7) stay out of scope with their pointers named: the `test_ac_021` line-ending
+root cause (`core.autocrlf=true` with no `.gitattributes`) → the separate **`docs/todo/gitattributes-line-endings.md`**
+TODO (§7, §10); the two Hypothesis deadline flakes and the **search contract's timing budget**
+`test_nfr_001_performance_budgets` (a wall-clock contract documented as load/hardware-sensitive) → no TODO exists,
+the record is `docs/workflow/PROBLEMS.md` **P-35 / P-36 / P-86 / P-119**, and §10 excludes fixing them here; the
+`ty` informational +1 diagnostic (mypy is the gate); `complexipy`, cleared by the branch refresh (§7.3).
+
+### 16.3 ISSUE Review-Gate criteria (AGENTS.md "Review Gate (Phase 6)")
+
+| Criterion | Verdict | Evidence |
+|---|---|---|
+| The reproduction tests are GREEN | **pass** | §7.1 / §7.4: the three reproduction files went **3 failed / 6 passed** at the §5.3 RED gate → **9 passed**; spot-checked again here (18 passed across the guard and reproduction files on the committed final tree) |
+| The fix introduces no behaviour beyond the affected spec IDs | **pass** | §16.1 check 6 — the only new behaviour is the key-only REQ-023 / AC-028 `WARNING`, added as REQ-023 / AC-028 in `settings-coverage.md` v3 in this same PR; every other change is pinned by an amendment in §4; the `src/` diff is the four §6 files and nothing else |
+| The full regression suite has no new failures | **pass** | §7.1: **891 passed, 1 skipped, 0 failed** at `736a24c` against the inherited baseline's 3 failed / 887 passed / 1 skipped (§7) — strictly better, the +1 collected node is this change's own `test_ac_028_persisted_override_warns`, and each of the three inherited failures is individually classified (§7.1 table). §13.2: two further full-suite runs under `--cov`, the second **0 failed**, coverage **93.85 %** ≥ 92 in both |
+| No acceptance test weakened or deleted to achieve GREEN | **pass** | §16.1 check 5 and the §14 test-diff audit — no removed function, no marker, the two assertion changes are the recorded re-derivations, and the F-2 rewrite is provably a widening (§15.7 control run) |
+| Feature boundaries and architecture rules respected | **pass** | §16.1 checks 3–4 and §15.4 (every rule measured on the final tree) |
+
+**Not this step's gate:** the **full-suite + coverage re-confirmation on the final tree is the S6.4 pre-merge
+gate** (this change is **not** light-tier, §8, so Phase 5 already ran the full set; S6.4 re-confirms it on the tree
+the PR carries, after the `CHANGELOG.md` entry and the `patch` bump) and records the result here. §7.1 and §13.2
+are the current measurements.
+
+**AGENTS.md Phase 6 item 9 (the `AGENTS.md` "how to use this" note) — n/a.** That item is scoped
+"FEATURE/CROSS-CUTTING only" and this is an ISSUE. The reusable mechanics it would document (the composition-root
+registration list, the feature-owned `register_settings` seam, the singleton install/reset trio, the shared test
+tooling) are already documented in `AGENTS.md`, and this change introduced no new pattern (§10: no ADR, no new
+dependency).
+
+**S6.4's remaining obligations** (§13.8 items 2–5): the `CHANGELOG.md` entry under `## [Unreleased]` — `Fixed` for
+D-1…D-5 and `Changed` for the category/group move, and per §14-8 the operator-visible consequence; the
+`bump-my-version bump patch` (`1.2.0 → 1.2.1`, clean tree, `tag = false`) with the `## [Unreleased]` entries moved
+into `## [1.2.1] - <date>` in the same commit; the full-suite + coverage pre-merge re-confirmation; then the PR to
+`main`, presented for human review/merge, and STOP (the agent never merges — human governance).
+
+### 16.4 Verdict
+
+All eight Phase 6 checks pass. Of the 12 distinct findings raised in §14 and §15: **2 closed by fix in this PR**
+(F-1, F-2), **1 carried to S6.4** as a required action (§14-8, the changelog wording), **9 accepted with rationale
+and a pointer** (§14-3…§14-7, §14-9/F-6, F-3, F-4, F-5) — **0 open**. The ISSUE Review-Gate criteria are met.
+
+**REVIEW REPORT: CLEAN**
