@@ -671,5 +671,157 @@ and both missing-input messages were emitted, identically, by both versions.
 | pinned test (untouched) | `uv run pytest tests/acceptance/test_structure_map.py::test_ac_025_mypy_covers_scripts -q` | **1 passed** |
 | map | `uv run python scripts/make_map.py` + `--check` | regenerated in this commit; `--check` exit **0**; `STRUCTURE.md` **2 021** lines (was 2 016, +5 signatures) — NFR-002 ceiling 2 200, headroom **179** |
 
-- **Next:** S4.2 unit 4 — widen the gate (`pyproject.toml` `[tool.complexipy] paths` + the `complexity` job in
-  `.github/workflows/quality.yml`), the NFR-005 amendment + ADR-087, and the `CHANGELOG.md` entry.
+## Phase 4 unit 4 — the gate widening + the design record (S4.2, 2026-10-11)
+
+Scope items **#1, #2, #6, #7** (plus **#8**, the map). This is the unit that makes the change's own
+acceptance signal true: `scripts/` joins the cognitive-complexity gate **in both places it is written**
+(**Q-05**), the spec line that said the opposite is amended (**Q-04**), and the decision is recorded in
+**ADR-087**, which supersedes ADR-086's complexipy row without editing ADR-086.
+
+Files touched by this unit: `pyproject.toml`, `.github/workflows/quality.yml`,
+`docs/specs/structure-map.md`, `docs/decisions/ADR-087-complexipy-scope-extended-to-scripts.md` (new),
+the regenerated `STRUCTURE.md`, and this record. **Not** touched: any `scripts/*.py` (units 1–3 are done),
+any test file (**Q-12**), `docs/verification/traceability.md` (**Q-15**), `CHANGELOG.md` (**pending Phase 6**,
+see below), `.pre-commit-config.yaml`, the coverage / bandit / `ty` / mypy configuration (**Q-17**), and
+`docs/decisions/ADR-086-scripts-type-checked-tree.md` (**Q-04** — a decision record is superseded, never
+rewritten).
+
+### The two gate-scope lines, exactly as scoped
+
+```diff
+ pyproject.toml:100
+-[tool.complexipy]
+-paths = ["src", "tests"]
++[tool.complexipy]
++paths = ["src", "tests", "scripts"]
+ max-complexity-allowed = 15          # unchanged — the ceiling is not touched (Q-13, Q-17)
+
+ .github/workflows/quality.yml:143-146 (the `complexity` job)
+-      # Cognitive-complexity gate over both trees; the threshold lives in
++      # Cognitive-complexity gate over all three trees; the threshold lives in
+       # `[tool.complexipy]` and is repeated here so CI fails loudly on a bad config.
+       - name: Run complexipy (gate)
+-        run: uv run complexipy src tests --max-complexity-allowed 15
++        run: uv run complexipy src tests scripts --max-complexity-allowed 15
+```
+
+Job name, runner, steps, the `uv sync --only-group dev` setup and the hard-gate semantics (no
+`continue-on-error`) are unchanged; the positional args stay **explicit** so CI fails loudly on a bad
+config, exactly as the job's own comment intends (**Q-05**).
+
+**Scope note (one comment word).** "over both trees" → "over all three trees" is not a third scoped edit;
+it is the comment on the line this scope item rewrites, and leaving it would make it false in the same way
+NFR-005's tail was false (**Q-04**). No behavior, no semantics, no other line of the workflow file.
+
+### The gate, before → after (measured in this worktree, this unit)
+
+| Form | Before (HEAD `7ebc19a`, config still `src`+`tests`) | After (this commit) |
+|---|---|---|
+| `uv run complexipy` (config-driven — what a developer runs) | exit **0**, **2 186** functions analysed, 0 FAILED, **0** `scripts/` files, stdout 187 539 B | exit **0**, **2 253** functions analysed, 0 FAILED, **4** `scripts/` files (67 functions), stdout 192 033 B |
+| `uv run complexipy src tests scripts --max-complexity-allowed 15` (the new CI form) | exit **0**, **2 253** analysed (run here *before* the config change to prove the args, not the config, drive it) | exit **0**, **2 253** analysed, 0 FAILED |
+| `uv run complexipy src tests --max-complexity-allowed 15` (the old CI form, kept as a witness) | exit **0**, 2 186 analysed | exit **0**, 2 186 analysed — positional args still override the widened config, which is what the untouched `test_nfr_005_complexipy_threshold_holds` relies on |
+| `uv run complexipy scripts --max-complexity-allowed 15` | exit **0**, 67 analysed, 0 FAILED (units 1–3) | exit **0**, 67 analysed, 0 FAILED — unchanged by this unit |
+
+The config-driven run and the CI form now produce **identical** reports (ANSI-stripped stdout compared byte
+for byte: identical; the only raw-byte difference is `uv`'s four-line rebuild banner, an artifact of
+`pyproject.toml` having just changed). The config-driven report's ANSI-stripped diff against the baseline is
+**+75 lines, −0**: the four `scripts\*.py` headers, their 67 function lines and the blank lines between
+them — nothing else in the 2 186-function report moved.
+
+Baseline comparison for the record: at `eddf94f` the same `scripts/` scope scored **50 functions, 4 FAILED**
+(17 / 19 / 22 / 22) and exit **1**; the widening therefore lands a tree that is already clean, and the
+`complexity` job goes green with the PR rather than needing a grace period.
+
+### NFR-005 amendment (`docs/specs/structure-map.md`, scope item #6)
+
+```diff
+-| NFR-005 | Complexity | The new test files stay under `[tool.complexipy] max-complexity-allowed = 15` (`paths = ["src", "tests"]`); `scripts/` is not analyzed by complexipy. |
++| NFR-005 | Complexity | The new test files stay under `[tool.complexipy] max-complexity-allowed = 15`. The gate analyses `paths = ["src", "tests", "scripts"]` — widened to include `scripts/` by the `complexipy-scripts` change (v4, ADR-087), so `scripts/` **is** analyzed by complexipy; the CI `complexity` job repeats the three paths explicitly so a bad config fails loudly. |
+```
+
+The normative clause (that change's test files stay under 15) is kept verbatim; only the descriptive tail
+that the widening falsifies is replaced. Nothing else in the spec changed — no ID renumbered, restated or
+deleted, and the §11 witness row (`:575`, `test_nfr_005_complexipy_threshold_holds`) is untouched.
+
+The `## 15. Changelog` **v4** entry was appended at the top of the list in the existing v3/v2 format, naming
+the change, the Spec Amendment Workflow, the fact that the amendment rides this PR, and this record plus
+ADR-087 — the format AGENTS' Spec Amendment Workflow prescribes (`- v<n> (<date>): NFR-005 amended — …`),
+numbered from the file's existing v1/v2/v3.
+
+**The witness is unchanged and still passes** (**Q-12**): `test_nfr_005_complexipy_threshold_holds` keeps
+its own `_COMPLEXIPY_PATHS = ("src", "tests")` (`tests/acceptance/test_structure_map.py:1427`) and is neither
+weakened nor extended to `scripts/`. Enforcement of the widened scope is the `complexity` job plus
+`[tool.complexipy] paths` — deliberately not duplicated by a config-contract test.
+
+### ADR-087 (scope item #7)
+
+`docs/decisions/ADR-087-complexipy-scope-extended-to-scripts.md` — **new file**; ADR-086 was **not** edited.
+
+- **Supersession statement (in ADR-087's Status section):** "**supersedes `ADR-086-scripts-type-checked-tree.md`**
+  in exactly one respect: its gate-map row for `complexipy` (`:18`, 'Covers `scripts/`? — no') and the
+  sentence of its Decision bullet that keeps complexipy at `paths = ["src", "tests"]` (`:47-50`). Every other
+  ADR-086 decision — `scripts/` as a type-checked tree, the stdlib-only generator, coverage/bandit/`ty`
+  scopes, the `fail_under = 92` floor — stands unchanged."
+- **Convention check (done at write time):** the repo records supersession **in the superseding ADR** —
+  ADR-082's Status line reads "Accepted (supersedes ADR-002)" and its body states that the ADRs whose wording
+  it absorbs are "deliberately **not** edited … the wording is superseded by this ADR, which is the current
+  record"; ADR-083 likewise records "Extends, does not supersede" without touching the ADRs it names. (The
+  lone older counter-example is ADR-002's own Status line, added when it was superseded.) ADR-087 follows the
+  current convention: the supersession lives in ADR-087, ADR-086 stays as written.
+- **Numbering re-checked at write time:** `ls docs/decisions` → 86 files, highest **ADR-086**, **ADR-081**
+  absent and deliberately reserved for `api-keys` (`docs/verification/structure-map.md:240`,
+  `docs/verification/settings-public-registry-setter.md:297-301`); `git log --all --oneline --
+  "docs/decisions/ADR-087*"` → empty, and no in-flight worktree holds an ADR-087. **087 is free.**
+- **What it justifies with the measured facts:** the four before/after scores (17→0, 19→2, 22→3, 22→3) and
+  the whole-tree numbers (50 functions / 4 FAILED / exit 1 → 67 / 0 / exit 0, gate 2 186 → 2 253 analysed);
+  why **both** places carry the scope (**Q-05**, with the measured fact that positional args override the
+  config); the **accepted drift risk** (**Q-18** — no pin, no snapshot, no ratchet; the engine has already
+  moved once, 20 PASSED under 5.1.0 vs 38 FAILED under 8.0.1 for the same function, and the ≤ 12 target is
+  the mitigation); the **near-miss functions left alone** (**Q-17** — `test_ac_008_document_shape` 15,
+  `_feature_logger_names` 14, `test_inv_004_other_loggers_untouched` 14, `test_concurrent_thread_safe` 14,
+  `SearchService::search` 13, `SettingsRegistry::create_template` 13); the **no-witness** decision
+  (**Q-12**); and that ADR-086's other frozen scopes (coverage, bandit, `ty`, `migrations/`,
+  `.github/hooks/`) stay closed.
+
+### Golden-output re-run (the primary no-behavior-delta evidence, Q-03)
+
+`bash capture.sh <this worktree> /c/workspace/active-projects/complexipy-scratch/golden-after-unit4`
+(absolute, outside every worktree), then `diff -r golden-before golden-after-unit4` — **21 files compared,
+18 byte-identical, 3 differ, and all three are complexipy measurement files, not witnesses**:
+
+| Witness (18 files) | Result |
+|---|---|
+| `check_traceability.stdout` (72 B, sha `e13c5631…4c3f`) / `.stderr` (0 B) / `.exit` (`0`) | **identical** |
+| `validate_task_dag.stdout` (61 B, sha `9234e830…1158`) / `.stderr` / `.exit` | **identical** |
+| `verify_spec_all.stdout` (31 708 B, sha `9d3d3cdc…7b58`) / `.stderr` / `.exit` (475 B, sha `8b4c99ea…fb18`) — all 15 specs, exit 0 each | **identical** — **this is the witness that the NFR-005 amendment and the v4 Changelog line are neutral to `verify_spec.py`**, exactly as the §Golden-output baseline neutrality argument predicted (`parse_spec` collects IDs, and the amendment adds no ID and deletes none) |
+| `verify_spec_template.stdout` (363 B, sha `0f8ec58e…4a0b`) / `.stderr` / `.exit` — the AC-025 byte-pinned report | **identical** |
+| `complexipy_ci_form.stdout` (187 539 B, sha `da346575…e237`) / `.stderr` / `.exit` | **identical** — the explicit `src tests` form is unaffected by the config widening, which is what keeps the untouched NFR-005 witness meaningful |
+| `complexipy_config.stdout` (187 539 → **192 033 B**, sha `da346575…` → `31b3e44e…`) | **differs — expected, and this is the acceptance signal**: the config-driven run now analyses `scripts/` (+75 report lines, −0). `.exit` (`0`) and `.stderr` (0 B) are **identical** |
+| `complexipy_scripts.stdout` (5 017 B, sha `9995d513…`) / `.exit` (`0`) | **identical to unit 3** — the explicit `scripts` run does not depend on the config, so this unit moves nothing here |
+
+Against `golden-after-unit3` (i.e. this unit alone): **exactly one file differs**, `complexipy_config.stdout`.
+No script witness moved in any direction.
+
+### Gates run for this unit
+
+| Gate | Command | Result |
+|---|---|---|
+| complexity (config-driven) | `uv run complexipy` | exit **0** — **2 253 functions analysed, 0 FAILED**, `scripts/` now analysed (4 files, 67 functions) |
+| complexity (CI form) | `uv run complexipy src tests scripts --max-complexity-allowed 15` | exit **0** — **2 253 analysed, 0 FAILED**; report identical to the config-driven run |
+| lint (repo-wide sweep — this unit edits config both ruff and complexipy read) | `uv run ruff check .` | **All checks passed!** |
+| format | `uv run ruff format --check .` | **362 files already formatted** |
+| types | `uv run mypy scripts/` | **Success: no issues found in 4 source files** |
+| dependencies | `uv run deptry .` | **Success! No dependency issues found.** (no dependency was added or removed) |
+| untouched witnesses | `uv run pytest tests/acceptance/test_structure_map.py::test_nfr_005_complexipy_threshold_holds …::test_ac_025_mypy_covers_scripts -q` | **2 passed** — neither test was touched (**Q-12**) |
+| map | `uv run python scripts/make_map.py` + `--check` | regenerated in this commit; `--check` exit **0**; `STRUCTURE.md` **2 021** lines (unchanged — no `.py` changed), the `docs/ — 235 files` line → **236** (ADR-087) — NFR-002 ceiling 2 200, headroom **179** |
+
+### `CHANGELOG.md` — pending Phase 6
+
+Scope item **#9** is **not** done here by design: the change's `CHANGELOG.md` entry under `## [Unreleased]` →
+`### Changed` is a **Phase 6 (S6.x)** step in this workflow (AGENTS Phase 6 check 10), not a Phase 4 step.
+Recorded here so Phase 5/6 can confirm it is owed, not forgotten. **No version bump** (DOCS/CHORE → none,
+**Q-16**).
+
+- **Next:** S5.1 — Phase 5 light verify (`uv run ruff check .`, `uv run mypy scripts/`, the complexipy gate
+  in both forms, the golden byte comparison, and the confirmation that no test file and no
+  `docs/verification/traceability.md` row was touched).
