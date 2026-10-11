@@ -9,6 +9,14 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 ## [Unreleased]
 
+### Added
+
+- Startup now logs one `WARNING` for every setting whose **persisted** value overrides its definition default
+  (`persisted value overrides setting default: key=<key>`), so a stale `settings/values.yaml` no longer changes
+  behaviour silently. The record names the **key only — never the value**, because a persisted value may be a
+  credential (`mail.smtp_password`) and `docs/specs/settings-coverage.md` NFR-002 as amended keeps credentials out
+  of log records. New requirement REQ-023 / AC-028 (`startup-settings-registration-gaps`, defect D-5).
+
 ### Changed
 
 - The cognitive-complexity gate now covers `scripts/` alongside `src` and `tests`: `[tool.complexipy]
@@ -34,6 +42,49 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
   `paths = ["src", "tests"]`. ADR-086 itself is not edited, and its other frozen scopes (coverage
   `source` and `fail_under = 92`, bandit `-r src/`, `ty root = ["./src"]`) stand unchanged
   (`complexipy-scripts`).
+- The two guards that were meant to catch missing feature registration are themselves complete now, so the gap
+  cannot reopen: the AC-003 witness `tests/acceptance/settings_coverage/test_wiring.py::test_main_wires_all_features`
+  derives its expected key set from **every** `backend.<feature>.feature_settings` module (it asserts
+  `PROBED 34 / REGISTERED 34 / MISSING []`) instead of four hard-coded keys, and the contract inventory guard
+  `tests/contract/settings_coverage/test_inventory.py` covers the full 34-key inventory of all nine features, with
+  its NFR-002 credential check rewritten as a set equality against a documented exemption list
+  (`mail.smtp_password` only) and read from the live registry rather than from the inventory table
+  (defects D-2 and D-6, REQ-017 / REQ-019 / AC-022…AC-024, NFR-002 as amended).
+- Six approved specs are amended **in this change's own PR** — the user's explicit decision Q-02 / Q-27 overrides
+  the separate-Spec-Amendment-PR rule for this change, and the override is recorded in
+  `docs/verification/startup-settings-registration-gaps.md` §4: `settings-coverage.md` v3 (nine-feature
+  enumeration, the full 34-key §3.5 inventory, REQ-019 widened to it, new REQ-023 / AC-028, NFR-002 rewritten),
+  `settings-public-registry-setter.md` v4 (REQ-011 / AC-016 cover every registration call site, no hard-coded
+  count or line numbers), `user-roles-permissions.md` v3 and `session-management.md` v3 (the model blocks' category
+  and group), `file-management.md` v3 (REQ-015 / AC-029 state that the composition root passes no
+  `StorageBackend`), `structlog-logging.md` v3 (AC-009's count is the witness's measured figure, 43).
+
+### Fixed
+
+- The composition root registers the settings of **all nine** settings-owning features. It registered 18 of the 34
+  specified keys: `filemanagement.*` (5), `mail.*` (8) and `sessionmanagement.*` (3) — **16 keys** — were never
+  registered, so they were absent from the live registry, invisible in settings views, impossible to set or reset,
+  and every read fell through the REQ-005 hardcoded code default while the features kept working. The six named
+  `register_*_settings(...)` one-liners are replaced by an ordered `_SETTINGS_REGISTRATIONS` tuple of the nine
+  features' `register_settings` callables and the loop that calls each against the shared registry, so a feature
+  cannot be left out silently again (defect D-1, REQ-002 / AC-003, `startup-settings-registration-gaps`).
+- **Operator-visible consequence of the 16 newly registered keys:** they now take part in the persisted-value
+  precedence (REQ-011), so a value already present in `settings/values.yaml` for any of them wins over the code
+  default from the next start — and each such override is named by the new startup `WARNING` (REQ-023) instead of
+  being invisible (`startup-settings-registration-gaps`).
+- `permissions.system_principal` and the three `sessionmanagement.*` settings now carry the **domain** category
+  `security` instead of their own feature name, and the three `sessionmanagement.*` definitions now carry
+  `group="sessionmanagement"` (they had no group at all — `register_feature` validates only the key prefix and
+  never sets one). REQ-018 / AC-023 require `category` = domain and `group` = feature name, so the position of
+  those four keys in the settings category/group hierarchy is corrected (defect D-3,
+  `user-roles-permissions.md` v3, `session-management.md` v3).
+- The composed `FileService` no longer pins its storage backend to the literal
+  `LocalDiskStorageBackend("./data/files")`; the composition root passes no `StorageBackend` at all.
+  **Operator-visible consequence: `filemanagement.storage_root` is a live setting again** — changing it now actually
+  moves the directory the application reads and writes user files in, whereas before this change the composed
+  application ignored the setting and always used `./data/files` (the literal was byte-identical to the registered
+  default, which is why the inert setting stayed unnoticed). Per file-management REQ-015 / AC-029 the backend is
+  built from the live setting on every operation (defect D-4, `file-management.md` v3).
 
 ## [1.2.0] - 2026-10-10
 

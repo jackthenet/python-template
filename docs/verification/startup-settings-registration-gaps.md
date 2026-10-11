@@ -853,75 +853,144 @@ this change's dated note sits at `:424`, naming exactly these 11 rows (7 in this
   guard inventory-scoped) are both **witness-completeness** gaps — the specified behaviour is correct in the final
   state but under-guarded. S6.3 must resolve each as fix-in-PR or recorded follow-up, and §13.5's D-4 evidence row
   must be corrected either way.
-- **Blockers: 0.** The change may proceed to S6.3.
-
-### 15.7 Findings F-1 / F-2 resolved (S6.3, fix in this PR) — 2026-10-11
-
-**Scope of this step: test-only.** `git diff -- src/` is empty on the committed tree; no spec, no
-acceptance test was deleted, weakened or marked; no new test module, no helper class, no import of
-`main`. Both fixes are the option each finding named: F-1 = extend the existing AST scan in
-`tests/integration/singleton_install/test_composition_root.py`; F-2 = build the checked key set from
-the registry the guard builds.
-
-**F-1 — the composition-root backend guard (D-4 is now guarded).**
-`tests/integration/singleton_install/test_composition_root.py` gains `_file_service_calls()` (an AST
-scan of `src/main.py` for `FileService(...)` constructions, the same pattern as the module's
-`_private_slot_imports()` / `_consumer_sites_passing_the_handle()`) and
-`test_file_management_req_015_composition_root_passes_no_backend()`, which asserts (a) exactly one
-`FileService` construction exists in the composition root — so the guard cannot go vacuous if the call
-is renamed or removed — and (b) it passes **no** backend: no keyword `backend=`, and no value in the
-positional backend slot (`FileService(repository, backend=None, …)` → `args[1]`). The docstring cites
-`file-management.md` REQ-015 / AC-029 (v3).
-
-- **RED on the temporary defect:** the exact D-4 defect re-added to `src/main.py` (the
-  `LocalDiskStorageBackend` import plus the positional `LocalDiskStorageBackend("./data/files")` at
-  `src/main.py:242`) → `uv run pytest tests/integration/singleton_install/test_composition_root.py -q` =
-  **1 failed, 2 passed**, `AssertionError: file-management REQ-015 / AC-029: src/main.py must pass
-  FileService no StorageBackend (backend argument at line(s) [242]) … assert [242] == []`. Only the new
-  witness failed — i.e. the rest of the suite really is blind to the literal, exactly as F-1 measured.
-- **GREEN after the revert:** `git checkout -- src/main.py` → **3 passed**; `git diff -- src/` empty.
-
-**F-2 — the NFR-002 witness is now registry-scoped.**
-`tests/contract/settings_coverage/test_inventory.py::test_no_secret_settings` derives
-`keys = {view.key for view in reg.views()}` from the registry `_registry_with_all_features()` built, and
-runs **both** clauses over it — the credential-name set equality against
-`NFR_002_CREDENTIAL_EXEMPTIONS = {"mail.smtp_password"}` (LQ-01 (a), unchanged) and the non-empty-value
-connection-string clause. `INVENTORY` is no longer an input to this guard.
-
-- **RED on the temporary defect:** a credential-named key with no `INVENTORY` row registered in
-  `_registry_with_all_features()` (`foo.api_secret`, TEXT) →
-  `uv run pytest tests/contract/settings_coverage/test_inventory.py -q` = **1 failed, 4 passed** — the
-  failure is `test_no_secret_settings`: `found ['foo.api_secret', 'mail.smtp_password'], exempted
-  ['mail.smtp_password']`, while `test_key_prefix` / `test_category_group` / `test_inventory_matches` /
-  `test_inventory_backward_compatible` all pass: precisely the hole F-2 described.
-- **Control (the old derivation was vacuous):** with the same defect still registered and the derivation
-  temporarily set back to `keys = set(INVENTORY)` → **1 passed**. The hardening is what closes it.
-- **GREEN after both reverts:** `uv run pytest tests/contract/settings_coverage/test_inventory.py -q` =
-  **5 passed**; no `TEMP` marker left in the file.
-
-**Targeted runs on the final tree (full suite not re-run — Phase 5 owns it, S6.4 re-confirms pre-merge).**
-
-| Run | Result |
-|---|---|
-| `uv run pytest tests/integration/singleton_install tests/contract/settings_coverage tests/acceptance/settings_coverage tests/acceptance/filemanagement -q` | **76 passed, 1 skipped** (the pre-existing `symlinks not available on this host` skip) |
-| the change's `green_command` (wiring + inventory + persistence + `test_ac_029_default_local_backend` + `test_composition_root.py` + `sessionmanagement/test_settings.py`) | **15 passed** (14 at S5.3 + the new witness) |
-| `uv run ruff check` + `uv run ruff format` on the two changed test paths | `All checks passed!` / `2 files left unchanged` |
-| `uv run python scripts/check_traceability.py` | `Traceability: PASS (891 matrix rows, 136 spec IDs, 877 test functions)`, **exit 0** — 877 = 876 + the one new test function |
-| `uv run python scripts/make_map.py` then `--check` | **exit 0**; `STRUCTURE.md` unchanged — the map's module sections cover `src`/`scripts`/`migrations` plus only `tests/conftest.py` and `tests/*_test_helpers.py` (REQ-011 file scope), so the two changed test modules are tree entries only, and the map is regenerated in the same commit as any `.py` change it does cover |
-
-**Traceability updated (rows this change already owned, no new row):** the `file-management.md`
-REQ-015 / AC-029 row (`docs/verification/traceability.md:516`) now cites
-`test_file_management_req_015_composition_root_passes_no_backend` beside `test_ac_029_default_local_backend`
-— its Test column names witnesses, so the new witness belongs there — and its Status cell records that the
-composition-root clause was un-guarded until this step. The `settings-coverage.md` NFR-002 row (`:418`)
-parenthetical now states that the checked key set is read from the registry the guard builds, not from its
-own `INVENTORY` table.
-
-**§13.5 corrected:** the D-4 evidence row no longer cites `test_composition_root.py` as proof of the fix;
-it records that the citation overstated the evidence at S5.4 and names the witness that closes the gap.
-
-**Findings F-1 and F-2: resolved in this PR** (fix, not follow-up). §15.6's two open witness-completeness
-gaps are closed; findings 3–9 of §14 and F-3…F-6 of §15 stay as recorded (accepted / notes).
+- **Blockers: 0.** The change may proceed to S6.3.
+
+
+
+### 15.7 Findings F-1 / F-2 resolved (S6.3, fix in this PR) — 2026-10-11
+
+
+
+**Scope of this step: test-only.** `git diff -- src/` is empty on the committed tree; no spec, no
+
+acceptance test was deleted, weakened or marked; no new test module, no helper class, no import of
+
+`main`. Both fixes are the option each finding named: F-1 = extend the existing AST scan in
+
+`tests/integration/singleton_install/test_composition_root.py`; F-2 = build the checked key set from
+
+the registry the guard builds.
+
+
+
+**F-1 — the composition-root backend guard (D-4 is now guarded).**
+
+`tests/integration/singleton_install/test_composition_root.py` gains `_file_service_calls()` (an AST
+
+scan of `src/main.py` for `FileService(...)` constructions, the same pattern as the module's
+
+`_private_slot_imports()` / `_consumer_sites_passing_the_handle()`) and
+
+`test_file_management_req_015_composition_root_passes_no_backend()`, which asserts (a) exactly one
+
+`FileService` construction exists in the composition root — so the guard cannot go vacuous if the call
+
+is renamed or removed — and (b) it passes **no** backend: no keyword `backend=`, and no value in the
+
+positional backend slot (`FileService(repository, backend=None, …)` → `args[1]`). The docstring cites
+
+`file-management.md` REQ-015 / AC-029 (v3).
+
+
+
+- **RED on the temporary defect:** the exact D-4 defect re-added to `src/main.py` (the
+
+  `LocalDiskStorageBackend` import plus the positional `LocalDiskStorageBackend("./data/files")` at
+
+  `src/main.py:242`) → `uv run pytest tests/integration/singleton_install/test_composition_root.py -q` =
+
+  **1 failed, 2 passed**, `AssertionError: file-management REQ-015 / AC-029: src/main.py must pass
+
+  FileService no StorageBackend (backend argument at line(s) [242]) … assert [242] == []`. Only the new
+
+  witness failed — i.e. the rest of the suite really is blind to the literal, exactly as F-1 measured.
+
+- **GREEN after the revert:** `git checkout -- src/main.py` → **3 passed**; `git diff -- src/` empty.
+
+
+
+**F-2 — the NFR-002 witness is now registry-scoped.**
+
+`tests/contract/settings_coverage/test_inventory.py::test_no_secret_settings` derives
+
+`keys = {view.key for view in reg.views()}` from the registry `_registry_with_all_features()` built, and
+
+runs **both** clauses over it — the credential-name set equality against
+
+`NFR_002_CREDENTIAL_EXEMPTIONS = {"mail.smtp_password"}` (LQ-01 (a), unchanged) and the non-empty-value
+
+connection-string clause. `INVENTORY` is no longer an input to this guard.
+
+
+
+- **RED on the temporary defect:** a credential-named key with no `INVENTORY` row registered in
+
+  `_registry_with_all_features()` (`foo.api_secret`, TEXT) →
+
+  `uv run pytest tests/contract/settings_coverage/test_inventory.py -q` = **1 failed, 4 passed** — the
+
+  failure is `test_no_secret_settings`: `found ['foo.api_secret', 'mail.smtp_password'], exempted
+
+  ['mail.smtp_password']`, while `test_key_prefix` / `test_category_group` / `test_inventory_matches` /
+
+  `test_inventory_backward_compatible` all pass: precisely the hole F-2 described.
+
+- **Control (the old derivation was vacuous):** with the same defect still registered and the derivation
+
+  temporarily set back to `keys = set(INVENTORY)` → **1 passed**. The hardening is what closes it.
+
+- **GREEN after both reverts:** `uv run pytest tests/contract/settings_coverage/test_inventory.py -q` =
+
+  **5 passed**; no `TEMP` marker left in the file.
+
+
+
+**Targeted runs on the final tree (full suite not re-run — Phase 5 owns it, S6.4 re-confirms pre-merge).**
+
+
+
+| Run | Result |
+
+|---|---|
+
+| `uv run pytest tests/integration/singleton_install tests/contract/settings_coverage tests/acceptance/settings_coverage tests/acceptance/filemanagement -q` | **76 passed, 1 skipped** (the pre-existing `symlinks not available on this host` skip) |
+
+| the change's `green_command` (wiring + inventory + persistence + `test_ac_029_default_local_backend` + `test_composition_root.py` + `sessionmanagement/test_settings.py`) | **15 passed** (14 at S5.3 + the new witness) |
+
+| `uv run ruff check` + `uv run ruff format` on the two changed test paths | `All checks passed!` / `2 files left unchanged` |
+
+| `uv run python scripts/check_traceability.py` | `Traceability: PASS (891 matrix rows, 136 spec IDs, 877 test functions)`, **exit 0** — 877 = 876 + the one new test function |
+
+| `uv run python scripts/make_map.py` then `--check` | **exit 0**; `STRUCTURE.md` unchanged — the map's module sections cover `src`/`scripts`/`migrations` plus only `tests/conftest.py` and `tests/*_test_helpers.py` (REQ-011 file scope), so the two changed test modules are tree entries only, and the map is regenerated in the same commit as any `.py` change it does cover |
+
+
+
+**Traceability updated (rows this change already owned, no new row):** the `file-management.md`
+
+REQ-015 / AC-029 row (`docs/verification/traceability.md:516`) now cites
+
+`test_file_management_req_015_composition_root_passes_no_backend` beside `test_ac_029_default_local_backend`
+
+— its Test column names witnesses, so the new witness belongs there — and its Status cell records that the
+
+composition-root clause was un-guarded until this step. The `settings-coverage.md` NFR-002 row (`:418`)
+
+parenthetical now states that the checked key set is read from the registry the guard builds, not from its
+
+own `INVENTORY` table.
+
+
+
+**§13.5 corrected:** the D-4 evidence row no longer cites `test_composition_root.py` as proof of the fix;
+
+it records that the citation overstated the evidence at S5.4 and names the witness that closes the gap.
+
+
+
+**Findings F-1 and F-2: resolved in this PR** (fix, not follow-up). §15.6's two open witness-completeness
+
+gaps are closed; findings 3–9 of §14 and F-3…F-6 of §15 stay as recorded (accepted / notes).
+
 
 ---
 
@@ -1029,3 +1098,50 @@ All eight Phase 6 checks pass. Of the 12 distinct findings raised in §14 and §
 and a pointer** (§14-3…§14-7, §14-9/F-6, F-3, F-4, F-5) — **0 open**. The ISSUE Review-Gate criteria are met.
 
 **REVIEW REPORT: CLEAN**
+
+### 16.5 Pre-merge gate (S6.4) — 2026-10-11, HEAD `4004785` + the `CHANGELOG.md` entry, clean tree
+
+This change is **not** light-tier (§8), so the **full** regression suite and the CI coverage job are re-confirmed on
+the tree the PR carries, as §13.8 item 2 and §16.3 require. Command run **verbatim** as `.github/workflows/quality.yml:61`
+runs it (Quality → `coverage`), no `-x`, no deselection, no marker filter, in this worktree:
+
+```text
+uv run pytest tests/ --cov --cov-report=xml
+→ 892 passed, 1 skipped in 303.85s (0:05:03)
+SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host
+Required test coverage of 92.0% reached. Total coverage: 93.85%
+```
+
+**Gate: PASS.** **0 failed** — no failure beyond the inherited set of §7, so nothing needed classifying against
+§7 / §13.2 / P-119 / P-120 this time. Coverage **93.85 %** against `pyproject.toml:112` `fail_under = 92` → margin
+**+1.85 points**, identical to the two §13.2 runs (93.85 % both times), so the figure is stable across the review's
+two new test witnesses.
+
+**Composition differences from §7.1, both accounted for:**
+
+| Difference | Explanation |
+|---|---|
+| 891 passed → **892 passed** | The +1 node is the witness §15.7 added at S6.3 (`tests/integration/singleton_install/test_composition_root.py::test_file_management_req_015_composition_root_passes_no_backend`, the F-1 fix). Collected: 893 = 892 + the 1 skip (§7.1 measured 892 collected) |
+| the two §13.2 run-1 flakes (`test_inv_001_token_hash_uniqueness`, `test_nfr_001_performance_budgets`) **did not recur** | Both are the documented load-sensitive nodes (§7 inherited Hypothesis `DeadlineExceeded` pair; §13.2 + `docs/workflow/PROBLEMS.md` P-35/P-36/P-86/P-119 for the search wall-clock budget). Not fixed here, out of scope (§10, §13.7) — they simply did not fail in this run |
+| `CoverageWarning: Module src/frontend was never imported` | Expected: `[tool.coverage.run] source` names the empty `src/frontend` placeholder on purpose (`pyproject.toml:105-108`); it is a warning, not a failure, and appears in every coverage run |
+
+`coverage.xml` is gitignored (`.gitignore:47`); after the run `git status --porcelain` shows only `CHANGELOG.md`.
+
+**CHANGELOG entry (Phase 6 item 10) — written, and §14-8 is closed by it.** `CHANGELOG.md` `## [Unreleased]` now
+carries this change's entries: **Added** — the REQ-023 / AC-028 startup `WARNING` (key only, never the value);
+**Changed** — the two widened guards (D-2 / D-6) and the six in-PR spec amendments with the Q-02 / Q-27 override
+pointer; **Fixed** — D-1 (all nine features / 34 keys registered, the 16 `filemanagement.*` / `mail.*` /
+`sessionmanagement.*` keys that fell back to code defaults), D-3 (the `security` category and the
+`sessionmanagement` group), D-4 (no pinned `StorageBackend`). Per **§14-8** the entry states the operator-visible
+consequence plainly, in two places: the 16 newly registered keys now take part in the REQ-011 persisted-value
+precedence, so a value already in `settings/values.yaml` wins over the code default and is named by the new
+`WARNING`; and `filemanagement.storage_root` is a **live setting again** — changing it now actually moves the
+directory the application reads and writes user files in, where before the composed application always used
+`./data/files`. The entry is not readable as a no-op.
+
+**Version bump (Phase 6 item 11) — ISSUE → `patch`** (§12): `bump-my-version bump patch` with a clean tree, `tag =
+false`, `1.2.0 → 1.2.1`, dry-run first; the `## [Unreleased]` entries — this change's **and** the `complexipy-scripts`
+ones inherited from `main` by the §7.3 merge, which AGENTS.md leaves under `## [Unreleased]` "until the next bumped
+release" — move into `## [1.2.1] - 2026-10-11` in the bump commit. `uv.lock` carries the project version and is
+synced by a follow-up commit, the `75bedd8` precedent. Then the PR to `main` (Phase 6 item 12), presented for human
+merge; the agent does not merge.
