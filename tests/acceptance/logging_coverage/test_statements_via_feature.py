@@ -2,8 +2,8 @@
 one-off statements stay statements, but they are written through the shared logging
 feature's exported ``get_logger()`` and the feature module imports no logging backend.
 
-The witness is per file (structlog-logging AC-009 names the four files and the statement count in
-each): the module's source is parsed, its one-off statement call sites are counted —
+The witness is per file (structlog-logging AC-009 names the four files, REQ-005 the statement count
+in each): the module's source is parsed, its one-off statement call sites are counted —
 the statements are kept as statements, none added, none removed — and every one of
 them must be written on a logger the module obtained from ``get_logger()``.
 
@@ -221,10 +221,9 @@ _AC_009_STATEMENTS: dict[str, int] = {
     "src/backend/permissions/service.py": 2,
 }
 
-# structlog-logging REQ-005 / AC-009 state the total explicitly ("each of the 42 one-off
-# statements"); 43 is that total plus the one-off WARNING settings-coverage REQ-023 adds to
-# registry.py — the structlog-logging count is one behind and is recorded as a finding in
-# docs/verification/startup-settings-registration-gaps.md.
+# structlog-logging AC-009 (v3) states the total as this witness's measured figure, not a fixed
+# constant: 43 is REQ-005's per-file total (19 + 11 + 11 + 2), including the one-off WARNING that
+# settings-coverage REQ-023 adds to registry.py.
 _AC_009_TOTAL_STATEMENTS = 43
 
 
