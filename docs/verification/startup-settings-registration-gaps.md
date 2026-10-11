@@ -438,6 +438,41 @@ The whole-repo ruff sweep runs **once, here** (AGENTS.md "Tooling & Execution En
 
 **Phase 5 lint/types gate: PASS.** The two gates AGENTS.md names for an ISSUE — `uv run ruff check .` (whole repo, matching `.github/workflows/lint.yml` exactly) and `uv run mypy src/` — are both clean, as is `mypy scripts/`, `deptry`, `bandit`, `pip-audit`, `mkdocs build --strict`, `alembic upgrade head`, `check_traceability.py`, `validate_task_dag.py`, `verify_spec.py` ×15 and `make_map.py --check`. The only non-zero exits are `ty` (informational by CI configuration, +1 diagnostic of an already-existing class) and `complexipy` (four `scripts/` functions this change never touched, already fixed on `main` by PR #82, cleared by merging `main` — recorded above and handed to the orchestrator). Next: **S5.3** (traceability rows).
 
+### 7.3 Branch refreshed (`main` merged) — 2026-10-11, merge commit `9b19d7d`, clean tree
+
+**Why this step exists.** §7.2 established that the `complexipy` exit 1 is neither caused by this change nor pre-existing on `main`: the **branch is stale**, and handed the merge to the orchestrator. This step performs exactly that merge and re-confirms only the gates the merge touches.
+
+**Fetch / `main` state (primary worktree, read-only).** `git fetch origin` → local `main` == `origin/main` == `877dcff`; `git rev-list --left-right --count main...origin/main` → `0 0`, so **no fast-forward was needed** and nothing else in the primary worktree was touched.
+
+**The merge.** Change worktree tree clean at `fe7026a`; `git merge main --no-edit`. `git merge-base HEAD main` = `25b7e7b` (the branch point). Merge commit: **`9b19d7d` — `Merge branch 'main' into issue/startup-settings-registration-gaps`**. `main` brought in **25 commits** (`git log --oneline fe7026a..main`). The substantive ones are PR #82 (`91b4237 Merge pull request #82 from …/chore/complexipy-scripts`): `f2878d7` / `4dd3d78` / `7ebc19a` refactoring `scripts/check_traceability.py`, `scripts/validate_task_dag.py` and `scripts/verify_spec.py` under the ceiling, `54decc7` bringing `scripts/` into the gate (`pyproject.toml`, `.github/workflows/quality.yml`), **ADR-087** (`docs/decisions/ADR-087-complexipy-scope-extended-to-scripts.md`), the `complexipy-scripts` verification record, its `CHANGELOG.md` entry, and its planning-record archive moves. The remainder are other changes' P.2 / value-triage / status-advance records. Three of them touch **this** change's planning records (`72d799b` READY, `eddf94f` WAITING, `093f2ff` LQ-01 answered + IN-WORKFLOW) — they arrive **from `main`** via the merge; this step authored nothing under `docs/todo/` or `docs/questions/`.
+
+**Conflict list: exactly one path, exactly as predicted.** `git merge-tree --write-tree HEAD main` had predicted `CONFLICT (content): Merge conflict in STRUCTURE.md` and nothing else; the real merge matched — `UU STRUCTURE.md` was the **only** unmerged path, every other path auto-merged. Resolved per AGENTS.md "Git Worktrees" and `code-structure-map` rule 4: **took `main`'s side** (`git checkout --theirs STRUCTURE.md`), then **regenerated** — `uv run python scripts/make_map.py` (exit 0) → `uv run python scripts/make_map.py --check` → **exit 0**. The generated file was never hand-merged. The regenerated map differs from `main`'s only in what this change itself moves (`src/main.py` 239→264 lines, `src/backend/settings/registry.py` 467→473, `src/backend/sessionmanagement/feature_settings.py` 58→61, `docs/` 236→237 files) — i.e. it describes the **merged tree**, not either side.
+
+**Merged-state identity check (the §7.2 prediction, confirmed on the real merge):**
+
+- `git diff 9b19d7d main -- scripts/ pyproject.toml .github/workflows/quality.yml` → **empty**: the branch now carries `main`'s `scripts/` and gate configuration byte-for-byte.
+- `git diff 9b19d7d fe7026a -- src/ tests/` → **empty**: this change's `src/` and `tests/` are untouched by the merge, and this step modified **no** source or test file.
+
+**Re-confirmed gates (targeted).** The merge touched only `scripts/`, gate configuration, generated and doc files, so the full suite is deliberately **not** re-run — §7.1 remains the regression record.
+
+| Command | Exit | Result |
+|---|---|---|
+| `uv run complexipy src tests scripts --max-complexity-allowed 15` | **0** | `All functions are within the allowed complexity.` — the §7.2 exit-1 gate is **cleared** (was 4 functions over: `check_traceability.py::check` 17, `check_traceability.py::matrix_rows` 19, `validate_task_dag.py::check_acyclic` 22, `verify_spec.py::main` 22) |
+| `uv run python scripts/make_map.py --check` | **0** | the committed map is current after the regeneration |
+| `uv run python scripts/check_traceability.py` | **0** | `Traceability: PASS (891 matrix rows, 136 spec IDs, 876 test functions)` |
+| `uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json` | **0** | `Task DAG validation PASSED: 12 tasks, acyclic, well-formed.` |
+| `uv run python scripts/verify_spec.py docs/specs/<spec>` × **15** (`template.md` skipped) | **0 ×15** | every spec PASS: authentication, event-bus, file-management, logging-coverage, logging, mail-service, search, session-management, settings-coverage, settings-public-registry-setter, settings, structlog-logging, structure-map, user-management, user-roles-permissions |
+| `uv run ruff check .` | **0** | `All checks passed!` (whole-repo sweep, as CI runs it) |
+| `uv run ruff format --check .` | **0** | `362 files already formatted` |
+| `uv run mypy src/` | **0** | `Success: no issues found in 84 source files` — re-checked because S5.2's types gate sits on the merged tree; the merge changed no `src/` file, so the gate still holds |
+| `uv run pytest tests/acceptance/settings_coverage tests/contract/settings_coverage tests/acceptance/test_structure_map.py tests/unit/test_make_map.py -q` | **0** | **68 passed in 19.89s** — the reproduction tests (§5.3 RED → §6.1 GREEN) plus the structure-map test, which is the direct witness of the artifact the conflict resolution regenerated |
+
+**Path correction recorded.** The brief named `tests/unit/scripts`; that directory **does not exist** in this repository. The scripts' unit tests are the single module `tests/unit/test_make_map.py` — `grep -l` over `tests/` for `check_traceability|validate_task_dag|verify_spec|make_map` returns only `tests/acceptance/test_structure_map.py`, `tests/property/test_structure_map.py` and `tests/unit/test_make_map.py` — so that module was substituted and nothing was skipped.
+
+**Still open after this step (unchanged by the merge).** The §7.2 coverage row remains **unmeasured**: `uv run pytest tests/ --cov` against `fail_under = 92` (Quality → `coverage`) has not been run on this branch and MUST be confirmed at the Phase 6 pre-merge gate (S6.4) — logged as **P-119**. The `ty` informational diagnostic (+1 instance of an already-existing class) is likewise unchanged; mypy remains the gate and passes.
+
+**Branch state after the merge:** clean working tree, HEAD `9b19d7d`, `main` reachable from HEAD. Next: **S5.3** (traceability rows).
+
 ## 8. Light ISSUE tier assessment — **NOT qualified** (full Phase 5 gate set applies)
 
 AGENTS.md "Light ISSUE tier" requires **all** of: single feature, fix touches ≤ 3 files excluding tests, no new dependency, no new public interface, no cross-feature change, and the triage naming the covering tests.
