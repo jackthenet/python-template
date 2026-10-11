@@ -576,3 +576,125 @@ A test that starts the real composition root finds **all 34** feature settings k
 ISSUE → **`patch`** (AGENTS.md Versioning): `bump-my-version bump patch` at S6.4 with a clean tree, `1.2.0 → 1.2.1`, `tag = false`; the `## [Unreleased]` entries move to `## [1.2.1] - <date>` in the same commit. `CHANGELOG.md` `## [Unreleased]` is currently empty, so this change's entries are the only ones in it.
 
 **S3.1 done** (2026-10-11): R-1, R-2 and the D-5 witness are in place, LQ-01 is ANSWERED (§5.1), and the targeted run shows the expected RED — `uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py -v` → **3 failed, 6 passed**: `test_main_wires_all_features` (16 missing keys, D-1), `test_category_group` (4 categories + 3 missing groups, D-3), `test_ac_028_persisted_override_warns` (no override `WARNING`, D-5). Every failure is an `AssertionError` on behaviour — no collection, import or `ValidationError` failure. **Next step: S3.2** (ruff on the changed paths + confirm and record RED).
+
+---
+
+## 13. Verification report (S5.4) — 2026-10-11, HEAD `845569f`, clean tree
+
+**Numbering note.** The step brief asked for a section numbered 9; §9–§12 of this record are already occupied (constraints, out of scope, acceptance signal, version/changelog) and existing sections are never renumbered, so the Phase 5 report is appended as **§13**. It closes Phase 5. Docs only — this step changed no `src/`, no `tests/`, no `CHANGELOG.md`, no `pyproject.toml`, no `docs/todo/`, no `docs/questions/`.
+
+### 13.1 Verdict
+
+**VERIFIED.** Every gate of the ISSUE Phase 5 gate set (AGENTS.md Phase 5 → ISSUE items 9–12; §8 establishes that the light tier does **not** apply, so the full set ran) is measured and passes, and the one gate §7.2 left unmeasured — the CI `coverage` job, logged as **P-119** — is measured here and passes: **93.85%** against `fail_under = 92`.
+
+**State machine: `REFACTORED → VERIFIED`** (§6.2 reached `REFACTORED`; the transition requires the traceability matrix updated — §7.4 — and it is).
+
+The change satisfies its normative basis: all six defects (§3) are closed by the fix or by an approved spec amendment, the reproduction witnesses that were RED at §5.3 are GREEN, the full suite is strictly better than the inherited baseline (§7 → §7.1: 3 failed → **0 failed**), and **every REQ/AC the change touches has at least one GREEN test** (§13.4).
+
+### 13.2 Coverage — the gate this step measured
+
+CI command read from `.github/workflows/quality.yml:61` (`uv run pytest tests/ --cov --cov-report=xml`, Quality → `coverage`); threshold read from `pyproject.toml:112` (`[tool.coverage.report] fail_under = 92`), with `[tool.coverage.run]` `branch = true`, `source = ["src/backend", "src/frontend"]`. Run **verbatim**, no deselection, no `-x`, no marker filter, in this worktree.
+
+| Run | Test outcome | Coverage output | Gate |
+|---|---|---|---|
+| 1 | `2 failed, 889 passed, 1 skipped in 291.85s` | `Required test coverage of 92.0% reached. Total coverage: 93.85%` | **PASS** |
+| 2 | `891 passed, 1 skipped in 273.80s` — **0 failed** | `Required test coverage of 92.0% reached. Total coverage: 93.85%` | **PASS** |
+
+The total is **93.85%** in both runs — identical to two decimal places, so the figure is stable, not a lucky sample. The margin over the floor is **+1.85 points**. `coverage.xml` is gitignored (`.gitignore:47`) and `git status --porcelain` is empty after both runs. The §7.2 row that said "not run" is **superseded** by this section.
+
+**Run 1's two failures — classified (skill `verify`: pre-existing vs regression).** Neither is a regression; run 2, the same command on the same tree, has zero failures.
+
+| Failing test | Observed | Classification |
+|---|---|---|
+| `tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uniqueness` | `hypothesis.errors.DeadlineExceeded: Test took 312.87ms, which exceeds the deadline of 200.00ms` | **Inherited flake (§7)** — one of the two documented load-dependent deadline flakes; it did not fail in the §7.1 full-suite run and it passed in the isolation re-run. Not fixed here (§10) |
+| `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets` | `assert 0.5423477 < 0.3` — median of 15 × `svc.search(...)` over 10k items vs the 300 ms local budget | **Not a regression.** A wall-clock budget contract, documented as load/hardware-sensitive (`docs/verification/pyproject-tooling-gaps.md:231` with the same classification, `docs/verification/search.md:456`, `docs/workflow/PROBLEMS.md:330` — a ~293 ms median against the 300 ms budget). Measured here: it **passes standalone** (`2 passed in 8.31s` with the token flake) and **passes under `--cov` in isolation** (`1 passed in 9.23s`), it **did not fail in run 2**, and this change touches **no** search code or test — `git diff main...HEAD -- tests/contract/search/` is empty and the whole `src/` diff is the four files of §6 |
+
+### 13.3 Gate table
+
+| Gate | Command | Measured result | Recorded |
+|---|---|---|---|
+| S5.1 full regression (ISSUE 9) | `uv run pytest tests/ -q` | **891 passed, 1 skipped, 0 failed** in 273.91s at `736a24c` (baseline §7: 3 failed / 887 passed / 1 skipped → strictly better; the +1 collected test is this change's own `test_ac_028_persisted_override_warns`) | §7.1 |
+| Reproduction tests GREEN (ISSUE obligation) | `uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py -q` | **9 passed** — the same three files were **3 failed / 6 passed** at the §5.3 RED gate | §7.1, §7.4 |
+| Targeted `green_command` (§5) | six paths, `-q` | **14 passed** (identical count at S4.2, S4.3, S4.4, S5.3) | §6.1, §6.2, §7.4 |
+| S5.2 lint — the one whole-repo sweep, as CI runs it | `uv run ruff check .` | **exit 0** — `All checks passed!` | §7.2, re-confirmed §7.3 |
+| Formatting | `uv run ruff format --check .` | **exit 0** — `362 files already formatted` | §7.2, §7.3 |
+| S5.2 types (the gate) | `uv run mypy src/` · `uv run mypy scripts/` | **exit 0 / exit 0** — 84 / 4 source files, no issues | §7.2, §7.3 |
+| Types (informational, `continue-on-error: true`) | `uv run ty check src/` | exit 1 — 160 diagnostics vs 159 on `main`; exactly **+1**, an instance of a class `ty` already emits 7× on `main` | §7.2 |
+| Dependencies | `uv run deptry .` | **exit 0** — no dependency issues (91 files) | §7.2 |
+| Security | `uv run bandit -r src/` · `uv run pip-audit` | **exit 0 / exit 0** — 0 issues; no known vulnerabilities | §7.2 |
+| Docs | `uv run --group docs mkdocs build --strict` | **exit 0** — no strict-mode warning | §7.2 |
+| Migrations | `alembic upgrade head` (throwaway DB under the OS temp dir) | **exit 0** — head `d94b7f2e6a31`; the expected **no-delta** confirmation (no SQLModel table touched) | §7.2 |
+| Complexity | `uv run complexipy src tests scripts --max-complexity-allowed 15` | exit 1 at §7.2 (4 `scripts/` functions this change never touched — the **branch was stale**) → **exit 0** after the branch refresh | §7.2 → §7.3 |
+| **Coverage (measured at S5.4)** | `uv run pytest tests/ --cov --cov-report=xml` | **93.85% ≥ 92 → PASS**, identical in two runs | §13.2 (supersedes the §7.2 "not run" row) |
+| S5.3 traceability | `uv run python scripts/check_traceability.py` | **exit 0** — `Traceability: PASS (891 matrix rows, 136 spec IDs, 876 test functions)`; **11 rows** updated to this change's dated GREEN | §7.4 |
+| Spec validation (not an ISSUE gate; run anyway) | `uv run python scripts/verify_spec.py docs/specs/<spec>` × 15 | **exit 0 ×15** | §7.2, §7.3 |
+| Task DAG | `uv run python scripts/validate_task_dag.py .github/task-runner/tasks.json` | **exit 0** — 12 tasks, acyclic, well-formed | §7.2, §7.3 |
+| Structure map | `uv run python scripts/make_map.py --check` | **exit 0** — the committed `STRUCTURE.md` is current (regenerated in the same commit as every `.py` edit: `b88684d`, `38056af`, and after the merge conflict at §7.3) | §6.1, §6.1.1, §7.3 |
+| Branch refresh | `git merge main` → `9b19d7d`; merged-tree identity checks | `scripts/`, `pyproject.toml`, `.github/workflows/quality.yml` byte-identical to `main`; `src/`, `tests/` byte-identical to the branch; one conflict (`STRUCTURE.md`), resolved by regenerate, never hand-merged | §7.3 |
+
+### 13.4 Requirement coverage — the actual gate
+
+AGENTS.md: *"Spec coverage = 100% is required. Code coverage is a secondary quality signal, not evidence that the specification has been implemented."* An ISSUE carries **no spec of its own** (§1, §2), so "100%" is evaluated against the **touched** IDs — every REQ/AC/NFR this change amended, re-validated or fixed. `verify_spec.py` is not an ISSUE gate; it was run over all 15 specs anyway (§7.2, §7.3).
+
+| Spec | ID (how this change touched it) | Proving test — GREEN | Matrix row |
+|---|---|---|---|
+| `settings-coverage.md` | **REQ-001** (feature enumeration amended to all nine features) | `test_main_wires_all_features` (the feature set is **derived** from every `backend.<feature>.feature_settings` module, so a tenth feature cannot hide) + `test_inventory_matches` | REQ-001's own AC-001/AC-002 rows are about registration mechanics and were **not** refreshed (convention B); the enumeration is witnessed by the REQ-002 and REQ-019 rows below |
+| `settings-coverage.md` | **REQ-002 / AC-003** (D-1, D-2) | `tests/acceptance/settings_coverage/test_wiring.py::test_main_wires_all_features` — `PROBED 34 / REGISTERED 34 / MISSING []` | updated at S5.3 → GREEN |
+| `settings-coverage.md` | **REQ-005 / AC-006** (the fallback that masked D-1; unchanged by the fix) | `test_unregistered_key_fallback` | untouched row, still GREEN (convention B) |
+| `settings-coverage.md` | **REQ-017 / AC-022** | `tests/contract/settings_coverage/test_inventory.py::test_key_prefix` (nine features / 34 keys) | updated at S5.3 → GREEN |
+| `settings-coverage.md` | **REQ-018 / AC-023** (D-3: category **and** group) | `test_inventory.py::test_category_group` (all 34 rows: category = domain, group = feature name) + `tests/acceptance/sessionmanagement/test_settings.py::test_ac_039_register_settings_defaults` | updated at S5.3 → GREEN |
+| `settings-coverage.md` | **REQ-019 / AC-024** (D-2: guard checks the complete inventory) | `test_inventory.py::test_inventory_matches` | updated at S5.3 → GREEN |
+| `settings-coverage.md` | **NFR-002** (D-6, resolved by the wording amendment, LQ-01 (a)) | `test_inventory.py::test_no_secret_settings` — credential-named inventory keys must **equal** the documented exemption list (`mail.smtp_password` only); full force on the other 33 keys | updated at S5.3 → GREEN |
+| `settings-coverage.md` | **NFR-003** | `test_inventory.py::test_inventory_backward_compatible` | updated at S5.3 → GREEN |
+| `settings-coverage.md` | **REQ-023 / AC-028** — **the new requirement this change adds** (D-5) | `tests/acceptance/settings_coverage/test_persistence.py::test_ac_028_persisted_override_warns` — one `WARNING` names the overridden key, the effective value stays the persisted one, an equal value names nothing | added at S4.1, updated at S5.3 → **GREEN** |
+| `settings-coverage.md` | **REQ-011 / AC-015** (the persisted precedence D-5 sits on; unchanged) | `test_persistence.py::test_persisted_precedence` | untouched row, still GREEN. (§2 cites this as `settings.md` REQ-011; the persisted-precedence requirement is `settings-coverage.md` REQ-011 — `settings.md` REQ-011 is the hierarchy/`grouped_views()` requirement. Citation slip only; no ID was left uncovered.) |
+| `file-management.md` | **REQ-015 / AC-029** (D-4 + the v3 wiring wording) | `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_029_default_local_backend` (the composed service now reaches this live-read path) + `tests/integration/singleton_install/test_composition_root.py` | updated at S5.3 → GREEN |
+| `settings-public-registry-setter.md` | **REQ-011 / AC-016** (wording: six → every call site) | `test_composition_root.py::test_ac_016_main_installs_through_setter` + `::test_installed_registry_serves_feature_registration` — both still pass with the nine-callable loop | existing row GREEN (this change re-ran both witnesses at S4.2 and S5.3; the row itself was not refreshed) |
+| `user-roles-permissions.md` | **REQ-019** (model-block category → `security`) | `tests/acceptance/permissions/test_system_principal.py::test_system_set_settings_alias_sync` (witness unchanged) — the category fix itself is witnessed by the widened `test_category_group` | updated at S5.3 → GREEN |
+| `session-management.md` | **REQ-019 / AC-039** (model block: category `security`, `group` added) | `test_ac_039_register_settings_defaults` — re-derived at S4.2 from the v3 model block | updated at S5.3 → GREEN |
+| `structlog-logging.md` | **REQ-005 / AC-009** (S4.3 wording amendment; measured total 43) | `test_ac_009_statements_go_through_get_logger` + the per-feature witnesses `test_ac_009_settings_statements_go_through_get_logger` / `test_ac_009_eventbus_statements_go_through_get_logger` | updated at S5.3 → GREEN |
+
+**Statement.** Every REQ/AC/NFR this change touches has **at least one GREEN test**, and the new requirement **REQ-023 / AC-028 is covered** by `test_ac_028_persisted_override_warns` (acceptance tier, GREEN in the full suite and in the reproduction run). **Touched IDs with no GREEN test: none.** Requirement coverage is 100% over the touched set; the 93.85% branch coverage of §13.2 is the secondary signal, not the evidence.
+
+### 13.5 Defect closure (D-1…D-6)
+
+| Defect | What closed it | Proving test (GREEN) |
+|---|---|---|
+| **D-1** — the composition root registered 18 of 34 keys | `src/main.py`: the six named one-liners replaced by `_SETTINGS_REGISTRATIONS`, an ordered tuple of the **nine** features' `register_settings` callables, plus the loop calling each against `_shared_settings_registry()` (commit `b88684d`) | `test_main_wires_all_features` — `PROBED 34 / REGISTERED 34 / MISSING []` |
+| **D-2** — the AC-003 witness and the contract inventory guard were themselves incomplete | The witness's expected set is now **derived** from every `feature_settings` module; the contract guard's `INVENTORY` widened to the 34-key inventory and `_registry_with_all_features` registers all nine features (S3.1, `46d679a`) | `test_main_wires_all_features` + `test_key_prefix` / `test_category_group` / `test_inventory_matches` / `test_no_secret_settings` / `test_inventory_backward_compatible` |
+| **D-3** — four keys carried a feature name as their category; three carried no `group` | `permissions/feature_settings.py:31` and `sessionmanagement/feature_settings.py:41,48,55`: `category="security"`, and `group="sessionmanagement"` added to the three (the specs' model blocks amended in the same PR, Q-26) | `test_category_group` (all 34 rows) + `test_ac_039_register_settings_defaults` |
+| **D-4** — the composed `FileService` pinned the storage root to a literal | `src/main.py`: the `LocalDiskStorageBackend("./data/files")` argument and its now-unused import dropped, so REQ-015's live read runs | `test_ac_029_default_local_backend` (the AC-029 contract, already GREEN at the service level, now reached by the composed service) + `test_composition_root.py` |
+| **D-5** — a persisted value silently overrode a new default | `src/backend/settings/registry.py`: `register()` emits **one `WARNING`** when the loaded persisted value differs from the definition default, naming the **key only** (never the value — Q-28 + the amended NFR-002) | `test_ac_028_persisted_override_warns` (RED at §5.3 → GREEN) |
+| **D-6** — NFR-002 conflicted with the registered `mail.smtp_password` | Resolved by **spec wording**, not code: LQ-01 (a) — NFR-002 amended (Q-27 wording) and the guard rewritten as a set equality against the documented exemption list | `test_no_secret_settings` — GREEN by design (§5.1), full name-check force on the other 33 keys |
+
+### 13.6 Spec amendments carried by this PR (six)
+
+**No separate Spec Amendment PR** — the user's explicit override of the Spec Amendment Workflow at **Q-02** and **Q-27** (recorded in §4 and in `docs/questions/startup-settings-registration-gaps.md`); the decision was also recorded on `main` at `093f2ff` for LQ-01. Each file carries its `## Changelog` line.
+
+| Spec | Version | IDs amended |
+|---|---|---|
+| `settings-coverage.md` | **v3** | REQ-001, REQ-017 (nine-feature enumeration), REQ-019 (guard checks the complete inventory), §3.5 inventory → 34 keys, **new REQ-023 / AC-028**, NFR-002 (credential wording + the named `mail.smtp_password` exemption), §10 test-strategy and §11 matrix rows |
+| `settings-public-registry-setter.md` | **v4** | REQ-011, AC-016 — "the six `register_*_settings(...)` calls" → "every feature `register_settings` call site"; the hard-coded count and the drifted line references removed (Q-13(b), Q-14) |
+| `user-roles-permissions.md` | **v3** | REQ-019 model block: `category="permissions"` → `category="security"` (Q-26) |
+| `session-management.md` | **v3** | REQ-019 model block ×3: `category="sessionmanagement"` → `category="security"` **and `group="sessionmanagement"` added** (Q-26, §5.2) |
+| `file-management.md` | **v3** | REQ-015, AC-029 — the composition root passes **no** `StorageBackend`; its storage root is the live `filemanagement.storage_root`, never a hard-coded path (Q-24, Q-26) |
+| `structlog-logging.md` | **v3** | AC-009 — the invariant replaces the hard-coded "42 statements", the count kept as the witness's **measured** figure (43 = 19 + 11 + 11 + 2); REQ-005's per-file count for `registry.py` refreshed 18 → 19. No ID changed (S4.3, §6.1.1) |
+
+### 13.7 Residual / inherited items (not this change's)
+
+- **`test_ac_021` line endings** — passes in this worktree only because the regenerated `STRUCTURE.md` is LF; the root cause (`core.autocrlf=true` with no `.gitattributes`) is untouched and belongs to the separate `gitattributes-line-endings` TODO (§7, §10).
+- **The two Hypothesis deadline flakes** — `test_inv_002_password_round_trip` and `test_inv_001_token_hash_uniqueness`; load-dependent `DeadlineExceeded` (§7), one recurred in the §13.2 coverage run 1; explicitly out of scope (§10).
+- **`test_nfr_001_performance_budgets` (search)** — a documented load-sensitive wall-clock contract; failed once under coverage instrumentation (§13.2), passes standalone and did not recur. Not this change's code path.
+- **`ty` diagnostics** — 160 vs 159 on `main`; the +1 is an instance of an `invalid-type-form` class `ty` already emits 7× for the same annotation shape. Informational by CI configuration; **mypy is the gate** and passes (§7.2).
+- **`complexipy`** — cleared by the branch refresh (§7.2 → §7.3); the four `scripts/` functions were fixed on `main` by PR #82, not here.
+- **Repo-root `settings/` pollution from `import main`** — mitigated for this change's witness only (Q-22, §5.2); the general isolation mechanism already exists from `settings-test-isolation` (§10).
+- **`register_feature` never sets `group`** — the three `sessionmanagement.*` definitions now pass it explicitly; deriving it inside `register_feature` would change behaviour for every feature and is out of scope (§6.1.1).
+
+### 13.8 What Phase 6 must still do
+
+1. **S6.1–S6.3 review** against the ISSUE normative basis (triage record + affected spec IDs): traceability (§7.4, §13.4), feature boundaries and architecture rules, **no acceptance test weakened or deleted** — the one assertion change (`tests/acceptance/sessionmanagement/test_settings.py:58`) is the spec-amendment narrowing recorded in §3/§9, and the NFR-002 guard's value-clause correction is recorded in §5.2; no behaviour beyond the affected spec IDs (§13.4).
+2. **S6.4 pre-merge gate: re-confirm the full suite and coverage on the final tree.** §7.1 (891 passed / 1 skipped / 0 failed) and §13.2 (93.85% ≥ 92, twice) are the current measurements; the review report must carry the pre-merge confirmation.
+3. **`CHANGELOG.md` entry under `## [Unreleased]`** — owed by every change type (skill `verify` MUST, AGENTS.md Phase 6 item 10); it does **not** exist yet, and §12 plans `Fixed` for D-1…D-5 plus `Changed` for the category move.
+4. **Version bump: `bump-my-version bump patch`** — ISSUE → patch, `1.2.0 → 1.2.1`, clean tree, `tag = false`; the `## [Unreleased]` entries move to `## [1.2.1] - <date>` in the bump commit (§12).
+5. **Open the PR** to `main` and present it for human merge, then STOP — the agent never merges (human governance). The branch already carries `main` (`9b19d7d`), so the `complexipy` gate is green on the branch itself.
+6. **Post-merge cleanup (S7.1)** — verify the merge on `main`, remove the worktree, delete the local and remote change branches, move the two planning records to their archive folders.
