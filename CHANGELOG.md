@@ -9,6 +9,8 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-11
+
 ### Added
 
 - Startup now logs one `WARNING` for every setting whose **persisted** value overrides its definition default
