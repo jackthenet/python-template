@@ -50,11 +50,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 | Q-30 | Confirm the classification stays FEATURE (no spec amendment to any existing feature) and the bump is `minor`. | yes |
 | Q-31 | What does this change explicitly NOT do — the `notifications` ↔ `mail` / `eventbus` / `backend-api` ownership boundary? | yes (non-goals) |
 
+**Batch state (one `BLOCKED-USER` batch, complete):** **31** entries, every one `Status: PENDING` / `Incorporated: no`, every one carrying a `- **Recommended:**` answer — the FEATURE floor (≥ 20) is met with 11 to spare. Q-31 was appended to **this same** batch by the P.2 completion pass (nothing has been presented to the user yet, so it is not a second batch): **P.3 presents all 31 in one set**, ≤ 4 per round, most blocking first — the leading round is the escalation-verdict cluster **Q-02, Q-06, Q-10, Q-30** (plus **Q-31**, the non-goals question that fixes the spec's out-of-scope section).
+
 ---
 
 ### Q-01 — Event-driven only, an explicit `create()` API, or both?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -67,13 +70,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Explicit API only** — features call `create(recipient_id, type_id, context)`; no subscriptions.
 - **C. Both** — registration declares `event_type → notification_type`; the generated handlers call an internal `create()` that is also public for direct use and tests.
 
-- **Recommendation:** **C.** It is the only option that satisfies the TODO's acceptance signal ("a feature registers a new notification type at startup and gets notifications without the notifications feature changing") while keeping the create path directly testable without an event round-trip — the subscription half is already the house pattern (`src/backend/sessionmanagement/service.py`, ADR-063/ADR-064), and the missing half is measurable: session-management has no create seam, so its tests must publish on a real bus to reach the behavior (`tests/acceptance/sessionmanagement/test_cap_eviction.py:74`).
+- **Recommended:** **C.** It is the only option that satisfies the TODO's acceptance signal ("a feature registers a new notification type at startup and gets notifications without the notifications feature changing") while keeping the create path directly testable without an event round-trip — the subscription half is already the house pattern (`src/backend/sessionmanagement/service.py`, ADR-063/ADR-064), and the missing half is measurable: session-management has no create seam, so its tests must publish on a real bus to reach the behavior (`tests/acceptance/sessionmanagement/test_cap_eviction.py:74`).
 
 ---
 
 ### Q-02 — Who owns the event → notification-type mapping?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -88,13 +92,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Each producing feature owns its `feature_notifications.py`** — additive modules in other packages + `src/main.py` wiring; the notifications feature never changes when a feature adds a type.
 - **C. Hybrid** — notifications owns the v1 built-in set; the registration API is public so a feature may add its own later.
 
-- **Recommendation:** **A for v1** (fewest files, no other feature's spec or code touched → stays FEATURE, `minor` bump). Choose **B** only if the user wants the "any feature declares its own types" property to be *demonstrated* in v1 — that makes the change CROSS-CUTTING (per-feature impact analysis + per-feature traceability), which is legitimate but strictly more expensive. Measured cost of B on `main`: a new `feature_notifications.py` in each of the **7** packages that publish events (`ls src/backend/*/events.py` → 7) plus 7 `src/main.py` wiring lines, against A's one module in `src/backend/notifications/`.
+- **Recommended:** **A for v1** (fewest files, no other feature's spec or code touched → stays FEATURE, `minor` bump). Choose **B** only if the user wants the "any feature declares its own types" property to be *demonstrated* in v1 — that makes the change CROSS-CUTTING (per-feature impact analysis + per-feature traceability), which is legitimate but strictly more expensive. Measured cost of B on `main`: a new `feature_notifications.py` in each of the **7** packages that publish events (`ls src/backend/*/events.py` → 7) plus 7 `src/main.py` wiring lines, against A's one module in `src/backend/notifications/`.
 
 ---
 
 ### Q-03 — Delivery guarantee: at-most-once, idempotency key, or outbox/retry?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -107,13 +112,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. A + idempotency key** — the type definition may declare a dedup key (e.g. `(type_id, recipient_id, source_id)` with a unique index), so a duplicate event cannot create two rows.
 - **C. Transactional outbox / retry queue** — a persisted pending-delivery state machine re-driven by a scheduler.
 
-- **Recommendation:** **A, plus B only if a concrete duplicate source exists** (e.g. `LoginSucceeded` firing twice). **C is out of scope** — `docs/specs/mail-service.md:14` lists "queueing/retry of failed sends" as explicitly out of scope for the mail feature, and building an outbox would be a second dispatch mechanism next to the event bus. Mark the ceiling with a `ponytail:` comment naming the upgrade path (C).
+- **Recommended:** **A, plus B only if a concrete duplicate source exists** (e.g. `LoginSucceeded` firing twice). **C is out of scope** — `docs/specs/mail-service.md:14` lists "queueing/retry of failed sends" as explicitly out of scope for the mail feature, and building an outbox would be a second dispatch mechanism next to the event bus. Mark the ceiling with a `ponytail:` comment naming the upgrade path (C).
 
 ---
 
 ### Q-04 — Is the SMTP send allowed to run inline on the event bus's single worker thread?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -126,13 +132,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Feature-owned sender thread/queue** — the handler only creates the record; a notifications-owned thread performs email sends (new machinery, new ADR, new lifecycle tests).
 - **C. Email channel out of scope for v1** — in-app records only; email is a follow-up change.
 
-- **Recommendation:** **A** for v1 (the mail feature already bounds the send with `mail.smtp_timeout`, so the stall is bounded), with the NFR and the comment made explicit. Choose **C** if the user would rather not carry the risk at all before an HTTP/API surface exists. Measured: `mail.smtp_timeout` is a registered NUMBER setting read live on every send (`src/backend/mail/feature_settings.py:128`; the transport applies it at `src/backend/mail/repository.py:60` with a 30 s fallback), so the worst-case stall on the bus's single worker is a known, configurable constant — not an unbounded hang.
+- **Recommended:** **A** for v1 (the mail feature already bounds the send with `mail.smtp_timeout`, so the stall is bounded), with the NFR and the comment made explicit. Choose **C** if the user would rather not carry the risk at all before an HTTP/API surface exists. Measured: `mail.smtp_timeout` is a registered NUMBER setting with default `30` (`src/backend/mail/feature_settings.py:128`), live-read with a 30 s fallback at `src/backend/mail/feature_settings.py:60`, and handed to `smtplib.SMTP(host, port, timeout=…)` at `src/backend/mail/transport.py:71` (a timeout becomes `MailTransportError("timeout")`, `transport.py:85`) — so the worst-case stall on the bus's single worker is a known, configurable constant, not an unbounded hang. (Corrected at the second completion pass: the earlier citation `src/backend/mail/repository.py:60` names a file that does not exist — `src/backend/mail/` has no `repository.py`.)
 
 ---
 
 ### Q-05 — Which notification types ship in v1, and which events are explicitly exempt?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -156,13 +163,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. A + operational set:** also `security.passkey_registered`, `security.role_changed`, `files.validation_failed` (needs a recipient decision, see Q-06).
 - **C. Minimal:** only `security.password_changed` + `security.new_login`.
 
-- **Recommendation:** **A**, and exempt by rule (never by omission): `PasswordResetRequested` (double email), `EmailSent`/`EmailFailed` (loop), `SettingChanged`, `SourceRegistered`/`SourceUnregistered`/`SourceQueryFailed`, `ExpiredSessionsDeleted`, `SessionsListed`, and every file event (no recipient). State the exemption as an EDGE with a test asserting no row is created.
+- **Recommended:** **A**, and exempt by rule (never by omission): `PasswordResetRequested` (double email), `EmailSent`/`EmailFailed` (loop), `SettingChanged`, `SourceRegistered`/`SourceUnregistered`/`SourceQueryFailed`, `ExpiredSessionsDeleted`, `SessionsListed`, and every file event (no recipient). State the exemption as an EDGE with a test asserting no row is created.
 
 ---
 
 ### Q-06 — How is the recipient resolved when the event carries no `user_id` — and is a new `usermanagement` read allowed?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -175,13 +183,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Add `UserManager.get_user_by_email(email)`** (additive public read, new REQ in `user-management.md`) so email-keyed events can be resolved → CROSS-CUTTING.
 - **C. Fan out over `list_users()` and match the email in the notification feature** — no API change, but an O(n) read of every user per event.
 
-- **Recommendation:** **A.** Every v1 type from Q-05 carries a `user_id`, so nothing needs email resolution; record B as the upgrade path if an email-keyed type is ever wanted. **C is rejected** — measured on `main`, `get_by_email` exists only on `UserRepository` (`src/backend/usermanagement/repository.py:94` ABC, `:200` SQLite) and never on `UserManager`, so C would re-implement a query user-management already owns, unbounded, per event.
+- **Recommended:** **A.** Every v1 type from Q-05 carries a `user_id`, so nothing needs email resolution; record B as the upgrade path if an email-keyed type is ever wanted. **C is rejected** — measured on `main`, `get_by_email` exists only on `UserRepository` (`src/backend/usermanagement/repository.py:94` ABC, `:200` SQLite) and never on `UserManager`, so C would re-implement a query user-management already owns, unbounded, per event.
 
 ---
 
 ### Q-07 — Do per-user channel preferences live in a notifications-owned table or in the settings registry?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -194,13 +203,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Extend the settings registry with a user scope** — a new settings feature capability (amends `docs/specs/settings.md`, CROSS-CUTTING, affects templates/views/persistence).
 - **C. Store preferences as a JSON column on a notifications-owned `user_state` row.**
 
-- **Recommendation:** **A.** B is a cross-feature architecture change to an approved spec for one feature's need; C loses per-type querying and constraint enforcement. Measured at this pass: `SettingsRegistry.get_value(key, principal: Principal = _SYSTEM_PRINCIPAL)` is `src/backend/settings/registry.py:166` — `principal` is an enforcement argument, not a value scope, so the registry genuinely cannot hold a per-user toggle today (the `:130` cited in Context has drifted; the claim itself holds).
+- **Recommended:** **A.** B is a cross-feature architecture change to an approved spec for one feature's need; C loses per-type querying and constraint enforcement. Measured at this pass: `SettingsRegistry.get_value(key, principal: Principal = _SYSTEM_PRINCIPAL)` is `src/backend/settings/registry.py:166` — `principal` is an enforcement argument, not a value scope, so the registry genuinely cannot hold a per-user toggle today (the `:130` cited in Context has drifted; the claim itself holds).
 
 ---
 
 ### Q-08 — With no preference row stored, is a channel on or off by default?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -213,13 +223,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Global default: in-app on, email off** (opt-in email) unless a row says otherwise.
 - **C. Global default: both on** (opt-out email).
 
-- **Recommendation:** **A**, with `("in_app",)` as the default for every v1 type and email explicitly opted-in per type only where the user asked for it — this keeps "email is sent **only** when that recipient's preference enables the email channel" (TODO acceptance signal) true by construction, and avoids emailing every user the moment the feature is deployed. A is also the only option that needs no new write path: the repo's two existing default mechanisms are "persisted value beats definition default" (settings REQ-011) and "unregistered key falls back to the hardcoded default" (file-management), and both resolve at read time, exactly like A.
+- **Recommended:** **A**, with `("in_app",)` as the default for every v1 type and email explicitly opted-in per type only where the user asked for it — this keeps "email is sent **only** when that recipient's preference enables the email channel" (TODO acceptance signal) true by construction, and avoids emailing every user the moment the feature is deployed. A is also the only option that needs no new write path: the repo's two existing default mechanisms are "persisted value beats definition default" (settings REQ-011) and "unregistered key falls back to the hardcoded default" (file-management), and both resolve at read time, exactly like A.
 
 ---
 
 ### Q-09 — What exactly does a registered notification type declare, and may types be registered after startup?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -232,13 +243,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Same, but types may also be registered/unregistered at runtime** (needs events + views + a mutable registry, like search's `register_source`/`unregister_source`).
 - **C. Minimal:** a plain dict/enum of type ids with templates owned inside the feature (no external registration) — contradicts the TODO's acceptance signal.
 
-- **Recommendation:** **A.** Startup-only keeps the vocabulary closed and auditable (catalog precedent) and removes the need for `SourceUnregistered`-style events; runtime registration is YAGNI until a plugin exists. The duplicate-key error to copy is concrete: `PermissionCatalog.register_feature` raises `ValueError` for a key that is malformed, out of scope, or already registered (`src/backend/permissions/catalog.py:48-52`).
+- **Recommended:** **A.** Startup-only keeps the vocabulary closed and auditable (catalog precedent) and removes the need for `SourceUnregistered`-style events; runtime registration is YAGNI until a plugin exists. The duplicate-key error to copy is concrete: `PermissionCatalog.register_feature` raises `ValueError` for a key that is malformed, out of scope, or already registered (`src/backend/permissions/catalog.py:48-52`).
 
 ---
 
 ### Q-10 — Which `notifications.*` permission actions exist, and is the event-driven create path permission-enforced?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -251,13 +263,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Enforce everything and add `notifications.create` to `BOOTSTRAP_SYSTEM_PERMISSIONS`** + a seed migration → touches `permissions` code and data.
 - **C. No enforcement at all** (no `feature_actions.py`, no `permission_service` injection) — contradicts ADR-071 and the search precedent.
 
-- **Recommendation:** **A** — mirrors authentication's exempt set, keeps the change inside one feature (stays FEATURE), and still gives every user-facing operation a catalog action. Also decide whether the actions are added to any role by default (recommend: **no** — the catalog gains keys, roles stay untouched, so no existing user's grants change). Measured cost of B: `BOOTSTRAP_SYSTEM_PERMISSIONS` is a hardcoded `frozenset` at `src/backend/permissions/models.py:99`, so B means editing that set **and** adding a seed migration — a change to another feature's code and data (CROSS-CUTTING).
+- **Recommended:** **A** — mirrors authentication's exempt set, keeps the change inside one feature (stays FEATURE), and still gives every user-facing operation a catalog action. Also decide whether the actions are added to any role by default (recommend: **no** — the catalog gains keys, roles stay untouched, so no existing user's grants change). Measured cost of B: `BOOTSTRAP_SYSTEM_PERMISSIONS` is a hardcoded `frozenset` at `src/backend/permissions/models.py:99`, so B means editing that set **and** adding a seed migration — a change to another feature's code and data (CROSS-CUTTING).
 
 ---
 
 ### Q-11 — Does this change take `Depends on: api-keys`, or ship an in-process read API with the consumer deferred?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -270,13 +283,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Add `Depends on: api-keys`** — notifications waits until the API surface exists, then ships an actually reachable inbox.
 - **C. Ship notifications **inside** the api-keys change** as one CROSS-CUTTING change.
 
-- **Recommendation:** **A.** The record store, preferences, registration API and mail integration are all independent of transport; deferring them behind an unrelated HTTP decision couples a 4/5 item to a change that has not even been specified. Note the deferred value honestly in the spec's Overview. Refreshed at the completion pass: the HTTP surface is now `docs/todo/backend-api.md` (CROSS-CUTTING, WAITING — split out of `api-keys` at its P.3 round 1, 2026-10-08), and `api-keys`' own P.2 reached the same verdict for this very question ("`notifications` should not take `Depends on: api-keys`", `docs/todo/api-keys.md` prep log, 2026-10-03) — the user still decides.
+- **Recommended:** **A.** The record store, preferences, registration API and mail integration are all independent of transport; deferring them behind an unrelated HTTP decision couples a 4/5 item to a change that has not even been specified. Note the deferred value honestly in the spec's Overview. Refreshed at the completion pass: the HTTP surface is now `docs/todo/backend-api.md` (CROSS-CUTTING, WAITING — split out of `api-keys` at its P.3 round 1, 2026-10-08), and `api-keys`' own P.2 reached the same verdict for this very question ("`notifications` should not take `Depends on: api-keys`", `docs/todo/api-keys.md` prep log, 2026-10-03) — the user still decides.
 
 ---
 
 ### Q-12 — Is the notification body rendered and stored at creation, or stored as type + context and rendered on read?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -289,13 +303,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Store `type_id` + JSON context; render on read.**
 - **C. Store both** (context for future re-render, snapshot for display).
 
-- **Recommendation:** **A.** Fewer moving parts, no re-render drift, and it keeps the raw event payload out of the store (less PII at rest). Reuses `mail`'s renderer rather than inventing a second one — see Q-13.
+- **Recommended:** **A.** Fewer moving parts, no re-render drift, and it keeps the raw event payload out of the store (less PII at rest). Reuses `mail`'s renderer rather than inventing a second one — see Q-13.
 
 ---
 
 ### Q-13 — Does the notifications feature own its `EmailTemplate`s and call `MailService.send_email` (no change to `mail`)?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -308,13 +323,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Add a generic `notification` template to `mail`** (a new built-in template + a new high-level `send_notification_email(...)` on `MailService`) → amends `docs/specs/mail-service.md` → CROSS-CUTTING.
 - **C. Notifications builds its own MIME message** — duplicates `mail`, explicitly prohibited by AGENTS.md.
 
-- **Recommendation:** **A.** It is the pattern the mail spec prescribes, and it keeps `mail` untouched. If a type declares no `email_template`, its email channel is unavailable and the preference is rejected/ignored (decide which in the spec).
+- **Recommended:** **A.** It is the pattern the mail spec prescribes, and it keeps `mail` untouched. If a type declares no `email_template`, its email channel is unavailable and the preference is rejected/ignored (decide which in the spec).
 
 ---
 
 ### Q-14 — Does notifications depend on the concrete `MailService` or on a structural sender protocol?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -327,13 +343,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Depend on a structural `EmailSender` protocol** (`send_email(to, template, context)`) declared inside notifications — a fake is one class, no SMTP machinery in tests.
 - **C. Depend on `mail`'s `SmtpTransport`** and build the message in notifications — duplicates mail, rejected.
 
-- **Recommendation:** **B** (a one-method protocol in the notifications package, satisfied by the real `MailService`), matching the `EventPublisher` precedent and keeping notification tests free of SMTP. Record the mail call's principal explicitly (system principal, since `mail.send_email` is bootstrap-granted — `src/backend/permissions/models.py:106`). Note the composition-root fact that makes the protocol the cheaper seam: `src/main.py:219` builds `MailService(permission_service=_permission_service)` with **no** `event_bus`, so `EmailSent`/`EmailFailed` are not published today and cannot be relied on as the notification feature's delivery signal.
+- **Recommended:** **B** (a one-method protocol in the notifications package, satisfied by the real `MailService`), matching the `EventPublisher` precedent and keeping notification tests free of SMTP. Record the mail call's principal explicitly (system principal, since `mail.send_email` is bootstrap-granted — `src/backend/permissions/models.py:106`). Note the composition-root fact that makes the protocol the cheaper seam: `src/main.py:219` builds `MailService(permission_service=_permission_service)` with **no** `event_bus`, so `EmailSent`/`EmailFailed` are not published today and cannot be relied on as the notification feature's delivery signal.
 
 ---
 
 ### Q-15 — What happens to a user's notification rows when the user is deleted?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -346,13 +363,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Keep the rows** (orphaned `user_id`s; reads are always filtered by `user_id`, so nothing is exposed).
 - **C. Lazy cleanup** — drop rows for a missing user on read (file-management EDGE-011 style).
 
-- **Recommendation:** **A**, plus a retention sweep (Q-16) as the safety net for a dropped `UserDeleted` event (the bus is at-most-once, so A alone is not a guarantee — state that in the spec). A is the exact precedent: ADR-064 is session-management subscribing to `UserDeleted`/`UserDeactivated`/`UserPasswordChanged` and cleaning up that user's rows (`src/backend/sessionmanagement/service.py`), and user-management's tables declare no foreign keys, so nothing else can cascade for us.
+- **Recommended:** **A**, plus a retention sweep (Q-16) as the safety net for a dropped `UserDeleted` event (the bus is at-most-once, so A alone is not a guarantee — state that in the spec). A is the exact precedent: ADR-064 is session-management subscribing to `UserDeleted`/`UserDeactivated`/`UserPasswordChanged` and cleaning up that user's rows (`src/backend/sessionmanagement/service.py`), and user-management's tables declare no foreign keys, so nothing else can cascade for us.
 
 ---
 
 ### Q-16 — Retention and cleanup policy for notification rows (age, batch size, per-user cap)?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -365,13 +383,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. A + per-user cap:** keep at most `notifications.max_per_user` (e.g. 500) newest rows per recipient; older ones are deleted at creation time.
 - **C. No cleanup** — rows live forever.
 
-- **Recommendation:** **A + B.** The cap is what actually bounds the table for an active user (age alone does not, since a busy user can produce >retention rows/day), and both are one `DELETE` each. Read/unread semantics must not be affected by the sweep (deleting an unread row is legal — state it). The shape to copy is already in the tree: `SessionService.cleanup_expired(principal=…)` (`src/backend/sessionmanagement/service.py:325`) is bounded by the live-read `sessionmanagement.cleanup_batch_size` (`feature_settings.py:51`) and is application-scheduled with no scheduler in that change.
+- **Recommended:** **A + B.** The cap is what actually bounds the table for an active user (age alone does not, since a busy user can produce >retention rows/day), and both are one `DELETE` each. Read/unread semantics must not be affected by the sweep (deleting an unread row is legal — state it). The shape to copy is already in the tree: `SessionService.cleanup_expired(principal=…)` (`src/backend/sessionmanagement/service.py:325`) is bounded by the live-read `sessionmanagement.cleanup_batch_size` (`feature_settings.py:51`) and is application-scheduled with no scheduler in that change.
 
 ---
 
 ### Q-17 — When the email send fails, what happens to the in-app record, and is the failure recorded?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -384,13 +403,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. A + a per-row delivery marker** (e.g. `email_failed: bool` or a `delivery_error` string) so the user/operator can see it.
 - **C. Skip the in-app record when the email fails** (all-or-nothing) — impossible to roll back cleanly across a network call.
 
-- **Recommendation:** **A**, with the failure recorded in the log (structured, secret-free) and an EDGE test. **B** only if the user wants user-visible delivery state — it adds a column, an AC and a test for a state nothing acts on (no retry exists, Q-03). Grounded in the composition root: `src/main.py:219` injects no `event_bus` into `MailService`, so `EmailFailed` is never published today — a log record is the only failure signal that actually exists without a wiring change to `main.py`.
+- **Recommended:** **A**, with the failure recorded in the log (structured, secret-free) and an EDGE test. **B** only if the user wants user-visible delivery state — it adds a column, an AC and a test for a state nothing acts on (no retry exists, Q-03). Grounded in the composition root: `src/main.py:219` injects no `event_bus` into `MailService`, so `EmailFailed` is never published today — a log record is the only failure signal that actually exists without a wiring change to `main.py`.
 
 ---
 
 ### Q-18 — Does the global `notifications.enabled` kill switch suppress record creation or only the email channel?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -403,13 +423,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. Kill switch stops only email**; in-app records are still created (a "quiet mode").
 - **C. Two switches:** `notifications.enabled` (whole feature) and `notifications.email_enabled` (channel).
 
-- **Recommendation:** **A** for the global switch (simplest to reason about: disabled = the feature does nothing), and rely on per-type/per-user preferences for the granular case. Add `notifications.email_enabled` only if the user wants a global email mute (C) — cheap, but it is a second switch to test. Live-read semantics are already normative (settings-coverage REQ-003/AC-004: a `set_value` affects a running feature without re-construction), so neither option needs a restart story — only an AC saying whether rows created while enabled survive a disable.
+- **Recommended:** **A** for the global switch (simplest to reason about: disabled = the feature does nothing), and rely on per-type/per-user preferences for the granular case. Add `notifications.email_enabled` only if the user wants a global email mute (C) — cheap, but it is a second switch to test. Live-read semantics are already normative (settings-coverage REQ-003/AC-004: a `set_value` affects a running feature without re-construction), so neither option needs a restart story — only an AC saying whether rows created while enabled survive a disable.
 
 ---
 
 ### Q-19 — Confirm the `notifications.*` settings inventory (keys, kinds, defaults).
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -430,13 +451,14 @@ A late question (Phases 2–6) is appended under "Late questions" with `Step:` s
 - **B. The four + `notifications.email_enabled` (BOOLEAN, `true`)** (see Q-18).
 - **C. Fewer:** drop `max_per_user` (no cap, age sweep only, see Q-16).
 
-- **Recommendation:** **A** (or **B** if Q-18 chooses C) — the four keys follow settings-coverage REQ-017 (full `notifications.*` prefix) and REQ-018 (`category` = `application`, `group` = `notifications`), and this table is exactly what REQ-019's inventory check and the existing contract tests (`test_key_prefix`, `test_category_group`) will assert.
+- **Recommended:** **A** (or **B** if Q-18 chooses C) — the four keys follow settings-coverage REQ-017 (full `notifications.*` prefix) and REQ-018 (`category` = `application`, `group` = `notifications`), and this table is exactly what REQ-019's inventory check and the existing contract tests (`test_key_prefix`, `test_category_group`) will assert.
 
 ---
 
 ### Q-20 — Confirm the read/mutation API surface and its idempotency + pagination semantics.
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -456,13 +478,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **B. As above but raising `NotificationNotFoundError`** for an unknown id (leaks existence across users unless carefully worded).
 - **C. Bounded list, no offset** (session-management style).
 
-- **Recommendation:** **A.** Never-raising, user-scoped mutations are the smallest correct surface and make the isolation invariant (INV: a mutation with `user_id` X can never affect a row owned by Y) directly testable with a property test. Both alternatives are named decisions already in the corpus — ADR-066 ("bounded list, no offset, current session pinned") is option C and ADR-067 ("idempotent revocation, no new exceptions") is the no-op rule; A keeps C's idempotency but takes file-management's `limit`/`offset` pagination (`src/backend/filemanagement/service.py:829`), which an inbox needs and a session list did not.
+- **Recommended:** **A.** Never-raising, user-scoped mutations are the smallest correct surface and make the isolation invariant (INV: a mutation with `user_id` X can never affect a row owned by Y) directly testable with a property test. Both alternatives are named decisions already in the corpus — ADR-066 ("bounded list, no offset, current session pinned") is option C and ADR-067 ("idempotent revocation, no new exceptions") is the no-op rule; A keeps C's idempotency but takes file-management's `limit`/`offset` pagination (`src/backend/filemanagement/service.py:829`), which an inbox needs and a session list did not.
 
 ---
 
 ### Q-21 — May an admin read or delete another user's notifications?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -475,13 +498,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **B. Self + admin** — an admin holding `notifications.list` may pass an explicit `user_id` (session-management analogue).
 - **C. Self + admin, gated by a separate action** (e.g. `notifications.read_any`).
 
-- **Recommendation:** **A for v1** (strictest reading of the TODO's signal, no second action, no admin UI consumer exists yet), with B recorded as the extension point. If A is chosen, state explicitly that `admin` does **not** get an exception, because permissions **REQ-010/AC-012** — not REQ-011, as the Context above cites (REQ-011 is "the `user` role starts with zero permissions") — make `admin` an **implicit wildcard over the catalog**: `has_permission` returns `True` for any catalog action, so a `notifications.list` action alone would open every inbox to every admin unless the ownership rule is stated in the spec.
+- **Recommended:** **A for v1** (strictest reading of the TODO's signal, no second action, no admin UI consumer exists yet), with B recorded as the extension point. If A is chosen, state explicitly that `admin` does **not** get an exception, because permissions **REQ-010/AC-012** — not REQ-011, as the Context above cites (REQ-011 is "the `user` role starts with zero permissions") — make `admin` an **implicit wildcard over the catalog**: `has_permission` returns `True` for any catalog action, so a `notifications.list` action alone would open every inbox to every admin unless the ownership rule is stated in the spec.
 
 ---
 
 ### Q-22 — Are broadcast / role-targeted notifications (e.g. notify all admins) in scope for v1?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -493,13 +517,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **A. Out of scope** — every notification has exactly one recipient user; multi-recipient needs are N separate rows created by N registrations.
 - **B. In scope** — a type may declare a recipient resolver returning many users (e.g. all active admins).
 
-- **Recommendation:** **A.** No v1 type from Q-05 needs it, and admin alerting is a different product concept (audit/alerting) that belongs with `api-keys`' audit story, not here. Measured: `PermissionDenied` carries the **acting** `user_id` (`src/backend/permissions/events.py:25`), not an admin audience, so no event in the Q-05 inventory has a natural multi-recipient type.
+- **Recommended:** **A.** No v1 type from Q-05 needs it, and admin alerting is a different product concept (audit/alerting) that belongs with `api-keys`' audit story, not here. Measured: `PermissionDenied` carries the **acting** `user_id` (`src/backend/permissions/events.py:25`), not an admin audience, so no event in the Q-05 inventory has a natural multi-recipient type.
 
 ---
 
 ### Q-23 — Which events does the notifications feature itself publish (and how is a self-loop prevented)?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -512,13 +537,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **B. No events at all** from this feature in v1.
 - **C. Full set** (`NotificationCreated`/`NotificationRead`/`NotificationDeleted`/`PreferencesChanged`) — read/delete events for a feature nothing else consumes.
 
-- **Recommendation:** **A.** `NotificationCreated` is the hook an external consumer (future push/webhook) needs; read/delete events have no consumer (YAGNI). State normatively that the feature subscribes to no event it publishes — the precedent for a deliberately small typed event set is ADR-068 (session-management's typed lifecycle events), and the loop risk is real because the bus matches by `isinstance` (`docs/specs/event-bus.md`).
+- **Recommended:** **A.** `NotificationCreated` is the hook an external consumer (future push/webhook) needs; read/delete events have no consumer (YAGNI). State normatively that the feature subscribes to no event it publishes — the precedent for a deliberately small typed event set is ADR-068 (session-management's typed lifecycle events), and the loop risk is real because the bus matches by `isinstance` (`docs/specs/event-bus.md`).
 
 ---
 
 ### Q-24 — New `NotificationError` hierarchy, or plain `ValueError` like session-management?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -531,13 +557,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **B. Full hierarchy** (+ `NotificationNotFoundError`, `NotificationPreferenceError`, `NotificationDeliveryError`).
 - **C. No new exceptions** (session-management style: `ValueError` for malformed arguments, no-op for unknown ids).
 
-- **Recommendation:** **A.** Registration is the only place a caller can genuinely be wrong at startup, and a distinct error type there is what makes a misbehaving feature's wiring fail loudly. Both extremes are precedented: session-management ships **no** hierarchy (ADR-067 "idempotent revocation, no new exceptions") while seven features ship one (`UserManagerError`, `AuthenticationError`, `MailError`, `FileManagementError`, `SettingsError`, `SearchError`, `AuthorizationError`) — A is the middle that matches a feature with exactly one raise site.
+- **Recommended:** **A.** Registration is the only place a caller can genuinely be wrong at startup, and a distinct error type there is what makes a misbehaving feature's wiring fail loudly. Both extremes are precedented: session-management ships **no** hierarchy (ADR-067 "idempotent revocation, no new exceptions") while seven features ship one (`UserManagerError`, `AuthenticationError`, `MailError`, `FileManagementError`, `SettingsError`, `SearchError`, `AuthorizationError`) — A is the middle that matches a feature with exactly one raise site.
 
 ---
 
 ### Q-25 — How is "no secret in a notification body" enforced — spec rule + tests, or a runtime guard?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -550,13 +577,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **B. A runtime redaction pass** over rendered bodies (pattern blocklist) before storing/sending.
 - **C. Rule only, no test.**
 
-- **Recommendation:** **A.** A blocklist redactor is a false sense of security and a maintenance burden — measured: no redaction/masking helper exists anywhere in `src/backend/`, and nothing would be maintained by it. The real guarantee is that the context a type may reference is declared at registration, so an undeclared variable simply cannot be rendered (`mail` already raises `MailTemplateError` on an unknown variable — reuse that as the enforcement point). The test pattern to copy is already in the repo, with correct IDs: `tests/acceptance/logging_coverage/test_secret_args.py::test_no_raw_secrets_in_any_log_record` (logging-coverage **AC-015**/REQ-015, sentinel-based), plus authentication **REQ-022/AC-035** (`tests/acceptance/authentication/test_logging.py::test_ac_035_no_secrets_in_log_records`) and session-management **AC-044/AC-045** (`tests/acceptance/sessionmanagement/test_observability.py`). The "INV-004/AC-044" pair cited in the Context above is wrong on `main`: authentication INV-004 is the lockout invariant and AC-044 does not exist in that spec.
+- **Recommended:** **A.** A blocklist redactor is a false sense of security and a maintenance burden — measured: no redaction/masking helper exists anywhere in `src/backend/`, and nothing would be maintained by it. The real guarantee is that the context a type may reference is declared at registration, so an undeclared variable simply cannot be rendered (`mail` already raises `MailTemplateError` on an unknown variable — reuse that as the enforcement point). The test pattern to copy is already in the repo, with correct IDs: `tests/acceptance/logging_coverage/test_secret_args.py::test_no_raw_secrets_in_any_log_record` (logging-coverage **AC-015**/REQ-015, sentinel-based), plus authentication **REQ-022/AC-035** (`tests/acceptance/authentication/test_logging.py::test_ac_035_no_secrets_in_log_records`) and session-management **AC-044/AC-045** (`tests/acceptance/sessionmanagement/test_observability.py`). The "INV-004/AC-044" pair cited in the Context above is wrong on `main`: authentication INV-004 is the lockout invariant and AC-044 does not exist in that spec.
 
 ---
 
 ### Q-26 — Does notifications register a search source (`build_notification_source`) in v1?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -568,13 +596,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **A. Out of scope for v1.**
 - **B. In scope** — `build_notification_source(repository)` with fields (`type_id`, `title`, `created_at`, `read_at`), registered in `src/main.py`.
 
-- **Recommendation:** **A.** Same reasoning as the inbox: nothing can call it yet, and a source with no consumer is untested value. Record it as the natural follow-up. Measured: exactly three sources exist today (`src/backend/usermanagement/search_source.py`, `src/backend/filemanagement/search_source.py`, `src/backend/sessionmanagement/search_source.py`), all registered from `src/main.py`, and none of them has an out-of-process consumer until `backend-api` lands.
+- **Recommended:** **A.** Same reasoning as the inbox: nothing can call it yet, and a source with no consumer is untested value. Record it as the natural follow-up. Measured: exactly three sources exist today (`src/backend/usermanagement/search_source.py`, `src/backend/filemanagement/search_source.py`, `src/backend/sessionmanagement/search_source.py`), all registered from `src/main.py`, and none of them has an out-of-process consumer until `backend-api` lands.
 
 ---
 
 ### Q-27 — Confirm storage: own SQLite file under `./data/notifications/`, repository ABC + SQLite concrete, own migration.
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -587,13 +616,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **B. Same tables in the existing `data/usermanagement/users.db`** — rejected (cross-feature persistence dependency, violates ADR-056's "no code dependency").
 - **C. In-memory only in v1** — rejected (the TODO's acceptance signal requires records that can be listed later).
 
-- **Recommendation:** **A.** It is the shape every existing feature already uses — measured on `main`, `migrations/env.py:15-18` has exactly 4 model-module imports (authentication, filemanagement, permissions, usermanagement), so this change adds a fifth import plus one revision, and ADR-056 already fixes one SQLite file per feature under `./data/` (B would create the cross-feature persistence dependency ADR-056 exists to prevent).
+- **Recommended:** **A.** It is the shape every existing feature already uses — measured on `main`, `migrations/env.py:15-18` has exactly 4 model-module imports (authentication, filemanagement, permissions, usermanagement), so this change adds a fifth import plus one revision, and ADR-056 already fixes one SQLite file per feature under `./data/` (B would create the cross-feature persistence dependency ADR-056 exists to prevent).
 
 ---
 
 ### Q-28 — Confirm the NFR budgets (creation latency, list latency, email excluded, suite runtime).
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -606,13 +636,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **B. Looser:** 100 ms budgets.
 - **C. No latency NFRs** (only the suite-runtime NFR).
 
-- **Recommendation:** **A**, but the suite-runtime clause must be re-measured at P.4 rather than copied: the `< 120 s` figure quoted from session-management is stale — measured on `main` at this pass, `uv run pytest tests/ -q` → **889 passed, 1 skipped, 1 failed in 271.81 s** (the failure is the pre-existing `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render`, unrelated to this change). Keep the 50 ms record-write and list budgets — session-management NFR-001 states the measurement context this spec must reuse (default INFO, synchronous console sink, budgets hold including per-call tracing overhead) — and keep the email path out of every latency budget.
+- **Recommended:** **A**, but the suite-runtime clause must be re-measured at P.4 rather than copied: the `< 120 s` figure quoted from session-management is stale — measured on `main` at this pass, `uv run pytest tests/ -q` → **889 passed, 1 skipped, 1 failed in 271.81 s** (the failure is the pre-existing `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render`, unrelated to this change). Keep the 50 ms record-write and list budgets — session-management NFR-001 states the measurement context this spec must reuse (default INFO, synchronous console sink, budgets hold including per-call tracing overhead) — and keep the email path out of every latency budget.
 
 ---
 
 ### Q-29 — Confirm the test strategy: how the mail dependency is faked, and which invariants get Hypothesis property tests.
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -624,13 +655,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **A.** Acceptance: one per v1 type (event → record for the right recipient; email only when the preference enables it; registration of a new type; isolation; no secret). Property (Hypothesis): recipient isolation over generated (owner, actor, id) triples; preference resolution (stored row overrides type default); retention sweep never deletes a row younger than the cutoff. Unit: registration errors, malformed pagination, exempt events create nothing. Integration: event bus → handler → record → mail fake. Contract: `register_type` signature + `EmailSender` protocol compatibility with the real `MailService`. Mail fake: a recording `EmailSender` (Q-14 B) — no SMTP, no `respx`. Time: `travel(..., tick=True)` for retention.
 - **B. Fake at the transport level instead** (`MailService(transport=FakeSmtpTransport())`) — exercises mail's MIME building in notification tests (slower, more coupling).
 
-- **Recommendation:** **A.** `tests/tooling_test_helpers.py` exists on `main` (`model_factory` / `travel` / `mock_http`) and 13 feature directories already sit under `tests/property/`, so the property strategies have a home; faking at the `EmailSender` protocol (Q-14 B) keeps SMTP out of the feature's tests while mail's own MIME behaviour stays covered where it is specified (`tests/contract/mail/`), and `respx` genuinely does not apply — `SmtpTransportImpl` uses `smtplib`, not httpx.
+- **Recommended:** **A.** `tests/tooling_test_helpers.py` exists on `main` (`model_factory` / `travel` / `mock_http`) and 13 feature directories already sit under `tests/property/`, so the property strategies have a home; faking at the `EmailSender` protocol (Q-14 B) keeps SMTP out of the feature's tests while mail's own MIME behaviour stays covered where it is specified (`tests/contract/mail/`), and `respx` genuinely does not apply — `SmtpTransportImpl` uses `smtplib`, not httpx.
 
 ---
 
 ### Q-30 — Confirm the classification stays FEATURE (no spec amendment to any existing feature) and the bump is `minor`.
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -642,13 +674,14 @@ delete(notification_id, *, user_id) -> None         # idempotent no-op
 - **A. FEATURE** — all of Q-02 A, Q-06 A, Q-13 A, Q-10 A, Q-07 A hold; no existing spec is amended; bump `minor`.
 - **B. CROSS-CUTTING** — at least one trigger above is chosen; the spec gains a per-feature Impact Analysis, ADRs are required (new cross-feature interfaces), Phase 5 updates every affected feature's traceability rows; bump `minor` (no breaking change).
 
-- **Recommendation:** **A**, with the spec's Impact Analysis still written informally in the Overview ("touches `mail`, `eventbus`, `usermanagement`, `permissions` read-only / additively; none of their specs change") so the verdict is auditable. Grounded: ADR-079 is the proof that a feature-owned `feature_actions.py` (`src/backend/search/feature_actions.py`) adds catalog keys without touching the permissions feature, and `docs/specs/search.md` became CROSS-CUTTING only because it added a method to another feature's repository ABC — the pattern ADR-080 later repeated for sessions.
+- **Recommended:** **A**, with the spec's Impact Analysis still written informally in the Overview ("touches `mail`, `eventbus`, `usermanagement`, `permissions` read-only / additively; none of their specs change") so the verdict is auditable. Grounded: ADR-079 is the proof that a feature-owned `feature_actions.py` (`src/backend/search/feature_actions.py`) adds catalog keys without touching the permissions feature, and `docs/specs/search.md` became CROSS-CUTTING only because it added a method to another feature's repository ABC — the pattern ADR-080 later repeated for sessions.
 
 ---
 
 ### Q-31 — What does this change explicitly NOT do — the `notifications` ↔ `mail` / `eventbus` / `backend-api` ownership boundary?
 
 - **Step:** P.2 (Phase P, added at the completion pass)
+- **Date:** 2026-10-11
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -665,7 +698,7 @@ The TODO already carries an Out of scope list (frontend/UI, push, WebSocket/SSE,
 - **B. The TODO's list only** — the reuse decisions stay implicit in the REQs and are discoverable only by reading the code.
 - **C. A broader v1** — fold the HTTP inbox and/or the delivery outbox into this change (reclassification per Q-30, strictly larger diff).
 
-- **Recommendation:** **A.** It costs one spec section and every rule is checkable against a file that already exists — `src/backend/mail/` owns SMTP/templates/rendering, `src/backend/eventbus/eventbus.py` owns the process's only event worker, and `docs/todo/backend-api.md` owns the boundary — so Phase 6 can verify the rule against code rather than against intent; **C** additionally breaks the FEATURE verdict Q-30 recommends and re-opens the escalation triggers.
+- **Recommended:** **A.** It costs one spec section and every rule is checkable against a file that already exists — `src/backend/mail/` owns SMTP/templates/rendering, `src/backend/eventbus/eventbus.py` owns the process's only event worker, and `docs/todo/backend-api.md` owns the boundary — so Phase 6 can verify the rule against code rather than against intent; **C** additionally breaks the FEATURE verdict Q-30 recommends and re-opens the escalation triggers.
 
 ### Category coverage
 
@@ -729,7 +762,11 @@ Checked at P.2 (2026-10-03) against all 13 files in `docs/specs/` and all 16 ite
 | `file-management.md` | limit/offset pagination, live settings reads, dangling-mapping EDGE precedent | pattern reuse |
 | `search.md` | ADR-077 additive-source pattern; a notifications source is optional | pattern reuse / optional (Q-26) |
 | `logging.md`, `logging-coverage.md` | `@logged_class`/`@logged` policy, `include_args=False`, secret-free records | reuse |
-| `profiling.md` | unrelated | none |
+| `structlog-logging.md` | the logging backend swap (ADR-082, MERGED); the only `docs/specs/` file that mentions `notifications` at all, and only as a sequencing note (line 217) | predecessor, satisfied |
+| `settings-public-registry-setter.md` | the `get_*`/`set_*`/`reset_*` install trio (ADR-083/084, MERGED PR #81) the notifications module singleton MUST ship, and the private-slot write ban the architecture tests enforce | reuse, no amendment |
+| `structure-map.md` | `STRUCTURE.md` must be regenerated in the same commit as this change's new `.py` files (`uv run python scripts/make_map.py --check`) — the gate Q-28 measured failing on `main` | obligation, not overlap |
+| `template.md` | the spec template, not a spec | n/a |
+| ~~`profiling.md`~~ | **does not exist** — profiling is ADR-085 plus the `logging.profiling_include_arguments` setting (`docs/specs/settings-coverage.md:110`); the row P.2 wrote named a file that is not in `docs/specs/` (measured: 16 files = 15 specs + `template.md`) | corrected at this pass |
 
 **TODOs — overlap findings (refreshed 2026-10-11, all 11 live TODOs):**
 
@@ -746,7 +783,7 @@ Checked at P.2 (2026-10-03) against all 13 files in `docs/specs/` and all 16 ite
 | `gitattributes-line-endings.md` (DOCS/CHORE, PREPARING) | Owns the EOL normalization policy. No overlap (this file is LF, measured). |
 | `complexipy-scripts.md` (DOCS/CHORE, WAITING, PR #82) | Owns the complexity gate over `scripts/`. No overlap — `notifications` adds no `scripts/` file. |
 | `notifications.md` (this change) | Owns: the notification record + read state, per-user per-type channel preferences, the notification-type registry, the event→notification handlers, `notifications.*` settings/actions, and the mail call. Not: SMTP, templates, dispatch, HTTP, frontend. |
-| Archived since P.2: `structlog-logging.md`, `pyproject-tooling-gaps.md`, `python-3.15.md`, `security-changelog-license.md`, `update-readme.md`, `structure-map.md`, `docs-path-ci-trigger.md`, `spec-interview-protocol.md`, `split-archived-qa.md`, `workflow-docs-nits.md`, `remove-spec-tdd-driver.md`, `value-triage-gate.md`, `track-python-skill.md` (+ 7 more) | **`structlog-logging` has merged** — the TODO's `Depends on: structlog-logging must land first` is **satisfied** (measured: `docs/specs/structlog-logging.md` and ADR-082 are on `main`, `src/backend/logging/_pipeline.py` imports `structlog`, and the TODO sits in `docs/todo/archive/`). `notifications` uses only the public logging API (`@logged_class`, `@logged`, `get_logger`), so it is backend-agnostic. The rest are tooling/docs/CI/workflow changes with no overlap. |
+| Archived since P.2 (20 files in `docs/todo/archive/`, measured): `structlog-logging.md`, `pyproject-tooling-gaps.md`, `python-3.15.md`, `security-changelog-license.md`, `update-readme.md`, `structure-map.md`, `docs-path-ci-trigger.md`, `spec-interview-protocol.md`, `split-archived-qa.md`, `workflow-docs-nits.md`, `remove-spec-tdd-driver.md`, `value-triage-gate.md`, `track-python-skill.md`, **and** `settings-public-registry-setter.md`, `composition-root-singleton-install.md`, `map-default-drop-shift.md`, `ruff-d-docstrings.md`, `architecture-tests-missing.md`, `session-lookup-unwired.md`, `codecov-coverage-badge.md` | **`structlog-logging` has merged** — the TODO's `Depends on: structlog-logging must land first` is **satisfied** (measured: `docs/specs/structlog-logging.md` and ADR-082 are on `main`, `src/backend/logging/_pipeline.py:23` imports `structlog`, and the TODO sits in `docs/todo/archive/`). `notifications` uses only the public logging API (`@logged_class`, `@logged`, `get_logger`), so it is backend-agnostic. **Four more archived items bind P.4:** `settings-public-registry-setter` (**MERGED**, PR #81, merge commit `2115faa`) owns the `get_*`/`set_*`/`reset_*` singleton trio (ADR-083/084) that `notifications`' module singleton must ship (AGENTS.md "Using the Feature Singletons") and the private-slot guard `public-api-import-boundary` widens; `map-default-drop-shift` (**MERGED**, PRs #79/#80) owns the `scripts/make_map.py` behaviour behind `STRUCTURE.md`, which this change must regenerate in the same commit as its new `.py` files — that is exactly the check Q-28 measured failing on `main`; `ruff-d-docstrings` (**MERGED**) is the change `docstrings-tests` waits on, i.e. the `tests/*` `per-file-ignores` removal that decides whether this change's test files need docstrings from day one; `composition-root-singleton-install` is **DROPPED** (not merged), so the install-trio semantics stand on ADR-083/084 alone and no dropped change's wording may be cited. `architecture-tests-missing` / `session-lookup-unwired` (MERGED) and `codecov-coverage-badge` (DROPPED) and the remaining docs/CI/workflow items have no overlap. |
 
 **In-flight state (re-checked 2026-10-11):** `git worktree list` → the primary (`main`) plus `chore/complexipy-scripts` and `issue/startup-settings-registration-gaps`; `gh pr list` → one OPEN PR (#82, `chore/complexipy-scripts`). Neither touches `src/backend/notifications/` (which does not exist) or the notification concepts, so there is no branch conflict with this change. Both in-flight changes do touch `src/`-adjacent files (`scripts/`, one ISSUE in `src/main.py` wiring) — the `composition-root-factory` + `startup-settings-registration-gaps` + `notifications` collision on `src/main.py` is the only merge-order risk to watch.
 
@@ -768,6 +805,7 @@ The batch is consistent with the change's type and the TODO's scope:
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE (escalation candidate CROSS-CUTTING); todo set created; **value triage 4/5, implement** |
 | P.2 Interrogate (30 questions) | 2026-10-03 | 30 questions recorded in one `BLOCKED-USER` batch (≥ 20 floor met); overlap checked against 13 specs + 16 TODOs; 5 concrete CROSS-CUTTING escalation triggers identified (Q-02/06/07/10/13) |
 | P.2 Interrogate — completion pass (2026-10-11) | 2026-10-11 | Re-checked against the current P.2 done-criteria. **Floor:** 30 entries already present, each with `Options:` and a recommendation; all 30 recommendations restyled to the `- **Recommendation:**` field the completed files use, and the three bare ones (Q-27/Q-28/Q-29) plus the thin ones given a measured reason. **Added Q-31** (the mandatory non-goals / scope-boundary question — Q-01…Q-30 asked per-item scope but never the global `notifications` ↔ `mail` / `eventbus` / `backend-api` ownership boundary), so the file has **31** entries. Added the mandatory **`### Category coverage`** table (17 rows: 15 covered, 2 skipped with reasons — every `Q-nn` reference checked against the entries). Refreshed the overlap section for the 11 live TODOs (it predated `backend-api`, `composition-root-factory`, `docstrings-tests`, `gitattributes-line-endings`, `public-api-import-boundary`, `python-3.15-upgrade`, `startup-settings-registration-gaps`) and recorded that `structlog-logging` — the TODO's stated predecessor — has merged. Corrected three stale facts P.4 would otherwise inherit: permissions **REQ-010/AC-012** (not REQ-011) is the admin wildcard (Q-21); authentication INV-004 is the lockout invariant and there is no AC-044 in that spec — the secret scans are logging-coverage AC-006/AC-015, authentication REQ-022/AC-035, session-management AC-044/AC-045 (Q-25); the suite-runtime NFR figure is stale — measured `uv run pytest tests/ -q` → **889 passed, 1 skipped, 1 failed in 271.81 s** on `main` (the failure is the pre-existing structure-map check `test_ac_021_committed_map_matches_fresh_render`) (Q-28). **No existing entry's wording, numbering, `Answer:` or `Status:` was changed** — all 31 remain `PENDING`. |
+| P.2 Interrogate — second completion pass (2026-10-11) | 2026-10-11 | Re-audited the P.2 done-criteria against the current tree. **Floor/batch:** 31 entries, all `PENDING`, one batch — verified by script (31 `### Q-nn` headings, 31 `Status: PENDING`, 31 `Incorporated:`, 31 recommendation fields, no gaps). **Field name normalised:** `- **Recommendation:**` → `- **Recommended:**` on all 31 entries — the name `docs/questions/template.md` and AGENTS.md use and the name 7 of the 9 other question files use (`backend-api.md` still uses `Recommendation:`; that file is not this change's to touch), so the field is now grep-findable by the P.3 check. **Added the missing `- **Date:**` line to every entry** (Q-01…Q-30 → 2026-10-03, the P.2 batch commit `84534ff`; Q-31 → 2026-10-11, commit `0b3f491`) — the template's entry format requires it and the file had none. **Category coverage table:** already present (17 rows, 15 covered / 2 skipped with reasons) — re-verified by script: all 31 `Q-nn` references resolve to real entries and every entry is cited at least once. **Non-goals question:** Q-31 ✓. **Overlap check re-run:** `docs/specs/` = 16 files (15 specs + template), `grep -rniE "notification|inbox|in-app|broadcast|alerting" docs/specs/*.md` → **one hit only**, the `structlog-logging.md:217` sequencing note, so **no approved spec covers notification/inbox/alert/in-app messaging behavior**; `docs/todo/` = 11 live TODOs + 20 archived, none of which owns a notification record, read state, channel preference or type registry — the nearest are `backend-api` (the HTTP boundary this change refuses, Q-31) and `api-keys` (whose own Q-31 already answered this change's Q-11 from the other side). Refreshed the archived-TODO row for the four merged/dropped items that bind P.4 (see the table). **One bad citation fixed:** Q-04 cited `src/backend/mail/repository.py:60`, a file that does not exist — replaced with `feature_settings.py:60` + `transport.py:71`. Spot-checked the other measured citations in the recommendations: `permissions/models.py:99` (`BOOTSTRAP_SYSTEM_PERMISSIONS`) and `:106` (`mail.send_email`), `main.py:219` (`MailService(permission_service=…)`), `settings/registry.py:166` (`get_value(key, principal=…)`), `usermanagement/repository.py:94`/`:200` (`get_by_email` on the repository only), `permissions/catalog.py:47-52`, `sessionmanagement/service.py:325`, `sessionmanagement/feature_settings.py:51`, `filemanagement/service.py:829`, `migrations/env.py:15-18` (4 model imports), `pyproject.toml:4` (`1.2.0`), `src/backend/*/events.py` → 7, `find src/frontend -type f` → empty, `grep -rni notification src --include=*.py` → empty — **all confirmed**. **Spec-overlap table corrected:** it listed `profiling.md`, which is not in `docs/specs/` (profiling is ADR-085 + the `logging.profiling_include_arguments` setting), and omitted three files that are — `structlog-logging.md`, `settings-public-registry-setter.md` (the install trio this change's singleton must ship) and `structure-map.md` (the `STRUCTURE.md` regeneration obligation); the table now covers all 16 `docs/specs/` entries. No answer was invented; all 31 entries stay `PENDING`. |
 | P.3 Answer (<n> answered) | | |
 | P.4 Draft spec + create branch/worktree | | |
 | P.5 Self-consistency | | |
