@@ -302,3 +302,124 @@ change adds no test and changes no test, so the AC-021 result is identical befor
   modified in this step; `docs/todo/` and `docs/questions/` were not touched.
 - **Next:** S4.1 — the first Phase 4 refactor step (pick a script, refactor to ≤ 12, re-check the golden pair for
   that script, regenerate the map, commit).
+
+## Phase 4 unit 1 — `scripts/check_traceability.py` (S4.2, 2026-10-11)
+
+Scope item **#3** only. `check` **17** and `matrix_rows` **19** were restructured to the **Q-13** target (≤ 12)
+with a **byte-identical stdout + exit-code contract** (**Q-07**). Files touched by this unit:
+`scripts/check_traceability.py`, the regenerated `STRUCTURE.md`, and this record — nothing else
+(no `pyproject.toml`, no workflow, no spec, no ADR, no `CHANGELOG.md`, **no test file**, no
+`docs/verification/traceability.md` row, per **Q-12** / **Q-15**).
+
+### Shape chosen (permitted by Q-09, Q-10, Q-11)
+
+Pure extraction plus one flattening — no algorithm change, so the emission order cannot drift:
+
+- `matrix_rows` (nested `flush` closure) → `table_blocks` (splits the file into pipe-table blocks) +
+  `status_index` (Status column or `-1`) + `matrix_row` (one row's IDs / cited tests / Status cell) +
+  `table_rows` (one block → its data rows) + a one-line `matrix_rows` comprehension.
+- `check` (four loops) → one module-level function per rule — `ids_without_row`, `rows_citing_undefined_ids`,
+  `rows_citing_missing_tests`, `rows_with_undeclared_status` (+ `status_token` for the Status vocabulary
+  probe) — and `check` is the **concatenation of the four in the frozen order** (missing row → undefined ID →
+  missing test → undeclared Status). A table of callables was **not** used: the concatenation is smaller,
+  fully typed for `mypy`, and shows the frozen order at the call site.
+- All nine new helpers are **public, module-level, same file** (**Q-10**); no `scripts/_common.py`; existing
+  names kept where they still read (`matrix_rows`, `check`, `main` unchanged in signature) — renaming was
+  **allowed** (**Q-11**) but was not needed, so the map churn stays at 10 added lines.
+
+### Per-function complexity, before → after
+
+`uv run complexipy scripts --max-complexity-allowed 15` (ANSI-stripped), this file only:
+
+| Function | Before | After |
+|---|---|---|
+| `check` | **17** ✗ | **0** ✅ |
+| `matrix_rows` | **19** ✗ | **2** ✅ |
+| `defined_ids` | 1 | 1 |
+| `test_names` | 1 | 1 |
+| `spec_files` | 2 | 2 |
+| `main` | 6 | 6 |
+| `table_blocks` | — (new) | **9** ✅ |
+| `table_rows` | — (new) | 4 ✅ |
+| `ids_without_row` | — (new) | 5 ✅ |
+| `rows_with_undeclared_status` | — (new) | 3 ✅ |
+| `rows_citing_undefined_ids` | — (new) | 2 ✅ |
+| `rows_citing_missing_tests` | — (new) | 2 ✅ |
+| `status_index` | — (new) | 2 ✅ |
+| `status_token` | — (new) | 1 ✅ |
+| `matrix_row` | — (new) | 0 ✅ |
+
+The file is now **15 functions, max 9** — under the ≤ 12 target with 3 points of margin, and under the
+house maximum already demonstrated by `make_map.py::_member_lines` (12). `check_traceability.py` contributes
+**no** FAILED line to the gate any more.
+
+Whole-`scripts/` gate state after this unit (the other two over-ceiling functions are **units 2 and 3**, so the
+command still exits **1** — expected mid-change, and the gate widening (**unit 4**) still lands after them):
+
+```text
+FAILED  scripts\validate_task_dag.py :: check_acyclic  22   (unit 2)
+FAILED  scripts\verify_spec.py       :: main           22   (unit 3)
+```
+
+### Golden-output re-run (the primary no-behavior-delta evidence, Q-03)
+
+`bash capture.sh <this worktree> /c/workspace/active-projects/complexipy-scratch/golden-after-unit1`
+(absolute, outside every worktree; `capture.sh` refuses anything else), then `diff -r golden-before
+golden-after-unit1` — **21 files compared, 20 byte-identical, exactly 1 differs**:
+
+| Witness (18 files) | Result |
+|---|---|
+| `check_traceability.stdout` (72 B, sha `e13c5631…4c3f`) / `.stderr` (0 B) / `.exit` (`0`) | **identical** |
+| `validate_task_dag.stdout` (61 B, sha `9234e830…1158`) / `.stderr` / `.exit` | **identical** |
+| `verify_spec_all.stdout` (31 708 B, sha `9d3d3cdc…7b58`) / `.stderr` / `.exit` (475 B, sha `8b4c99ea…fb18`) | **identical** |
+| `verify_spec_template.stdout` (363 B, sha `0f8ec58e…4a0b`) / `.stderr` / `.exit` | **identical** |
+| `complexipy_ci_form.*`, `complexipy_config.*` | **identical** (they analyse `src` + `tests` only) |
+| `complexipy_scripts.stdout` | **differs — expected**: it is the complexity **measurement**, not a witness (§Complexity baseline files: "expected to differ after the change"), and the diff is only this file's score lines (`check 17 ❌` / `matrix_rows 19 ❌` removed; the nine new helpers `0…9 ✅` added) |
+
+`check_traceability.stdout` verbatim, unchanged: `Traceability: PASS (890 matrix rows, 136 spec IDs, 875 test
+functions)` — the row/ID/test-function counts the parser produces are identical, so the table-parsing rewrite
+sees exactly the same rows.
+
+### FAIL-path differential (closes the §Known ceiling of the witness gap for this file)
+
+The golden set only reaches PASS paths, so the FAIL branches were differential-tested against a **scratch
+fixture outside the worktree**: `complexipy-scratch/unit1/faildiff.sh` copies the real `docs/` + `tests/`
+(890-row matrix) into `complexipy-scratch/unit1/fail-fixture/`, mutates the **copy**, and runs the pre-refactor
+script (`git show HEAD:scripts/check_traceability.py`, saved to the scratch dir) and the post-refactor script
+against the same fixture with that fixture as CWD.
+
+| Fixture | before vs after | exit |
+|---|---|---|
+| unmutated copy (PASS path, second witness) | stdout **byte-identical** (both sha `e13c5631…4c3f`), stderr 0 B both | `0` / `0` |
+| mutated copy (all four rules + parser edges) | stdout **byte-identical** (both sha `6b130fe2…fd49` — full value below), stderr 0 B both | `1` / `1` |
+| no `tests/` directory (missing-input branch) | stdout **byte-identical** | `1` / `1` |
+
+Mutated-fixture output, identical for both scripts (sha256 `6b130fe208040cd1ae7cc8163e9c45f8a4f19a61895f698bfacc925ea406fd49`
+for both stdouts), which exercises **all four rules in the frozen order** and the parser edge cases:
+
+```text
+Traceability: FAIL (5 violation(s))
+  REQ-9001 defined in docs/specs/ has no row in docs\verification\traceability.md
+  docs\verification\traceability.md:1191: row references undefined REQ-9998
+  docs\verification\traceability.md:1191: row references missing test test_injected_test_that_does_not_exist
+  docs\verification\traceability.md:1191: undeclared Status value 'DONE'
+  docs\verification\traceability.md:1192: undeclared Status value '1234'
+```
+
+Rule coverage in that run: rule 1 × 1, rule 2 × 1, rule 3 × 1, rule 4 × 2 — and the three parser edges injected
+alongside them (a data row with fewer cells than the Status index, a 2-line table below `MIN_TABLE_LINES`, and
+two tables with no Status column) produced **no** message in either version, i.e. they are still skipped
+identically.
+
+### Gates run for this unit
+
+| Gate | Command | Result |
+|---|---|---|
+| complexity (this file) | `uv run complexipy scripts --max-complexity-allowed 15` | `check_traceability.py` — **15/15 PASSED, max 9**; whole command still exit **1** on `check_acyclic` 22 + `verify_spec.main` 22 (units 2/3) |
+| lint | `uv run ruff check scripts/check_traceability.py` | **All checks passed!** |
+| format | `uv run ruff format --check scripts/check_traceability.py` | **1 file already formatted** |
+| types | `uv run mypy scripts/` | **Success: no issues found in 4 source files** |
+| map | `uv run python scripts/make_map.py` + `--check` | regenerated in this commit; `--check` exit **0**; `STRUCTURE.md` **2 013** lines (was 2 004, +9 signatures +1 line-count line) — NFR-002 ceiling 2 200, headroom **187** |
+
+- **Next:** S4.2 unit 2 — `scripts/validate_task_dag.py::check_acyclic` **22 → ≤ 12** (first-cycle-only
+  short-circuit frozen by **Q-07**; the `validate_task_dag.*` golden pair must stay byte-identical).

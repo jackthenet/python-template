@@ -496,7 +496,7 @@ usermanagement multi-role amendment (member to user; role column to roles list)
 - def `downgrade() -> None`
 
 ### scripts/
-#### scripts/check_traceability.py (153 lines)
+#### scripts/check_traceability.py (190 lines)
 Check referential integrity of the traceability matrix (docs/verification/traceability.md).
 - @dataclass class `MatrixRow`: One data row of a matrix table.
   - `line: int`
@@ -506,7 +506,16 @@ Check referential integrity of the traceability matrix (docs/verification/tracea
 - def `spec_files(spec_dir: Path) -> list[Path]`: Spec files that define normative IDs (the template's IDs are formatting examples).
 - def `defined_ids(spec_dir: Path) -> set[str]`: Every normative ID defined by any spec.
 - def `test_names(test_dir: Path) -> set[str]`: Every test function name defined anywhere under tests/.
+- def `table_blocks(matrix_path: Path) -> list[list[tuple[int, list[str]]]]`: Every pipe-table in the matrix as (line number, cells); the prose between tables is dropped.
+- def `status_index(header: list[str]) -> int`: Index of a table's Status column, or -1 when the table has none (such tables are not rows).
+- def `matrix_row(line_no: int, cells: list[str], status_idx: int) -> MatrixRow`: One data row: the normative IDs and backticked test names it cites, plus its Status cell.
+- def `table_rows(block: list[tuple[int, list[str]]]) -> list[MatrixRow]`: Data rows of one block; a block too short to be a table, or without a Status column, has none.
 - def `matrix_rows(matrix_path: Path) -> list[MatrixRow]`: Parse the matrix tables, keeping only tables that have a Status column.
+- def `ids_without_row(matrix_path: Path, rows: list[MatrixRow], specs: set[str]) -> list[str]`: Rule 1: every REQ/AC defined by a spec has at least one matrix row.
+- def `rows_citing_undefined_ids(matrix_path: Path, rows: list[MatrixRow], specs: set[str]) -> list[str]`: Rule 2: no matrix row references an ID that no spec defines.
+- def `rows_citing_missing_tests(matrix_path: Path, rows: list[MatrixRow], tests: set[str]) -> list[str]`: Rule 3: every backticked test function cited by a matrix row exists under tests/.
+- def `status_token(status: str) -> str`: The vocabulary token a Status cell starts with; the cell itself when it starts with no letters.
+- def `rows_with_undeclared_status(matrix_path: Path, rows: list[MatrixRow]) -> list[str]`: Rule 4: every Status cell uses a declared value.
 - def `check(matrix_path: Path, rows: list[MatrixRow], specs: set[str], tests: set[str]) -> list[str]`: Return one message per referential-integrity violation.
 - def `main() -> int`
 #### scripts/make_map.py (581 lines)
