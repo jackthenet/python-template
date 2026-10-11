@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** READY  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** IN-WORKFLOW  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
 - **Change type:** DOCS/CHORE  <!-- reclassified at P.3 Q-16 (2026-10-11) from P.1's REFACTOR: the gate widening is the point of the change and the four function restructures exist only to satisfy it, so criterion #5 (no behavior delta) matches before #4. Escalation Rules applied; recorded in docs/verification/complexipy-scripts.md -->
 - **Created:** 2026-10-09
 - **Question file:** `docs/questions/complexipy-scripts.md`
