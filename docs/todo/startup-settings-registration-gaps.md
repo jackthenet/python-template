@@ -4,7 +4,7 @@ Backlog item for one planned change, created at **P.1 Frame** from this template
 
 This is a **planning record, not normative**: like `docs/questions/`, it is committed directly to `main` (see "Phase P: PREPARE" in `AGENTS.md`). It carries no approval gate — the spec does.
 
-- **Status:** READY  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
+- **Status:** WAITING  <!-- PREPARING | QUESTIONS-ANSWERED | READY | IN-WORKFLOW | WAITING | MERGED | DROPPED -->
 - **Change type:** ISSUE  <!-- confirmed at P.3 Q-01 (deviation from settings-coverage REQ-002/AC-003) and re-confirmed after the Q-15 widening at Q-24: the type stays ISSUE, the spec wordings are amended inside this change's PR -->
 - **Created:** 2026-10-10
 - **Question file:** `docs/questions/startup-settings-registration-gaps.md`
