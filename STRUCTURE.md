@@ -526,10 +526,13 @@ Generate the repository structure map (spec: docs/specs/structure-map.md).
   - `tree: ast.Module`
   - `line_count: int`
 - def `main(argv: Sequence[str] | None=None) -> int`: Run the generator and return its exit code.
-#### scripts/validate_task_dag.py (134 lines)
+#### scripts/validate_task_dag.py (161 lines)
 Validate task DAG: acyclicity, well-formedness, and sync.
 - def `load_tasks(path: Path) -> list[dict]`: Load tasks from a JSON task DAG file.
 - def `check_well_formed(tasks: list[dict]) -> list[str]`: Check that every task has required fields.
+- def `build_graph(tasks: list[dict]) -> dict[str, list[str]]`: Map each task id to its dependency ids; a task without an id contributes nothing.
+- def `cycle_message(path: list[str], neighbor: str) -> str`: The one 'Cycle detected: ...' line a back edge to a GRAY neighbor produces.
+- def `visit(graph: dict[str, list[str]], node: str, color: dict[str, int], path: list[str], failures: list[str]) -> bool`: Walk the dependency graph from node and return True once a cycle has been recorded.
 - def `check_acyclic(tasks: list[dict]) -> list[str]`: Check that the dependency graph is acyclic using DFS.
 - def `check_sync(docs_path: Path, runner_path: Path) -> list[str]`: Check that docs/tasks and .github/task-runner are in sync.
 - def `main() -> int`

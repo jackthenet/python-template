@@ -421,5 +421,131 @@ identically.
 | types | `uv run mypy scripts/` | **Success: no issues found in 4 source files** |
 | map | `uv run python scripts/make_map.py` + `--check` | regenerated in this commit; `--check` exit **0**; `STRUCTURE.md` **2 013** lines (was 2 004, +9 signatures +1 line-count line) — NFR-002 ceiling 2 200, headroom **187** |
 
-- **Next:** S4.2 unit 2 — `scripts/validate_task_dag.py::check_acyclic` **22 → ≤ 12** (first-cycle-only
-  short-circuit frozen by **Q-07**; the `validate_task_dag.*` golden pair must stay byte-identical).
+## Phase 4 unit 2 — `scripts/validate_task_dag.py` (S4.2, 2026-10-11)
+
+Scope item **#4** only. `check_acyclic` **22** was restructured to the **Q-13** target (≤ 12) with a
+**byte-identical stdout + exit-code contract** (**Q-07**), first-cycle-only semantics included. Files touched
+by this unit: `scripts/validate_task_dag.py`, the regenerated `STRUCTURE.md`, and this record — nothing else
+(no `pyproject.toml`, no workflow, no spec, no ADR, no `CHANGELOG.md`, **no test file**, no
+`docs/verification/traceability.md` row, per **Q-12** / **Q-15**).
+
+### Shape chosen (permitted by Q-09, Q-10, Q-11)
+
+**Extraction, not an algorithm rewrite** — the recursive `dfs` closure was the whole problem: complexipy scores
+a nested closure **inside** its enclosing function, so one 22-point blob held the graph build, the DFS and the
+message. Splitting it into three module-level functions plus the module-level `WHITE, GRAY, BLACK` constants
+reaches the target with margin and leaves the DFS statements **byte-for-byte the same statements**, so the
+subtle parts of the frozen semantics cannot drift by construction:
+
+- `build_graph` — the graph-build loop, verbatim.
+- `cycle_message` — the `Cycle detected: …` line, including the `path.index(neighbor) if neighbor in path else 0`
+  fallback (a GRAY node left behind by an aborted walk is not on the later root's path).
+- `visit` — the DFS step, verbatim (`graph.get(node, [])` → `graph[node]`: `visit` is only ever called with a key
+  of `color`, and `color`'s keys are `graph`'s keys).
+- `check_acyclic` — the root loop (`for tid in list(graph)` → `for tid in graph`: `graph` is never mutated during
+  the walk).
+
+All four are **public, module-level, same file** (**Q-10**); no `scripts/_common.py`; existing names and the
+`check_acyclic(tasks) -> list[str]` signature kept — renaming was **allowed** (**Q-11**) but was not needed, so
+the map grows by 3 signature lines only.
+
+**Why not the iterative DFS** (**Q-09** permits it, it is not required): extraction already lands the new code at
+max **9**, so the rewrite buys no complexity, and it would be a **behavior change**, not a refactor — a recursive
+walk raises `RecursionError` on a dependency chain deeper than the interpreter limit where an iterative walk
+reports the cycle. That is outside a DOCS/CHORE change (**Q-07**: same input → same observable result). The
+`visit` docstring records the reason so the next reader does not "modernise" it into a delta. The repo DAG is
+12 tasks; the limit is never reached by any real input.
+
+### Per-function complexity, before → after
+
+`uv run complexipy scripts --max-complexity-allowed 15` (ANSI-stripped), this file only:
+
+| Function | Before | After |
+|---|---|---|
+| `check_acyclic` | **22** ✗ | **3** ✅ |
+| `load_tasks` | 0 | 0 |
+| `main` | 6 | 6 |
+| `check_well_formed` | 8 | 8 |
+| `check_sync` | 12 | 12 |
+| `visit` | — (was the `dfs` closure, scored inside `check_acyclic`) | **9** ✅ |
+| `build_graph` | — (new) | 3 ✅ |
+| `cycle_message` | — (new) | 1 ✅ |
+
+The file is now **8 functions, max 12** — `check_acyclic` contributes **no** FAILED line to the gate any more.
+The remaining 12 is `check_sync`, untouched (already at the house maximum, not in the refactor set per the scope
+table).
+
+Whole-`scripts/` gate state after this unit (`verify_spec.py::main` is **unit 3**, and the gate widening is
+**unit 4**, so the command still exits **1** — expected mid-change):
+
+```text
+FAILED  scripts\verify_spec.py :: main  22   (unit 3)
+```
+
+### Golden-output re-run (the primary no-behavior-delta evidence, Q-03)
+
+`bash capture.sh <this worktree> /c/workspace/active-projects/complexipy-scratch/golden-after-unit2`
+(absolute, outside every worktree), then `diff -r golden-before golden-after-unit2` — **21 files compared, 20
+byte-identical, exactly 1 differs**:
+
+| Witness (18 files) | Result |
+|---|---|
+| `validate_task_dag.stdout` (61 B, sha `9234e830…1158`) / `.stderr` (0 B) / `.exit` (`0`) | **identical** |
+| `check_traceability.stdout` (72 B, sha `e13c5631…4c3f`) / `.stderr` / `.exit` | **identical** |
+| `verify_spec_all.stdout` (31 708 B, sha `9d3d3cdc…7b58`) / `.stderr` / `.exit` (475 B, sha `8b4c99ea…fb18`) | **identical** |
+| `verify_spec_template.stdout` (363 B, sha `0f8ec58e…4a0b`) / `.stderr` / `.exit` | **identical** |
+| `complexipy_ci_form.*`, `complexipy_config.*` | **identical** (they analyse `src` + `tests` only) |
+| `complexipy_scripts.stdout` | **differs — expected**: the complexity **measurement**, and the diff is only the score lines of units 1 and 2 (`check 17` / `matrix_rows 19` / `check_acyclic 22` FAILED removed; the twelve new helpers `0…9` PASSED added) |
+
+`validate_task_dag.stdout` verbatim, unchanged: `Task DAG validation PASSED: 12 tasks, acyclic, well-formed.`
+
+### Cycle-path differential (closes the §Known ceiling gap for this file)
+
+The golden set only reaches the PASS path — `check_acyclic`'s FAIL branch is exactly what this unit rewrote. So
+the pre-refactor script (`git show f2878d7:scripts/validate_task_dag.py`) and the post-refactor one were run over
+the **same** cycle-bearing fixtures: `complexipy-scratch/unit2/faildiff.sh`, fixtures under
+`complexipy-scratch/unit2/fixtures/` (outside the worktree, nothing added to the repository — **Q-12**). Each
+fixture is run **twice per script**, in two invocation modes:
+
+- **`ci`** — the fixture is copied to `<scratch>/runhere/.github/task-runner/tasks.json` and passed as
+  `.github/task-runner/tasks.json`, so `main` skips `check_sync` (`tasks_path == runner_path`) and the output is
+  the pure cycle report, exactly as CI produces it;
+- **`sync`** — the fixture is passed by absolute path from another CWD, so `check_sync`'s
+  `Runner file missing: .github/task-runner/tasks.json` line is emitted too (the branch the golden run never
+  reaches, §Second ceiling).
+
+**26 runs (13 fixtures × 2 modes), 0 mismatches** — every stdout is byte-identical (sha256 in
+`unit2/faildiff-table.txt`), every stderr is 0 bytes, every exit code matches:
+
+| Fixture | What it witnesses | exit ci / sync | Cycle line(s) — identical before/after |
+|---|---|---|---|
+| `01-acyclic` | PASS path, second witness | 0 / 1 | `Task DAG validation PASSED: 4 tasks, acyclic, well-formed.` |
+| `02-cycle2` | the canonical 2-node cycle | 1 | `Cycle detected: A -> B -> A` |
+| `03-chain-backedge` | long chain + back edge → cycle slice starts mid-path | 1 | `Cycle detected: B -> C -> D -> E -> F -> B` |
+| `04-selfloop` | self-loop, then a root reaching the abandoned GRAY node | 1 | `Cycle detected: A -> A` + `Cycle detected: B -> A` |
+| `05-disconnected-second` | cycle only in the second component (root loop continues) | 1 | `Cycle detected: C -> D -> C` |
+| `06-edge-order` | cycle reachable only through the **second** dependency of `A` (the first branch is explored to BLACK first) | 1 | `Cycle detected: A -> C -> A` |
+| `07-two-cycles` | **first-cycle-per-root-walk, not first-cycle-overall**: two components, each with a cycle → both reported, one per walk | 1 | `Cycle detected: B -> C -> B` + `Cycle detected: D -> E -> D` |
+| `08-gray-abandoned` | the `path.index(...) if … else 0` fallback: `D` reaches a GRAY `B` left by an aborted walk, not on `D`'s path | 1 | `Cycle detected: B -> C -> B` + `Cycle detected: D -> B` |
+| `09-dangling-dep` | dependency id that is not a task → `continue`, not a dangling edge | 0 / 1 | `Task DAG validation PASSED: 2 tasks, acyclic, well-formed.` |
+| `10-deep-chain` | 61-node chain + back edge — recursion depth and the mid-path cycle slice | 1 | `Cycle detected: T30 -> T31 -> … -> T60 -> T30` (31 nodes; elided **in this table only** — the emitted line is spelled out in full and is byte-identical) |
+| `11-empty-task-id` | `check_well_formed` + `check_acyclic` message **order** with an id-less task | 1 | `Task with empty task_id found` then `Cycle detected: A -> B -> A` |
+| `12-dup-id` | duplicate `task_id` → last write wins in `build_graph` (the cycle disappears) | 0 / 1 | `Task DAG validation PASSED: 3 tasks, acyclic, well-formed.` |
+| `13-no-tasks` | empty DAG | 0 / 1 | `Task DAG validation PASSED: 0 tasks, acyclic, well-formed.` |
+
+Fixtures 04, 07 and 08 are the witnesses that the **Q-07** first-cycle-only semantics survived: a walk stops at
+its first cycle, the nodes it left GRAY are never revisited, and the next root's walk is reported against the
+path that walk built.
+
+### Gates run for this unit
+
+| Gate | Command | Result |
+|---|---|---|
+| complexity (this file) | `uv run complexipy scripts --max-complexity-allowed 15` | `validate_task_dag.py` — **8/8 PASSED, max 12**; whole command still exit **1** on `verify_spec.main` 22 (unit 3) |
+| lint | `uv run ruff check scripts/validate_task_dag.py` | **All checks passed!** |
+| format | `uv run ruff format --check scripts/validate_task_dag.py` | **1 file already formatted** |
+| types | `uv run mypy scripts/` | **Success: no issues found in 4 source files** |
+| map | `uv run python scripts/make_map.py` + `--check` | regenerated in this commit; `--check` exit **0**; `STRUCTURE.md` **2 016** lines (was 2 013, +3 signatures) — NFR-002 ceiling 2 200, headroom **184** |
+
+- **Next:** S4.2 unit 3 — `scripts/verify_spec.py::main` **22 → ≤ 12** (the `docs/specs/template.md` report stays
+  byte-identical to AC-025's `_VERIFY_SPEC_REPORT_BEFORE_FIX`; the `verify_spec_*` golden pairs must not change).
