@@ -362,6 +362,45 @@ FAILED tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uni
 
 **Baseline for this change = 3 failed / 887 passed / 1 skipped**, with the composition of that 3 as above. Phase 5 must show no failure other than these inherited ones.
 
+### 7.1 Full regression run (S5.1) — 2026-10-11, HEAD `736a24c`, clean tree
+
+```
+uv run pytest tests/ -q
+→ 891 passed, 1 skipped in 273.91s (0:04:33)
+SKIPPED [1] tests\acceptance\filemanagement\test_filemanagement.py:364: symlinks not available on this host
+```
+
+No `-x`, no deselection, no marker filter; the run went to completion. `uv run pytest tests/ -q --collect-only` → **892 tests collected** against the baseline's 891 (3 failed + 887 passed + 1 skipped). The +1 is this change's own new reproduction test `tests/acceptance/settings_coverage/test_persistence.py::test_ac_028_persisted_override_warns` (the only test function the change adds — `git diff 25b7e7b HEAD -- tests/` shows one added `def test_…`, the rest of the test diff being edits to existing functions).
+
+**Failures in the full run: 0.** Every one of the three inherited baseline failures (§7) was checked against this run:
+
+| Inherited failure (§7) | Full run at `736a24c` | Classification |
+|---|---|---|
+| `tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render` | **did not fail** | **Measured difference, not a fix this change claims.** This change regenerates `STRUCTURE.md` (commit `b88684d`, required by the `src/main.py` edit), and the regenerated file is written with LF, so the raw-byte compare passes *in this worktree*. The root cause — `core.autocrlf=true` with no `.gitattributes` checking the LF blob out as CRLF — is untouched and still belongs to the separate `gitattributes-line-endings` TODO (§10). On `main` at base `25b7e7b` it still fails. |
+| `tests/property/usermanagement/test_usermanagement_properties.py::test_inv_002_password_round_trip` | **did not fail** | Known load-dependent Hypothesis `DeadlineExceeded` flake (§7). Not fixed here; it simply did not recur in this run (the run was faster: 273.91s vs 351.73s). |
+| `tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uniqueness` | **did not fail** | Same inherited flake pair (§7). Not fixed here; did not recur. |
+
+Isolation re-run of all three (the §7 check, re-run at this HEAD):
+
+```
+uv run pytest tests/acceptance/test_structure_map.py::test_ac_021_committed_map_matches_fresh_render \
+    tests/property/usermanagement/test_usermanagement_properties.py::test_inv_002_password_round_trip \
+    tests/property/authentication/test_tokens.py::test_inv_001_token_hash_uniqueness -q
+→ 3 passed in 5.57s
+```
+
+**Reproduction tests GREEN (ISSUE obligation):**
+
+```
+uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py \
+    tests/acceptance/settings_coverage/test_persistence.py -q
+→ 9 passed in 3.71s
+```
+
+The 9 are the R-1 / R-2 / D-5 witnesses that were RED at the S3.2 gate (§5.3: 3 failed, 6 passed) — all 9 now pass.
+
+**Phase 5 regression gate: PASS.** The full suite is GREEN with **zero** failures, so there is no failure to classify as a regression: the run is strictly better than the inherited baseline (3 failed → 0 failed) and the only composition differences are the +1 collected test this change adds and the `test_ac_021` line-ending artifact passing in this worktree, both accounted for above. No test was weakened, deleted or deselected to reach this result (the single assertion change in `tests/acceptance/sessionmanagement/test_settings.py:58` is the spec-amendment narrowing recorded in §9). Next: **S5.2** (whole-repo `ruff check .` + `mypy src/`).
+
 ## 8. Light ISSUE tier assessment — **NOT qualified** (full Phase 5 gate set applies)
 
 AGENTS.md "Light ISSUE tier" requires **all** of: single feature, fix touches ≤ 3 files excluding tests, no new dependency, no new public interface, no cross-feature change, and the triage naming the covering tests.
