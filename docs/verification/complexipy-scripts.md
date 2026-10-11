@@ -995,3 +995,176 @@ CI gate on the PR.
 - **Owed by Phase 6:** the `CHANGELOG.md` entry under `## [Unreleased]` → `### Changed` (no version bump), and the
   light review (S6.1–S6.3) plus the PR (S6.4).
 - **Next:** S6.1 — Phase 6 light review against this scope record.
+
+---
+
+## Phase 6 — review report (S6.1 + S6.2 + S6.3, DOCS/CHORE light review, 2026-10-11)
+
+Reviewed the **final state** of the branch (`chore/complexipy-scripts` @ `c8b97b8`, clean working tree) against the
+approved scope — `docs/todo/complexipy-scripts.md` (In scope / Out of scope / Constraints), this file's scope record
+and the four Phase 4 unit sections, and the answered `docs/questions/complexipy-scripts.md` (18 entries, 0 PENDING,
+no late questions). Not reviewed commit-by-commit; the full suite was **not** re-run (Phase 5 owns that gate and it is
+a CI gate on the PR). Only targeted re-checks were run (the three config witnesses, the complexity gate, ruff on the
+three scripts). **No file was changed by this review.**
+
+### Check 1 — scope conformance (the DOCS/CHORE normative basis) — **PASS**
+
+`git diff --name-status main...HEAD` lists **exactly the nine approved files**, nothing else (9 files, +1 365 / −108):
+
+| File | Scope item |
+|---|---|
+| `pyproject.toml` | 1 — `[tool.complexipy] paths` (`:100`, the only changed line) |
+| `.github/workflows/quality.yml` | 1 — the `complexity` job args (`:146`, 2 changed lines) |
+| `scripts/check_traceability.py` | 2 — `check()` 17 → 9 |
+| `scripts/validate_task_dag.py` | 2 — `check_acyclic()` 22 → 12 |
+| `scripts/verify_spec.py` | 2 — `main()` 22 → 6, `check_traceability()` 19 → 10 |
+| `docs/specs/structure-map.md` | 3 — NFR-005 amendment + Changelog v4 (2 hunks, 11 lines) |
+| `docs/decisions/ADR-087-complexipy-scope-extended-to-scripts.md` | 3 — new ADR (142 lines) |
+| `STRUCTURE.md` | 4 — regenerated map (+22 / −5) |
+| `docs/verification/complexipy-scripts.md` | 5 — this record |
+
+Out-of-scope list, line by line (all **respected**):
+
+- **Ceiling unchanged, not parameterised; no carve-out, no snapshot, no suppression** — `pyproject.toml` diff is one
+  line (`paths`); `max-complexity-allowed = 15` untouched; `grep -rn "noqa\|complexipy" scripts/` → no hits, so no
+  per-function escape exists.
+- **Near-miss functions untouched (Q-17)** — `git diff main...HEAD -- tests/ src/` → **0 lines** each, so
+  `test_ac_008_document_shape` (15), `_feature_logger_names` (14), `test_inv_004_other_loggers_untouched` (14),
+  `test_concurrent_thread_safe` (14), `SearchService::search` (13), `SettingsRegistry::create_template` (13) are
+  byte-identical to `main`.
+- **`scripts/make_map.py` untouched** — not in the diff; still 581 lines in the map; measured max 12 (unchanged).
+- **No new scripts, no `scripts/_common.py` (Q-10)** — the only added files are the ADR and this record.
+- **No CI map job (Q-08)** — `quality.yml` diff is the 2 gate lines only; `spec-validation.yml` not in the diff.
+- **Coverage / bandit / `ty` / mypy / pre-commit untouched** — `pyproject.toml` has one changed line; the `complexity`
+  job still installs `complexipy>=2.8.0` with no pin/downgrade (**Q-18**); `.pre-commit-config.yaml` not in the diff.
+- **No test file added or changed (Q-12)** — `git log main..HEAD -- tests/` → 0 commits.
+- **No `docs/verification/traceability.md` row (Q-15)** — diff 0 lines.
+- **No `.gitattributes` / line-ending change (Q-02)** — no `.gitattributes` in the repo, diff 0 lines; the CRLF
+  failure stays owned by the `gitattributes-line-endings` TODO.
+- **Constraints** — branch base `045d95d` (contains `map-default-drop-shift`), version `1.2.0` at `pyproject.toml:4`
+  unchanged (no bump for this type), `docs/todo/` / `docs/questions/` not in the branch diff (planning records are
+  `main`-only), and the map is regenerated in the same commit as each `scripts/*.py` change (`git show --stat`:
+  `1c6751c`+`c8b97b8` each carry `STRUCTURE.md`).
+
+### Check 2 — no behavior delta (the DOCS/CHORE contract) — **PASS**
+
+- **Golden pair re-verified independently at HEAD**: `diff -rq ../complexipy-scratch/golden-before
+  ../complexipy-scratch/golden-after-phase5` → **exactly three files differ**, all `complexipy_*` measurements; the
+  eight behavioural witnesses are byte-identical, and their sizes/sha256 re-read at HEAD match the record exactly
+  (`check_traceability.stdout` 72 B `e13c5631…`, `validate_task_dag.stdout` 61 B `9234e830…`,
+  `verify_spec_all.stdout` 31 708 B `9d3d3cdc…`, `verify_spec_template.stdout` 363 B `0f8ec58e…`).
+- **FAIL-path differentials are on disk**: `unit1/faildiff.sh` + `fail-fixture` + `no-tests-fixture`,
+  `unit2/faildiff.sh` + 13 cycle fixtures (`01-acyclic` … `13-no-tasks`) × 2 modes,
+  `unit3/faildiff.sh` + 11 synthetic spec fixtures (`01-req-no-ac` … `11-no-trailing-newline`) + the 15 real specs,
+  `unit3/out/` 198 captured files. The record reports 0 mismatches across 3 + 26 + 33 runs; the artifacts back it.
+- **The `1 → 0` exit flip is the acceptance signal, not a behavior delta**: `complexipy_scripts.exit` belongs to the
+  *measurement command* `uv run complexipy scripts --max-complexity-allowed 15`, not to any of the three scripts. The
+  scripts' own exit witnesses are unchanged (`check_traceability.exit` 0, `validate_task_dag.exit` 0, and 15 × `0` for
+  `verify_spec`), and the flip is exactly what Q-05/Q-13 require (the four offenders were above 15 before, ≤ 12 now).
+  Internally consistent.
+- **Independent re-measurement at HEAD** (re-run, not quoted): both gate forms — the CI line and the config-driven
+  `uv run complexipy` — exit **0**, analyse **2 253** functions, **0 FAILED**, and the per-file maxima are
+  `check_traceability.py` 9, `validate_task_dag.py` 12, `verify_spec.py` 10, `make_map.py` 12 — identical to G1–G3,
+  every function in the three target scripts ≤ 12 (Q-13).
+
+### Check 3 — traceability for this type — **PASS**
+
+- No `REQ-XXX` / `AC-XXX` is defined by this change, so no matrix row is owed and none was added (**Q-15**);
+  `docs/verification/traceability.md` diff = 0 lines. The evidence lives in this file, as Q-15 decided.
+- **NFR-005 amendment is correct and minimal**: the diff is 2 hunks — the NFR-005 row (the normative clause "every
+  function in the analyzed tree stays at or below `max-complexity-allowed`" is kept verbatim; only the tail that
+  excluded `scripts/` is replaced with the three analyzed paths, the CI positional args, the 2 253-function
+  re-measurement and the ADR-087 pointer) and the `## 15. Changelog` **v4** entry, placed at the top of the list in
+  the existing v3/v2 format and in the AGENTS Spec-Amendment shape (`- v4 (2026-10-11): NFR-005 amended — …`).
+  **No ID renumbered or deleted**: the ID set of `structure-map.md` is 85 before and 85 after, added = ∅, removed = ∅
+  — which is why `verify_spec_all.stdout` is byte-identical. The §11 witness row (`:575`) and the §14 note (`:646`)
+  are unchanged.
+- **ADR convention respected**: `docs/decisions/ADR-086-scripts-type-checked-tree.md` is **not** in the diff; its
+  gate-map row (`:18`, `widen: no`) and its frozen-scope sentence (`:47-49`, `complexipy (paths = ["src", "tests"]) …
+  keep their current scope`) still read as on `main`. Supersession is stated in ADR-087's Status ("Supersedes the
+  `complexipy` row of ADR-086 … ADR-086 is **not edited**") and in its Decision ("ADR-086 stays as written"), matching
+  the current convention — ADR-082 `:4` "Accepted (supersedes ADR-002)" and `:30` "deliberately **not** edited … only
+  their naming … is stale" (ADR-087's quotation of that sentence is accurate), ADR-083 `:97` "Extends, does not
+  supersede"; the older counter-example (ADR-002's own `Superseded by ADR-082` Status line) is left as the record
+  says. ADR-087's `:18` citation is exact; its `:47-50` range covers the cited sentence (`:48-49`) — accurate enough
+  to locate, no action. Numbering is next-free (086 is the highest existing).
+
+### Check 4 — boundaries and architecture rules — **PASS**
+
+- Each refactor stayed inside its own file; no cross-script import was introduced (`grep` of the imports in the three
+  scripts returns stdlib only), and `src/` is untouched, so no feature boundary and no `shared/` rule is engaged.
+  Helpers are **module-level and public** in the file that uses them (**Q-10**), all typed:
+  `check_traceability.py:61/77/83/94/109/119/126/135/141` (`table_blocks`, `status_index`, `matrix_row`, `table_rows`,
+  `ids_without_row`, `rows_citing_undefined_ids`, `rows_citing_missing_tests`, `status_token`,
+  `rows_with_undeclared_status`), `validate_task_dag.py:42/52/64` (`build_graph`, `cycle_message`, `visit`),
+  `verify_spec.py:69/81/95/103/111` (`configure_stdout`, `print_requirement_lines`,
+  `print_acceptance_criterion_lines`, `print_invariant_lines`, `print_traceability_summary`).
+- Docstrings: ruff `D` is per-file-ignored for `scripts/`, so this is a review judgement. Every **new** docstring
+  states something its signature does not — `cycle_message:52` (the GRAY-node fallback and why the path is not
+  carried), `visit:64` (the walk is recursive on purpose; iterative = behavior change), `check:150` (the
+  concatenation order *is* the printed contract), `print_requirement_lines:81` (the check is spec-wide, not per
+  requirement), `configure_stdout:69` (the cp1252 `UnicodeEncodeError` it prevents). No filler was added.
+
+### Check 5 — tests not weakened — **PASS** (one finding, F-1)
+
+- `git diff main...HEAD -- tests/` → **0 lines**, `git log main..HEAD -- tests/` → **0 commits**: no test was
+  modified, deleted, skipped, xfailed or re-parametrised, and no test was added (Q-12).
+- Targeted re-run at HEAD: `test_nfr_005_complexipy_threshold_holds`, `test_ac_025_mypy_covers_scripts`,
+  `test_nfr_002_map_line_budget` → **3 passed in 0.89 s** (unmodified witnesses still green).
+- `_COMPLEXIPY_PATHS = ("src", "tests")` (`tests/acceptance/test_structure_map.py:1427`, used at `:1462`) is
+  **consistent** with the widened config in the narrow sense — the test asserts its own expectation (a clean report at
+  15 over `src tests`) and still passes; it never read `[tool.complexipy] paths`, so the widening cannot make it fail
+  and it was not touched to make the change pass. But it now **under-asserts** the amended NFR-005: nothing in the
+  suite forces `scripts/` to stay inside the gate, and the constant's inline comment (`# NFR-005:
+  [tool.complexipy] paths`) plus the `_complexipy` helper docstring (`:1454`, "The CI complexity gate (`complexipy src
+  tests --max-complexity-allowed <n>`)") describe the **pre-change** gate. Recorded as **F-1**, not fixed here.
+
+### Check 6 — quality of the restructured code — **PASS**
+
+- **Pure extraction, statement-for-statement** against `main`: `matrix_rows`' `flush` closure → `table_rows` /
+  `matrix_row` / `status_index` with `MIN_TABLE_LINES = 3` (`:22`) replacing the inline `len(block) < 3`; the four
+  rule loops → `ids_without_row` / `rows_citing_undefined_ids` / `rows_citing_missing_tests` /
+  `rows_with_undeclared_status` concatenated in `check:150-161` in the frozen order; the `dfs` closure → `visit` with
+  `WHITE, GRAY, BLACK` hoisted to `:19` and the cycle-path slice moved verbatim into `cycle_message:52`; `main`'s
+  report blocks → `configure_stdout` + three `print_*` + `print_traceability_summary`, with `main` reduced to
+  configure → parse → check → print → return. No condition, message string or ordering was rewritten.
+- **No dead helpers, no duplication introduced**: every `def` in the three files (15 / 8 / 9) is referenced at least
+  once beyond its own definition (checked programmatically); `ruff check` on the three paths and
+  `ruff format --check scripts/*.py` are clean at HEAD.
+- **No abstraction beyond extraction** (Q-09): no class, protocol, registry or table of callables was introduced. The
+  unit-1 decision to keep `check()` as four named calls rather than a table of partially-applied rules is the lazier
+  and fully-typed choice, and it leaves the frozen message order visible at the call site — endorsed.
+- **Signatures unchanged everywhere** (Q-11 renaming was not needed), which is why the map churn is only +22 / −5 and
+  the map stays 179 lines under NFR-002.
+- **`ponytail:` audit**: the one real ceiling in the touched code is `visit`'s recursion depth — pre-existing, not
+  introduced — and it is named with its upgrade path in the `visit` docstring (`:64-72`) rather than with a
+  `ponytail:` marker; the unit-2 section explains why the iterative rewrite would be a behavior change under this
+  type. Acceptable; no new unmarked corner was added.
+
+### Findings
+
+| # | Finding | Severity | Resolution / status |
+|---|---|---|---|
+| **F-1** | `test_nfr_005_complexipy_threshold_holds` now **under-asserts** the amended NFR-005: `_COMPLEXIPY_PATHS = ("src", "tests")` (`:1427`) and the `_complexipy` docstring (`:1454`) still describe the pre-change gate, so no test witnesses that `scripts/` stays inside the complexity gate. | Low (informational; enforcement is the hard CI job) | **Accepted by decision, no action in this change.** Q-12 chose CI-job enforcement over a config-contract test, and a DOCS/CHORE change may not touch tests (Phase 5 G10). The asymmetry is recorded in ADR-087's Consequences so a later reader does not "fix" it without deciding. If the user later wants a witness, `tests/contract/singleton_install/test_lint_contract.py` is the precedent (it reads `pyproject.toml` as data) — that would be a separate change. |
+| **F-2** | This record is internally inconsistent on one number: the P.4 golden-baseline paragraph states `MANIFEST-before.txt` is **2 382 bytes**, the file is **2 268 bytes**, and the Phase 5 G4 detail quotes 2 268. | Nit (documentation only) | **Noted, no action.** The sha256 (`ed053acf…`) — the identity witness the record itself designates — matches byte-for-byte, and the correct figure is present in Phase 5. A Phase 4 log line is a historical observation; rewriting it would falsify the log. |
+| **F-3** | `verify_spec.py` evaluates the same conditions twice — `check_traceability:38` and the three `print_*` helpers (`:81/:95/:103`) — so the failure text and the failure count are computed independently. | Observation (pre-existing, not introduced) | **No action.** Both are at 10 ≤ 12, the duplication predates this change, and unifying them would change which messages are emitted — a behavior change this type forbids. Left as-is deliberately. |
+
+### Verdict
+
+**CLEAN.** All six checks pass; F-1 is accepted by an answered decision and documented in ADR-087, F-2 is a nit in
+this record's own prose, F-3 is pre-existing and out of scope. No finding is open, so the change may proceed to the
+PR (S6.4). Nothing was changed by this review; the branch is still `c8b97b8` with a clean working tree.
+
+### Owed by S6.4 (not done here)
+
+1. **`CHANGELOG.md` entry** under `## [Unreleased]` → `### Changed` (the section is currently empty). One line per
+   user-observable change, traced to what this change actually did — the gate now covers `scripts/`
+   (`[tool.complexipy] paths` and the `complexity` job's positional args), and the four `scripts/` functions that
+   exceeded the ceiling were restructured to ≤ 12 with byte-identical output. No invented prose.
+2. **No version bump** — DOCS/CHORE takes none (AGENTS Versioning, Q-16); `version = "1.2.0"` (`pyproject.toml:4`)
+   stays, so the entry stays under `## [Unreleased]` until the next bumped release.
+3. **Flag the NFR-005 spec amendment to the reviewer at the merge gate** (Q-04 — the standing practice for in-PR spec
+   amendments), and note the **Q-01/Q-02** CRLF caveat so the reviewer reads the CI run as authoritative.
+
+- **Next:** S6.4 — CHANGELOG entry + open the PR (no bump); human merge, then S7.1 cleanup.
+
