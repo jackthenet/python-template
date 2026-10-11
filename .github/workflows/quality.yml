@@ -140,7 +140,7 @@ jobs:
           python-version: '3.14'
       - name: Sync tooling
         run: uv sync --only-group dev
-      # Cognitive-complexity gate over both trees; the threshold lives in
+      # Cognitive-complexity gate over all three trees; the threshold lives in
       # `[tool.complexipy]` and is repeated here so CI fails loudly on a bad config.
       - name: Run complexipy (gate)
-        run: uv run complexipy src tests --max-complexity-allowed 15
+        run: uv run complexipy src tests scripts --max-complexity-allowed 15
