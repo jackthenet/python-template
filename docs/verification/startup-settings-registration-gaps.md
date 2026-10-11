@@ -312,6 +312,39 @@ uv run python scripts/check_traceability.py         → PASS (891 matrix rows, 1
 
 **State machine: `GREEN` unchanged** (no observable behaviour change in (a); (b) is spec wording). Next atomic step: S4.4 (commit + status).
 
+### 6.2 S4.4 (2026-10-11) — Phase 4 complete (commit + status)
+
+**Phase 4 commits on `issue/startup-settings-registration-gaps`** (`git log --oneline main..HEAD`, oldest first; Phase 3 commits listed for context, they are not part of Phase 4):
+
+| Commit | Step | Content |
+|---|---|---|
+| `cce7439` | (Phase P) | triage record |
+| `79d92cf`, `dbbe2ea` | (orchestrator) | Problem Log entries P-109…P-117 (`docs/workflow/PROBLEMS.md`) — no source or test content |
+| `46d679a` | S3.1 | reproduction tests |
+| `7e2508d` | S3.1 | LQ-01 answer + S3.1 findings |
+| `1c0dfe5` | S3.2 | RED gate + traceability rows |
+| `ffcd125` | S4.1 | five spec amendments + the REQ-023 / AC-028 traceability rows |
+| `b88684d` | S4.2 | the minimal fix (D-1…D-5) — `src/main.py`, `settings/registry.py`, `permissions/feature_settings.py`, `sessionmanagement/feature_settings.py`, two test files, **`STRUCTURE.md` regenerated in the same commit** |
+| `38056af` | S4.3 | refactor — `settings/registry.py` one-liner, the AC-009 witness comments, **`STRUCTURE.md` regenerated in the same commit** (478 → 473 lines) |
+| `c9dfb55` | S4.3 | sixth spec amended: `structlog-logging.md` AC-009 / REQ-005 wording |
+
+Both commits that edit a `.py` file (`b88684d`, `38056af`) carry their `STRUCTURE.md` regeneration; the two docs commits touch no source. `git status --porcelain` is **empty** — every Phase 4 artefact is committed, nothing is left in the working tree. There is **no task DAG for an ISSUE** (Phase 2 is skipped), so the "update status" half of this step is this state-machine line, not a `tasks.json` `VERIFIED` field.
+
+**Re-run of the targeted `green_command` against the committed state** (proving the commit, not the pre-commit buffer, is GREEN):
+
+```text
+uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py \
+     tests/acceptance/settings_coverage/test_persistence.py \
+     tests/acceptance/filemanagement/test_filemanagement.py::test_ac_029_default_local_backend \
+     tests/integration/singleton_install/test_composition_root.py \
+     tests/acceptance/sessionmanagement/test_settings.py -q
+    → 14 passed in 5.59s        (identical count to S4.2, the orchestrator re-run and S4.3)
+```
+
+The full suite was **not** run here — it is the Phase 5 gate (S5.1), as is the whole-repo ruff sweep (S5.2).
+
+**State machine: `GREEN → REFACTORED`.** Next atomic step is **S5.1** (run the full test suite), then S5.2 (lint + types), S5.3 (update traceability), S5.4 (verification report, spec coverage = 100%). This change is **not** light-tier (§8), so the full Phase 5 gate set applies.
+
 ## 7. Inherited baseline on `main` (measured verbatim in this worktree)
 
 `uv run pytest tests/ -q` at base `25b7e7b` in this worktree:
