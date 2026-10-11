@@ -58,10 +58,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** E-02 (index already 100 % LF), E-13 (no `.bat/.cmd/.ps1/.sh` tracked, so nothing genuinely needs CRLF), E-08 (`eol=lf` wins over `core.autocrlf=true`), E-10 (forced `text` corrupts the PNG).
 - **Question:** Which rule set: **(A)** `* text=auto eol=lf` (single line, auto-detect binaries); **(B)** a per-extension allowlist (`*.py text eol=lf`, `*.md text eol=lf`, …); **(C)** `* text=auto eol=lf` plus `text eol=crlf` rules for Windows script types that do not exist in this repo?
 - **Recommended:** **A** — one line, it is measured to fix the host (E-08), the index needs no re-normalisation (E-07), and C would add rules for file types E-13 shows the repo does not have; B is more lines with strictly less coverage.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A — `* text=auto eol=lf`** (one line, plus the binary rules from **Q-02**). Measured again 2026-10-11 at `f04c381`: 554 tracked files are `w/crlf`, 48 `w/lf`, 44 `w/none`, 1 `w/-text`; `core.autocrlf=true` still comes from `file:C:/Program Files/Git/etc/gitconfig`; **no** `.bat/.cmd/.ps1/.sh/.csv` is tracked, so **C** would add rules for file types the repo does not have, and **B** (per-extension allowlist) is more lines with strictly less coverage — a new extension would be unprotected.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** no — P.4 has not run
 
 ## Q-02 — Does the policy mark binaries explicitly, or rely on `text=auto`?
 - **Step:** P.2 Interrogate — Phase P
@@ -69,10 +69,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** E-10 — with `* text eol=lf` (forced `text`) `git add --renormalize` rewrites `src/backend/filemanagement/assets/default_avatar.png` (blob `44ad54c…`→`78909d1…`, 761→760 B). With `text=auto` the PNG stays `i/-text` and its blob is unchanged (E-02, E-07).
 - **Question:** Add an explicit binary rule alongside `* text=auto eol=lf` — **(A)** none (trust `text=auto`); **(B)** `*.png binary` only (the one tracked binary); **(C)** a broader binary list (`png/jpg/jpeg/gif/webp/ico/pdf/zip/db`)?
 - **Recommended:** **B** — one extra line costs nothing and removes the measured corruption path for the only binary that exists; C marks extensions E-13 shows are not in the tree (YAGNI).
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **C — a broader binary list** (against the recommendation). Alongside `* text=auto eol=lf`, mark the image/document/database extensions explicitly: `*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.webp`, `*.ico`, `*.pdf`, `*.zip`, `*.db` as `binary`. The measured hazard that motivates it: with forced `* text eol=lf`, `git add --renormalize` rewrites `src/backend/filemanagement/assets/default_avatar.png` (blob `44ad54c…`→`78909d1…`, 761→760 B) — an explicit `binary` rule removes that class of accident rather than relying on content sniffing. The user accepted the trade-off P.2 raised: only `.png` is tracked today, so the other rules are inert today but protective for formats this project already handles at runtime (`image/jpeg`, `image/webp` uploads in file-management; SQLite `*.db` files as gitignored runtime state).
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** no — P.4 has not run
 
 ## Q-03 — Is `eol=lf` mandatory, or is `* text=auto` enough?
 - **Step:** P.2 Interrogate — Phase P
@@ -80,10 +80,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** E-09 — with `* text=auto` (no `eol`) `STRUCTURE.md` is still `w/crlf` (148 113 B) after a re-checkout, and with `core.autocrlf=false` it is **also** `w/crlf`, because a set `text` attribute makes checkout follow `core.eol=native`.
 - **Question:** Confirm the rule must carry `eol=lf` explicitly (and that `* text=auto` alone is rejected)?
 - **Recommended:** Yes, carry `eol=lf` — E-09 shows `text=auto` alone leaves the witness red on this host and would flip LF-contributors to CRLF.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **Confirmed — `eol=lf` is mandatory and `* text=auto` alone is rejected** — the recommendation. Measured (E-09): with `* text=auto` and no `eol`, `STRUCTURE.md` is still `w/crlf` (148 113 B) after a re-checkout, and with `core.autocrlf=false` it is **also** `w/crlf`, because a set `text` attribute makes checkout follow `core.eol=native`. So the shorter form leaves `test_ac_021_committed_map_matches_fresh_render` red on this host and would flip an LF contributor's checkout to CRLF. `* text eol=lf` (forced `text`) is likewise rejected — it is the measured PNG-corruption path from **Q-02**, which the explicit binary rules exist to close.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** no — P.4 has not run
 
 ## Q-04 — Is a `git add --renormalize .` commit required?
 - **Step:** P.2 Interrogate — Phase P
@@ -102,10 +102,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **Context:** E-08 — after committing the attribute, 579 of 583 text files are still `w/crlf`; only the re-checked-out ones became `w/lf`. E-16 — all three worktrees are clean.
 - **Question:** How is the signal verified: **(A)** in a throwaway clone under a temp dir (never touching the live worktrees); **(B)** force a re-checkout in the primary worktree (`git rm -r --cached . && git checkout -f .`); **(C)** only assert the attribute exists and leave the worktree state unverified?
 - **Recommended:** **A** — it measures exactly what a new contributor gets, is reproducible in the verification record, and cannot disturb the two in-flight changes; B risks the uncommitted state of `main` for no extra evidence.
-- **Answer:** **PENDING**
-- **Date:** 2026-10-10
-- **Status:** PENDING
-- **Incorporated:** no
+- **Answer:** **A — a throwaway clone under a temp dir** — the recommendation. The verification record clones the change branch into a temp directory and asserts there that `git ls-files --eol` reports `w/lf` for the text files (and `w/-text` for the PNG) and that `test_ac_021_committed_map_matches_fresh_render` passes. It measures exactly what a new contributor gets, is reproducible, and cannot disturb the primary worktree — re-measured 2026-10-11: **554** files in the current checkout are still `w/crlf`, so option **B** (`git rm -r --cached . && git checkout -f .`) would rewrite 554 working-tree files under the agent's feet for no extra evidence, and **C** would leave the change's own acceptance signal unwitnessed.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** no — P.4 has not run
 
 ## Q-06 — Must this change regenerate `STRUCTURE.md`?
 - **Step:** P.2 Interrogate — Phase P
