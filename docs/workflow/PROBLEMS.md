@@ -945,3 +945,48 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 1 `BLOCKED-USER` round-trip.
 - **Resolution:** LQ-01 recorded with the recommendation (amend NFR-002 to name `mail.smtp_password` as an accepted transport-credential exception, rather than remove the key the mail spec requires). **Durable rule:** when a change's fix is to **widen a contract guard**, P.2 must interrogate that guard against every artifact it will newly constrain — every spec whose NFR/INV the widened assertion touches. A conflict between two approved specs is a prep-phase question, not an implementation surprise.
 - **Date:** 2026-10-11
+
+## P-113 — a P.2 question batch rots while the change waits for the user (P.2 completion passes)
+
+- **Problem:** three P.2 batches recorded 2026-10-03/2026-10-05 were still `PENDING` when the repo had moved under them. The `tenacity-rich-cachetools` completion pass corrected **51** citations (5 cited TODO files had been archived, ~20 line numbers shifted by the structlog merge, and two premises had become false: PR #67 was merged, not WAITING, and `loguru` was gone). `python-3.15-upgrade` had a **reversed** recommendation (Q-12: the committed `uv.lock` pins `pydantic-core 2.46.5`, which has no cp315 wheel, so a lock refresh is a *precondition* of a 3.15 CI job, not an optional extra) plus wrong site counts (6 → 13 `@contextmanager` sites, 8 → 10 `re.match` sites). `api-keys` needed **18** citation fixes, including five wrong REQ ranges.
+- **Step / Phase:** P.2 completion passes (three changes) — the re-verification cost more than writing the missing fields did.
+- **Change:** tenacity-rich-cachetools, python-3.15-upgrade, api-keys
+- **Duration / iterations:** three passes, ~90 min total, 51 + 18 + ~10 citation fixes.
+- **Resolution:** **Durable rule:** when a change is picked up after its P.2 batch has waited more than a few days, run a citation re-verification pass (`test -f` on every cited path, re-read the cited lines, re-measure every count) **before** presenting the batch at P.3 — a stale recommendation is worse than none.
+- **Date:** 2026-10-11
+
+## P-114 — the P.2 recommendation field has two names, so the gate check gave a false negative (P.2)
+
+- **Problem:** `.agents/skills/specify/SKILL.md` states the P.2 done-criteria as `- **Recommendation:**`, while `AGENTS.md` and `docs/questions/template.md` require `- **Recommended:**`. A completion pass had already run on `notifications` and followed the skill, so `grep -- "- \*\*Recommended:\*\*"` returned 0 and the batch read as having **zero** recommendations — causing a redundant re-launch of the same P.2 step. `docs/questions/backend-api.md` still uses the skill's name.
+- **Step / Phase:** P.2 gate check — one redundant subagent launch (~26 min).
+- **Change:** notifications (and the backlog generally)
+- **Duration / iterations:** 1 redundant launch; the second pass did find real defects (missing `- **Date:**` lines on all 31 entries, a citation to a non-existent `src/backend/mail/repository.py`), so it was not wasted.
+- **Resolution:** the field is normalised to the template's `Recommended:` in the files touched. **Durable rule:** the gate check must grep **both** spellings until the skill is fixed; the skill fix itself is a DOCS/CHORE change (not done here — it is not a planning record and this is not its branch).
+- **Date:** 2026-10-11
+
+## P-115 — a step subagent committed a planning record itself (P.2)
+
+- **Problem:** the `python-3.15-upgrade` P.2 completion subagent was told not to commit (planning records are orchestrator-owned, committed on `main` by the orchestrator), yet it committed `85aeeb7` on its own. The commit was benign — it touched only its own question file, with a correct message and no other path — but it bypassed the orchestrator's handoff verification, and an unpushed commit like this is exactly what corrupted PR #82's file set in P-109.
+- **Step / Phase:** P.2 completion pass — detected by `git log`/`git status` after the handoff.
+- **Change:** python-3.15-upgrade
+- **Duration / iterations:** one verification pass; no rework needed.
+- **Resolution:** the orchestrator verified the commit's file set and pushed `main`. **Durable rule:** after every Phase P subagent, the orchestrator runs `git status --short` + `git log --oneline -3` and pushes; a launch prompt that forbids committing is not a substitute for checking.
+- **Date:** 2026-10-11
+
+## P-116 — a reported-successful edit did not change the file; a read returned a phantom version (P.2)
+
+- **Problem:** twice in one day the file-state reported by the tools was not the file on disk. The orchestrator's edit adding a Value triage + late-questions block to `docs/todo/backend-api.md` reported success, but the resulting commit contained **one** added line and the block was absent (`git hash-object` == `git rev-parse HEAD:<path>`). The `api-keys` pass independently reported a `read` returning a 1006-line version of its file containing edits that had never been applied, and an `edit` reporting success while the blob was byte-identical to HEAD (845 lines).
+- **Step / Phase:** P.2 completion passes + orchestrator bookkeeping — one lost edit, one re-derived file.
+- **Change:** api-keys, backend-api
+- **Duration / iterations:** one full re-derivation of the file's structure and re-application of the edits.
+- **Resolution:** the intended content was re-checked against the file and, where it was genuinely missing, re-written and verified. **Durable rule:** after any write to a planning record, verify with `grep -c` on the new content plus `git hash-object <path>` vs `git rev-parse HEAD:<path>`; never trust the tool's success message, and never re-apply an edit based on a `read` alone.
+- **Date:** 2026-10-11
+
+## P-117 — a prep step's "side finding" was false on `main` and propagated into two question files (P.2)
+
+- **Problem:** the `api-keys` P.2 log recorded a "side finding (separate ISSUE, not a blocker)": `src/main.py` builds the shared `PermissionService` with **no** `session_lookup`, so every `Principal(session_token=…)` denies with `storage_error` — dead wiring. The claim was repeated in `backend-api`'s P.2 (Q-03) and was about to be recorded on `main` as a late question recommending a new ISSUE TODO. Measured on `main`: `src/main.py:176` passes `session_lookup=_session_repository,  # validates a provided session token (REQ-017, AC-020)`, and `src/backend/permissions/service.py:139,162,441-445` consume it. There is no defect.
+- **Step / Phase:** P.2 completion passes (api-keys fixed 18 citations, backend-api's file records the correction) — caught before any TODO/ISSUE was opened.
+- **Change:** api-keys, backend-api
+- **Duration / iterations:** one re-measurement.
+- **Resolution:** both question files now state that session-token validation **is** live at the composition root; no new TODO was opened. **Durable rule:** a "side finding" written by a prep step is a claim, not evidence — re-measure it against the current tree before it is recorded on `main` or turned into a change.
+- **Date:** 2026-10-11
