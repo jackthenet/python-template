@@ -825,3 +825,173 @@ Recorded here so Phase 5/6 can confirm it is owed, not forgotten. **No version b
 - **Next:** S5.1 — Phase 5 light verify (`uv run ruff check .`, `uv run mypy scripts/`, the complexipy gate
   in both forms, the golden byte comparison, and the confirmation that no test file and no
   `docs/verification/traceability.md` row was touched).
+
+## Phase 5 — verification report (DOCS/CHORE, light tier)
+
+**S5.2 (lint + types) + S5.4 (this report)**, 2026-10-11, executed in the change worktree
+`../python-template_kopie-worktrees/chore/complexipy-scripts` at HEAD **`54decc7`** (working tree clean before
+and after; no scratch file was written inside the worktree — every capture lives under
+`C:/workspace/active-projects/complexipy-scratch/`). The gate set is exactly the one the Phase Matrix assigns to
+**DOCS/CHORE** ("Light: lint/types where applicable") as this change's own §Gates this type runs fixes it: the
+repo-wide lint sweep, type checks, the complexipy gate in **both** forms, the **golden-output byte comparison**
+as the primary no-behavior-delta witness (**Q-03**, replacing REFACTOR's full-regression gate per **Q-16**), and
+the confirmation that no test file and no `docs/verification/traceability.md` row was touched.
+
+### Gate table
+
+| # | Gate | Command | Expected | Observed | Verdict |
+|---|---|---|---|---|---|
+| G1 | complexipy gate, **new CI form** | `uv run complexipy src tests scripts --max-complexity-allowed 15` | exit **0**, 0 FAILED | exit **0**; stdout 192 033 B, sha256 `31b3e44e…`; **2 253 functions analysed, 0 FAILED**, 270 files | **PASS** |
+| G2 | complexipy gate, **config-driven** (the run that was blind to `scripts/` before) | `uv run complexipy` | exit **0** **and** `scripts/` analysed | exit **0**; stdout 192 033 B, sha256 `31b3e44e…` — **byte-identical to G1**; **2 253 analysed** (baseline **2 186**, +67), **4 `scripts/` files / 67 functions** (baseline **0**), 0 FAILED | **PASS** |
+| G3 | per-function ceiling **≤ 12** (**Q-13**) | same report, `scripts/` scope parsed | every function in the three refactored scripts ≤ 12 | four named functions: `check_traceability.check` **17 → 0**, `matrix_rows` **19 → 2**, `validate_task_dag.check_acyclic` **22 → 3**, `verify_spec.main` **22 → 3**; max per file **9 / 12 / 10** (see table below) | **PASS** |
+| G4 | **golden-output byte comparison** (primary no-behavior-delta witness, **Q-03**) | `bash complexipy-scratch/capture.sh <worktree> /c/…/complexipy-scratch/golden-after-phase5` then `diff -r golden-before golden-after-phase5` | every **script witness** byte-identical; only the `complexipy_*` measurements may differ | 21 files compared, **18 byte-identical**, **3 differ — all `complexipy_*` measurement captures**; all 12 script-witness files identical, `complexipy_ci_form.*` identical | **PASS** |
+| G5 | lint, **repo-wide** (matches `.github/workflows/lint.yml:37` exactly) | `uv run ruff check .` | clean | **All checks passed!** (exit 0) | **PASS** |
+| G6 | format | `uv run ruff format --check .` | clean | **362 files already formatted** (exit 0) — same count as the P.4 baseline | **PASS** |
+| G7 | types, the tree this change edits | `uv run mypy scripts/` | clean | **Success: no issues found in 4 source files** (exit 0) | **PASS** |
+| G7b | types, `src/` (AGENTS gate; `src/` is untouched by this change — run for completeness) | `uv run mypy src/` | clean | **Success: no issues found in 84 source files** (exit 0) | **PASS** |
+| G8 | dependencies (this change edits `pyproject.toml`) | `uv run deptry .` | clean | **Success! No dependency issues found.** (scanning 91 files, exit 0) — no dependency added or removed | **PASS** |
+| G9 | no test / no matrix row / no `src/` touched (**Q-12**, **Q-15**) | `git diff --name-only main…HEAD` | no `tests/`, no `docs/verification/traceability.md`, no `src/` | 9 files changed; `git diff main…HEAD -- tests/ docs/verification/traceability.md` → **0 lines**; `git log main…HEAD -- tests/acceptance/test_structure_map.py` → **0 commits** | **PASS** |
+| G10 | the two existing witnesses that read this config, **unmodified** | `uv run pytest tests/acceptance/test_structure_map.py::test_nfr_005_complexipy_threshold_holds …::test_ac_025_mypy_covers_scripts …::test_nfr_002_map_line_budget -q` | pass unchanged | **3 passed in 0.85 s**; `_COMPLEXIPY_PATHS = ("src", "tests")` still at `tests/acceptance/test_structure_map.py:1427`, used at `:1462` — the test was neither weakened nor extended to `scripts/` (**Q-12**) | **PASS** |
+| G11 | generated map | `uv run python scripts/make_map.py --check` | exit 0 | exit **0** (no output); `STRUCTURE.md` **2 021 lines** vs the NFR-002 ceiling **2 200** (`docs/specs/structure-map.md:483`) → headroom **179**; `docs/ — 236 files (process record)` (`STRUCTURE.md:477`) | **PASS** |
+| G12 | baseline caveat re-measured (**Q-01** / **Q-02**) | `uv run pytest …::test_ac_021_committed_map_matches_fresh_render -q` + `make_map.py --check`, in **both** worktrees | no regression attributable to this change | change worktree: **1 passed**, `--check` exit 0; primary worktree (`main`): **1 failed** — `committed 2004 lines, fresh 2004 lines`, `At index 22 diff: b'\r' != b'\n'`, `--check` exit 0. Host CRLF artifact, **not** a regression (see §Baseline re-measured) | **PASS (with the recorded host caveat)** |
+
+### G3 detail — per-function ceiling evidence
+
+Scores parsed from the G1/G2 report (identical reports), `scripts/` scope:
+
+| File | Functions | The four named functions (baseline → now) | Max score in file | ≤ 12? |
+|---|---|---|---|---|
+| `scripts/check_traceability.py` | 15 (was 6) | `check` **17 → 0**, `matrix_rows` **19 → 2** | **9** (`table_blocks`) | ✅ |
+| `scripts/validate_task_dag.py` | 8 (was 5) | `check_acyclic` **22 → 3** | **12** (`check_sync`, pre-existing, untouched) | ✅ |
+| `scripts/verify_spec.py` | 9 (was 4) | `main` **22 → 3** | **10** (`check_traceability`, `find_test_functions`, pre-existing, untouched) | ✅ |
+| `scripts/make_map.py` (out of scope) | 35 | — | **12** (`_member_lines`) | ✅ |
+
+**No function anywhere in `scripts/` scores above 12**, and the whole tree scores **2 253 analysed / 0 FAILED** at
+the ceiling of 15. Baseline for the same `scripts/` scope at `eddf94f`: **50 functions, 4 FAILED** (17 / 19 / 22 /
+22), exit **1** → now **67 functions, 0 FAILED**, exit **0**.
+
+### G4 detail — the golden pair, file by file
+
+`bash C:/workspace/active-projects/complexipy-scratch/capture.sh
+/c/workspace/active-projects/python-template_kopie-worktrees/chore/complexipy-scripts
+/c/workspace/active-projects/complexipy-scratch/golden-after-phase5` (absolute out dir outside every worktree —
+`capture.sh` refuses anything else), then `diff -r golden-before golden-after-phase5`. Manifests:
+`MANIFEST-before.txt` (2 268 B, sha256 `ed053acf…b36b`) vs `MANIFEST-after-phase5.txt` (2 268 B, sha256
+`cb8397b3…2d74`) — the manifest diff is **exactly 3 of 21 entries**.
+
+| Witness (12 files) | before = after | Verdict |
+|---|---|---|
+| `check_traceability.stdout` 72 B `e13c5631…4c3f` · `.stderr` 0 B `e3b0c442…b855` · `.exit` `0` | identical | **byte-identical** |
+| `validate_task_dag.stdout` 61 B `9234e830…1158` · `.stderr` 0 B · `.exit` `0` | identical | **byte-identical** |
+| `verify_spec_all.stdout` 31 708 B `9d3d3cdc…7b58` · `.stderr` 0 B · `.exit` 475 B `8b4c99ea…fb18` (15/15 specs exit 0) | identical | **byte-identical** |
+| `verify_spec_template.stdout` 363 B `0f8ec58e…4a0b` (AC-025's pinned report) · `.stderr` 0 B · `.exit` `0` | identical | **byte-identical** |
+
+| Measurement (9 files) | before → after | Expected? |
+|---|---|---|
+| `complexipy_config.stdout` | 187 539 B `da346575…e237` → **192 033 B `31b3e44e…abb9`** | **yes — this is the acceptance signal**: the ANSI-stripped diff is **+75 lines / −0** (4 `scripts\\*.py` headers + their 67 function lines + 4 blank lines); nothing in the 2 186-function report moved. `.exit` (`0`) and `.stderr` (0 B) identical |
+| `complexipy_scripts.stdout` | 3 774 B `6d71a312…946f` → **5 017 B `9995d513…06c6b`** | **yes** — the ANSI-stripped diff is **−4 / +23 lines, all score lines**: the four `FAILED` lines (`check 17`, `matrix_rows 19`, `check_acyclic 22`, `main 22`) removed, the fourteen new helpers (`0…9`) added, plus the `All functions are within the allowed complexity.` summary line a clean run prints |
+| `complexipy_scripts.exit` | `1` (`4355a46b…d865`) → **`0`** (`9a271f2a…86aa`) | **yes** — the **1 → 0 exit-code flip** is the change's own acceptance signal |
+| `complexipy_ci_form.stdout` / `.stderr` / `.exit` | 187 539 B `da346575…e237` unchanged | **yes** — the explicit `src tests` form is unaffected by the config widening, which is what keeps the untouched NFR-005 witness meaningful |
+
+**No script witness moved.** Every difference is in a `complexipy_*` measurement capture, which §Complexity
+baseline files declared in advance would differ ("these three are expected to differ after the change (that is
+the point)"). The FAIL-path differentials recorded in the three Phase 4 units cover the branches the golden set
+cannot reach, so the §Known ceiling of the witness gap stays closed: unit 1 — 3 fixture cases × both script
+versions (PASS, all-four-rules mutated, missing `tests/`); unit 2 — 26 cases (13 cycle fixtures × 2 invocation
+modes); unit 3 — 33 cases (15 real specs + 18 synthetic fixtures) — **0 mismatches** in every case, stdout sha,
+stderr and exit code.
+
+### S5.1 (full test suite) — not run, and why
+
+S5.1 is **not a DOCS/CHORE gate**. The Phase Matrix gives DOCS/CHORE the Phase 5 row "Light: lint/types where
+applicable", and AGENTS' Phase 5 → DOCS/CHORE block is only "Run lint and type checks where applicable; confirm
+no test files or behavior were touched" — there is no full-suite step for this type. The type was chosen at
+**Q-16** with its trade-off stated by the user: "REFACTOR's full-regression gate is dropped, so the **Q-03
+golden-output byte comparison is the primary no-behavior-delta evidence**", and this record's §Gates this type
+runs spells out what replaces it — "a regression run would not have noticed a changed message (no test covers
+them), the byte comparison would". G4 is that replacement, run against the pre-restructuring baseline, and it is
+stronger than a suite run for the two scripts the suite does not cover at all (**Q-03**). The full suite is also
+known-slow-cold in a fresh worktree (248 s warm on `main`, per the **Q-01** context), so running it here would
+buy no evidence the type asks for.
+
+**Remaining external gate (recorded, not run here):** CI runs the full suite on the PR —
+`.github/workflows/quality.yml` `coverage` job (`uv run pytest tests/ --cov`, `quality.yml:61`) and
+`.github/workflows/spec-validation.yml` `tests` job (`uv run pytest tests/ -v`, `:84`); `quality.yml` has no
+`paths:` filter, and `spec-validation.yml` triggers on `docs/specs/**`, `docs/verification/**`,
+`scripts/verify_spec.py` and `pyproject.toml`, all of which this change touches. So a regression elsewhere is
+caught at the merge gate, exactly as §Gates this type runs states. The same CI set re-runs every gate in the table
+above: `lint.yml` `lint` (`uv run ruff check .`), `quality.yml` `type-check` (`mypy src/` **and** `mypy scripts/`),
+`complexity` (the new three-path form), `dependencies` (`deptry .`), and `spec-validation.yml`
+`spec-validation` + `traceability` (the three scripts whose stdout is byte-witnessed here).
+
+### S5.3 (traceability rows) — skipped by the user's **Q-15** decision
+
+**Q-15** (answer, `docs/questions/complexipy-scripts.md`): "**No matrix rows** — the recommendation.
+`docs/verification/traceability.md` is left untouched; the evidence lives in
+`docs/verification/complexipy-scripts.md` (baseline, golden outputs before/after, complexipy scores
+before/after)." Rationale as answered: this change defines no `REQ-XXX`/`AC-XXX`; `scripts/check_traceability.py`
+polices referential integrity only; Convention B makes each row a historical record written by the change that
+owns the IDs, so a row without a normative ID is exactly what the checker cannot police. The amended **NFR-005**
+wording gets no row either (NFR rows are not required by the checker, and the existing witness row at
+`docs/specs/structure-map.md:575` is unchanged). G9 confirms the file was in fact not touched. The AGENTS state
+machine's "GREEN → VERIFIED requires the matrix updated" is satisfied by the type's own Phase 5 list, which for
+DOCS/CHORE does not include a matrix step — and by the recorded user decision, not silently.
+
+### What this change touched, and what it did not
+
+`git diff --name-only main…HEAD` — **9 files**, all of them scope items #1–#8 plus #10 (this record):
+
+```
+.github/workflows/quality.yml          (#2 gate scope: 1 run line + 1 comment word)
+pyproject.toml                         (#1 [tool.complexipy] paths; ceiling 15 unchanged)
+scripts/check_traceability.py          (#3 check 17→0, matrix_rows 19→2)
+scripts/validate_task_dag.py           (#4 check_acyclic 22→3)
+scripts/verify_spec.py                 (#5 main 22→3)
+docs/specs/structure-map.md            (#6 NFR-005 amendment + Changelog v4)
+docs/decisions/ADR-087-complexipy-scope-extended-to-scripts.md   (#7 new)
+STRUCTURE.md                           (#8 regenerated, 2 021 lines)
+docs/verification/complexipy-scripts.md (#10 this record)
+```
+
+**Not touched** (each confirmed against the diff, not asserted): any file under `tests/` — **0 files, 0 diff
+lines, 0 commits** touching `tests/acceptance/test_structure_map.py` (**Q-12**: no test added, changed, weakened
+or extended); `docs/verification/traceability.md` — **0 diff lines** (**Q-15**); anything under `src/` — **0
+files**; `scripts/make_map.py` (out of scope, max 12); `CHANGELOG.md` — **still owed, not yet written**: scope
+item #9 is a **Phase 6** step (AGENTS Phase 6 check 10) and this change owes one entry under `## [Unreleased]` →
+`### Changed` (the gate widening + the four refactors), added in Phase 6, **no version bump** (DOCS/CHORE → none,
+**Q-16**); `docs/decisions/ADR-086-*.md` (**Q-04** — superseded, never rewritten); `.pre-commit-config.yaml`, the
+coverage / bandit / `ty` / ruff / mypy configuration (**Q-17**); `docs/todo/`, `docs/questions/` (orchestrator-owned,
+`main`-only); `.gitattributes` (**Q-02**).
+
+### Baseline re-measured (Q-01 / Q-02) — host artifact, not a regression
+
+Re-measured in both worktrees on 2026-10-11:
+
+| Worktree | `STRUCTURE.md` eol (`git ls-files --eol`) | CRLF pairs in the working copy | `make_map.py --check` | `test_ac_021_committed_map_matches_fresh_render` |
+|---|---|---|---|---|
+| change worktree (`chore/complexipy-scripts`) | `i/lf w/lf` | 0 / 2 021 lines | exit **0** | **1 passed** |
+| primary worktree (`main` @ `fa3d30a`) | `i/lf w/crlf` | 2 004 / 2 004 lines | exit **0** | **1 failed** — `committed 2004 lines, fresh 2004 lines`, `At index 22 diff: b'\r' != b'\n'` |
+
+The failure is a **line-ending artifact of the checkout**, not a content defect and not this change's doing: the
+line counts are equal, only `\r` differs; `core.autocrlf = true` with **no `.gitattributes`** in the repository;
+and the same witness **passes in this change's worktree**, where `make_map.py` wrote the file with LF. The
+**CI/Linux checkout (LF) is the authoritative gate** for this test, as **Q-01/Q-02** decided. The fix
+(`.gitattributes`) stays out of scope — it is owned by the open `gitattributes-line-endings` TODO (**Q-02**).
+This change adds no test and changes no test, so the AC-021 result is unaffected by it in either direction.
+
+### Verdict
+
+**VERIFIED.** Every gate the DOCS/CHORE type runs (and every gate this change's scope record fixed in
+§Gates this type runs) passed with the evidence above: the acceptance signal holds in both forms (G1, G2 — exit 0,
+`scripts/` now analysed, 2 186 → 2 253 functions), the **Q-13** ceiling is met with margin (G3), the **Q-03**
+golden pair shows **every script witness byte-identical** with only the three declared measurement captures
+moving and the `complexipy scripts` exit code flipping **1 → 0** (G4), lint/format/types/deptry are clean
+repo-wide and on `scripts/` (G5–G8), no test, no traceability row and no `src/` file was touched and the two
+existing config witnesses still pass unmodified (G9, G10), and the generated map is fresh with 179 lines of
+NFR-002 headroom (G11). The one red test on the host is the recorded **Q-01/Q-02** CRLF artifact and passes in
+this change's own worktree. S5.1 and S5.3 are skipped for the stated, cited reasons; the full suite remains a
+CI gate on the PR.
+
+- **Owed by Phase 6:** the `CHANGELOG.md` entry under `## [Unreleased]` → `### Changed` (no version bump), and the
+  light review (S6.1–S6.3) plus the PR (S6.4).
+- **Next:** S6.1 — Phase 6 light review against this scope record.
