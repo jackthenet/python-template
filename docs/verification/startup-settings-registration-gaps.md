@@ -473,6 +473,63 @@ The whole-repo ruff sweep runs **once, here** (AGENTS.md "Tooling & Execution En
 
 **Branch state after the merge:** clean working tree, HEAD `9b19d7d`, `main` reachable from HEAD. Next: **S5.3** (traceability rows).
 
+### 7.4 Traceability updated (S5.3) — 2026-10-11, HEAD `bc05ca5`, clean tree
+
+**Objective.** Bring `docs/verification/traceability.md` up to date with this change's evidence: every
+REQ/AC the fix touches cites a GREEN test, and the new REQ-023 / AC-028 pair is recorded GREEN. Docs only —
+no `src/`, no `tests/`, no `docs/todo/`, no `docs/questions/`, no CHANGELOG entry (that is Phase 6, S6.4).
+
+**Rows updated — 11, in place, no row added or removed** (the matrix still parses to **891 rows**):
+
+| Matrix (spec) | Row | Cell before S5.3 | Cell after S5.3 |
+|---|---|---|---|
+| Settings Coverage | REQ-002 / AC-003 (`test_main_wires_all_features`) | `RED (S3.2 …)` | `GREEN` — D-1 fixed, PROBED 34 / REGISTERED 34 / MISSING [] |
+| Settings Coverage | REQ-017 / AC-022 (`test_key_prefix`) | `GREEN (re-observed S3.2 …)` | `GREEN` — S5.1 full-suite observation of the widened guard |
+| Settings Coverage | REQ-018 / AC-023 (`test_category_group`) | `RED (S3.2 …)` | `GREEN` — D-3 fixed on all four keys |
+| Settings Coverage | REQ-019 / AC-024 (`test_inventory_matches`) | `GREEN (re-observed S3.2 …)` | `GREEN` — S5.1 observation over the 34-key inventory |
+| Settings Coverage | **REQ-023 / AC-028** (`test_ac_028_persisted_override_warns`) | `RED (S3.2 …)` | `GREEN` — D-5 fixed at S4.2 |
+| Settings Coverage | NFR-002 (`test_no_secret_settings`) | `GREEN (re-observed S3.2 …)` | `GREEN` — D-6 resolved by the wording amendment |
+| Settings Coverage | NFR-003 (`test_inventory_backward_compatible`) | `GREEN (re-observed S3.2 …)` | `GREEN` — S5.1 observation of the nine-feature guard |
+| File Management | REQ-015 / AC-029 (`test_ac_029_default_local_backend`) | bare `GREEN` | `GREEN` — D-4: the composition root passes no backend; the amended v3 wording says so |
+| Session Management | REQ-019 / AC-039 (`test_ac_039_register_settings_defaults`) | bare `GREEN` | `GREEN` — witness re-derived at S4.2 from the v3 model block (category `security`, group `sessionmanagement`) |
+| User Roles & Permissions | REQ-019 / AC-023 (`test_system_set_settings_alias_sync`) | bare `GREEN` | `GREEN` — the REQ-019 model-block category moved to `security`; the witness itself is unchanged |
+| Structlog Logging | REQ-005 / AC-009 (`test_ac_009_statements_go_through_get_logger` + per-feature witnesses) | `GREEN (structlog-logging S5.1 …)` | `GREEN` — the amended AC-009 wording and the measured total **43** (19 + 11 + 11 + 2) recorded in the Test column |
+
+**Convention B (decision Q-129) respected.** Each updated cell now carries **this** change's dated
+observation (change name + date + evidence inside the cell); the cell each update replaced — the S3.2 RED
+observations, the `search` S5.1 `727 passed` cells, the bare `GREEN` cells — is **not** kept twice in the
+cell and stays recoverable from git history (`git log -p -- docs/verification/traceability.md`). No row this
+change did not touch was refreshed: the other 880 rows are byte-identical.
+
+**Why the four non-Settings-Coverage rows are in scope.** They are the rows of the four specs this change's
+approved in-PR amendments touched (§4): `file-management.md` REQ-015/AC-029 (D-4), `session-management.md`
+REQ-019/AC-039 (D-3, the model block the witness is derived from), `user-roles-permissions.md` REQ-019
+(D-3, the `permissions.system_principal` category), `structlog-logging.md` REQ-005/AC-009 (the per-file
+statement count the REQ-023 diagnostic moves to 19, and the AC-009 wording amendment of S4.3). The
+`permissions` row's own witness does not assert the category — the cell says so explicitly and points at
+the widened settings-coverage AC-023 guard as the witness of the fix.
+
+**Matrix note rewritten.** The Settings Coverage section's note ("Row added with the spec amendment
+(S4.1)") described a state that no longer holds — it said the REQ-023 row "stays RED until the S4.2 fix"
+and that the `sessionmanagement` rows would be updated "in Phase 4". It is replaced by a "Rows updated by
+`startup-settings-registration-gaps` (S5.3)" note listing the 11 rows, the Q-129 rule, and the §-pointers
+to the evidence.
+
+**Fresh measurements taken in this step** (the branch moved since §7.1 and §6.1, so the cited figures were
+re-measured at `bc05ca5` before being written into the cells; the full suite is **not** re-run — §7.1 stays
+the regression record):
+
+| Command | Exit | Result |
+|---|---|---|
+| `uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py -q` | **0** | **9 passed in 2.27s** — the three reproduction files (3 failed / 6 passed at the §5.3 RED gate) |
+| the effective `green_command` of §5 (six paths) | **0** | **14 passed in 4.65s** — identical count to §6.1 / §6.2 |
+| `uv run pytest tests/acceptance/logging_coverage/test_statements_via_feature.py tests/acceptance/sessionmanagement/test_settings.py::test_ac_039_register_settings_defaults tests/acceptance/permissions/test_system_principal.py::test_system_set_settings_alias_sync -q` | **0** | **5 passed in 1.03s** — the three witnesses whose rows were refreshed |
+| `uv run python scripts/check_traceability.py` | **0** | `Traceability: PASS (891 matrix rows, 136 spec IDs, 876 test functions)` — the S5.3 gate |
+
+**Gate: S5.3 PASSES.** Every REQ/AC this change touched has a row citing a GREEN test, REQ-023 / AC-028 is
+GREEN, and referential integrity holds. **State machine: unchanged (`REFACTORED` → `VERIFIED` at S5.4).**
+Next: **S5.4** (verification report, spec coverage = 100%).
+
 ## 8. Light ISSUE tier assessment — **NOT qualified** (full Phase 5 gate set applies)
 
 AGENTS.md "Light ISSUE tier" requires **all** of: single feature, fix touches ≤ 3 files excluding tests, no new dependency, no new public interface, no cross-feature change, and the triage naming the covering tests.
