@@ -909,3 +909,39 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 3 aborted runs + 2 successful runs.
 - **Resolution:** the gate was produced by (1) warming the tree with a `-p no:randomly` run first, (2) capturing output to a file **outside** the worktree (`../s51-scratch/`) so `make_map.py` and `test_nfr_004_mypy_and_ruff_clean` cannot see it, and (3) reading the tail of the log in a separate short command instead of waiting on the run. **Durable rules:** (1) never launch a cold full-suite run as a single blocking shell call — warm the cache first or split the run; (2) always capture to a file outside the worktree and read it afterwards (also P-91: the suite's `ResourceWarning` flood buries real failures); (3) a run that returns nothing is an aborted run, not a failed gate — re-run it, do not interpret it.
 - **Date:** 2026-10-10
+
+## P-109 — a change branch cut from a local `main` ahead of `origin/main` makes the PR diff inherit other changes' planning records (S6.4)
+
+- **Problem:** the S6.4 pre-push check ran `git diff --name-status main...HEAD` (the *local* main) and passed with exactly the 10 approved files, while `origin/main` lagged local `main` by 9 direct-to-`main` planning-record commits. The diff GitHub would render was therefore 20 files: four other changes' `docs/todo/` + `docs/questions/` edits plus two `archive/` renames — precisely what AGENTS.md forbids in a change PR, and a reviewer-misleading base.
+- **Step / Phase:** S6.4 (Phase 6, open PR) — one step blocked before pushing, one resume after the base was fixed.
+- **Change:** complexipy-scripts / DOCS/CHORE
+- **Duration / iterations:** 1 blocked subagent run + 1 re-run.
+- **Resolution:** the orchestrator pushed `main` (`a363d8c..fa3d30a`, verified planning-record paths only), then PR #82 opened with exactly 10 changed files. **Durable rules:** (1) the S6.4 pre-push check compares against `origin/main` **after a `git fetch`** (`git diff --name-status origin/main...HEAD`), never against local `main`; (2) every planning-record commit on `main` is pushed immediately, so the base of a change branch never drifts.
+- **Date:** 2026-10-11
+
+## P-110 — a scratch capture wrote inside the change worktree because its output argument was relative (P.4)
+
+- **Problem:** re-running the golden capture as `capture.sh <worktree> golden-recheck` created a stray `golden-recheck/` directory **inside** the change worktree — the exact P-108 failure mode, since a stray file there breaks `scripts/make_map.py --check` and `test_nfr_004_mypy_and_ruff_clean`.
+- **Step / Phase:** P.4 Draft (golden-output baseline capture) — one stray directory, removed immediately (worktree verified clean, `make_map --check` exit 0).
+- **Change:** complexipy-scripts / DOCS/CHORE
+- **Duration / iterations:** one cleanup + one guard added.
+- **Resolution:** `capture.sh` now resolves `OUT` to an absolute path and refuses any `OUT` inside a worktree or the repository. **Durable rule:** the guard belongs in the tool, not only in the instruction — any scratch-writing helper handed to a step subagent must reject in-tree output paths itself.
+- **Date:** 2026-10-11
+
+## P-111 — an inherited TODO baseline claim was wrong (3 failures, not 1, and not the stated cause) (P.4)
+
+- **Problem:** the TODO recorded "1 failing test, caused by a stale `docs/` file count in `STRUCTURE.md`". Re-measured in the change worktree: **3 failed, 887 passed, 1 skipped** — `test_ac_021_committed_map_matches_fresh_render` is a CRLF-vs-LF raw-byte artifact (`make_map.py --check` exits 0, 2004/2004 lines, `core.autocrlf=true`, no `.gitattributes`) and the other two are Hypothesis deadline flakes that pass in isolation. Trusted, that claim would have made Phase 5 classify a pre-existing host artifact as this change's regression.
+- **Step / Phase:** P.4 Draft (ISSUE triage baseline) — one re-measurement.
+- **Change:** startup-settings-registration-gaps / ISSUE
+- **Duration / iterations:** 1 full-suite run (351 s) + 2 targeted re-runs.
+- **Resolution:** the corrected baseline is recorded in the triage record. **Durable rule:** never copy a baseline number from a TODO into a triage or verification record — re-measure in the change worktree and record the observed output; a stale baseline claim becomes a false regression signal at Phase 5.
+- **Date:** 2026-10-11
+
+## P-112 — a cross-spec conflict (settings-coverage NFR-002 vs the mail spec's registered secret) surfaced only at P.4, after a 22-question P.2 (P.4 → S3.1 held)
+
+- **Problem:** this ISSUE's own contract guard — widen the settings inventory assertion to **all** registered keys — fails on `mail.smtp_password` (`src/backend/mail/feature_settings.py:101`), because `docs/specs/settings-coverage.md` NFR-002 forbids passwords or tokens in settings while the approved mail spec registers exactly that key. P.2's interrogation did not surface it, so the change reached READY and only then went `BLOCKED-USER` (LQ-01).
+- **Step / Phase:** P.4 Draft, then S3.1 held (Phase 3) — one `BLOCKED-USER` cycle; the change is WAITING.
+- **Change:** startup-settings-registration-gaps / ISSUE
+- **Duration / iterations:** 1 `BLOCKED-USER` round-trip.
+- **Resolution:** LQ-01 recorded with the recommendation (amend NFR-002 to name `mail.smtp_password` as an accepted transport-credential exception, rather than remove the key the mail spec requires). **Durable rule:** when a change's fix is to **widen a contract guard**, P.2 must interrogate that guard against every artifact it will newly constrain — every spec whose NFR/INV the widened assertion touches. A conflict between two approved specs is a prep-phase question, not an implementation surprise.
+- **Date:** 2026-10-11
