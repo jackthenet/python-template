@@ -909,3 +909,120 @@ A step MUST log a problem when it:
 - **Duration / iterations:** 3 aborted runs + 2 successful runs.
 - **Resolution:** the gate was produced by (1) warming the tree with a `-p no:randomly` run first, (2) capturing output to a file **outside** the worktree (`../s51-scratch/`) so `make_map.py` and `test_nfr_004_mypy_and_ruff_clean` cannot see it, and (3) reading the tail of the log in a separate short command instead of waiting on the run. **Durable rules:** (1) never launch a cold full-suite run as a single blocking shell call — warm the cache first or split the run; (2) always capture to a file outside the worktree and read it afterwards (also P-91: the suite's `ResourceWarning` flood buries real failures); (3) a run that returns nothing is an aborted run, not a failed gate — re-run it, do not interpret it.
 - **Date:** 2026-10-10
+
+## P-109 — a change branch cut from a local `main` ahead of `origin/main` makes the PR diff inherit other changes' planning records (S6.4)
+
+- **Problem:** the S6.4 pre-push check ran `git diff --name-status main...HEAD` (the *local* main) and passed with exactly the 10 approved files, while `origin/main` lagged local `main` by 9 direct-to-`main` planning-record commits. The diff GitHub would render was therefore 20 files: four other changes' `docs/todo/` + `docs/questions/` edits plus two `archive/` renames — precisely what AGENTS.md forbids in a change PR, and a reviewer-misleading base.
+- **Step / Phase:** S6.4 (Phase 6, open PR) — one step blocked before pushing, one resume after the base was fixed.
+- **Change:** complexipy-scripts / DOCS/CHORE
+- **Duration / iterations:** 1 blocked subagent run + 1 re-run.
+- **Resolution:** the orchestrator pushed `main` (`a363d8c..fa3d30a`, verified planning-record paths only), then PR #82 opened with exactly 10 changed files. **Durable rules:** (1) the S6.4 pre-push check compares against `origin/main` **after a `git fetch`** (`git diff --name-status origin/main...HEAD`), never against local `main`; (2) every planning-record commit on `main` is pushed immediately, so the base of a change branch never drifts.
+- **Date:** 2026-10-11
+
+## P-110 — a scratch capture wrote inside the change worktree because its output argument was relative (P.4)
+
+- **Problem:** re-running the golden capture as `capture.sh <worktree> golden-recheck` created a stray `golden-recheck/` directory **inside** the change worktree — the exact P-108 failure mode, since a stray file there breaks `scripts/make_map.py --check` and `test_nfr_004_mypy_and_ruff_clean`.
+- **Step / Phase:** P.4 Draft (golden-output baseline capture) — one stray directory, removed immediately (worktree verified clean, `make_map --check` exit 0).
+- **Change:** complexipy-scripts / DOCS/CHORE
+- **Duration / iterations:** one cleanup + one guard added.
+- **Resolution:** `capture.sh` now resolves `OUT` to an absolute path and refuses any `OUT` inside a worktree or the repository. **Durable rule:** the guard belongs in the tool, not only in the instruction — any scratch-writing helper handed to a step subagent must reject in-tree output paths itself.
+- **Date:** 2026-10-11
+
+## P-111 — an inherited TODO baseline claim was wrong (3 failures, not 1, and not the stated cause) (P.4)
+
+- **Problem:** the TODO recorded "1 failing test, caused by a stale `docs/` file count in `STRUCTURE.md`". Re-measured in the change worktree: **3 failed, 887 passed, 1 skipped** — `test_ac_021_committed_map_matches_fresh_render` is a CRLF-vs-LF raw-byte artifact (`make_map.py --check` exits 0, 2004/2004 lines, `core.autocrlf=true`, no `.gitattributes`) and the other two are Hypothesis deadline flakes that pass in isolation. Trusted, that claim would have made Phase 5 classify a pre-existing host artifact as this change's regression.
+- **Step / Phase:** P.4 Draft (ISSUE triage baseline) — one re-measurement.
+- **Change:** startup-settings-registration-gaps / ISSUE
+- **Duration / iterations:** 1 full-suite run (351 s) + 2 targeted re-runs.
+- **Resolution:** the corrected baseline is recorded in the triage record. **Durable rule:** never copy a baseline number from a TODO into a triage or verification record — re-measure in the change worktree and record the observed output; a stale baseline claim becomes a false regression signal at Phase 5.
+- **Date:** 2026-10-11
+
+## P-112 — a cross-spec conflict (settings-coverage NFR-002 vs the mail spec's registered secret) surfaced only at P.4, after a 22-question P.2 (P.4 → S3.1 held)
+
+- **Problem:** this ISSUE's own contract guard — widen the settings inventory assertion to **all** registered keys — fails on `mail.smtp_password` (`src/backend/mail/feature_settings.py:101`), because `docs/specs/settings-coverage.md` NFR-002 forbids passwords or tokens in settings while the approved mail spec registers exactly that key. P.2's interrogation did not surface it, so the change reached READY and only then went `BLOCKED-USER` (LQ-01).
+- **Step / Phase:** P.4 Draft, then S3.1 held (Phase 3) — one `BLOCKED-USER` cycle; the change is WAITING.
+- **Change:** startup-settings-registration-gaps / ISSUE
+- **Duration / iterations:** 1 `BLOCKED-USER` round-trip.
+- **Resolution:** LQ-01 recorded with the recommendation (amend NFR-002 to name `mail.smtp_password` as an accepted transport-credential exception, rather than remove the key the mail spec requires). **Durable rule:** when a change's fix is to **widen a contract guard**, P.2 must interrogate that guard against every artifact it will newly constrain — every spec whose NFR/INV the widened assertion touches. A conflict between two approved specs is a prep-phase question, not an implementation surprise.
+- **Date:** 2026-10-11
+
+## P-113 — a P.2 question batch rots while the change waits for the user (P.2 completion passes)
+
+- **Problem:** three P.2 batches recorded 2026-10-03/2026-10-05 were still `PENDING` when the repo had moved under them. The `tenacity-rich-cachetools` completion pass corrected **51** citations (5 cited TODO files had been archived, ~20 line numbers shifted by the structlog merge, and two premises had become false: PR #67 was merged, not WAITING, and `loguru` was gone). `python-3.15-upgrade` had a **reversed** recommendation (Q-12: the committed `uv.lock` pins `pydantic-core 2.46.5`, which has no cp315 wheel, so a lock refresh is a *precondition* of a 3.15 CI job, not an optional extra) plus wrong site counts (6 → 13 `@contextmanager` sites, 8 → 10 `re.match` sites). `api-keys` needed **18** citation fixes, including five wrong REQ ranges.
+- **Step / Phase:** P.2 completion passes (three changes) — the re-verification cost more than writing the missing fields did.
+- **Change:** tenacity-rich-cachetools, python-3.15-upgrade, api-keys
+- **Duration / iterations:** three passes, ~90 min total, 51 + 18 + ~10 citation fixes.
+- **Resolution:** **Durable rule:** when a change is picked up after its P.2 batch has waited more than a few days, run a citation re-verification pass (`test -f` on every cited path, re-read the cited lines, re-measure every count) **before** presenting the batch at P.3 — a stale recommendation is worse than none.
+- **Date:** 2026-10-11
+
+## P-114 — the P.2 recommendation field has two names, so the gate check gave a false negative (P.2)
+
+- **Problem:** `.agents/skills/specify/SKILL.md` states the P.2 done-criteria as `- **Recommendation:**`, while `AGENTS.md` and `docs/questions/template.md` require `- **Recommended:**`. A completion pass had already run on `notifications` and followed the skill, so `grep -- "- \*\*Recommended:\*\*"` returned 0 and the batch read as having **zero** recommendations — causing a redundant re-launch of the same P.2 step. `docs/questions/backend-api.md` still uses the skill's name.
+- **Step / Phase:** P.2 gate check — one redundant subagent launch (~26 min).
+- **Change:** notifications (and the backlog generally)
+- **Duration / iterations:** 1 redundant launch; the second pass did find real defects (missing `- **Date:**` lines on all 31 entries, a citation to a non-existent `src/backend/mail/repository.py`), so it was not wasted.
+- **Resolution:** the field is normalised to the template's `Recommended:` in the files touched. **Durable rule:** the gate check must grep **both** spellings until the skill is fixed; the skill fix itself is a DOCS/CHORE change (not done here — it is not a planning record and this is not its branch).
+- **Date:** 2026-10-11
+
+## P-115 — a step subagent committed a planning record itself (P.2)
+
+- **Problem:** the `python-3.15-upgrade` P.2 completion subagent was told not to commit (planning records are orchestrator-owned, committed on `main` by the orchestrator), yet it committed `85aeeb7` on its own. The commit was benign — it touched only its own question file, with a correct message and no other path — but it bypassed the orchestrator's handoff verification, and an unpushed commit like this is exactly what corrupted PR #82's file set in P-109.
+- **Step / Phase:** P.2 completion pass — detected by `git log`/`git status` after the handoff.
+- **Change:** python-3.15-upgrade
+- **Duration / iterations:** one verification pass; no rework needed.
+- **Resolution:** the orchestrator verified the commit's file set and pushed `main`. **Durable rule:** after every Phase P subagent, the orchestrator runs `git status --short` + `git log --oneline -3` and pushes; a launch prompt that forbids committing is not a substitute for checking.
+- **Date:** 2026-10-11
+
+## P-116 — a reported-successful edit did not change the file; a read returned a phantom version (P.2)
+
+- **Problem:** twice in one day the file-state reported by the tools was not the file on disk. The orchestrator's edit adding a Value triage + late-questions block to `docs/todo/backend-api.md` reported success, but the resulting commit contained **one** added line and the block was absent (`git hash-object` == `git rev-parse HEAD:<path>`). The `api-keys` pass independently reported a `read` returning a 1006-line version of its file containing edits that had never been applied, and an `edit` reporting success while the blob was byte-identical to HEAD (845 lines).
+- **Step / Phase:** P.2 completion passes + orchestrator bookkeeping — one lost edit, one re-derived file.
+- **Change:** api-keys, backend-api
+- **Duration / iterations:** one full re-derivation of the file's structure and re-application of the edits.
+- **Resolution:** the intended content was re-checked against the file and, where it was genuinely missing, re-written and verified. **Durable rule:** after any write to a planning record, verify with `grep -c` on the new content plus `git hash-object <path>` vs `git rev-parse HEAD:<path>`; never trust the tool's success message, and never re-apply an edit based on a `read` alone.
+- **Date:** 2026-10-11
+
+## P-117 — a prep step's "side finding" was false on `main` and propagated into two question files (P.2)
+
+- **Problem:** the `api-keys` P.2 log recorded a "side finding (separate ISSUE, not a blocker)": `src/main.py` builds the shared `PermissionService` with **no** `session_lookup`, so every `Principal(session_token=…)` denies with `storage_error` — dead wiring. The claim was repeated in `backend-api`'s P.2 (Q-03) and was about to be recorded on `main` as a late question recommending a new ISSUE TODO. Measured on `main`: `src/main.py:176` passes `session_lookup=_session_repository,  # validates a provided session token (REQ-017, AC-020)`, and `src/backend/permissions/service.py:139,162,441-445` consume it. There is no defect.
+- **Step / Phase:** P.2 completion passes (api-keys fixed 18 citations, backend-api's file records the correction) — caught before any TODO/ISSUE was opened.
+- **Change:** api-keys, backend-api
+- **Duration / iterations:** one re-measurement.
+- **Resolution:** both question files now state that session-token validation **is** live at the composition root; no new TODO was opened. **Durable rule:** a "side finding" written by a prep step is a claim, not evidence — re-measure it against the current tree before it is recorded on `main` or turned into a change.
+- **Date:** 2026-10-11
+
+## P-118 — the change worktree is a CRLF checkout, so exact-text edits to existing files miss (S3.1)
+
+- **Problem:** the `startup-settings-registration-gaps` worktree checks text files out with CRLF line endings (`core.autocrlf=true`, no `.gitattributes` — the same root cause as the `test_ac_021` byte-compare failure recorded in §7 of the triage record). Exact-text edits against an existing file therefore failed on line endings: the LF pattern never matches the CRLF bytes on disk, and the failure is silent for a tool that reports the pattern as “not found” without naming why. S3.1 had to apply its edits to `tests/contract/settings_coverage/test_inventory.py`, `tests/acceptance/settings_coverage/test_wiring.py` and `tests/acceptance/settings_coverage/test_persistence.py` through a byte-level patch script that matched `\r\n` explicitly.
+- **Step / Phase:** S3.1 Derive tests (reproduction tests) — Phase 3; the same workaround was needed for S3.2's edits to the triage record, the traceability matrix and this log.
+- **Change:** startup-settings-registration-gaps (ISSUE)
+- **Duration / iterations:** several failed edit attempts, then one patch script per file; no test or document content was lost or re-derived.
+- **Resolution:** the workaround works — read bytes, match CRLF-normalised patterns, write bytes back, then verify with `grep` and `git diff --stat` (and `check_traceability.py` for the matrix). The **root cause** is checkout-wide line endings and belongs to the separate `gitattributes-line-endings` TODO; it is deliberately **not** fixed here (not this change's branch, not a planning record). **Durable rule:** in a CRLF worktree, patch existing files by bytes, not by exact-text edits — and check `git config core.autocrlf` before the first edit of a change.
+- **Date:** 2026-10-11
+
+## P-119 — a stale change branch fails a whole-repo CI gate on files it never touched (S5.2 → merge `main`)
+
+- **Problem:** `startup-settings-registration-gaps` was cut at `25b7e7b`; while it ran, PR #82 (`chore/complexipy-scripts`, merge `91b4237`) refactored `scripts/check_traceability.py`, `scripts/validate_task_dag.py` and `scripts/verify_spec.py` under the complexity ceiling and brought `scripts/` into the gate. At S5.2 the whole-repo command `uv run complexipy src tests scripts --max-complexity-allowed 15` exited **1** in the change worktree with 4 functions over the ceiling — **all four in `scripts/`, in files this change never touched** (`git diff 25b7e7b..HEAD -- scripts/ pyproject.toml` is empty, and no branch commit touches either path) — while the identical command exits **0** on `main`. A whole-repo gate therefore read as a failure of this change. The branch's own narrower `[tool.complexipy] paths` did not shield it because the CLI path arguments (`src tests scripts`) override the config.
+- **Step / Phase:** S5.2 Lint + types (Phase 5) — diagnosed there and handed to the orchestrator; fixed at a dedicated merge step (S5.2b) before S6.4.
+- **Change:** startup-settings-registration-gaps (ISSUE)
+- **Duration / iterations:** one full CI-job sweep to classify the exit-1 as staleness rather than a defect caused by this change or a failure pre-existing on `main`, then one merge.
+- **Resolution:** `git fetch origin` + confirm `main` == `origin/main`, then `git merge main --no-edit` in the change worktree (merge `9b19d7d`). `git merge-tree --write-tree HEAD main` had predicted exactly one conflict — `STRUCTURE.md` — and the real merge matched; it was resolved by taking `main`'s side and **regenerating** (`uv run python scripts/make_map.py`, then `--check` exit 0), never hand-merged. `complexipy` then exits **0**, as do `check_traceability.py`, `validate_task_dag.py`, `verify_spec.py` ×15, `ruff check .`, `ruff format --check .`, `mypy src/` and the targeted reproduction + map tests (68 passed). Recorded in §7.3 of the triage record. **Related and still open:** the same S5.2 sweep could **not** re-measure the `coverage` job (`uv run pytest tests/ --cov`, `fail_under = 92`) because re-running the full suite was outside that step's brief — it must be confirmed at the Phase 6 pre-merge gate (S6.4). **Durable rule:** a whole-repo gate result on a branch is only meaningful against that branch's own base. Before classifying such a failure as caused-by-this-change or pre-existing, diff the failing paths against the base (`git diff <merge-base>..HEAD -- <paths>`) and run the same command on `main`; if the diff is empty and `main` passes, the branch is **stale** — merge `main` in and regenerate any generated artifact, rather than "fixing" out-of-scope files on the change branch.
+- **Date:** 2026-10-11
+
+## P-120 — the coverage job had never been run on the branch, and measuring it surfaced a second flaky wall-clock node (S5.4)
+
+- **Problem:** no step before Phase 5 had ever run the `coverage` job (`uv run pytest tests/ --cov`, `fail_under = 92`) on `issue/startup-settings-registration-gaps` — the S5.2 sweep could not run it because re-running the full suite was outside that step's brief (P-119, "Related and still open"). Measuring it at S5.4 was the first time the branch ran the suite under coverage instrumentation, and run 1 failed on `tests/contract/search/test_search_contracts.py::test_nfr_001_performance_budgets`: a wall-clock contract (`statistics.median` of 15 searches < 0.3 s local), measured at a **median of 0.542 s** with coverage tracing active. It **passes standalone and in isolation**, and it did **not recur** in the second full run.
+- **Step / Phase:** S5.4 Verification report — Phase 5 (the coverage gate had been deferred from S5.2 by P-119).
+- **Change:** startup-settings-registration-gaps (ISSUE)
+- **Duration / iterations:** two full instrumented runs plus one standalone and one isolated re-run to classify the failure, on top of the deferred coverage measurement itself.
+- **Resolution:** classified **not a regression**, with measurements recorded: the node is the same documented load/hardware-sensitive contract already classified in `docs/verification/pyproject-tooling-gaps.md:231` (and `docs/verification/search.md:456`, `docs/workflow/PROBLEMS.md:330`); this change touches no search code path, and the second instrumented run passed with coverage **93.85 % ≥ 92** (§13.2). Recorded as a residual item at §13.7; **Phase 6 must not re-litigate it** — S6.4's pre-merge gate only re-confirms the suite and the coverage figure. The real fix is not in this change: the search contract's timing budget needs an environment-aware, instrumentation-aware treatment of its own (a separate change). **Durable rule:** a deferred whole-suite gate does not become cheaper by waiting — it moves its flaky-node classification onto the step that finally pays for it, so a step brief that forbids re-running the full suite must say which later step owns the measurement.
+- **Date:** 2026-10-11
+
+## P-121 — a step subagent died mid-step on a transport error and left its work uncommitted; the relaunch had to verify, not redo (S6.4)
+
+- **Problem:** the `startup-settings-registration-gaps` S6.4 subagent completed the first two parts of the step — the `CHANGELOG.md` entry under `## [Unreleased]` and the §16.5 pre-merge gate record (full suite + coverage on the tree the PR carries) — and then died on a connection/transport error **before returning any handoff**. The work was left **uncommitted** in the change worktree (`CHANGELOG.md` +51, `docs/verification/startup-settings-registration-gaps.md` +116), so the next execution of the same step had to decide, with no handoff to trust, whether the gate had actually run and whether the entry was complete. Re-running the step from scratch would have re-paid the 303.85 s instrumented full suite for nothing; trusting the diff blindly would have carried an unverified changelog into the PR.
+- **Step / Phase:** S6.4 Bump version + open PR — Phase 6; the step was relaunched once.
+- **Change:** startup-settings-registration-gaps (ISSUE)
+- **Duration / iterations:** one dead subagent (its two artifacts written, no handoff) plus one fresh subagent for the same step; no artifact had to be re-derived and the full suite was **not** re-run.
+- **Resolution:** per the completion guard in "Phase Execution (Atomic Steps, Synchronous Subagents)", the orchestrator relaunched a **fresh** subagent for the same atomic step (the stuck session was never resumed) and its launch prompt named exactly what the dead run had already produced, named the two uncommitted paths, and stated the recorded §16.5 figures — so the fresh subagent **verified** them (`git diff --stat`; the entry covers all six defects D-1…D-6 and the §14-8 operator-visible consequences; §16.5 states PASS: 892 passed, 1 skipped, 0 failed, coverage 93.85 % vs `fail_under = 92`) instead of redoing them, then committed both files and finished the step (bump `1.2.0 → 1.2.1` with the changelog section moved in the same commit, `uv.lock` sync, this log, push, PR). Two smaller traps surfaced in the same step and are recorded here so the next S6.4 does not rediscover them: `bump-my-version` is a **uv tool** whose binary is not on this shell's `PATH` (call it by full path under `uv tool dir --bin`), its `bump --dry-run` prints **nothing** without `-v`, and with `-v` its rich logger raises `UnicodeEncodeError` on the `→` of the templated commit message under the cp1252 console — a logging error only, the bump itself is unaffected. `git commit --cleanup=strip` also **deletes** body lines that start with `#`, which silently ate three lines of the bump body quoting the markdown headings `## [Unreleased]` / `## [1.2.1]`; the message was rewritten with `--cleanup=whitespace`. **Durable rule:** a dead step subagent's work is in the worktree, not lost — the relaunch prompt must state what the dead run already did, name its uncommitted paths, carry its recorded gate figures, order the fresh subagent to verify the diff before redoing anything, and explicitly forbid re-running an expensive gate the dead run already recorded. When a commit body quotes markdown headings, use `--cleanup=whitespace`, never `strip`.
+- **Date:** 2026-10-11

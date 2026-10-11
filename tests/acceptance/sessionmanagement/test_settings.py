@@ -55,7 +55,10 @@ def test_ac_039_register_settings_defaults(settings_registry: SettingsRegistry) 
         assert definition.kind is SettingKind.NUMBER
         assert definition.default == default
         assert definition.min_value == 1
-        assert definition.category == "sessionmanagement"
+        # The amended session-management.md model block (REQ-019, v3): category = domain,
+        # group = feature name (settings-coverage REQ-018).
+        assert definition.category == "security"
+        assert definition.group == "sessionmanagement"
         # the value is initialized to the default
         assert settings_registry.get_value(key) == default
 

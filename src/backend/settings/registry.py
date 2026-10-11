@@ -118,7 +118,13 @@ class SettingsRegistry:
                 raise SettingsRegistrationError(f"duplicate key {definition.key}")
             self._definitions[definition.key] = definition
             # Persisted values take precedence over definition defaults (REQ-011).
-            self._values[definition.key] = self._persisted.get(definition.key, definition.default)
+            persisted = self._persisted.get(definition.key, definition.default)
+            if definition.key in self._persisted and persisted != definition.default:
+                # REQ-023 / AC-028: a persisted override is visible at startup instead of silent. The
+                # record names the key only — never the value — because a persisted value may be a
+                # credential (mail.smtp_password) and the amended NFR-002 keeps it out of log records.
+                _logger.warning(f"persisted value overrides setting default: key={definition.key}", key=definition.key)
+            self._values[definition.key] = persisted
         _logger.debug(
             f"setting registered: key={definition.key} kind={definition.kind}",
             key=definition.key,

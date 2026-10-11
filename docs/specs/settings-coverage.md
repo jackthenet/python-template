@@ -1,6 +1,7 @@
 # Spec: Settings Coverage
 
 ## Changelog
+- v3 (2026-10-11): Amendment (change `startup-settings-registration-gaps`, ISSUE), applied **in place in that change's own PR** at the user's explicit decision (Q-02, Q-13(b), Q-26, Q-27 — no separate Spec Amendment PR; the override is recorded in `docs/verification/startup-settings-registration-gaps.md` §4). REQ-001 and REQ-017 now enumerate all **nine** settings-owning features; §3.5 carries the complete **34-key** inventory (it listed 14 keys from 4 features); REQ-019 now requires the contract guard to check that complete inventory; **REQ-023 and AC-028 added** — one `WARNING` naming every key whose persisted value overrode its definition default (defect D-5); **NFR-002 rewritten** (Q-27 / LQ-01 (a)) as the log-record-and-event guarantee with `mail.smtp_password` named as the accepted transport-credential exception; §9 gains the override `WARNING` row; §10 and §11 rows updated to the guard functions as they now exist. REQ-001, REQ-017, REQ-019 and NFR-002 are restated in place, REQ-023/AC-028 are the only IDs added; no ID was renumbered or removed.
 - v2 (2026-10-04): Amendment (change `structlog-logging`, ADR-082). REQ-014, REQ-015, REQ-016, AC-019, AC-020, AC-021 and EDGE-008 restated in capability terms for the new logging pipeline: `setup_logger()` stays callable with no arguments (an optional keyword-only `renderer` override is added by `docs/specs/structlog-logging.md` REQ-006), live reconfiguration keeps its observable contract but the mechanism may mutate the feature's own handlers instead of replacing sinks, and the rotation case only requires that all current `logging.*` values are re-applied. Dependencies row no longer names a logging backend.
 
 ## 1. Overview & Objectives
@@ -101,6 +102,8 @@ def get_settings_registry(required: bool = True) -> SettingsRegistry | None: ...
 
 ### 3.5 Complete settings inventory
 
+The inventory is the union of the nine settings-owning features' `src/backend/<feature>/feature_settings.py` modules — **34 keys**, every row taken from the module that registers it. `tests/contract/settings_coverage/test_inventory.py` mirrors it row for row and registers all nine features (REQ-019 / AC-024).
+
 | Feature | Key | Kind | Default | Parameters | Category | Group |
 |---------|-----|------|---------|------------|----------|-------|
 | logging | `logging.log_level` | SELECT | `"INFO"` | options `[DEBUG, INFO, WARNING, ERROR, CRITICAL]` | application | logging |
@@ -117,8 +120,28 @@ def get_settings_registry(required: bool = True) -> SettingsRegistry | None: ...
 | authentication | `authentication.origin` | TEXT | `"http://localhost:3000"` | — | security | authentication |
 | usermanagement | `usermanagement.roles` | LIST | `["admin", "member"]` | `item_pattern ^[a-z0-9_-]{1,32}$`, `min_items 1` | security | usermanagement |
 | eventbus | `eventbus.max_queue_size` | NUMBER | `1000` | min `1` | application | eventbus |
+| permissions | `permissions.system_principal` | LIST | `list(BOOTSTRAP_SYSTEM_PERMISSIONS)` (the bootstrap system set) | `item_pattern ^[a-z0-9_-]+\.[a-z0-9_-]+$` | security | permissions |
+| search | `search.default_page_size` | NUMBER | `100` | — | application | search |
+| search | `search.max_page_size` | NUMBER | `1000` | — | application | search |
+| search | `search.source_timeout` | NUMBER | `5000` | — (milliseconds) | application | search |
+| filemanagement | `filemanagement.storage_root` | TEXT | `"./data/files"` | — | application | filemanagement |
+| filemanagement | `filemanagement.max_file_size` | NUMBER | `10485760` | — | application | filemanagement |
+| filemanagement | `filemanagement.avatar_max_size` | NUMBER | `2097152` | — | application | filemanagement |
+| filemanagement | `filemanagement.allowed_types` | LIST | `[application/octet-stream, application/pdf, application/zip, text/plain, text/csv, image/png, image/jpeg, image/gif, image/webp]` | — (no `ListSpec`) | application | filemanagement |
+| filemanagement | `filemanagement.avatar_base_url` | TEXT | `"files.example.com"` | — (host only, no scheme) | application | filemanagement |
+| mail | `mail.smtp_host` | TEXT | `"localhost"` | — | application | mail |
+| mail | `mail.smtp_port` | NUMBER | `587` | min `1`, max `65535` | application | mail |
+| mail | `mail.smtp_username` | TEXT | `""` | — | application | mail |
+| mail | `mail.smtp_password` | TEXT | `""` | — (credential setting, NFR-002) | application | mail |
+| mail | `mail.smtp_from` | EMAIL | `"no-reply@example.com"` | — | application | mail |
+| mail | `mail.smtp_tls` | BOOLEAN | `True` | — | application | mail |
+| mail | `mail.smtp_timeout` | NUMBER | `30` | min `1` | application | mail |
+| mail | `mail.from_name` | TEXT | `"Python Template"` | — | application | mail |
+| sessionmanagement | `sessionmanagement.max_listed_sessions` | NUMBER | `100` | min `1` | security | sessionmanagement |
+| sessionmanagement | `sessionmanagement.max_sessions_per_user` | NUMBER | `5` | min `1` | security | sessionmanagement |
+| sessionmanagement | `sessionmanagement.cleanup_batch_size` | NUMBER | `1000` | min `1` | security | sessionmanagement |
 
-- Time-based settings are stored as **NUMBER in seconds**; the feature converts to `timedelta` at read time.
+- Time-based settings are stored as **NUMBER in seconds**; the feature converts to `timedelta` at read time (`search.source_timeout` is the one exception: milliseconds, `docs/specs/search.md` D12).
 - The settings feature (the registry itself) registers no settings of its own (it is the source of truth; its persistence directory is a constructor parameter, default `"settings"`).
 
 ## 4. Requirements
@@ -128,7 +151,7 @@ Each normative requirement MUST have a stable ID. These IDs propagate through th
 
 | ID | Requirement |
 |----|-------------|
-| REQ-001 | Each feature module (`logging`, `authentication`, `usermanagement`, `eventbus`) exposes a `register_settings(registry)` function that registers the feature's `SettingDefinition`s with the given registry. Registration has no import side effects (importing a feature module does not mutate the registry singleton). |
+| REQ-001 | Each feature module (`logging`, `authentication`, `usermanagement`, `eventbus`, `permissions`, `search`, `filemanagement`, `mail`, `sessionmanagement`) exposes a `register_settings(registry)` function that registers the feature's `SettingDefinition`s with the given registry. Registration has no import side effects (importing a feature module does not mutate the registry singleton). |
 | REQ-002 | The entrypoint (`src/main.py`) calls each feature's `register_settings(registry)` once at startup, before any feature code runs, using the shared registry from `get_settings_registry()`. |
 | REQ-003 | Features read their settings **live** from the registry (`get_value` on each use), so a `set_value` affects a running feature without re-construction. |
 | REQ-004 | Existing feature constructor parameters are retained for DI/testing; their default becomes the registry value, and an explicit argument wins over the registry value. |
@@ -144,12 +167,13 @@ Each normative requirement MUST have a stable ID. These IDs propagate through th
 | REQ-014 | `setup_logger()` is callable with no arguments and reads `logging.*` from the shared registry (falling back to the logging defaults with a warning if unregistered). It is idempotent (a second call is a no-op). Any parameter it accepts is optional and keyword-only, so the no-argument call remains the specified default. |
 | REQ-015 | The logging feature subscribes to `SettingChanged` and reconfigures **its own** sinks at runtime when any `logging.*` setting changes, re-applying all current `logging.*` values, without restarting the process and without touching sinks it does not own. |
 | REQ-016 | The logging feature keeps no private configuration source: it reads `log_*` values from the registry, and its `Settings` export is a plain container of those registry values, not a settings model of its own. |
-| REQ-017 | Each feature's settings use the full feature name as the key prefix: `logging.*`, `authentication.*`, `usermanagement.*`, `eventbus.*`. |
+| REQ-017 | Each feature's settings use the full feature name as the key prefix: `logging.*`, `authentication.*`, `usermanagement.*`, `eventbus.*`, `permissions.*`, `search.*`, `filemanagement.*`, `mail.*`, `sessionmanagement.*`. |
 | REQ-018 | Each feature's settings use `category` = domain (`application`/`security`) and `group` = feature name for the views hierarchy. |
-| REQ-019 | The complete settings inventory (key, kind, default, parameters, category, group for every feature setting) is as defined in section 3.5. |
+| REQ-019 | The complete settings inventory (key, kind, default, parameters, category, group for every feature setting) is as defined in section 3.5 — all 34 keys of the nine settings-owning features. The contract inventory guard registers all nine features and checks every row of that complete inventory; a guard that covers only part of it does not satisfy this requirement. |
 | REQ-020 | Tracing: `register_settings` functions are traced with `@logged`; per-operation live reads are traced only when the observed value differs from the feature's previously observed value for that key. |
 | REQ-021 | The settings feature performs no environment-variable handling (the settings feature is the single source of truth; env vars are out of scope). |
 | REQ-022 | The settings feature registers no settings of its own; its value-persistence directory is a `SettingsRegistry` constructor parameter (default `YamlValueRepository("settings")`). |
+| REQ-023 | When a setting is registered whose **persisted** value overrides the definition default — the loaded value differs from that default — the settings feature logs exactly one `WARNING` naming the key. A persisted value equal to the default is not an override and logs no `WARNING`. The record names the key and never carries the persisted value (NFR-002); the precedence itself stays REQ-011's. |
 
 ## 5. Acceptance Criteria
 
@@ -184,6 +208,7 @@ Each acceptance criterion MUST have a stable ID and MUST reference at least one 
 | AC-025 | REQ-020 | **Given** a `register_settings` function, **When** it is called, **Then** it is traced; **Given** a live read, **When** the observed value changes, **Then** it is traced. |
 | AC-026 | REQ-021 | **Given** the settings feature, **When** it is used, **Then** no environment variables are read. |
 | AC-027 | REQ-022 | **Given** the settings feature, **When** it is used, **Then** it registers no settings of its own. |
+| AC-028 | REQ-023, REQ-011 | **Given** a value repository holding a persisted value that differs from a setting's definition default, **When** that setting is registered, **Then** exactly one `WARNING` record names the key **And** the effective value is still the persisted one; **Given** a persisted value equal to the default, **When** the setting is registered, **Then** no `WARNING` names it. |
 
 ## 6. Invariants
 
@@ -219,7 +244,7 @@ State invariants that hold over a large input space. These become Hypothesis pro
 | ID | Category | Requirement |
 |----|----------|-------------|
 | NFR-001 | Performance | Live reads are in-memory (no per-read file I/O); the registry loads persisted values once at construction. |
-| NFR-002 | Security | Settings values are not secrets; no credential storage. Settings do not contain passwords or tokens. |
+| NFR-002 | Security | No credential or token may appear in **log records or events**. A setting explicitly declared as a credential **may** be persisted: `mail.smtp_password` is the one accepted transport-credential exception — the mail feature registers it, traces with `include_args=False` and publishes secret-free events — and a credential-named setting key outside that documented exemption is a violation. |
 | NFR-003 | Contract | The settings inventory (key, kind, default) is backward-compatible; adding a setting is non-breaking. |
 | NFR-004 | Observability | `register_settings` functions and change-detection live reads are logged per the logging policy. |
 | NFR-005 | Atomicity | Persistence uses atomic writes (the file is always either absent or valid YAML). |
@@ -234,6 +259,7 @@ Every feature MUST be observable. Specify the logging behavior: which operations
 | `register_settings` called | DEBUG | feature name, count of settings registered |
 | Live read observes a changed value | DEBUG | key, previous value, new value |
 | Feature reads an unregistered key | WARNING | key, fallback default used |
+| A persisted value overrides a definition default (REQ-023) | WARNING | key (never the persisted value) |
 | `setup_logger` called | INFO | log level, log file |
 | Logging sink reconfigured on change | INFO | key, new value |
 | Values persisted | DEBUG | count of values persisted |
@@ -276,6 +302,7 @@ Map each requirement/AC to a test category. This drives the test file layout.
 | AC-025 | unit | `tests/unit/test_settings_coverage.py` | `test_tracing` |
 | AC-026 | unit | `tests/unit/test_settings_coverage.py` | `test_no_env_vars` |
 | AC-027 | unit | `tests/unit/test_settings_coverage.py` | `test_settings_registers_nothing` |
+| AC-028 | acceptance | `tests/acceptance/settings_coverage/test_persistence.py` | `test_ac_028_persisted_override_warns` |
 | INV-001 | property | `tests/property/test_settings_coverage.py` | `test_get_value_valid_for_kind` |
 | INV-002 | property | `tests/property/test_settings_coverage.py` | `test_list_round_trip` |
 | INV-003 | property | `tests/property/test_settings_coverage.py` | `test_live_read_after_set` |
@@ -333,6 +360,7 @@ Maintain this matrix as tests are written and pass. Every normative requirement 
 | REQ-020 | AC-025 | `test_tracing` | PENDING |
 | REQ-021 | AC-026 | `test_no_env_vars` | PENDING |
 | REQ-022 | AC-027 | `test_settings_registers_nothing` | PENDING |
+| REQ-023 | AC-028 | `test_ac_028_persisted_override_warns` | PENDING |
 | INV-001 | — | `test_get_value_valid_for_kind` | PENDING |
 | INV-002 | — | `test_list_round_trip` | PENDING |
 | INV-003 | — | `test_live_read_after_set` | PENDING |

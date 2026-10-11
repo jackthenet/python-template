@@ -1,6 +1,7 @@
 # Spec: Session Management
 
 ## Changelog
+- v3 (2026-10-11): Amendment (change `startup-settings-registration-gaps`, ISSUE, decision Q-25) — the three `sessionmanagement.*` settings move to `category="security"` and gain an explicit `group="sessionmanagement"` keyword in the §3 registration block. `docs/specs/settings-coverage.md` REQ-018 requires the category to be one of the two domains (`application` / `security`) and the group to be the feature name; `category="sessionmanagement"` was out of domain, and `register_feature` (`src/backend/settings/registry.py`) validates only the key prefix — it never sets `group`, so the group has to be declared in each definition. Keys, kinds, defaults and `min_value` bounds are unchanged, and REQ-019 / AC-039 keep their wording (they fix keys, kinds and defaults, not the category). No ID was added, renumbered or removed.
 - v2 (2026-10-06): REQ-023 added — public install operation for the shared default session service (`set_session_service()`), with REQ-020's singleton-surface enumeration, the §3 API block, REQ-022's traced-module-function list and NFR-003's public-API contract list extended to name it, and AC-046..AC-049, EDGE-013, EDGE-014 added. Change `settings-public-registry-setter` (CROSS-CUTTING); see `docs/specs/settings-public-registry-setter.md`. AC-041, AC-042 and AC-043 (create-once, first-call-without-repository `ValueError`, reset-clears) are unchanged. No existing ID was renumbered, restated or deleted.
 
 ## 1. Overview & Objectives
@@ -129,11 +130,14 @@ class LoginRequest(BaseModel):
 # --- Settings registration (REQ-019) ---
 register_settings(registry):
     registry.register(SettingDefinition(key="sessionmanagement.max_listed_sessions",
-                                        kind=SettingKind.NUMBER, default=100, min_value=1, category="sessionmanagement"))
+                                        kind=SettingKind.NUMBER, default=100, min_value=1,
+                                        category="security", group="sessionmanagement"))
     registry.register(SettingDefinition(key="sessionmanagement.max_sessions_per_user",
-                                        kind=SettingKind.NUMBER, default=5, min_value=1, category="sessionmanagement"))
+                                        kind=SettingKind.NUMBER, default=5, min_value=1,
+                                        category="security", group="sessionmanagement"))
     registry.register(SettingDefinition(key="sessionmanagement.cleanup_batch_size",
-                                        kind=SettingKind.NUMBER, default=1000, min_value=1, category="sessionmanagement"))
+                                        kind=SettingKind.NUMBER, default=1000, min_value=1,
+                                        category="security", group="sessionmanagement"))
 # `authentication.session_ttl` (authentication feature) is reused unchanged — no duplicate TTL key.
 ```
 

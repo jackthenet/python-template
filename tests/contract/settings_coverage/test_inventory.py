@@ -1,4 +1,17 @@
-"""Contract tests for the settings inventory (AC-022..AC-024, NFR-002, NFR-003)."""
+"""Contract tests for the settings inventory (AC-022..AC-024, NFR-002, NFR-003).
+
+Reproduction guard for issue ``startup-settings-registration-gaps`` (D-2/D-3/D-6): the
+inventory carried the 14 keys of the four features ``docs/specs/settings-coverage.md``
+§3.5 enumerated, and ``_registry_with_all_features()`` registered only those four, so
+``test_category_group`` could not see the four out-of-domain ``category`` values and
+``test_no_secret_settings`` could not see ``mail.smtp_password`` — the guards were as
+incomplete as the wiring (§3 D-2). ``INVENTORY`` is now the full 34-key inventory of the
+nine features, every row taken from the module that registers it.
+
+This guard builds its **own** registry, so it pins the inventory and the REQ-018
+category/group rule, not the composition-root wiring — that is the acceptance witness
+(``tests/acceptance/settings_coverage/test_wiring.py``).
+"""
 
 from __future__ import annotations
 
@@ -9,8 +22,10 @@ from settings_test_helpers import make_registry
 
 from backend.settings import SettingsRegistry
 
-# The complete inventory from spec section 3.5:
-# key -> (kind, default, category, group)
+# The complete inventory of the nine features (spec section 3.5, widened by this change):
+# key -> (kind, default, category, group). The category/group values are what REQ-018 /
+# AC-023 require — the domain (application/security) and the feature name — so the four
+# rows the features currently register outside that set are RED here (D-3).
 INVENTORY: dict[str, tuple[str, object, str, str]] = {
     "logging.log_level": ("SELECT", "INFO", "application", "logging"),
     "logging.log_file": ("TEXT", "logs/app.log", "application", "logging"),
@@ -26,7 +41,67 @@ INVENTORY: dict[str, tuple[str, object, str, str]] = {
     "authentication.origin": ("TEXT", "http://localhost:3000", "security", "authentication"),
     "usermanagement.roles": ("LIST", ["admin", "member"], "security", "usermanagement"),
     "eventbus.max_queue_size": ("NUMBER", 1000, "application", "eventbus"),
+    "permissions.system_principal": (
+        "LIST",
+        [
+            "mail.send_email",
+            "mail.send_email_verification_email",
+            "mail.send_password_reset_email",
+            "sessionmanagement.cleanup_expired",
+            "settings.register",
+            "settings.register_feature",
+            "usermanagement.change_password",
+            "usermanagement.get_user",
+            "usermanagement.verify_password",
+        ],
+        "security",
+        "permissions",
+    ),
+    "search.default_page_size": ("NUMBER", 100, "application", "search"),
+    "search.max_page_size": ("NUMBER", 1000, "application", "search"),
+    "search.source_timeout": ("NUMBER", 5000, "application", "search"),
+    "filemanagement.storage_root": ("TEXT", "./data/files", "application", "filemanagement"),
+    "filemanagement.max_file_size": ("NUMBER", 10485760, "application", "filemanagement"),
+    "filemanagement.avatar_max_size": ("NUMBER", 2097152, "application", "filemanagement"),
+    "filemanagement.allowed_types": (
+        "LIST",
+        [
+            "application/octet-stream",
+            "application/pdf",
+            "application/zip",
+            "text/plain",
+            "text/csv",
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp",
+        ],
+        "application",
+        "filemanagement",
+    ),
+    "filemanagement.avatar_base_url": ("TEXT", "files.example.com", "application", "filemanagement"),
+    "mail.smtp_host": ("TEXT", "localhost", "application", "mail"),
+    "mail.smtp_port": ("NUMBER", 587, "application", "mail"),
+    "mail.smtp_username": ("TEXT", "", "application", "mail"),
+    "mail.smtp_password": ("TEXT", "", "application", "mail"),
+    "mail.smtp_from": ("EMAIL", "no-reply@example.com", "application", "mail"),
+    "mail.smtp_tls": ("BOOLEAN", True, "application", "mail"),
+    "mail.smtp_timeout": ("NUMBER", 30, "application", "mail"),
+    "mail.from_name": ("TEXT", "Python Template", "application", "mail"),
+    "sessionmanagement.max_listed_sessions": ("NUMBER", 100, "security", "sessionmanagement"),
+    "sessionmanagement.max_sessions_per_user": ("NUMBER", 5, "security", "sessionmanagement"),
+    "sessionmanagement.cleanup_batch_size": ("NUMBER", 1000, "security", "sessionmanagement"),
 }
+
+# NFR-002 (as amended by this change, LQ-01 (a)): no credential or token may appear in log
+# records or events, and a setting explicitly declared as a credential MAY be persisted.
+# mail.smtp_password is that one accepted transport-credential exception — the mail spec
+# registers it by design and keeps it out of every log record and event. The name check
+# keeps its full force on the other 33 keys: an undocumented credential-named key is a
+# violation, and an exemption that no longer names a real key is one too.
+NFR_002_CREDENTIAL_EXEMPTIONS: frozenset[str] = frozenset({"mail.smtp_password"})
+
+_SECRET_NAME_PARTS = ("password", "secret", "credential")
 
 
 @pytest.fixture(autouse=True)
@@ -43,14 +118,35 @@ def _registry_with_all_features() -> SettingsRegistry:
     reg, _bus = make_registry()
     from backend.authentication import register_settings as auth_register
     from backend.eventbus import register_settings as bus_register
+    from backend.filemanagement import register_settings as file_register
     from backend.logging import register_settings as logging_register
+    from backend.mail import register_settings as mail_register
+    from backend.permissions import register_settings as permissions_register
+    from backend.search import register_settings as search_register
+    from backend.sessionmanagement import register_settings as session_register
     from backend.usermanagement import register_settings as um_register
 
     logging_register(reg)
     auth_register(reg)
     um_register(reg)
     bus_register(reg)
+    permissions_register(reg)
+    search_register(reg)
+    file_register(reg)
+    mail_register(reg)
+    session_register(reg)
     return reg
+
+
+def _same_default(actual: object, expected: object) -> bool:
+    """Default equality; a LIST default is compared order-insensitively.
+
+    ``permissions.system_principal`` defaults to ``list(BOOTSTRAP_SYSTEM_PERMISSIONS)``, and a
+    ``frozenset`` iteration order is not fixed, so its list default has no stable order.
+    """
+    if isinstance(actual, list) and isinstance(expected, list):
+        return sorted(actual) == sorted(expected)
+    return actual == expected
 
 
 def test_key_prefix() -> None:
@@ -77,21 +173,35 @@ def test_inventory_matches() -> None:
     for key, (kind, default, _category, _group) in INVENTORY.items():
         d = reg.get_definition(key)
         assert d.kind.value.upper() == kind, f"{key}: kind {d.kind!r} != {kind!r}"
-        assert d.default == default, f"{key}: default {d.default!r} != {default!r}"
-        assert reg.get_value(key) == default, f"{key}: value {reg.get_value(key)!r} != {default!r}"
+        assert _same_default(d.default, default), f"{key}: default {d.default!r} != {default!r}"
+        value = reg.get_value(key)
+        assert _same_default(value, default), f"{key}: value {value!r} != {default!r}"
 
 
 def test_no_secret_settings() -> None:
-    """NFR-002: settings contain no passwords or tokens."""
+    """NFR-002: settings hold no password/secret/credential key outside the named exemption.
+
+    The exemption list is the documented NFR-002 exception (LQ-01 (a)); every other key keeps
+    the full name check, and a string value never carries a scheme-prefixed connection string
+    (an empty value is the absence of a value, not a secret — mail registers ``smtp_username``
+    and ``smtp_password`` with the empty-string default).
+
+    The keys are read from **the registry this guard built**, not from ``INVENTORY`` (S6.2
+    finding F-2): a credential-named key registered by a feature that has no ``INVENTORY`` row
+    would otherwise pass NFR-002 and every inventory guard, because both sides of the check
+    would be the same hand-written table.
+    """
     reg = _registry_with_all_features()
-    for key in INVENTORY:
-        lowered = key.lower()
-        assert "password" not in lowered
-        assert "secret" not in lowered
-        assert "credential" not in lowered
+    keys = {view.key for view in reg.views()}
+    named = {key for key in keys if any(part in key.lower() for part in _SECRET_NAME_PARTS)}
+    assert named == set(NFR_002_CREDENTIAL_EXEMPTIONS), (
+        "NFR-002: a settings key named like a password/secret/credential must be an exempted "
+        f"credential setting by name; found {sorted(named)}, exempted {sorted(NFR_002_CREDENTIAL_EXEMPTIONS)}"
+    )
+    for key in keys:
         value = reg.get_value(key)
-        if isinstance(value, str):
-            assert value and "://" not in value[:4]
+        if isinstance(value, str) and value:
+            assert "://" not in value[:4], f"NFR-002: {key} holds a connection string"
 
 
 def test_inventory_backward_compatible() -> None:

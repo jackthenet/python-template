@@ -474,7 +474,7 @@ migrations/
 .agents/ — 17 files (skills)
 .github/ — 9 files (CI and tooling)
 .vscode/ — 2 files
-docs/ — 236 files (process record)
+docs/ — 237 files (process record)
 userdocs/ — 2 files (published docs)
 
 ## Packages
@@ -1352,7 +1352,7 @@ Typed events for the session-management feature (docs/specs/session-management.m
 #### src/backend/sessionmanagement/feature_actions.py (30 lines)
 Feature-owned permission action declarations (docs/specs/user-roles-permissions.md, D3).
 - def `register_actions(catalog: PermissionCatalog) -> None`: Register the sessionmanagement actions (permission key -> description).
-#### src/backend/sessionmanagement/feature_settings.py (58 lines)
+#### src/backend/sessionmanagement/feature_settings.py (61 lines)
 Feature-owned settings registration for session-management (REQ-019).
 - @logged(slow_threshold_ms=5) def `register_settings(registry: SettingsRegistry) -> None`: Register the session-management feature's settings with registry (REQ-019).
 #### src/backend/sessionmanagement/models.py (30 lines)
@@ -1463,7 +1463,7 @@ Frozen Pydantic models for the settings feature.
 - def `is_valid_value(kind: SettingKind, value: Any, *, slider_min: float | None=None, slider_max: float | None=None, slider_step: float | None=None, select_options: tuple[str, ...] | None=None, pattern: str | None=None, min_length: int | None=None, max_length: int | None=None, min_value: float | None=None, max_value: float | None=None, list_spec: ListSpec | None=None) -> bool`: Return True iff value is valid for kind with the given params.
 - def `value_valid_for(d: SettingDefinition, value: Any) -> bool`: Return True iff value is valid for the setting d.
 - def `is_template_name_valid(name: str) -> bool`: Return True iff name matches the template name format.
-#### src/backend/settings/registry.py (467 lines)
+#### src/backend/settings/registry.py (473 lines)
 The settings registry.
 - @logged_class(slow_threshold_ms=250) class `SettingsRegistry`: Central registry of typed settings with template support.
   - `__init__(self, event_bus: EventBus | None=None, template_repository: TemplateRepository | None=None, value_repository: ValueRepository | None=None, permission_service: PermissionChecker | None=None) -> None`: Build a registry over the injected seams, falling back to the shared defaults.
@@ -1671,7 +1671,7 @@ The user-management service (use cases, domain rules, events).
   - @requires_permission('usermanagement.deactivate_user') `deactivate_user(self, user_id: UUID, principal: Principal=_SYSTEM_PRINCIPAL) -> UserRead`: Clear is_active, guarded first: the last active admin raises :class:LastAdminError (AC-018).
 
 ### src/
-#### src/main.py (239 lines)
+#### src/main.py (264 lines)
 Application entrypoint (the composition root).
 
 ### `tests.acceptance.authentication` — tests/acceptance/authentication/

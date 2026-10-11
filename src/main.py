@@ -17,6 +17,7 @@ settings methods); both are broken with lazy proxies so the shared instances are
 wired into both sides.
 """
 
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -34,14 +35,19 @@ from backend.eventbus import get_event_bus
 from backend.eventbus import register_settings as register_eventbus_settings
 from backend.filemanagement import (
     FileService,
-    LocalDiskStorageBackend,
     SqliteFileRepository,
     build_file_source,
+)
+from backend.filemanagement import (
+    register_settings as register_filemanagement_settings,
 )
 from backend.filemanagement.feature_actions import register_actions as register_filemanagement_actions
 from backend.logging import register_settings as register_logging_settings
 from backend.logging import setup_logger
 from backend.mail import MailService
+from backend.mail import (
+    register_settings as register_mail_settings,
+)
 from backend.mail.feature_actions import register_actions as register_mail_actions
 from backend.permissions import (
     BOOTSTRAP_SYSTEM_PERMISSIONS,
@@ -62,6 +68,9 @@ from backend.search import (
     register_settings as register_search_settings,
 )
 from backend.sessionmanagement import SessionService, build_session_source
+from backend.sessionmanagement import (
+    register_settings as register_sessionmanagement_settings,
+)
 from backend.sessionmanagement.feature_actions import register_actions as register_sessionmanagement_actions
 from backend.settings import (
     SettingsRegistry,
@@ -187,13 +196,27 @@ _permission_service_proxy.set_service(_permission_service)
 # the settings-read keys cover the live settings reads at startup.
 _permission_service.set_system_permissions(BOOTSTRAP_SYSTEM_PERMISSIONS | {"settings.has", "settings.get_value"})
 
-# --- Register every feature's settings ---
-register_logging_settings(_shared_settings_registry())
-register_authentication_settings(_shared_settings_registry())
-register_usermanagement_settings(_shared_settings_registry())
-register_eventbus_settings(_shared_settings_registry())
-register_permissions_settings(_shared_settings_registry())  # REQ-019: the permissions.system_principal alias
-register_search_settings(_shared_settings_registry())  # search feature
+# --- Register every feature's settings (REQ-002 / AC-003, settings-public-registry-setter REQ-011) ---
+# Every settings-owning feature, in one ordered list, registered by the loop below. The
+# list is data-driven so a feature cannot be silently left unregistered: the defect this
+# replaces was six named one-liners, which left filemanagement, mail and sessionmanagement
+# out of the live registry while every read fell through the REQ-005 hardcoded fallback.
+# Each callable is imported from its feature's package root (the seam the REQ-011 witness
+# spies) and each call reads the shared instance back through the getter, never a local
+# handle — and the install above still precedes every registration.
+_SETTINGS_REGISTRATIONS: tuple[Callable[[SettingsRegistry], None], ...] = (
+    register_logging_settings,
+    register_authentication_settings,
+    register_usermanagement_settings,
+    register_eventbus_settings,
+    register_permissions_settings,  # REQ-019: the permissions.system_principal alias
+    register_search_settings,  # search feature
+    register_filemanagement_settings,
+    register_mail_settings,
+    register_sessionmanagement_settings,
+)
+for register_settings in _SETTINGS_REGISTRATIONS:
+    register_settings(_shared_settings_registry())
 
 # --- The shared UserManager (one of the six services) ---
 _user_repository = SqliteUserRepository("sqlite:///./data/usermanagement/users.db")
@@ -210,9 +233,11 @@ _auth_service = AuthService(
     permission_service=_permission_service,
 )
 _file_repository = SqliteFileRepository("sqlite:///./data/filemanagement.db")
+# No StorageBackend is passed (file-management REQ-015 / AC-029): the composed service
+# builds its LocalDiskStorageBackend from the live filemanagement.storage_root setting on
+# every operation, so the root is a setting and never a hard-coded path.
 _file_service = FileService(
     _file_repository,
-    LocalDiskStorageBackend("./data/files"),
     settings_registry=_shared_settings_registry(),
     permission_service=_permission_service,
 )

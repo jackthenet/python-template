@@ -1,5 +1,11 @@
 """Composition-root integration witnesses for the public install operation.
 
+The module also carries the composition-root half of ``docs/specs/file-management.md``
+REQ-015 / AC-029 (v3): the ``FileService`` the composition root builds MUST be passed no
+``StorageBackend``. It lives here because this is the only witness that AST-parses
+``src/main.py``, and the file-management acceptance test proves the *service-level* default
+path, never the composed one (S6.2 finding F-1).
+
 Spec: ``docs/specs/settings-public-registry-setter.md`` REQ-011 / AC-016 (citing
 ``docs/specs/settings-coverage.md`` REQ-002 unchanged — the read-back rule is what makes
 its "using the shared registry from ``get_settings_registry()``" wording literally true).
@@ -32,6 +38,17 @@ _MAIN = _SRC / "main.py"
 
 # The local handle REQ-011 removes from src/main.py's consumer sites.
 _HANDLE = "_settings_registry"
+
+# file-management.md REQ-015 / AC-029 (v3): "the composition root passes **no** backend, so the
+# storage root it writes to is the live ``filemanagement.storage_root`` value and never a
+# hard-coded path". D-4 removed the ``LocalDiskStorageBackend("./data/files")`` argument; this
+# guard is what stops it coming back — the registered default is the same ``./data/files``, so
+# re-adding the literal would leave the rest of the suite GREEN with the setting inert again.
+_FILE_SERVICE = "FileService"
+
+# ``FileService(repository, backend=None, ...)`` — the backend is the second parameter, so a
+# positional backend is exactly ``args[1]``.
+_FILE_SERVICE_BACKEND_PARAM = "backend"
 
 # One settings key per feature whose ``register_*_settings`` call the composition root
 # makes (settings-coverage.md REQ-002): each must be registered in the shared instance.
@@ -181,6 +198,42 @@ def _consumer_sites_passing_the_handle() -> list[int]:
         if passed:
             sites.append(node.lineno)
     return sites
+
+
+def _file_service_calls() -> list[ast.Call]:
+    """The ``FileService(...)`` constructions in ``src/main.py`` (REQ-015 / AC-029)."""
+    tree = ast.parse(_MAIN.read_text(encoding="utf-8"))
+    calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+        if name == _FILE_SERVICE:
+            calls.append(node)
+    return calls
+
+
+def test_file_management_req_015_composition_root_passes_no_backend() -> None:
+    """file-management.md REQ-015 / AC-029 (v3): the composition root constructs its
+    ``FileService`` with no ``StorageBackend`` — positional or keyword — so the storage root it
+    writes to is the live ``filemanagement.storage_root`` setting and never a hard-coded path.
+
+    The D-4 guard (S6.2 finding F-1): ``test_ac_029_default_local_backend`` builds its own
+    ``FileService(…, backend=None, …)`` and never reads ``src/main.py``, so without this witness
+    the amended REQ-015 clause was un-guarded.
+    """
+    calls = _file_service_calls()
+    assert len(calls) == 1, f"expected exactly one FileService construction in src/main.py, found {len(calls)}"
+    call = calls[0]
+    passed = [node.lineno for node in call.args[1:2]] + [
+        kw.value.lineno for kw in call.keywords if kw.arg == _FILE_SERVICE_BACKEND_PARAM
+    ]
+    assert passed == [], (
+        "file-management REQ-015 / AC-029: src/main.py must pass FileService no StorageBackend"
+        f" (backend argument at line(s) {passed}); the composed service builds its"
+        " LocalDiskStorageBackend from the live filemanagement.storage_root setting"
+    )
 
 
 def test_ac_016_main_installs_through_setter(tmp_path: Path) -> None:
