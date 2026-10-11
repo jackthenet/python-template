@@ -95,7 +95,7 @@ Measured: `mail.smtp_password` (`src/backend/mail/feature_settings.py:101`) is t
 
 ## 4. Spec amendments — all in this change's own PR (Q-02, Q-11, Q-13, Q-26, Q-27)
 
-**No separate Spec Amendment PR is opened** (explicit user answers at Q-02 and Q-27). The five approved specs are amended **in place, in this PR**, as wording fixes so the spec matches the fixed behaviour; each amended file gets a `## Changelog` line at its top (all five already have that section at line 3). AGENTS.md's Spec Amendment Workflow is deliberately overridden by the user for this change; the override and its reason are recorded here.
+**No separate Spec Amendment PR is opened** (explicit user answers at Q-02 and Q-27). The **six** approved specs are amended **in place, in this PR**, as wording fixes so the spec matches the fixed behaviour; each amended file gets a `## Changelog` line at its top (all six already have that section at line 3). The sixth — `structlog-logging.md` — is not one of the five the P.3 answers anticipated; it is added at **S4.3** because the D-5 fix moves a count that spec states (last row below, §6.1.1). AGENTS.md's Spec Amendment Workflow is deliberately overridden by the user for this change; the override and its reason are recorded here.
 
 | Spec | Amendment |
 |---|---|
@@ -105,6 +105,7 @@ Measured: `mail.smtp_password` (`src/backend/mail/feature_settings.py:101`) is t
 | `session-management.md` | model block `:132,134,136`: `category="sessionmanagement"` → `category="security"` (Q-26) **and `group="sessionmanagement"` added** — the block states no `group`, and REQ-018 requires `group` = feature name (§5.2) |
 | `settings-coverage.md` — **NFR-002** | NFR-002 (`:222`) amended to the Q-27 wording decided at **LQ-01 (a)**: no credential or token may appear in log records or events, and a setting explicitly declared as a credential **may** be persisted; `mail.smtp_password` is named as the accepted transport-credential exception (decision recorded on `main` at `093f2ff`) |
 | `file-management.md` | **REQ-015 + AC-029 wording amended** (Q-24, Q-26): they now state that the composition root passes **no** `StorageBackend`, so its file storage root is the live `filemanagement.storage_root` setting and never a hard-coded path. (The P.4 row said "no wording change" — that held only for the category/group fix; Q-24/Q-26 decided the wiring wording here.) |
+| `structlog-logging.md` | **AC-009 wording amended at S4.3**: the criterion no longer hardcodes "each of the 42 one-off statements" — it now states the invariant (every one-off statement the AC-009 witness counts in the four named files is written through `get_logger()`) and keeps the count as the witness's **measured** figure (43 today: 19 + 11 + 11 + 2), so a requirement of another spec that adds a statement moves the figure without amending this one. REQ-005's per-file count for `registry.py` is refreshed **18 → 19** to match the measured state. Changelog **v3**; no ID changed, the migration requirement itself is unchanged. |
 
 ## 5. Reproduction plan (Phase 3)
 
@@ -201,6 +202,7 @@ uv run pytest tests/acceptance/settings_coverage tests/contract/settings_coverag
 | `docs/specs/user-roles-permissions.md` | model block category + Changelog |
 | `docs/specs/session-management.md` | model block category + Changelog |
 | `docs/specs/file-management.md` | REQ-015/AC-029 wiring wording + Changelog (Q-24, Q-26) |
+| `docs/specs/structlog-logging.md` | **S4.3:** AC-009 wording (measured count, not a fixed 42) + REQ-005 per-file count 18 → 19 + Changelog v3 (§4, §6.1.1) |
 | `STRUCTURE.md` | regenerated with the `src/main.py` edit in the **same commit** (AGENTS.md; skill `code-structure-map`) |
 | `CHANGELOG.md` | one entry under `## [Unreleased]` → `Fixed` (and `Changed` for the category fix), moved to `## [1.2.1]` in the bump commit |
 | `pyproject.toml` | `patch` bump `1.2.0 → 1.2.1` at S6.4 |
@@ -223,7 +225,7 @@ The minimal fix for **D-1, D-3, D-4, D-5** is implemented in four `src/` files; 
 | `src/backend/sessionmanagement/feature_settings.py` | **D-3** — the three `sessionmanagement.*` definitions: `category="sessionmanagement"` → `category="security"` **and `group="sessionmanagement"` added** (`register_feature` never sets `group`, §5.2). Keys, kinds, defaults and `min_value` unchanged. |
 | `src/backend/settings/registry.py` | **D-5 / REQ-023** — `register()` emits **one `WARNING`** when the loaded persisted value differs from the definition default. The record names the **key only** (message text + `key=` field), never the persisted value and never the default (Q-28 + the amended NFR-002: `mail.smtp_password` is a persisted credential). A persisted value equal to the default emits nothing; the REQ-011/REQ-022 precedence itself is unchanged. |
 | `tests/acceptance/sessionmanagement/test_settings.py` | Re-derived from the **amended** `session-management.md` model block (v3): `category == "security"` **and** `group == "sessionmanagement"` (was `category == "sessionmanagement"`). A narrowing to what AC-039 + settings-coverage REQ-018 state — not a weakening (§3 D-3, §9). |
-| `tests/acceptance/logging_coverage/test_statements_via_feature.py` | Re-counted for the new `registry.py` statement: `_AC_009_STATEMENTS["src/backend/settings/registry.py"]` **18 → 19**, and with it `_AC_009_TOTAL_STATEMENTS` **42 → 43** (the table guard `sum(...) == total` fails if only the per-file count moves), plus the two per-file counts in the docstring/comment. **Finding for Phase 6:** `docs/specs/structlog-logging.md` AC-009 still states "each of the 42 one-off statements" — REQ-023 adds the 43rd statement, and `structlog-logging.md` is **not** one of the five specs this change amends (§4). The count is a spec-wording drift, not a weakened assertion: the guard mechanism is byte-for-byte unchanged and now checks 19 + 11 + 11 + 2 = 43. |
+| `tests/acceptance/logging_coverage/test_statements_via_feature.py` | Re-counted for the new `registry.py` statement: `_AC_009_STATEMENTS["src/backend/settings/registry.py"]` **18 → 19**, and with it `_AC_009_TOTAL_STATEMENTS` **42 → 43** (the table guard `sum(...) == total` fails if only the per-file count moves), plus the two per-file counts in the docstring/comment. **Finding for Phase 6:** `docs/specs/structlog-logging.md` AC-009 still states "each of the 42 one-off statements" — REQ-023 adds the 43rd statement, and `structlog-logging.md` is **not** one of the five specs this change amends (§4). The count is a spec-wording drift, not a weakened assertion: the guard mechanism is byte-for-byte unchanged and now checks 19 + 11 + 11 + 2 = 43. **RESOLVED at S4.3** — `structlog-logging.md` AC-009/REQ-005 amended (v3, §4, §6.1.1). |
 | `STRUCTURE.md` | Regenerated with `uv run python scripts/make_map.py` **in the same commit** as the `src/main.py` edit (AGENTS.md; skill `code-structure-map`): the `docs/ 234 → 235` drift §5.3 recorded, plus the line counts of the four changed modules. |
 
 **GREEN evidence** (targeted — AGENTS.md "Targeted GREEN"; the full suite and the whole-repo ruff sweep are **Phase 5** gates and were not run here):
@@ -270,6 +272,45 @@ uv run python scripts/make_map.py --check           → exit 0
 | REQ-011 / AC-016 (regression guard on the loop) | `tests/integration/singleton_install/test_composition_root.py::test_ac_016_main_installs_through_setter` and `::test_installed_registry_serves_feature_registration` — both still `[True, …, True]` with the loop: the six spied modules are still spied through their package roots, the install still precedes the registrations, and the source scan still finds no consumer site passed the local `_settings_registry` handle |
 
 **State machine: `RED_CONFIRMED → GREEN`.** Next atomic step: S4.3 (refactor, keep GREEN).
+
+### 6.1.1 S4.3 (2026-10-11) — refactor (GREEN kept) + the AC-009 finding resolved
+
+**(a) Refactor — one change, everything else reviewed and left alone.**
+
+| File | Decision |
+|---|---|
+| `src/backend/settings/registry.py` | **Refactored.** The REQ-023 `WARNING` call is collapsed from four lines to one (119 chars, inside the 120 limit) so it matches its sibling in the same method (`_logger.warning(f"duplicate registration: key=…", key=…)`), and its why-comment is tightened from 5 lines to 3 with the content unchanged (key-only record, the credential reason, the amended NFR-002). Net **−5 lines**; the statement count the AC-009 witness counts is unchanged (still 19 in this module). |
+| `src/main.py` | **No change — already minimal.** The `_SETTINGS_REGISTRATIONS` tuple + loop is the data-driven shape Q-14 decided and the amended `settings-public-registry-setter` REQ-011 wording ("no hard-coded count") depends on; the comment states *why* (the six named one-liners left filemanagement, mail and sessionmanagement unregistered) and the two §9 constraints a later edit must not break (package-root imports, getter-not-handle, install-before-register). The loop variable is deliberately named `register_settings`: `test_composition_root.py::_consumer_sites_passing_the_handle()` classifies a call as a REQ-011 consumer site by the name pattern `register_*_settings`, so renaming it (e.g. `register`) would silently drop all nine registration call sites from that witness. The `tuple[Callable[[SettingsRegistry], None], ...]` annotation is kept — it is the single place pinning all nine callables to one signature. |
+| `src/main.py` imports | **No change.** The split `from backend.<feature> import (…)` / `from backend.<feature> import (register_settings as …)` pairs are ruff isort's `combine-as-imports = false` output (the pattern the file already used for authentication, search and usermanagement), not duplication — merging them would be undone by the linter. |
+| `src/backend/permissions/feature_settings.py`, `src/backend/sessionmanagement/feature_settings.py` | **No change.** The three repeated `category="security", group="sessionmanagement"` pairs are the explicit per-definition values settings-coverage REQ-018 states. Deriving `group` from the feature name inside `register_feature` would change behaviour for every feature — unspecified, and out of scope for this ISSUE (§10). |
+| — | No new abstraction, helper, module or dependency (AGENTS.md "Ponytail": boring over clever, no abstraction that was not requested). |
+
+**(b) AC-009 count drift — resolved (the sixth spec amended in this PR, §4).** `docs/specs/structlog-logging.md` **AC-009** no longer states "each of the **42** one-off statements": the criterion now names the invariant (every one-off statement the AC-009 witness counts in the four named files is written through `get_logger()`) and keeps the count as the witness's **measured** figure — 43 today, 19 + 11 + 11 + 2 — so a requirement of another spec that adds a one-off statement (settings-coverage REQ-023 did exactly that) moves the figure without amending this spec and without weakening the guard. **REQ-005**'s per-file count for `src/backend/settings/registry.py` is refreshed **18 → 19** in the same amendment, so the spec no longer contradicts its own witness. Changelog **v3 (2026-10-11)**; no ID changed, the migration requirement itself is unchanged. `tests/acceptance/logging_coverage/test_statements_via_feature.py` gets **comment-only** updates (the two comments that recorded the drift now record the amended wording); the guard mechanism — the `_AC_009_STATEMENTS` per-file table and the `sum(...) == _AC_009_TOTAL_STATEMENTS` guard — is byte-for-byte unchanged.
+
+**Gates (targeted — the full suite and the whole-repo ruff sweep stay Phase 5 gates).**
+
+```text
+uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py \
+     tests/acceptance/settings_coverage/test_persistence.py \
+     tests/acceptance/filemanagement/test_filemanagement.py::test_ac_029_default_local_backend \
+     tests/integration/singleton_install/test_composition_root.py \
+     tests/acceptance/sessionmanagement/test_settings.py -v
+    → 14 passed in 5.12s        (identical to the S4.2 / orchestrator re-run: 14 passed)
+
+uv run pytest tests/acceptance/logging_coverage tests/acceptance/settings_coverage tests/contract/settings_coverage -q
+    → 38 passed in 4.68s
+
+uv run ruff check src/backend/settings/registry.py tests/acceptance/logging_coverage/test_statements_via_feature.py
+    → All checks passed!        uv run ruff format <same two paths> → 2 files left unchanged
+uv run mypy src/                                    → Success: no issues found in 84 source files
+uv run python scripts/make_map.py                   → STRUCTURE.md regenerated in the same commit as the .py edit
+                                                       (src/backend/settings/registry.py 478 → 473 lines)
+uv run python scripts/make_map.py --check           → exit 0
+uv run python scripts/verify_spec.py docs/specs/structlog-logging.md → Traceability: PASS, exit 0
+uv run python scripts/check_traceability.py         → PASS (891 matrix rows, 136 spec IDs, 876 test functions), exit 0
+```
+
+**State machine: `GREEN` unchanged** (no observable behaviour change in (a); (b) is spec wording). Next atomic step: S4.4 (commit + status).
 
 ## 7. Inherited baseline on `main` (measured verbatim in this worktree)
 
