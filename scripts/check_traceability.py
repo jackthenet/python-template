@@ -58,70 +58,107 @@ def test_names(test_dir: Path) -> set[str]:
     return names
 
 
-def matrix_rows(matrix_path: Path) -> list[MatrixRow]:
-    """Parse the matrix tables, keeping only tables that have a Status column."""
-    rows: list[MatrixRow] = []
+def table_blocks(matrix_path: Path) -> list[list[tuple[int, list[str]]]]:
+    """Every pipe-table in the matrix as (line number, cells); the prose between tables is dropped."""
+    blocks: list[list[tuple[int, list[str]]]] = []
     block: list[tuple[int, list[str]]] = []
-
-    def flush(block: list[tuple[int, list[str]]]) -> None:
-        if len(block) < MIN_TABLE_LINES:
-            return
-        header = [c.strip().lower() for c in block[0][1]]
-        if "status" not in header:
-            return
-        status_idx = header.index("status")
-        for line_no, cells in block[2:]:
-            if len(cells) <= status_idx:
-                continue
-            text = " ".join(cells)
-            rows.append(
-                MatrixRow(
-                    line=line_no,
-                    ids=set(ID_RE.findall(text)),
-                    tests={t for t in (BACKTICK_RE.findall(text)) if TEST_NAME_RE.match(t.strip())},
-                    status=cells[status_idx],
-                )
-            )
-
     for line_no, line in enumerate(matrix_path.read_text(encoding="utf-8").splitlines(), start=1):
         stripped = line.strip()
         if stripped.startswith("|") and stripped.endswith("|"):
             block.append((line_no, [c.strip() for c in stripped.strip("|").split("|")]))
-        else:
-            flush(block)
+        elif block:
+            blocks.append(block)
             block = []
-    flush(block)
-    return rows
+    if block:
+        blocks.append(block)
+    return blocks
+
+
+def status_index(header: list[str]) -> int:
+    """Index of a table's Status column, or -1 when the table has none (such tables are not rows)."""
+    lowered = [cell.strip().lower() for cell in header]
+    return lowered.index("status") if "status" in lowered else -1
+
+
+def matrix_row(line_no: int, cells: list[str], status_idx: int) -> MatrixRow:
+    """One data row: the normative IDs and backticked test names it cites, plus its Status cell."""
+    text = " ".join(cells)
+    return MatrixRow(
+        line=line_no,
+        ids=set(ID_RE.findall(text)),
+        tests={t for t in BACKTICK_RE.findall(text) if TEST_NAME_RE.match(t.strip())},
+        status=cells[status_idx],
+    )
+
+
+def table_rows(block: list[tuple[int, list[str]]]) -> list[MatrixRow]:
+    """Data rows of one block; a block too short to be a table, or without a Status column, has none."""
+    if len(block) < MIN_TABLE_LINES:
+        return []
+    status_idx = status_index(block[0][1])
+    if status_idx < 0:
+        return []
+    return [matrix_row(no, cells, status_idx) for no, cells in block[2:] if len(cells) > status_idx]
+
+
+def matrix_rows(matrix_path: Path) -> list[MatrixRow]:
+    """Parse the matrix tables, keeping only tables that have a Status column."""
+    return [row for block in table_blocks(matrix_path) for row in table_rows(block)]
+
+
+def ids_without_row(matrix_path: Path, rows: list[MatrixRow], specs: set[str]) -> list[str]:
+    """Rule 1: every REQ/AC defined by a spec has at least one matrix row."""
+    referenced = {id_ for row in rows for id_ in row.ids}
+    return [
+        f"{id_} defined in docs/specs/ has no row in {matrix_path}"
+        for id_ in sorted(specs)
+        if REQ_OR_AC_RE.fullmatch(id_) and id_ not in referenced
+    ]
+
+
+def rows_citing_undefined_ids(matrix_path: Path, rows: list[MatrixRow], specs: set[str]) -> list[str]:
+    """Rule 2: no matrix row references an ID that no spec defines."""
+    return [
+        f"{matrix_path}:{row.line}: row references undefined {id_}" for row in rows for id_ in sorted(row.ids - specs)
+    ]
+
+
+def rows_citing_missing_tests(matrix_path: Path, rows: list[MatrixRow], tests: set[str]) -> list[str]:
+    """Rule 3: every backticked test function cited by a matrix row exists under tests/."""
+    return [
+        f"{matrix_path}:{row.line}: row references missing test {name}"
+        for row in rows
+        for name in sorted(row.tests - tests)
+    ]
+
+
+def status_token(status: str) -> str:
+    """The vocabulary token a Status cell starts with; the cell itself when it starts with no letters."""
+    match = STATUS_TOKEN_RE.match(status)
+    return match.group(0).upper() if match else status[:20]
+
+
+def rows_with_undeclared_status(matrix_path: Path, rows: list[MatrixRow]) -> list[str]:
+    """Rule 4: every Status cell uses a declared value."""
+    violations: list[str] = []
+    for row in rows:
+        if status_token(row.status) not in DECLARED_STATUSES:
+            violations.append(f"{matrix_path}:{row.line}: undeclared Status value {row.status!r}")
+    return violations
 
 
 def check(matrix_path: Path, rows: list[MatrixRow], specs: set[str], tests: set[str]) -> list[str]:
-    """Return one message per referential-integrity violation."""
-    violations: list[str] = []
-    referenced = {id_ for row in rows for id_ in row.ids}
+    """Return one message per referential-integrity violation.
 
-    # (1) every REQ/AC defined by a spec has at least one matrix row
-    for id_ in sorted(specs):
-        if REQ_OR_AC_RE.fullmatch(id_) and id_ not in referenced:
-            violations.append(f"{id_} defined in docs/specs/ has no row in {matrix_path}")
-
-    # (2) no matrix row references an ID that no spec defines
-    for row in rows:
-        for id_ in sorted(row.ids - specs):
-            violations.append(f"{matrix_path}:{row.line}: row references undefined {id_}")
-
-    # (3) every backticked test function in the matrix exists under tests/
-    for row in rows:
-        for name in sorted(row.tests - tests):
-            violations.append(f"{matrix_path}:{row.line}: row references missing test {name}")
-
-    # (4) every Status cell uses a declared value
-    for row in rows:
-        match = STATUS_TOKEN_RE.match(row.status)
-        token = match.group(0).upper() if match else row.status[:20]
-        if token not in DECLARED_STATUSES:
-            violations.append(f"{matrix_path}:{row.line}: undeclared Status value {row.status!r}")
-
-    return violations
+    The concatenation order IS the printed contract (Q-07): missing row → undefined ID →
+    missing test → undeclared Status value. Reordering it would change the CI log.
+    """
+    return (
+        ids_without_row(matrix_path, rows, specs)
+        + rows_citing_undefined_ids(matrix_path, rows, specs)
+        + rows_citing_missing_tests(matrix_path, rows, tests)
+        + rows_with_undeclared_status(matrix_path, rows)
+    )
 
 
 def main() -> int:

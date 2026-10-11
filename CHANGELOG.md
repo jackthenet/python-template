@@ -9,6 +9,32 @@ its `Bump version:` commit (the `0.1.0` section from the commit that set the ver
 
 ## [Unreleased]
 
+### Changed
+
+- The cognitive-complexity gate now covers `scripts/` alongside `src` and `tests`: `[tool.complexipy]
+  paths` gained the third path, and the `complexity` job in `.github/workflows/quality.yml` repeats the
+  three paths in its positional args
+  (`uv run complexipy src tests scripts --max-complexity-allowed 15`), so CI still fails loudly on a bad
+  config while a bare `uv run complexipy` now analyses 2 253 functions instead of 2 186. The ceiling is
+  unchanged at `max-complexity-allowed = 15` (`complexipy-scripts`).
+- The four `scripts/` functions above the ceiling were restructured to the ≤ 12 target by extracting
+  module-level helpers only, with byte-identical stdout and exit codes: `check_traceability.py::check`
+  17 → 0 and `matrix_rows` 19 → 2, `validate_task_dag.py::check_acyclic` 22 → 3,
+  `verify_spec.py::main` 22 → 3. `uv run complexipy scripts --max-complexity-allowed 15` went from
+  50 functions / 4 FAILED / exit 1 to 67 functions / 0 FAILED / exit 0; no test was added or changed, and
+  the three CI scripts' output is byte-witnessed against a baseline captured before the restructuring
+  (`complexipy-scripts`).
+- `docs/specs/structure-map.md` NFR-005 amended (v4): its tail "`scripts/` is not analyzed by complexipy"
+  is replaced by the widened gate scope, while its normative clause (the structure-map test files stay
+  under 15) is kept verbatim and its witness `test_nfr_005_complexipy_threshold_holds` is left untouched.
+  No ID was renumbered, restated or deleted; the amendment rides this change's PR under the Spec
+  Amendment Workflow (`complexipy-scripts`, ADR-087).
+- `docs/decisions/ADR-087-complexipy-scope-extended-to-scripts.md` (new) supersedes the `complexipy` row
+  of ADR-086 — its "widen: no" answer for `scripts/` and the sentence of its Decision that kept
+  `paths = ["src", "tests"]`. ADR-086 itself is not edited, and its other frozen scopes (coverage
+  `source` and `fail_under = 92`, bandit `-r src/`, `ty root = ["./src"]`) stand unchanged
+  (`complexipy-scripts`).
+
 ## [1.2.0] - 2026-10-10
 
 ### Added

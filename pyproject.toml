@@ -97,7 +97,7 @@ search = 'version = "{current_version}"'
 replace = 'version = "{new_version}"'
 
 [tool.complexipy]
-paths = ["src", "tests"]
+paths = ["src", "tests", "scripts"]
 max-complexity-allowed = 15
 
 [tool.coverage.run]

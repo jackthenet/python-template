@@ -7,7 +7,8 @@ One question file per change, created at **P.1 Frame** from this template and na
 - **Spec:** docs/specs/api-keys.md
 - **Opened:** 2026-10-03
 - **Status:** OPEN  <!-- OPEN | ALL ANSWERED — set OPEN by the orchestrator at P.1; ALL ANSWERED once every question in this file has an answer (the orchestrator records it together with the `QUESTIONS-ANSWERED` TODO advance) -->
-- **Answer rounds:** 0
+- **Answer rounds:** 1 (Q-01…Q-04 answered 2026-10-08; Q-05…Q-32 PENDING)
+- **P.2 completion pass:** 2026-10-11 — `- **Recommended:**` added to all 28 PENDING entries (the 4 ANSWERED entries keep their recorded recommendation and answer untouched), `- **Date:**` added per entry, the coverage table normalised to `### Category coverage`, **Q-32 (non-goals / scope boundary)** added, and every cited path, line reference and measured count re-verified against `main` — **18 stale or false citations corrected**, including the false "`session_lookup` is not wired" row, the "ADR numbering continues from ADR-081" claim and five wrong REQ ranges in the Impact Analysis.
 
 Every question that needs user input is recorded HERE — never in a central file. A step that needs input records **all** of its open questions in one batch and returns `BLOCKED-USER`; the orchestrator presents them (as few `ask_user_question` rounds as possible, <= 4 per round, most blocking first), records the answers here, marks each **ANSWERED** and **incorporated**, and relaunches the step **once** with the full answer set. The change is `WAITING` while its questions are unanswered — the orchestrator works on another change meanwhile, it does not idle.
 
@@ -40,10 +41,10 @@ Every question that needs user input is recorded HERE — never in a central fil
 
 | ID | Question (one line) | Blocking |
 |---|---|---|
-| Q-01 | Is the LLM-facing surface an HTTP server, or an in-process tool API + JSON-schema export (no server)? | yes (the central question; decides deps, ADRs, spec amendments) |
-| Q-02 | Does the change stay FEATURE, or is it reclassified CROSS-CUTTING now (branch rename, Impact Analysis, `minor`/`major` bump)? | yes (escalation verdict) |
-| Q-03 | How does a raw key become a `Principal` — api-keys resolves it, `Principal` gains scopes, or the key store plugs into permissions' `SessionLookup` seam? | yes (escalation verdict) |
-| Q-04 | On a key-driven call, which permission is checked — the target action, or an `apikeys.call` wrapper action? | yes |
+| Q-01 **(ANSWERED: B)** | Is the LLM-facing surface an HTTP server, or an in-process tool API + JSON-schema export (no server)? | yes (the central question; decides deps, ADRs, spec amendments) — **answered: FastAPI + uvicorn, which moved the HTTP boundary to `backend-api`** |
+| Q-02 **(ANSWERED: B)** | Does the change stay FEATURE, or is it reclassified CROSS-CUTTING now (branch rename, Impact Analysis, `minor`/`major` bump)? | yes (escalation verdict) — **answered: CROSS-CUTTING for the API change; this TODO stays FEATURE as the credential half** |
+| Q-03 **(ANSWERED: A)** | How does a raw key become a `Principal` — api-keys resolves it, `Principal` gains scopes, or the key store plugs into permissions' `SessionLookup` seam? | yes (escalation verdict) |
+| Q-04 **(ANSWERED: A)** | On a key-driven call, which permission is checked — the target action, or an `apikeys.call` wrapper action? | yes |
 | Q-05 | Who enforces the key's scopes, and at what single choke point? | yes |
 | Q-06 | Bootstrap: with no HTTP layer, how does the first key get created and who is allowed to create one? | yes |
 | Q-07 | Storage: a new `api_keys` table in its own SQLite file, or reuse authentication's `sessions` table? | yes |
@@ -71,6 +72,7 @@ Every question that needs user input is recorded HERE — never in a central fil
 | Q-29 | Confirm the test strategy: which invariants get Hypothesis property tests, and how the no-secret rule is asserted. | no |
 | Q-30 | Confirm the migration + `migrations/env.py` + deptry/CI consequences (and which of them only follow from Q-01). | no |
 | Q-31 | What is the `Depends on:` relationship to `notifications` (its Q-11 asks exactly this), and the ordering vs `structlog-logging`? | yes (schedule) |
+| Q-32 | What does api-keys **not** do in v1 — the explicit non-goals list the spec must state? | yes (the spec's Out of Scope section is normative) |
 
 ---
 
@@ -165,6 +167,7 @@ Every question that needs user input is recorded HERE — never in a central fil
 ### Q-05 — Who enforces scopes, and where?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -173,37 +176,41 @@ Every question that needs user input is recorded HERE — never in a central fil
 **Why needed:** It fixes the public API shape (is there a `ToolGateway`/`call()` entry point at all?) and where the audit row is written (the same choke point, or per feature).
 
 **Options:**
-- **A. One api-keys-owned gateway** (`ApiKeyService.call(raw_key, action, arguments, ...)` or a separate `ToolGateway` class in the feature) that resolves the key, checks the scope, writes the audit row, and invokes the target callable. Target callables are injected at construction by the composition root (the `_LazyUserManager` / `_LazyPermissionService` pattern, `src/main.py:129-130`), so no cross-feature import is introduced.
+- **A. One api-keys-owned gateway** (`ApiKeyService.call(raw_key, action, arguments, ...)` or a separate `ToolGateway` class in the feature) that resolves the key, checks the scope, writes the audit row, and invokes the target callable. Target callables are injected at construction by the composition root (the `_LazyUserManager` / `_LazyPermissionService` pattern — proxies built at `src/main.py:148-149`, classes at `:111` and `:135`), so no cross-feature import is introduced.
 - **B. Return a principal + scope set and let each caller enforce** — no gateway; every consumer re-implements the check.
 - **C. Enforce inside the permission service** (Q-03 B).
 
 **Recommendation:** **A.** One choke point means one audit write, one scope check, one denial path, and it is the only way the "exactly one audit row per call" acceptance signal is enforceable. Inject the action → callable map at the composition root (the repo already breaks feature cycles that way).
+- **Recommended:** **A** — one api-keys-owned gateway choke point: one scope check, one audit write, one denial path, and no cross-feature import.
 
 ---
 
 ### Q-06 — Bootstrap: how does the first key get created?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
-**Context:** With Q-01 = A there is no HTTP request to authenticate, so key creation is an in-process call. Every enforced method defaults to the **system principal** (`Principal()` with `user_id=None`, `src/backend/shared/principal.py:21-29`, EDGE-022), and the composition root seeds `BOOTSTRAP_SYSTEM_PERMISSIONS` (`src/backend/permissions/models.py`) — so an in-process `create_key()` call is effectively unauthenticated unless something else gates it. A key's `user_id` must reference a real user (the owner), which requires `usermanagement.create_user`-level trust.
+**Context:** With Q-01 = A there is no HTTP request to authenticate, so key creation is an in-process call. Every enforced method defaults to the **system principal** (`Principal()` with `user_id=None`, `src/backend/shared/principal.py:21-32`, EDGE-022), and the composition root seeds `BOOTSTRAP_SYSTEM_PERMISSIONS` (`src/backend/permissions/models.py`) — so an in-process `create_key()` call is effectively unauthenticated unless something else gates it. A key's `user_id` must reference a real user (the owner), which requires `usermanagement.create_user`-level trust.
 
 **Why needed:** It decides the trust model of the whole feature: who may mint credentials, and whether an LLM that holds one key can mint a second, wider one.
 
 **Options:**
 - **A. `apikeys.create_key` is a normal catalog action**, enforced like any other; only a principal whose roles include it (i.e. an admin) may create keys, and the caller names the owner `user_id`.
 - **B. ADR-documented bootstrap only:** key creation is permitted for the system principal (composition root / an operator script) and **never** for a key-derived principal — a key can use, list and revoke its own key but cannot mint keys.
-- **C. Exchange credentials for a key** (`login` → session token → `create_key` carrying that token) — requires the `session_lookup` wiring that is currently missing (see Q-03).
+- **C. Exchange credentials for a key** (`login` → session token → `create_key` carrying that token) — technically available today: the `session_lookup` wiring this needs is in place (`src/main.py:171-176`); the caller-authentication path belongs to `backend-api`.
 - **D. A CLI/`scripts/` entry point** for operators (precedent: the `structure-map` TODO ships a CLI as its own FEATURE).
 
-**Recommendation:** **A + B combined.** `apikeys.create_key` is a catalog action (so it is enforceable and auditable), and the spec states normatively that a principal resolved **from a key** may never call the key-minting actions — a key cannot escalate or clone itself. Bootstrap for the very first key is the documented system-principal path (composition root / operator code), recorded in the spec's security section and covered by an EDGE. Reject C for v1 (it needs the missing `session_lookup` wiring); reject D as a separate change (YAGNI — the in-process call is the API).
+**Recommendation:** **A + B combined.** `apikeys.create_key` is a catalog action (so it is enforceable and auditable), and the spec states normatively that a principal resolved **from a key** may never call the key-minting actions — a key cannot escalate or clone itself. Bootstrap for the very first key is the documented system-principal path (composition root / operator code), recorded in the spec's security section and covered by an EDGE. Reject C for v1 — not because the wiring is missing (it is not: `session_lookup` is wired at `src/main.py:176`) but because the credential-exchange path belongs to `backend-api` after the 2026-10-08 re-scope; reject D as a separate change (YAGNI — the in-process call is the API).
+- **Recommended:** **A + B** — `apikeys.create_key` is a normal catalog action, but a principal resolved *from a key* may never mint keys; the first key comes from the documented system-principal path.
 
 ---
 
 ### Q-07 — Storage: new `api_keys` table, or reuse the `sessions` table?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -217,12 +224,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Same DB as permissions** (`./data/permissions.db`) but separate tables.
 
 **Recommendation:** **A.** The TODO already flags the risk ("two token stores drifting into two half-implemented revocation models") — B *creates* that drift in the worst direction: session-management's cap eviction, `LoginSucceeded` handling and `cleanup_expired` would start touching machine credentials, and session-management's own constraint "no activity tracking, no `last_seen_at`" (`docs/specs/session-management.md` Constraints) directly contradicts api-keys' `last_used_at`. A keeps both specs' semantics intact and is the per-feature-DB convention. C is acceptable but buys nothing.
+- **Recommended:** **A** — a separate `api_keys` table keeps session-management's cap/revocation semantics and its "no activity tracking" constraint intact; B would make both specs lie.
 
 ---
 
 ### Q-08 — Feature-local audit log, or a shared audit capability?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -236,12 +245,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. No storage at all** — publish `ApiKeyCalled`/`ApiKeyCallDenied` events and let the loguru log be the audit trail.
 
 **Recommendation:** **A.** The TODO's acceptance signal ("every call leaves exactly one audit row naming key id, action and outcome, queryable per key") requires storage, and only the gateway sees both the key and the outcome, so the log belongs to api-keys. **C fails the acceptance signal** (a loguru line is not queryable per key). **B is a different, much larger change** — if the user wants a general audit trail, it should be its own CROSS-CUTTING change that later absorbs this table; say so in the spec's Out of Scope.
+- **Recommended:** **A** — only the gateway sees both the key and the outcome, and the acceptance signal needs a per-key queryable table, not a log line.
 
 ---
 
 ### Q-09 — How are per-action tool schemas derived?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -255,16 +266,18 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Refactor every action to take a single pydantic request model**, then export `Model.model_json_schema()`.
 
 **Recommendation:** **A.** Zero new dependencies, zero drift, and it reuses the catalog the repo already builds at startup (the TODO's "derived from the real catalog"). Accept and document the honest limits as EDGEs: `Any`/untyped parameters export as `{}`; `UUID`/`datetime`/`Enum` map to their pydantic JSON-schema forms; defaults are reported as schema defaults; `**kwargs`-style parameters are excluded. **C is a large, separate refactor** (it would touch every feature's public API and its tests) and must not be smuggled into this change. **B** is exactly the drift the acceptance signal forbids.
+- **Recommended:** **A** — signature introspection over the catalog the composition root already builds: no new dependency, no hand-written table to drift.
 
 ---
 
 ### Q-10 — May scopes contain wildcards?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
-**Context:** The grant grammar already allows feature-level wildcards: `_grant_matches` treats a grant ending in `.*` as a prefix match, and `_is_valid_grant_key` accepts a catalog action or `<feature>.*` where the feature is in `catalog.features()` (`src/backend/permissions/service.py:78-90, 485-495`; REQ-003, D18).
+**Context:** The grant grammar already allows feature-level wildcards: `_grant_matches` treats a grant ending in `.*` as a prefix match, and `_is_valid_grant_key` accepts a catalog action or `<feature>.*` where the feature is in `catalog.features()` (`src/backend/permissions/service.py:83-90` (`_grant_matches`) and `_is_valid_grant_key` (`:519-524`, called from `_check` at `:349`); REQ-003, D18).
 
 **Why needed:** It decides the scope validation rule, the `key_capabilities` expansion (a wildcard must expand to a concrete action list for the client), and whether `*` / `*.*` / partial wildcards (`usermanagement.list_*`) are legal.
 
@@ -274,16 +287,18 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Grant grammar plus a global `*`** (all actions the owner has).
 
 **Recommendation:** **A.** Reusing the existing grammar means one validator, no new vocabulary (the TODO's "never invent permission names"), and least surprise for anyone who already understands grants. `describe_actions()`/`key_capabilities()` must return the **expanded concrete action list**, never the raw wildcard, so the client's view is exact. Reject C: a global `*` is a role-level decision, not a credential-level one.
+- **Recommended:** **A** — reuse the grant grammar's `<feature>.*` wildcard (one validator, no new vocabulary), but always report the expanded concrete action list.
 
 ---
 
 ### Q-11 — Effective grant set, and creation-time validation of scopes?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
-**Context:** The TODO fixes the semantics: effective grants = key scopes ∩ the owner's role grants, so revoking a role tightens existing keys immediately (the permission service re-reads grants on every check — `docs/specs/user-roles-permissions.md` REQ-011/AC-005: "Immediate effect on the next check (no re-login, no cache)", `tests/acceptance/permissions/test_check_api.py:915-918`).
+**Context:** The TODO fixes the semantics: effective grants = key scopes ∩ the owner's role grants, so revoking a role tightens existing keys immediately (the permission service re-reads grants on every check — `docs/specs/user-roles-permissions.md` REQ-014 / AC-016: "Immediate effect on the next check (no re-login, no cache)", `tests/acceptance/permissions/test_check_api.py:872-918` (`test_grant_change_takes_effect_immediately`)).
 
 **Why needed:** It decides whether `create_key` rejects a scope the owner does not currently hold (fail-fast, but breaks "grant the role later" workflows) or accepts it (the intersection silently decides at call time), and what `key_capabilities` reports when the two sets differ.
 
@@ -293,12 +308,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Accept with a WARNING** recorded (log + event) that the scope is currently inert.
 
 **Recommendation:** **A + C's warning.** A matches the repo's live-check, no-cache model and keeps role grants the authority (a key can never exceed the owner — that is INV-territory). The warning is one log line and makes the "why is this key denied?" question answerable. `key_capabilities` MUST report the effective (intersected) list, never the raw scopes — otherwise the client is told something the backend will refuse.
+- **Recommended:** **A + C's warning** — effective grants are scopes ∩ the owner's live roles (a key can never exceed its owner), plus one log line when a scope is already denied.
 
 ---
 
 ### Q-12 — Revocation cascade for keys?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -312,12 +329,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Never cascade** — keys are independent credentials an admin revokes explicitly.
 
 **Recommendation:** **A.** A deleted or deactivated account must not retain machine access (a deactivated user's key still working would contradict `inactive_user` denial semantics — the permission service already denies inactive users, so B's password-change leg is the only real question). Password change is a *human* credential rotation; silently killing production automation keys is a surprising side effect, and the spec should instead state that rotating a leaked key is an explicit `revoke_key` (which works by id, without knowing the secret — TODO requirement). Implement as subscriptions inside api-keys (ADR-064 pattern), no user-management change.
+- **Recommended:** **A** — keys die on user deletion/deactivation through subscriptions inside api-keys; a password change must not silently kill production automation.
 
 ---
 
 ### Q-13 — Expiration: optional per key, default TTL?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -331,12 +350,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Mandatory expiry** on every key.
 
 **Recommendation:** **A**, with the cap in place so an operator can force expiry policy without touching the feature. Expired keys are **kept and denied** (like revoked ones) so the audit trail stays queryable per key; a separate `cleanup_expired`-style pruning step (Q-21) removes old rows. C contradicts the TODO's "optional expiration".
+- **Recommended:** **A** — expiry optional per key, capped by `apikeys.max_ttl_days`; expired keys are kept and denied so the audit trail stays queryable per key.
 
 ---
 
 ### Q-14 — `last_used_at`: stored column or derived from the audit table?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -350,12 +371,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Stored column, coalesced** (only written when it lags by more than N seconds).
 
 **Recommendation:** **A.** It is the smaller implementation, it cannot drift from the audit trail (one source of truth), it keeps the hot path to a single INSERT, and it makes the audit log the authority — which is what the acceptance signal already requires. Mark the ceiling honestly (`ponytail:` comment: the per-key last-used query is an indexed `MAX` over the audit table; upgrade path = a materialized column if the audit table grows past the NFR budget). If the user prefers B, C is the acceptable variant (never an unconditional per-call UPDATE).
+- **Recommended:** **A** — derive `last_used_at` from the audit table: one source of truth, one INSERT on the hot path, no drift between the two.
 
 ---
 
 ### Q-15 — Key format and prefix?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -369,12 +392,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. A structured key** `ak_<key id>_<secret>` (GitHub-style, lets lookup skip a table scan).
 
 **Recommendation:** **A.** The prefix costs one string concat, makes a leaked key recognizable (and lets a secret scanner / log scrubber pattern-match it), and keeps the hash lookup exactly as it is for sessions. **C is unnecessary** — the lookup is already an indexed unique `token_hash` equality, so embedding the id buys nothing (YAGNI). Normative rule for the spec: never normalize, trim, case-fold or strip the prefix before hashing — the whole presented string is the secret (an EDGE for "prefix stripped by the client").
+- **Recommended:** **A** — an `ak_` prefix over `new_token()`/`hash_token()` unchanged: a recognizable secret, the same indexed hash equality lookup.
 
 ---
 
 ### Q-16 — Whose keys may a caller list and revoke?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -388,12 +413,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Admin-only management** (a key can never manage keys).
 
 **Recommendation:** **A + C's key-derived restriction from Q-06.** A key may list and revoke **itself and its own owner's keys only** — and per Q-06, minting keys requires a non-key principal. Idempotent revoke (unknown id → no-op, no exception) matches REQ-008 and makes rotation scripts safe. Record the "neither/both arguments" EDGE as `ValueError`, matching session-management's no-new-exceptions stance (Q-24).
+- **Recommended:** **A + C** — a key lists and revokes only its own owner's keys; the admin path is the key-management actions, and revoke stays idempotent.
 
 ---
 
 ### Q-17 — Per-user key cap: reject or evict?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -407,12 +434,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. No cap.**
 
 **Recommendation:** **A.** Silent eviction of a machine credential is the worst failure mode of this whole design (an automation dies with no signal), and keys are not sessions. Rejecting is honest, needs no event hook, and bounds both the key table and the audit table's fan-out. C is unsafe; B contradicts the "keys are not sessions" boundary this change is drawing.
+- **Recommended:** **A** — reject creation over the cap; silently evicting a machine credential kills automation with no signal, and keys are not sessions.
 
 ---
 
 ### Q-18 — Rate limiting / quotas in v1?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -426,12 +455,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Defer, but reserve the settings keys and the audit `outcome` vocabulary** so a later change can add it without a contract break.
 
 **Recommendation:** **A + C.** Build no limiter (YAGNI, and an in-process counter is a false guarantee the moment two processes share a key — mark that ceiling in the spec rather than shipping a misleading half-feature). Reserve the vocabulary: the audit row's `outcome` field and the settings namespace make a later limiter additive. If the user wants real throttling, it is its own CROSS-CUTTING change (shared counter + every entry point).
+- **Recommended:** **A + C** — build no limiter in v1 (an in-process counter is a false guarantee the moment two processes share a key); reserve the vocabulary so a limiter stays additive.
 
 ---
 
 ### Q-19 — Which `apikeys.*` catalog actions exist?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -445,12 +476,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C.** A smaller set (drop `apikeys.list_key_calls` in favour of a search source, Q-22).
 
 **Recommendation:** **A**, with the normative rule that the *dispatch* path is enforced by the **target** action (Q-04) and the key-management actions are enforced by their own keys and unreachable from a key-derived principal (Q-06). Feature name `apikeys` (one word, lowercase, matches the existing `usermanagement`/`filemanagement`/`sessionmanagement` style, and the settings key prefix convention from `docs/specs/settings-coverage.md` REQ-017). Confirm the exact seven names before P.4 — they cannot be renamed later without a breaking change.
+- **Recommended:** **A** — feature name `apikeys`, seven actions confirmed before P.4 (they cannot be renamed later); dispatch is enforced by the target action, key management by its own actions.
 
 ---
 
 ### Q-20 — Audit row semantics and outcome vocabulary?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -464,12 +497,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Reuse `PermissionDenied` events as the audit source** (a subscriber writes rows).
 
 **Recommendation:** **A.** The gateway is the only place that sees the key, the scope decision, and the outcome, so it writes the row itself (C would miss scope denials and key-resolution failures, and would double-write permission denials). Keep the two reason vocabularies **separate and closed** — inventing new values inside the permission service's set would amend `user-roles-permissions.md`. Normative: the row is written even when the target method raises (`outcome=error`), and the row never contains the key secret, the hash, or the call arguments (NFR + INV).
+- **Recommended:** **A** — the gateway writes exactly one row per call including denials, with its reason vocabulary kept separate from permissions' closed set.
 
 ---
 
 ### Q-21 — Audit retention and pruning?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -483,12 +518,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. Prune only for revoked/deleted keys.**
 
 **Recommendation:** **A.** An append-only per-call log is the one part of this design that will grow without bound, and the repo already has the exact pattern to copy. B is unacceptable for a long-lived credential system; C is a rule nobody asked for.
+- **Recommended:** **A** — a retention window plus a bounded `cleanup_expired` analogue, copying session-management's existing cleanup pattern (REQ-012/REQ-019).
 
 ---
 
 ### Q-22 — Register a search source?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -502,12 +539,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. No source in v1** — dedicated methods only.
 
 **Recommendation:** **A.** It is a small additive module in api-keys (the established pattern), it makes "which keys exist?" answerable from the one place operators already query, and it never exposes the hash (fields are declared explicitly). B is premature (the audit query needs per-key ordering and outcome filtering that the dedicated method already gives); C leaves the feature invisible to the repo's query surface for no benefit.
+- **Recommended:** **A** — register `build_apikey_source` for keys only (the ADR-077 additive pattern), never the hash; the audit log keeps its dedicated per-key query.
 
 ---
 
 ### Q-23 — Which events does api-keys publish?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -521,12 +560,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C.** No events at all.
 
 **Recommendation:** **A.** Per-call events would double the event-bus load for a signal that is already durable in the audit table, and the event bus is at-most-once (a dropped event would look like a missing audit row). The notifications change (Q-23 there) is the natural future subscriber.
+- **Recommended:** **A** — lifecycle events only (created / revoked / expired); per-call events would double bus load for a signal already durable in the audit table.
 
 ---
 
 ### Q-24 — New exception hierarchy or plain `ValueError` + reused errors?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -540,12 +581,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 - **C. One `ApiKeyError` with a `reason` attribute** (closed string set, mirroring the denial-reason style).
 
 **Recommendation:** **C.** One class with a closed `reason` set is the smallest contract that is still machine-actionable for an agent client, it matches the permission service's existing closed-reason discipline, and it avoids a five-class hierarchy nobody will catch separately. Argument errors stay `ValueError` (session-management precedent). Never leak the secret or the hash in the message (NFR).
+- **Recommended:** **C** — one `ApiKeyError` with a closed `reason` set (argument errors stay `ValueError`): the smallest machine-actionable contract, and never the secret in the message.
 
 ---
 
 ### Q-25 — Confirm the `apikeys.*` settings inventory?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -564,12 +607,14 @@ Every question that needs user input is recorded HERE — never in a central fil
 | `apikeys.audit_page_size` | NUMBER | `100` | security | apikeys |
 
 **Recommendation:** Adopt the table above (drop `apikeys.audit_page_size` if the audit query reuses `search.default_page_size` instead — decide with Q-22). No `apikeys.enabled` kill switch unless the user wants one (notifications has one; a kill switch for the whole credential type is a reasonable ask — say so in the answer).
+- **Recommended:** Adopt the table; drop `apikeys.audit_page_size` if the audit query reuses `search.default_page_size` (decide with Q-22), and add an `apikeys.enabled` kill switch only if the user asks for one.
 
 ---
 
 ### Q-26 — Confirm the public API surface and representations?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -618,12 +663,14 @@ cleanup_key_calls() -> int                             # pruning (Q-21)
 Plus the module-singleton convention (`get_api_key_service()` / `reset_api_key_service()`, `src/backend/permissions/service.py:497-518` precedent) and `register_settings` / `register_actions` / `build_apikey_source`.
 
 **Recommendation:** Adopt it, with two normative rules: (1) the raw key appears in **exactly one** field of **exactly one** return type (`ApiKeyCreatedResult.key`); (2) `resolve_key` is public but returns only a `Principal` — it never returns the row, the hash, or the scopes (a separate `key_capabilities` call does that, by id or by key). Confirm whether `call()` returns the target's raw value (`Any`) or a serialized form — recommendation: raw value in-process (the server question is deferred, Q-01), documented as an NFR contract point.
+- **Recommended:** Adopt it, with two normative rules: the raw key appears in exactly one field of exactly one return type, and `resolve_key` returns only a `Principal` — never the row, hash or scopes.
 
 ---
 
 ### Q-27 — Thread-safety and write behaviour for the audit row?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -636,12 +683,14 @@ Plus the module-singleton convention (`get_api_key_service()` / `reset_api_key_s
 - **B. No concurrency requirement** (single-threaded assumption).
 
 **Recommendation:** **A, and choose fail-closed for the audit write** — i.e. if the audit row cannot be written, the call is denied (`reason=storage_error`, matching the permission service's fail-closed stance, ADR-075). That is the honest reading of "every call leaves exactly one audit row": a call that leaves no row must not have happened. Flag it explicitly, because it is a real availability trade-off the user should own.
+- **Recommended:** **A, fail-closed** — if the audit row cannot be written the call is denied (`reason=storage_error`); a real availability trade-off the user should own, not an implementation detail.
 
 ---
 
 ### Q-28 — Confirm the NFR budgets?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -656,12 +705,14 @@ Plus the module-singleton convention (`get_api_key_service()` / `reset_api_key_s
 - **NFR-004 Observability / NFR-005 Reliability:** tracing per `docs/specs/logging-coverage.md` REQ-012; thread-safety and fail-closed audit per Q-27.
 
 **Recommendation:** Adopt, with the CI-aware split written into the wording from the start (both precedents had to be corrected later). Do not add a suite-runtime budget (the TODO's "full existing suite still passes" is a Phase 5 gate, not an NFR).
+- **Recommended:** Adopt, with the CI-aware latency/coverage wording written in from the start (both precedents had to be corrected later); no suite-runtime budget — that is a Phase 5 gate.
 
 ---
 
 ### Q-29 — Confirm the test strategy?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -677,12 +728,14 @@ Plus the module-singleton convention (`get_api_key_service()` / `reset_api_key_s
 - **Integration** `tests/integration/apikeys/` — composition-root wiring (catalog actions, settings, search source, revocation-cascade subscriptions), plus `travel()`-driven expiry tests.
 
 **Recommendation:** Adopt. Add `tests/apikeys_test_helpers.py` (the per-feature helper-module convention) and extend `tests/logging_coverage_test_helpers.py:INVENTORY_CLASSES` + `test_secret_args.py` with the new classes (additive; the inventory list is hand-maintained, so no existing test breaks).
+- **Recommended:** Adopt; add `tests/apikeys_test_helpers.py` per the per-feature convention and extend the hand-maintained logging-coverage inventory additively so no existing test breaks.
 
 ---
 
 ### Q-30 — Migration, `migrations/env.py`, deptry and CI consequences?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -696,12 +749,14 @@ Plus the module-singleton convention (`get_api_key_service()` / `reset_api_key_s
 - **C (Q-01 = C):** same, plus new runtime dependencies, a new ADR, deptry `DEP002`/`DEP003` review, `uv.lock` churn, and a possible new CI job.
 
 **Recommendation:** **A.** Confirm at P.3 that the migration is a single revision for both tables and that `env.py` gains the import (the CI job will fail otherwise). Note the `uv.lock` staleness hazard (P-26) for any worktree that runs `uv run` before the lock is refreshed.
+- **Recommended:** **A** — one alembic revision for both tables plus the `backend.apikeys.models` import in `migrations/env.py`; the CI `migrations` job fails without it.
 
 ---
 
 ### Q-31 — Schedule: `Depends on:` relationship and ordering vs other changes?
 
 - **Step:** P.2 (Phase P)
+- **Date:** 2026-10-03
 - **Status:** PENDING
 - **Incorporated:** no
 
@@ -715,52 +770,80 @@ Plus the module-singleton convention (`get_api_key_service()` / `reset_api_key_s
 - **C. `api-keys` takes `Depends on: structlog-logging`** (build on the final logging backend).
 
 **Recommendation:** **A**, and record it symmetrically in both TODO files: api-keys has **no** dependency; notifications does **not** depend on api-keys (its Q-11 answer should be "ship the in-process read API, defer the consumer"). Reject C: api-keys uses only the public logging API (`@logged_class`, `@logged`, `logger`), so it is backend-agnostic — but note the ordering cost either way: if api-keys lands first, its log-assertion tests join the 17 files `structlog-logging` must re-derive, so **prefer api-keys before structlog-logging** only if structlog-logging is not already in workflow. Do not couple to `tenacity-rich-cachetools` (Q-18).
+- **Recommended:** **A** — no dependency in either direction, recorded symmetrically in both TODO files; `structlog-logging` merged on 2026-10-07 (PR #74), so the ordering half of this question is already settled.
 
 ---
 
-## Interrogation coverage (P.2)
+### Q-32 — What does api-keys NOT do in v1?
 
-| Category | Covered | Where |
-|---|---|---|
-| Scope boundary / surface shape | yes | Q-01, Q-02, Q-18, Q-30 |
-| Integration with existing features | yes | Q-03, Q-04, Q-05, Q-07, Q-12, Q-22, Q-23 |
-| Authorization semantics | yes | Q-04, Q-05, Q-10, Q-11, Q-16, Q-19 |
-| Credential lifecycle (create → use → revoke → expire → prune) | yes | Q-06, Q-12, Q-13, Q-14, Q-16, Q-17, Q-21 |
-| Secret handling & security | yes | Q-15, Q-24, Q-26, Q-28 (NFR-002), Q-27 |
-| Storage & migrations | yes | Q-07, Q-20, Q-21, Q-30 |
-| Observability (logs, events, audit) | yes | Q-08, Q-20, Q-23, Q-28 (NFR-004), Q-29 |
-| Public API & contract/versioning | yes | Q-19, Q-24, Q-26, Q-28 (NFR-003) |
-| Configuration | yes | Q-13, Q-17, Q-21, Q-25 |
-| Concurrency / reliability | yes | Q-27, Q-28 (NFR-005) |
-| Performance | yes | Q-14, Q-28 (NFR-001) |
-| Test strategy & evidence | yes | Q-29, Q-28 |
-| Schedule & overlap | yes | Q-31, Overlap check below |
-| Frontend / UI | skipped | Fixed out of scope at P.1 ("frontend UI for key management"); no question needed. |
-| Multi-tenancy / per-org keys | skipped | Fixed out of scope at P.1. |
-| OAuth2 / OIDC / JWT / mTLS / request signing | skipped | Fixed out of scope at P.1; Q-01 keeps the transport question open instead. |
-| Outbound webhooks / third-party integrations | skipped | Fixed out of scope at P.1 (the notifications TODO owns outbound delivery; Q-31 covers the ordering). |
+- **Step:** P.2 (Phase P) — completion pass
+- **Date:** 2026-10-11
+- **Status:** PENDING
+- **Incorporated:** no
+
+**Context:** The out-of-scope list was fixed at P.1 (`docs/todo/api-keys.md`: frontend UI, OAuth2/OIDC/JWT/mTLS/request signing, multi-tenancy, outbound webhooks — the last at `docs/todo/api-keys.md:51`), and the 2026-10-08 re-scope moved a second set of items out: the HTTP transport, the request/response contract and the caller-authentication path now belong to **`backend-api`** (`docs/todo/backend-api.md`). Nothing in this file asks the user to confirm the boundary as a whole — Q-01/Q-02 asked about the surface shape and Q-18 about rate limiting, both per-item.
+
+**Why needed:** "Out of scope" is normative in the spec (the template's Out of Scope section), and the two most tempting scope creep for a credential feature are exactly the two things another change owns: an HTTP endpoint for keys (`backend-api`) and a shared audit / limiter / cache layer (`tenacity-rich-cachetools`, declined). Without one explicit question, P.4 writes the boundary from the agent's inference instead of the user's decision, and a later change cannot tell whether an omission was a decision or an oversight.
+
+**Options:**
+- **A. Confirm the P.1 list plus the re-scope list as v1 non-goals**, stated verbatim in the spec: no HTTP/REST surface or key endpoints (that is `backend-api`); no frontend UI; no OAuth2/OIDC/JWT/mTLS/request signing; no multi-tenancy or per-org keys; no outbound webhooks or third-party integrations; no shared audit capability (api-keys owns its own table, Q-08); no rate limiter or quota engine (Q-18); no permission or session cache (forbidden outright by `docs/specs/user-roles-permissions.md` D11 / REQ-014 / AC-016); no key rotation that keeps two secrets live; no CLI/`scripts/` operator entry point (Q-06 D).
+- **B. Pull one or more of them back in** (name which: e.g. a key-management HTTP surface in this change instead of `backend-api`, or a rotation operation, or an operator CLI).
+- **C. Ship the list but leave the cache/limiter wording out** of the spec, treating them as unrelated changes rather than declared non-goals.
+
+**Recommendation:** **A.** Every item on the list is either owned by another change (`backend-api`, `notifications`, `tenacity-rich-cachetools`) or excluded by P.1, and one already has a spec forbidding it (permissions D11: "No caching — every check performs live lookups"). Naming them normatively is what makes a later addition an explicit amendment instead of drift; the only reason to choose B is if the user wants the credential HTTP endpoints shipped together with the credential itself, which contradicts the 2026-10-08 re-scope.
+- **Recommended:** **A** — confirm the P.1 exclusions plus the `backend-api` hand-off as normative v1 non-goals, so a later addition is an amendment rather than drift.
+
+---
+
+### Category coverage
+
+Every `Q-nn` reference below resolves to a real entry in this file (Q-01…Q-32); the listed dimensions are the specify skill's starting checklist, not a closed set.
+
+| Category | Coverage |
+|---|---|
+| Scope boundary / surface shape | covered (Q-01, Q-02, Q-18, Q-30, Q-32) |
+| Non-goals / explicit exclusions | covered (Q-32) |
+| Integration with existing features | covered (Q-03, Q-04, Q-05, Q-07, Q-12, Q-22, Q-23) |
+| Authorization semantics | covered (Q-04, Q-05, Q-10, Q-11, Q-16, Q-19) |
+| Credential lifecycle (create → use → revoke → expire → prune) | covered (Q-06, Q-12, Q-13, Q-14, Q-16, Q-17, Q-21) |
+| Secret handling & security | covered (Q-15, Q-24, Q-26, Q-27, Q-28 (NFR-002)) |
+| Storage & migrations | covered (Q-07, Q-20, Q-21, Q-30) |
+| Observability (logs, events, audit) | covered (Q-08, Q-20, Q-23, Q-28 (NFR-004), Q-29) |
+| Public API & contract/versioning | covered (Q-19, Q-24, Q-26, Q-28 (NFR-003)) |
+| Configuration | covered (Q-13, Q-17, Q-21, Q-25) |
+| Concurrency / reliability | covered (Q-27, Q-28 (NFR-005)) |
+| Performance | covered (Q-14, Q-28 (NFR-001)) |
+| Test strategy & evidence | covered (Q-28, Q-29) |
+| Schedule & overlap | covered (Q-31, Overlap check below) |
+| Frontend / UI | skipped — fixed out of scope at P.1 ("frontend UI for key management"); the browser surface is `backend-api`'s question, not this one. |
+| Multi-tenancy / per-org keys | skipped — fixed out of scope at P.1; Q-32 re-confirms it as a declared non-goal. |
+| OAuth2 / OIDC / JWT / mTLS / request signing | skipped — fixed out of scope at P.1; the transport question moved to `backend-api` and was answered there (FastAPI + uvicorn, session-token authenticated). |
+| Outbound webhooks / third-party integrations | skipped — fixed out of scope at P.1 (`docs/todo/api-keys.md:51`); `notifications` owns outbound delivery (Q-31 covers the ordering). |
 
 ## Closed from evidence (no question needed)
 
 | Point | Evidence |
 |---|---|
-| There is no HTTP layer and no server dependency in the repo. | `grep -rni "fastapi\|flask\|starlette\|uvicorn\|aiohttp" pyproject.toml src` → no match; runtime deps `pyproject.toml:8-24` (`dependencies = [` at line 8). |
-| Two approved specs exclude an HTTP layer normatively. | `docs/specs/authentication.md:15`; `docs/specs/session-management.md` Constraints ("Backend-only in-process service — no HTTP/REST layer, no frontend"). |
-| Adding a new feature's catalog actions does **not** break the closed-catalog acceptance test. | `tests/acceptance/permissions/test_check_api.py:1001-1035` builds its own `PermissionCatalog` from the six original features and asserts exactly 60 keys; `search.search` was added the same way without amending `user-roles-permissions.md`. |
-| The catalog is closed after startup; keys must match `^[a-z0-9_-]+\.[a-z0-9_-]+$` and start with `<feature>.`; read API is `has` / `features` / `actions(feature=None)`. | `src/backend/permissions/catalog.py`. |
-| The live catalog holds 61 actions across 7 features (authentication 11, usermanagement 11, settings 19, filemanagement 10, sessionmanagement 6, mail 3, search 1). | each `src/backend/<feature>/feature_actions.py` + `src/main.py` registration. |
-| Permission management is **not** permission-enforceable today (no `feature_actions.py` in `backend/permissions`), so an agent cannot manage roles/grants. | `ls src/backend/permissions/` → `feature_settings.py` only. |
-| The permission check order and the closed denial-reason set. | `src/backend/permissions/service.py:344-418` (shape → user lookup → session → catalog membership → grants), reasons `malformed_permission`, `unknown_user`, `inactive_user`, `storage_error`, `invalid_session`, `session_principal_mismatch`, `unknown_permission`, `unauthorized`; denial → WARNING log + `PermissionDenied` event (REQ-020). |
-| `Principal(session_token=…)` is currently dead at the composition root: no `session_lookup` is wired. | `src/main.py:145-153` (no `session_lookup` argument) + `src/backend/permissions/service.py:407-408` (`return "storage_error"` fail-closed). |
-| Grant grammar already allows `<feature>.*` wildcards. | `src/backend/permissions/service.py:78-90, 485-495`. |
-| There is no "effective permissions for a user" API; it must be computed from `UserRead.roles` × `get_role_permissions(role)` × `catalog.actions()`. | `src/backend/permissions/service.py:192, 262` (only `list_permissions` and `get_role_permissions`). |
+| There is no HTTP layer and no server dependency in the repo. | `grep -rni "fastapi\|flask\|starlette\|uvicorn\|aiohttp" pyproject.toml src` → no match (re-checked 2026-10-11); runtime deps `pyproject.toml:10-27` (`dependencies = [` at line 10). |
+| Two approved specs exclude an HTTP layer normatively — and both are amended by `backend-api`, not by this change. | `docs/specs/authentication.md:15` ("Out of scope: … HTTP/REST/GraphQL API layer"); `docs/specs/session-management.md:19` ("Backend-only in-process service — no HTTP/REST layer, no frontend"). |
+| Adding a new feature's catalog actions does **not** break the closed-catalog acceptance test. | `tests/acceptance/permissions/test_check_api.py:1001-1036` (`test_ac_035_…` builds its own `PermissionCatalog` from the six original features and asserts `len(catalog.actions()) == 60`); `search.search` was added the same way without amending `user-roles-permissions.md`. |
+| The catalog is closed after startup; keys must match `^[a-z0-9_-]+\.[a-z0-9_-]+$` and start with `<feature>.`; `register_feature` raises `ValueError` on a malformed key, a foreign prefix or a duplicate; read API is `has` / `features` / `actions(feature=None)` returning `PermissionRead(permission, feature, description)`. There is **no** `PermissionDefinition` symbol in the repo. | `src/backend/permissions/catalog.py` (`_PERMISSION_KEY_PATTERN`, `register_feature`). |
+| The live catalog holds **61 actions across 7 features** (authentication 11, usermanagement 11, settings 19, filemanagement 10, sessionmanagement 6, mail 3, search 1) — measured by summing the dicts each `register_actions` passes to `register_feature`. | each `src/backend/<feature>/feature_actions.py` + the `register_actions` calls in `src/main.py`. |
+| Permission management is **not** permission-enforceable today (`backend/permissions` has no `feature_actions.py`), so an agent cannot manage roles/grants. | `ls src/backend/permissions/` → `__init__.py`, `catalog.py`, `errors.py`, `events.py`, `feature_settings.py`, `models.py`, `repositories.py`, `service.py`. |
+| The permission check order and the closed denial-reason set. | `src/backend/permissions/service.py:368-455` — `_check` (368-400: shape → user lookup → session → catalog membership → grants), `_evaluate_grants` (401-422), `_lookup_user` (423-432), `_validate_session` (433-455); reasons `malformed_permission`, `unknown_user`, `inactive_user`, `storage_error`, `invalid_session`, `session_principal_mismatch`, `unknown_permission`, `unauthorized`; denial → WARNING log + `PermissionDenied` event (REQ-020). |
+| `Principal.session_token` **is** live at the composition root: `session_lookup` is wired, so a session token is validated and a mismatched token is denied. *(Corrected 2026-10-11 — the P.2 row claimed the opposite.)* | `src/main.py:171-176` (`PermissionService(... session_lookup=_session_repository,  # validates a provided session token (REQ-017, AC-020)`); fail-closed on an unavailable lookup at `src/backend/permissions/service.py:442, 447` (`return "storage_error"`). |
+| Grant grammar already allows `<feature>.*` wildcards. | `src/backend/permissions/service.py:83-90` (`_grant_matches`), applied through `_any_grant_matches` (`:92-94`) at `:412` (system principal) and `:419` (role grants). |
+| There is no "effective permissions for a user" API; it must be computed from `UserRead.roles` × `get_role_permissions(role)` × `catalog.actions()`. | `src/backend/permissions/service.py:211` (`list_permissions`), `:281` (`get_role_permissions`) — those are the only two read surfaces. |
+| The permissions spec **forbids caching**, so api-keys may not add a permission, session or key-resolution cache. | `docs/specs/user-roles-permissions.md:34` (D11 "No caching — every check performs live lookups"), `:513` (REQ-014), `:552` (AC-016); restated in code at `src/backend/permissions/service.py:424`. |
 | Token helpers are public and reusable. | `src/backend/authentication/tokens.py` (`new_token`, `hash_token`), exported at `src/backend/authentication/__init__.py:62, 108-109`. |
 | The `sessions` table is the template shape for a hashed-token table, and the raw token appears in exactly one return type. | `src/backend/authentication/models.py` (`Session`), `LoginResult.token` vs `SessionInfo`. |
-| Session-management forbids activity tracking for sessions — a direct conflict with `last_used_at` if the table were shared. | `docs/specs/session-management.md` Constraints ("no activity tracking, no `last_seen_at`, no `expires_at` updates"). |
-| New public classes must be traced by default; the traced-class inventory is a hand-maintained list, so adding a feature is additive. | `docs/specs/logging-coverage.md` REQ-001/REQ-012; `tests/logging_coverage_test_helpers.py:53-61`; `tests/acceptance/logging_coverage/test_inventory.py`. |
+| Session-management forbids activity tracking for sessions — a direct conflict with `last_used_at` if the table were shared. | `docs/specs/session-management.md:19` ("no activity tracking, no `last_seen_at`, no `expires_at` updates") and REQ-013 (`:159`). |
+| New public classes must be traced by default; the traced-class inventory is a hand-maintained list, so adding a feature is additive. | `docs/specs/logging-coverage.md` REQ-001/REQ-012; `tests/logging_coverage_test_helpers.py:57-61` (`INVENTORY_CLASSES`); `tests/acceptance/logging_coverage/test_inventory.py`. |
 | `tests/architecture/` does not exist; Phase 6 boundary checks are manual. | `ls tests/` (no `architecture/`); `docs/workflow/PROBLEMS.md` P-32. |
-| Coverage floor is 92%; CI runs `ruff check .`, `mypy src/`, `deptry`, `alembic upgrade head`, the docs build, and the traceability script. | `pyproject.toml:105-107`; `.github/workflows/`. |
-| ADR numbering continues from **ADR-081**. | `ls docs/decisions/` → highest is `ADR-080-additive-session-repository-list-all.md`. |
+| Coverage floor is 92%; CI runs `ruff check .`, `mypy src/`, `deptry`, `alembic upgrade head`, the docs build, and the traceability script. | `pyproject.toml:112` (`fail_under = 92`); `.github/workflows/`. |
+| The composition root registers **six** features' settings but **nine** features define `register_settings` — `filemanagement`, `mail` and `sessionmanagement` settings are never registered, so they fall back to hardcoded defaults. api-keys' own `register_settings` call must not be added to that gap. | `src/main.py:173-178` (six calls) vs the nine `src/backend/*/feature_settings.py` modules; tracked as `docs/todo/startup-settings-registration-gaps.md` (WAITING, ISSUE). |
+| ADR numbers are taken at **S2.1 by merge order** and are never pre-reserved; the corpus currently ends at **ADR-086**, and ADR-081..ADR-086 are already used or absent as files. *(Corrected 2026-10-11 — the P.2 row claimed the corpus ended at ADR-080 and continued from ADR-081.)* | `ls docs/decisions/` → highest is `ADR-086-scripts-type-checked-tree.md`. |
+| Repo scale as measured on 2026-10-11: **16 files in `docs/specs/`** (15 specs + `template.md`), **11 live TODOs** in `docs/todo/` (plus `template.md` and 20 items under `docs/todo/archive/`), and `uv run pytest tests/ -q` on `main` → **889 passed, 1 skipped, 1 failed** — the single failure is the pre-existing structure-map check `test_ac_021_committed_map_matches_fresh_render`. | `ls docs/specs/`, `ls docs/todo/`, the suite run. |
 
 ## Impact Analysis (P.2) — draft for P.4
 
@@ -769,25 +852,26 @@ Every touch is **additive** unless the answer to Q-03 or Q-08 says otherwise (th
 | Feature / component | What changes | Existing REQ/AC touched |
 |---|---|---|
 | `apikeys` (new, `src/backend/apikeys/`) | New feature package: models + repository ABC/SQLite concrete, `ApiKeyService` (create/list/revoke/revoke-all/resolve/call/capabilities/describe/list-calls/cleanup), `feature_settings.py`, `feature_actions.py`, `search_source.py`, errors, events, module singleton. | none (all new IDs) |
-| `user-roles-permissions` | New `apikeys.*` actions declared by api-keys' own `feature_actions.py` (ADR-079 pattern). No change to `PermissionService`, `PermissionCatalog`, `Principal`, or `requires_permission` **unless Q-03 = B**, which amends REQ-025/EDGE-022 and forces a spec amendment. | none (Q-03 = A/C); REQ-004/REQ-005/REQ-025 + EDGE-022 if Q-03 = B |
-| `authentication` | Reuse only: `new_token`, `hash_token`, the hashed-token table shape, the show-once pattern. No code change **unless Q-07 = B** (then the `Session` table + `SessionRepository` ABC grow, NFR-003 additive-ABC, ADR-080 precedent). | none (Q-07 = A/C); REQ-006/REQ-007/NFR-003 if Q-07 = B |
-| `session-management` | No change. It is the structural template (idempotent revoke, bounded list, `cleanup_expired`, no-new-exceptions, event-driven reactions) and the boundary this change must not blur. | none |
-| `user-management` | Consumes `UserDeleted` / `UserDeactivated` events inside api-keys (ADR-064 pattern). No `UserManager` change. | none |
-| `search` | api-keys registers `build_apikey_source(repo)` at the composition root (ADR-077 / REQ-022 pattern). No search code change. | none |
+| `user-roles-permissions` | New `apikeys.*` actions declared by api-keys' own `feature_actions.py` (ADR-079 pattern). No change to `PermissionService`, `PermissionCatalog`, `Principal`, or `requires_permission` **unless Q-03 = B**, which amends REQ-025/EDGE-022 and forces a spec amendment. | none (Q-03 = A/C); REQ-004 (closed catalog) / REQ-005 (feature-owned `register_actions`) / REQ-025 (`Principal`) + EDGE-022 if Q-03 = B. Reused as-is: REQ-001 (`has_permission`/`require_permission`), REQ-002 (`feature.action` key form), REQ-014 (live lookup, **no caching**), REQ-015 (fail-closed with a reason), REQ-017 (session validation), REQ-018 (system principal), REQ-024 (enforcement wiring), REQ-030 (`set_permission_service`) |
+| `authentication` | Reuse only: `new_token`, `hash_token`, the hashed-token table shape, the show-once pattern. No code change **unless Q-07 = B** (then the `Session` table + `SessionRepository` ABC grow, NFR-003 additive-ABC, ADR-080 precedent). | none (Q-07 = A/C); REQ-006/REQ-007/NFR-003 if Q-07 = B. Reused as the revocation analogue: REQ-009 (`logout`, idempotent revoke), REQ-010–REQ-013 (the show-once reset-token chain: single use, TTL, revoke-all-on-completion, closed `InvalidResetTokenError` reasons) |
+| `session-management` | No change. It is the structural template (idempotent revoke, bounded list, `cleanup_expired` REQ-012, no-new-exceptions Constraint `:27`, event-driven cap eviction REQ-014) and the boundary this change must not blur. | none |
+| `user-management` | Consumes `UserDeleted` / `UserDeactivated` events inside api-keys (ADR-064 pattern). No `UserManager` change. | none (events are user-management REQ-016/REQ-017; the owner read is `UserRead`, REQ-010) |
+| `search` | api-keys registers `build_apikey_source(repo)` at the composition root (ADR-077; search REQ-005 `register_source`). No search code change. | none |
 | `settings` / `settings-coverage` | New `apikeys.*` settings registered via feature-owned `register_settings`; must satisfy REQ-017/REQ-018/REQ-019 (prefix, category/group, inventory). | none (additive; conventions must be respected) |
 | `eventbus` | New events published; new subscriptions to user-management events. No bus change. | none |
 | `logging` / `logging-coverage` | `@logged_class(include_args=False)` on the service and repositories; additive entries in `tests/logging_coverage_test_helpers.py` and `test_secret_args.py`. REQ-012 (new public classes traced) is satisfied, not amended. | none |
 | `shared` | No change (Q-03 = A/C). | none; REQ-025 if Q-03 = B |
-| `mail`, `profiling`, `file-management` | No change. | none |
-| Composition root `src/main.py` | Additive wiring: `register_actions`, `register_settings`, repository + service construction (lazy-proxy pattern for cycles), search source registration. | none |
+| `mail`, `filemanagement`, `profiling` | No change. (`profiling` is governed by ADR-085 plus the `logging.profiling_include_arguments` setting — it is **not** a spec, so it carries no REQ/AC.) | none |
+| Composition root `src/main.py` | Additive wiring: `register_actions`, `register_settings`, repository + service construction (lazy-proxy pattern for cycles), search source registration. Lands **after** `composition-root-factory`, which moves this wiring into `build_composition_root() -> App` in a new `src/backend/composition/` package — api-keys must add its wiring there, not to `src/main.py`. | none (but see the `composition-root-factory` row in the overlap check) |
 | `migrations/` | One new alembic revision (`api_keys`, `api_key_calls`) + `backend.apikeys.models` import in `migrations/env.py`. | n/a |
 | `frontend` | None (out of scope at P.1). | n/a |
+| `backend-api` (future consumer) | The HTTP layer consumes api-keys' resolve/dispatch entry point and its catalog actions; it owns the transport, the request/response contract and the caller-authentication path. Nothing in this change depends on it. | n/a (its own spec will cite this change's IDs) |
 
-**Escalation verdict (P.2 recommendation):** reclassify to **CROSS-CUTTING** now (Q-02 = B) — new shared capability + new cross-feature interface, all touches additive, spec carries the §12-style Impact Analysis above; branch `crosscut/api-keys`; bump `minor`.
+**Escalation verdict (P.2 recommendation, updated 2026-10-11):** the P.2 pass recommended reclassifying to **CROSS-CUTTING** (Q-02 = B: new shared capability + new cross-feature interface). The user answered **B**, and the escalation was then realised by **splitting** rather than by renaming this branch: the runtime boundary became its own CROSS-CUTTING change (`backend-api`), and **this change stays FEATURE** — a single new feature package whose every touch on an existing feature is additive (`docs/todo/api-keys.md` still records `Change type: FEATURE` with the escalation note). If P.4 finds the credential half itself spans two or more features once `backend-api`'s answers are known, reclassify to `crosscut/api-keys` and take the `minor`/`major` bump; otherwise `feature/api-keys` with a `minor` bump.
 
 ## Overlap check (P.2)
 
-Checked against all 13 files in `docs/specs/` and all 16 items in `docs/todo/`, plus in-flight worktrees/branches/PRs (2026-10-03).
+Checked against all 16 files in `docs/specs/` (15 specs + `template.md`) and all 11 live items in `docs/todo/` (plus `template.md` and 20 archived items) on 2026-10-03, and **re-checked against the same sets on 2026-10-11** — the 2026-10-03 pass listed 13 specs and 16 TODO items; ten of those TODOs have since merged or been archived, and `structlog-logging`, `settings-public-registry-setter` and `structure-map` have all merged in between.
 
 **Specs — no spec owns API keys, credentials outside sessions, or an audit trail.** Adjacent-but-distinct:
 
@@ -802,20 +886,26 @@ Checked against all 13 files in `docs/specs/` and all 16 items in `docs/todo/`, 
 | `event-bus.md` | publish/subscribe, at-most-once, handler isolation, structural `EventPublisher` | reuse (Q-23), no amendment |
 | `logging.md` / `logging-coverage.md` | `@logged_class`/`@logged` policy, `include_args=False`, secret-free records, REQ-012 forward policy | reuse (Q-28/Q-29), no amendment |
 | `mail-service.md` | none (no outbound delivery in this change) | none |
-| `profiling.md` | unrelated | none |
+| `structlog-logging.md` | the logging backend behind the unchanged public API | **merged 2026-10-07** (spec PR #67, implementation PR #74 → `c7a9119`) — api-keys uses only the public logging API, so nothing to do; the renderer set is fixed to `text` \| `json` by its REQ-006 |
+| `settings-public-registry-setter.md` | the `get_*` / `set_*` / `reset_*` singleton trio (ADR-083/ADR-084) | reuse: api-keys exposes the same trio for its service; **merged 2026-10-10** (PR #81 → `2115faa`, release 1.2.0) |
+| `structure-map.md` | the generated `STRUCTURE.md` map and `scripts/make_map.py` | reuse: api-keys must regenerate the map in the same commit as its package; **merged**, and the map check is the one currently failing test on `main` |
 | `template.md` | spec format only | n/a |
 
 **TODOs — overlap findings:**
 
 | TODO | Finding |
 |---|---|
-| `notifications.md` | **The one real coupling, and it is reciprocal.** Its Q-11 asks whether notifications depends on api-keys; this file's Q-31 answers the mirror. Recommendation: **no dependency in either direction** — api-keys ships first (self-contained), notifications ships its in-process read API and defers its consumer. Both TODO files should record it. |
-| `structlog-logging.md` | **Ordering cost, no conflict.** It swaps the logging backend behind an unchanged public API and re-derives 17 log-assertion test files. api-keys uses only the public logging API, so either order works, but api-keys' log-assertion tests would join that set if it lands first. |
-| `tenacity-rich-cachetools.md` | **Do not couple.** Its retry/caching items are the tempting fix for Q-18/Q-27, but it is scored 2/5 and unscheduled; the spec must not assume a limiter or cache exists. |
-| `structure-map.md` | **No conflict, mild adjacency.** It generates a repo map + CLI; api-keys adds a package it will later map. No shared files. |
-| `python-3.15.md`, `pyproject-tooling-gaps.md`, `security-changelog-license.md`, `update-readme.md`, `docs-path-ci-trigger.md`, `spec-interview-protocol.md`, `split-archived-qa.md`, `workflow-docs-nits.md`, `remove-spec-tdd-driver.md`, `value-triage-gate.md`, `track-python-skill.md` | No overlap with a backend credential feature (tooling, docs, CI, process changes). |
+| `backend-api.md` | **The hard prerequisite.** api-keys takes `Depends on: backend-api` (decided 2026-10-08 at P.3 round 1): this item keeps only the machine-credential half and may not start before `backend-api` is merged. `backend-api` is itself gated on `composition-root-factory` (its Q-07 = B: the FastAPI app is built on that change's `create_app()`). So the chain is **`startup-settings-registration-gaps` → `composition-root-factory` → `backend-api` → api-keys**, and api-keys is the last of the four. |
+| `composition-root-factory.md` | **Wiring seam, not a conflict.** It moves today's `src/main.py` construction into `build_composition_root() -> App` in a new `src/backend/composition/` package (reclassified REFACTOR → CROSS-CUTTING at P.3 round 1, 2026-10-10) and needs a Spec Amendment PR over `settings-coverage.md` REQ-002/AC-003, `logging-coverage.md` REQ-011/AC-011 and `settings-public-registry-setter.md` REQ-011/AC-016. api-keys' additive wiring (catalog actions, settings, repository + service, search source) must land in that factory, not in `src/main.py` — writing it at the old site first guarantees a conflict. |
+| `startup-settings-registration-gaps.md` | **Fix the registration gap first.** Nine features define `register_settings`, `src/main.py:173-178` calls six; the ISSUE adds the three missing calls. api-keys must add its own `register_settings` call inside the fixed wiring, and must not be counted as the change that repairs the gap. |
+| `notifications.md` | **The one reciprocal coupling, and it is optional.** Its Q-11 asks whether notifications depends on api-keys; this file's Q-31 answers the mirror. `docs/todo/notifications.md:36` rules the HTTP/API surface and API keys out of its own scope, and `:13` records api-keys as a *possible* predecessor, not a required one; `:49` says a `Depends on:` is added only if the user asks for a browser-visible inbox. Recommendation stands: **no dependency in either direction**. |
+| `public-api-import-boundary.md` | **Adjacent, no conflict.** It draws the public-import boundary for features (REFACTOR, depends on `structlog-logging` and `settings-public-registry-setter`, both merged). api-keys must expose a package-root public interface from day one so that change has nothing to restructure. |
+| `tenacity-rich-cachetools.md` | **Do not couple.** Its retry/caching items are the tempting fix for Q-18/Q-27, but it is scored 2/5 (disposition KEPT, still WAITING with 33 PENDING questions) and unscheduled; the spec must not assume a limiter or cache exists — and a permission/session cache is forbidden outright by `user-roles-permissions.md` REQ-014. |
+| `python-3.15-upgrade.md` | **No overlap, one shared hazard.** It is blocked externally (CPython 3.15 final + a pydantic cp315 wheel). If it lands first, api-keys' new code is written under the newer interpreter; either order is safe. |
+| `complexipy-scripts.md`, `docstrings-tests.md`, `gitattributes-line-endings.md` | No overlap with a backend credential feature (tooling/CI/docs/process). `complexipy-scripts` is in flight with an open PR (#82) over `scripts/` only. |
+| `structlog-logging.md`, `structure-map.md`, `settings-public-registry-setter.md`, `pyproject-tooling-gaps.md`, `security-changelog-license.md`, `update-readme.md`, `docs-path-ci-trigger.md`, `spec-interview-protocol.md`, `split-archived-qa.md`, `workflow-docs-nits.md`, `remove-spec-tdd-driver.md`, `value-triage-gate.md`, `track-python-skill.md`, `composition-root-singleton-install.md`, `map-default-drop-shift.md`, `ruff-d-docstrings.md` | No longer live: merged or archived under `docs/todo/archive/`. The three that matter as history: `structlog-logging` (merged — the logging backend api-keys builds on), `settings-public-registry-setter` (merged — the singleton trio api-keys must expose), `composition-root-singleton-install` (absorbed and DROPPED into `composition-root-factory`). |
 
-**In-flight state (checked 2026-10-03):** `git worktree list` → primary (`main`) + `chore/remove-spec-tdd-driver`; `git branch -a` → `main`, `chore/remove-spec-tdd-driver`; `gh pr list --state open` → **PR #62** (chore, deletes the unused spec-tdd driver, OPEN). No in-flight change touches `src/backend/`, so there is no branch conflict with api-keys.
+**In-flight state (re-checked 2026-10-11):** `git worktree list` → primary (`main`) + `chore/complexipy-scripts` + `issue/startup-settings-registration-gaps`; `git branch` → `main`, `chore/complexipy-scripts`, `issue/startup-settings-registration-gaps`; `gh pr list --state open` → **PR #82** (`chore/complexipy-scripts`, `scripts/` only). Neither in-flight change touches `src/backend/permissions/`, `src/backend/authentication/` or `src/main.py`'s service construction, so there is no branch conflict with api-keys — but `composition-root-factory` will own `src/main.py` and must land first.
 
 ## For P.4 (what the answers change)
 
@@ -827,8 +917,9 @@ Checked against all 13 files in `docs/specs/` and all 16 items in `docs/todo/`, 
 - **Normative inventories (Q-19, Q-23, Q-25):** the catalog action list, the published-event list, and the settings inventory — each becomes REQ/AC/EDGE rows with a test.
 - **Out of scope (Q-08, Q-18):** the shared-audit and rate-limiting deferrals, stated explicitly so a later change can absorb them additively.
 - **Test strategy (Q-28, Q-29):** the five test directories under `tests/*/apikeys/`, `tests/apikeys_test_helpers.py`, the additive logging-coverage inventory entries, the Hypothesis strategies for the four invariants, and the environment-aware NFR budgets.
-- **Schedule (Q-31):** the reciprocal `Depends on:` note in `docs/todo/api-keys.md` and `docs/todo/notifications.md`.
-- **ADRs (from P.4 onward):** numbering starts at **ADR-081**; expected ADRs — the key→`Principal` seam (new pattern, cross-feature interface), the separate `api_keys` store (rejected: reuse the `sessions` table), the introspection-based tool-schema export (new pattern), and the api-keys-owned audit log (rejected: shared audit capability).
+- **Schedule (Q-31):** the reciprocal `Depends on:` note in `docs/todo/api-keys.md` and `docs/todo/notifications.md`, and the fact that this change now sits **last** in the chain `startup-settings-registration-gaps` → `composition-root-factory` → `backend-api` → api-keys.
+- **Non-goals (Q-32):** the spec's Out of Scope section, stated item by item so a later addition is an amendment rather than drift.
+- **ADRs (from P.4 onward):** numbers are taken at **S2.1 in merge order** and are never pre-reserved — the corpus currently ends at **ADR-086**, and `composition-root-factory` and `backend-api` will each take numbers ahead of this change because they merge first. Expected ADRs — the key→`Principal` seam (new pattern, cross-feature interface), the separate `api_keys` store (rejected: reuse the `sessions` table), the introspection-based tool-schema export (new pattern), and the api-keys-owned audit log (rejected: shared audit capability).
 
 ## Late questions (Phases 2–6)
 
@@ -839,7 +930,8 @@ _(none yet — the orchestrator appends entries here, with `Step:` set to the st
 | Step | Date | Result |
 |---|---|---|
 | P.1 Frame | 2026-10-03 | TODO + question file created on `main`; type FEATURE (escalation candidate CROSS-CUTTING); todo set created; **value triage 5/5, implement** |
-| P.2 Interrogate (31 questions) | 2026-10-03 | 31 questions recorded in one `BLOCKED-USER` batch (≥ 20 floor met); 14 coverage categories covered, 3 skipped as P.1-fixed scope; 16 points closed from evidence; Impact Analysis drafted (all touches additive under the recommended answers); escalation verdict = **CROSS-CUTTING**; overlap checked against 13 specs + 16 TODOs + PR #62 |
-| P.3 Answer (<n> answered) | | |
+| P.2 Interrogate (31 questions) | 2026-10-03 | 31 questions recorded in one `BLOCKED-USER` batch (≥ 20 floor met); 13 coverage categories covered, 4 skipped as P.1-fixed scope; 17 points closed from evidence; Impact Analysis drafted (all touches additive under the recommended answers); escalation verdict = **CROSS-CUTTING**; overlap checked against 16 spec files + 11 live TODOs + the in-flight branches/PR of that date |
+| P.3 Answer (4 answered) | 2026-10-08 | Round 1: Q-01 = B (FastAPI + uvicorn, the backend's own session tokens, all 61 catalog actions, both specs amended), Q-02 = B, Q-03 = A, Q-04 = A. The HTTP boundary was split out as **`backend-api`** (CROSS-CUTTING) and this TODO now depends on it; the P.2 "`session_lookup` not wired" finding was recorded as stale. Q-05…Q-31 stay PENDING. |
+| P.2 Interrogate (completion pass) | 2026-10-11 | `- **Recommended:**` added to all 28 PENDING entries (the 4 ANSWERED entries' recorded recommendation and answer left untouched); `- **Date:**` added to every entry (2026-10-03 for the P.2 batch, 2026-10-11 for Q-32); the coverage table normalised to `### Category coverage` (14 covered / 4 skipped, every `Q-nn` resolving); **Q-32 non-goals / scope-boundary question added** (32 entries total); **18 stale or false citations corrected** against `main` — the `session_lookup` row (now `src/main.py:171-176`) and Q-06's option C premise, the ADR-081 claim (corpus ends at ADR-086, numbers taken at S2.1 by merge order), the permissions/authentication/session-management/user-management/search REQ ids in the Impact Analysis, the `service.py` / `catalog.py` / `test_check_api.py` / `pyproject.toml` / `principal.py` / `src/main.py` line references, the `profiling.md` "spec" row, Q-31's stale dependency claim and the spec/TODO/suite counts. Overlap re-checked against 16 spec files + 11 live TODOs; merge order established: `startup-settings-registration-gaps` → `composition-root-factory` → `backend-api` → api-keys. |
 | P.4 Draft spec + create branch/worktree | | |
 | P.5 Self-consistency | | |

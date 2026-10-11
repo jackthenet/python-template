@@ -411,4 +411,13 @@ All measurements below were taken at `main` (`d2d58a3`, 2026-10-10) in the prima
 
 ## Late questions (Phases 2–6)
 
-<questions discovered after the change entered the workflow; same entry format, Step field set to the step that found it>
+## LQ-01 — Does the widened secret guard exempt `mail.smtp_password`, or does the password leave the registry?
+- **Step:** P.4 Draft — Phase P (late question, found while planning the widened NFR-002 guard)
+- **Why needed:** S3.1 cannot widen the contract-tier inventory guard (Q-17) without choosing a side: widening `tests/contract/settings_coverage/test_inventory.py` to all 34 keys makes `test_no_secret_settings` fail on `mail.smtp_password` (`src/backend/mail/feature_settings.py:101`) — the only key of the 34 that trips the guard's `"password" not in key` check. The RED gate would otherwise be an artifact of the test change, not of the defect.
+- **Context:** `docs/specs/settings-coverage.md` NFR-002 (`:222`) states "Settings do not contain passwords or tokens", while the approved `docs/specs/mail-service.md` registers exactly that key (`mail.smtp_password`, documented as sensitive — never in logs or events). The triage record `docs/verification/startup-settings-registration-gaps.md` records this as defect **D-6**.
+- **Question:** **(a)** amend NFR-002 in this change's PR to scope it and name `mail.smtp_password` as an accepted transport-credential exception (the guard keeps its force on every other key), or **(b)** remove the SMTP password from the settings registry (mail would read it from elsewhere — a much larger diff that contradicts the approved mail spec)?
+- **Recommended:** **(a)** — both the mail spec and `AGENTS.md` already treat `mail.smtp_password` as a registered (sensitive) setting, so NFR-002's absolute wording is the stale side; the amendment rides this change's own PR, which already amends four spec files (Q-02, Q-11/Q-27, Q-13(b), Q-26).
+- **Answer:** **(a) amend NFR-002 and name the exception** — the recommendation, accepted (2026-10-11). `settings-coverage.md` NFR-002 is amended in this change's PR with the Q-27 wording (no credential or token in **log records or events**; a setting explicitly declared as a credential **may** be persisted), and `mail.smtp_password` is named there as the accepted transport-credential exception. The widened `test_no_secret_settings` guard keeps its key-name force on the other 33 keys and carries the named exception explicitly, so the RED gate is the defect, not the guard. This is the **fifth** spec file amended in this PR, after Q-26's four.
+- **Date:** 2026-10-11
+- **Status:** ANSWERED
+- **Incorporated:** yes (orchestrator, 2026-10-11, before S3.1 relaunch)

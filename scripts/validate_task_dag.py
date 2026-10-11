@@ -15,6 +15,9 @@ import json
 import sys
 from pathlib import Path
 
+# DFS visit states: unvisited, on the current walk, finished.
+WHITE, GRAY, BLACK = 0, 1, 2
+
 
 def load_tasks(path: Path) -> list[dict]:
     """Load tasks from a JSON task DAG file."""
@@ -36,41 +39,65 @@ def check_well_formed(tasks: list[dict]) -> list[str]:
     return failures
 
 
-def check_acyclic(tasks: list[dict]) -> list[str]:
-    """Check that the dependency graph is acyclic using DFS."""
-    failures: list[str] = []
-
+def build_graph(tasks: list[dict]) -> dict[str, list[str]]:
+    """Map each task id to its dependency ids; a task without an id contributes nothing."""
     graph: dict[str, list[str]] = {}
     for task in tasks:
         tid = task.get("task_id")
         if tid:
             graph[tid] = task.get("dependencies", [])
+    return graph
 
-    # DFS cycle detection
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color: dict[str, int] = dict.fromkeys(graph, 0)
 
-    def dfs(node: str, path: list[str]) -> bool:
-        color[node] = GRAY
-        path.append(node)
-        for neighbor in graph.get(node, []):
-            if neighbor not in color:
-                continue
-            if color[neighbor] == GRAY:
-                cycle_start = path.index(neighbor) if neighbor in path else 0
-                cycle = [*path[cycle_start:], neighbor]
-                failures.append(f"Cycle detected: {' -> '.join(cycle)}")
-                return True
-            if color[neighbor] == WHITE and dfs(neighbor, path):
-                return True
-        path.pop()
-        color[node] = BLACK
-        return False
+def cycle_message(path: list[str], neighbor: str) -> str:
+    """The one 'Cycle detected: ...' line a back edge to a GRAY neighbor produces.
 
-    for tid in list(graph):
+    A walk that stops at a cycle leaves its own path nodes GRAY, so a later root can close a
+    cycle against a GRAY node that is not on its path; that whole path plus the back edge is
+    what the walk reported, and this keeps that text.
+    """
+    cycle_start = path.index(neighbor) if neighbor in path else 0
+    cycle = [*path[cycle_start:], neighbor]
+    return f"Cycle detected: {' -> '.join(cycle)}"
+
+
+def visit(
+    graph: dict[str, list[str]],
+    node: str,
+    color: dict[str, int],
+    path: list[str],
+    failures: list[str],
+) -> bool:
+    """Walk the dependency graph from node and return True once a cycle has been recorded.
+
+    Reaching a GRAY node closes a cycle and the walk stops there, so exactly one cycle is
+    reported per root walk; a dependency that is not a task id is skipped rather than treated
+    as a dangling edge. The walk stays recursive on purpose: an iterative walk would survive
+    dependency chains the recursive one fails on, and that is a behavior change, not a refactor.
+    """
+    color[node] = GRAY
+    path.append(node)
+    for neighbor in graph[node]:
+        if neighbor not in color:
+            continue
+        if color[neighbor] == GRAY:
+            failures.append(cycle_message(path, neighbor))
+            return True
+        if color[neighbor] == WHITE and visit(graph, neighbor, color, path, failures):
+            return True
+    path.pop()
+    color[node] = BLACK
+    return False
+
+
+def check_acyclic(tasks: list[dict]) -> list[str]:
+    """Check that the dependency graph is acyclic using DFS."""
+    graph = build_graph(tasks)
+    color: dict[str, int] = dict.fromkeys(graph, WHITE)
+    failures: list[str] = []
+    for tid in graph:
         if color[tid] == WHITE:
-            dfs(tid, [])
-
+            visit(graph, tid, color, [], failures)
     return failures
 
 

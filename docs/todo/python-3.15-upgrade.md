@@ -52,7 +52,10 @@ No `src/` path unless `re.prefixmatch` is taken. Config: `pyproject.toml`, `uv.l
 ## Value triage (2026-10-04, pre-workflow)
 - **Overlap:** the *procedure* already exists as guidance — `.agents/skills/python-best-practices/references/python-3.15.md` carries the version gate, the behavior-change list and the check command; nothing in the repo *applies* it. This item is executing a documented checklist against config + CI, not designing anything.
 - **Beneficiary:** future changes (they get permission to use 3.15 features and the skill's own gate stops blocking them) and anyone installing the template on a current interpreter.
+- **Score:** **2/5** — real but deferred value: it unblocks the 3.15-only features the `python-best-practices` skill currently withholds, and it is cheap once startable; docked because nothing can be gained today (the trigger has not fired) and the change delivers no user-visible behavior.
 - **Verdict:** **ACCEPT — scheduled, not startable.** Blocked on an external condition (3.15 final + a final pydantic with a cp315 wheel), not on a decision. Cost when unblocked is small and mechanical (14 pins + 11 CI literals + one lockfile regeneration).
+- **Re-measured 2026-10-11** (P.2 completion pass, `docs/questions/python-3.15-upgrade.md`): the trigger has **not** fired — `uv.lock:1489,1501` still pin `pydantic-core 2.46.5`, which ships no cp315 wheel, so a `uv lock` refresh is a **precondition** of any 3.15 CI job, not an optional extra (this reversed the batch's Q-12 recommendation). The CI literal count is now **12**, not 11. `docs/todo/complexipy-scripts.md` is a live `pyproject.toml` + `quality.yml` collision (PR #82).
+- **Decision:** **PENDING (user)** — keep in the backlog until CPython 3.15 final and a cp315-wheel pydantic both exist; the recommendation is to leave it unstarted rather than spend a worktree on it.
 
 ## Preparation log
 
