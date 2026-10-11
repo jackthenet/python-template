@@ -990,3 +990,12 @@ A step MUST log a problem when it:
 - **Duration / iterations:** one re-measurement.
 - **Resolution:** both question files now state that session-token validation **is** live at the composition root; no new TODO was opened. **Durable rule:** a "side finding" written by a prep step is a claim, not evidence — re-measure it against the current tree before it is recorded on `main` or turned into a change.
 - **Date:** 2026-10-11
+
+## P-118 — the change worktree is a CRLF checkout, so exact-text edits to existing files miss (S3.1)
+
+- **Problem:** the `startup-settings-registration-gaps` worktree checks text files out with CRLF line endings (`core.autocrlf=true`, no `.gitattributes` — the same root cause as the `test_ac_021` byte-compare failure recorded in §7 of the triage record). Exact-text edits against an existing file therefore failed on line endings: the LF pattern never matches the CRLF bytes on disk, and the failure is silent for a tool that reports the pattern as “not found” without naming why. S3.1 had to apply its edits to `tests/contract/settings_coverage/test_inventory.py`, `tests/acceptance/settings_coverage/test_wiring.py` and `tests/acceptance/settings_coverage/test_persistence.py` through a byte-level patch script that matched `\r\n` explicitly.
+- **Step / Phase:** S3.1 Derive tests (reproduction tests) — Phase 3; the same workaround was needed for S3.2's edits to the triage record, the traceability matrix and this log.
+- **Change:** startup-settings-registration-gaps (ISSUE)
+- **Duration / iterations:** several failed edit attempts, then one patch script per file; no test or document content was lost or re-derived.
+- **Resolution:** the workaround works — read bytes, match CRLF-normalised patterns, write bytes back, then verify with `grep` and `git diff --stat` (and `check_traceability.py` for the matrix). The **root cause** is checkout-wide line endings and belongs to the separate `gitattributes-line-endings` TODO; it is deliberately **not** fixed here (not this change's branch, not a planning record). **Durable rule:** in a CRLF worktree, patch existing files by bytes, not by exact-text edits — and check `git config core.autocrlf` before the first edit of a change.
+- **Date:** 2026-10-11

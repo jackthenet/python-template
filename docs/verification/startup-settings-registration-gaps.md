@@ -156,6 +156,38 @@ This is a conflict between two approved specs, surfaced only because the guard n
 - **D-5 witness tier.** `test_ac_028_persisted_override_warns` went into `tests/acceptance/settings_coverage/test_persistence.py` (acceptance, beside `test_persisted_precedence`) because AC-028 is a user-observable startup diagnostic, not an internal contract — and that file already owns the persisted-precedence behaviour it complements.
 - **Witness hygiene (Q-22).** `tests/acceptance/settings_coverage/test_wiring.py` now runs its child with `cwd=tmp_path` and an absolute `src` entry on `sys.path` (the `tests/acceptance/permissions/test_composition_wiring.py` pattern), plus an autouse fixture that removes a repository-root `settings/` directory **only if that run created it** — a developer's own `settings/` is left alone. Within the §10 boundary: the fixture is scoped to the witness file, not to the suite.
 
+### 5.3 S3.2 RED gate — **CONFIRMED** (2026-10-11)
+
+Targeted commands, run in this worktree (the whole-repo ruff sweep and the full suite are **Phase 5** gates and are not run here):
+
+```text
+uv run ruff check tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py
+uv run ruff format --check tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py
+uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py -q
+uv run pytest tests/acceptance/settings_coverage tests/contract/settings_coverage --collect-only -q
+```
+
+**Measured.** ruff: `All checks passed!`; format: `3 files already formatted`. Targeted run: **3 failed, 6 passed in 2.34s** — identical to the orchestrator's independent re-run at S3.1 (3 failed, 6 passed in 2.62s, same three failures). Collection sanity check: **17 tests collected in 0.44s, 0 errors** (the 8 collected but not run are the untouched `test_registration.py`, `test_live_reads.py` and `test_value_repository.py` witnesses).
+
+**Effective `red_command`** is the three-file pytest command above — the two-file `red_command` in §5 predates the D-5 witness; §12 already records the three-file form. `green_command` (§5) is unchanged.
+
+**Per-test RED state as observed, with the failure mode** (test contract sanity check, skill `test`):
+
+| Test | State | Observed failure mode / reason |
+|---|---|---|
+| `test_main_wires_all_features` | **RED** | `AssertionError` at `tests/acceptance/settings_coverage/test_wiring.py:108` — “the composition root never registers these settings: […16 keys…]” (D-1) |
+| `test_category_group` | **RED** | `AssertionError` at `tests/contract/settings_coverage/test_inventory.py:166` — “permissions.system_principal: category 'permissions' != 'security'”; the three `sessionmanagement.*` rows fail the same guard on category **and** on `group=None` (D-3, §5.2) |
+| `test_ac_028_persisted_override_warns` | **RED** | `AssertionError` at `tests/acceptance/settings_coverage/test_persistence.py:70` — “no WARNING named the persisted override of app.name”, with the full captured record list (D-5) |
+| `test_no_secret_settings` | GREEN **by design** | LQ-01 (a): the widened guard already encodes the amended NFR-002 with the single named exemption `mail.smtp_password` (§5.1) — the absent 4th RED is not a gap |
+| `test_key_prefix` / `test_inventory_matches` / `test_inventory_backward_compatible` | GREEN | widened to the nine features and the 34-key inventory; they go RED if any feature stops registering an inventory key |
+| `test_set_value_persists` / `test_persisted_precedence` | GREEN | pre-existing persistence witnesses, untouched by this change |
+
+**Test contract sanity check — PASS.** Every red test fails with an `AssertionError` raised by its own assertion on behaviour; the run contains **no** collection, import, fixture or `ValidationError` failure, and the `--collect-only` pass confirms 17 collected with 0 errors. Every widened row is a real key with the real kind/default/category of the module that registers it (§5, test-data validity), so the RED is behaviour, not invalid data; no Hypothesis strategy and no colliding fixture is involved.
+
+**`make_map.py --check` — measured STALE, deliberately not regenerated here.** The fresh render differs from the committed `STRUCTURE.md` in exactly one line: `docs/ — 234 files (process record)` → `235`. The extra file is this change's own triage record, added at P.4 (`cce7439`) without a map regeneration; no `.py` path changed at S3.1/S3.2, so the AGENTS.md trigger (regenerate in the same commit as the `.py` change) does not fire in this step. §6 already schedules the regeneration for the Phase 4 `src/main.py` commit, which also settles the `test_ac_021` byte-compare artifact of §7 in this worktree.
+
+**Gate: Phase 3 PASSES.** RED is observed on all three reproduction witnesses, the expected-RED table in §5 (as corrected by LQ-01 and §5.2) matches the measurement exactly, and the traceability matrix carries the issue's evidence rows for the already-defined IDs. **State machine: `TESTS_WRITTEN → RED_CONFIRMED`.** Phase 4 (S4.1, minimal fix) may start; D-4 has no RED witness by design — it is verified by the already-GREEN `test_ac_029_default_local_backend` contract in the `green_command`.
+
 ## 6. Fix scope (Phase 4)
 
 | File | Change |
