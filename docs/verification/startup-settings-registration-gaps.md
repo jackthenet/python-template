@@ -72,6 +72,7 @@ All numbers below were re-measured here (the TODO's numbers are from P.1 and are
 
 - **Measured.** Across the nine `feature_settings.py` modules the `category=` values are: `application` 22, `security` 8, **`sessionmanagement` 3**, **`permissions` 1**. The four out-of-domain literals are `src/backend/sessionmanagement/feature_settings.py:41`, `:48`, `:55` and `src/backend/permissions/feature_settings.py:31`.
 - **Required.** REQ-018 / AC-023: `category` is the **domain** (`application` / `security`), `group` is the feature name.
+- **Measured again at S3.1 — D-3 has a `group` half too.** The three `sessionmanagement.*` definitions carry **no `group` at all** (`group=None`); `register_feature` (`src/backend/settings/registry.py:135-149`) only validates the key prefix and never sets `group`. `permissions.system_principal` does carry `group="permissions"`. So the widened AC-023 guard is RED on the category of all four keys **and** on the missing `group` of three (§5.2).
 - **Deviation.** Four keys violate it, and the guard that would catch it never registers those features (D-2). **The approved specs mandate the wrong values**: `docs/specs/user-roles-permissions.md:288` and `docs/specs/session-management.md:132,134,136` show the out-of-domain categories in their normative model blocks — hence the amendments at Q-26 (§4).
 - **Consequence for tests.** `tests/acceptance/sessionmanagement/test_settings.py::test_ac_039_register_settings_defaults:58` asserts `definition.category == "sessionmanagement"`. That assertion over-specifies what AC-039 (`session-management.md:215`) actually requires (defaults 100/5/1000, `min_value` 1 — no category), so it must be re-derived from the amended model block. This is a **spec-amendment-driven test update**, not a weakening: the assertion is narrowed to what the AC states, and the category itself becomes covered by the widened AC-023 guard.
 
@@ -101,7 +102,8 @@ Measured: `mail.smtp_password` (`src/backend/mail/feature_settings.py:101`) is t
 | `settings-coverage.md` | REQ-001 (`:131`) / REQ-017 (`:147`) feature enumeration → all nine features; §3.5 inventory table (`:102-121`) → the full **34-key** inventory; REQ-019 (`:149`) → the guard checks the complete inventory; **new REQ-023 + AC-028** for the override `WARNING`; §10 test-strategy rows (`:273-275`, `:297-298`) and §11 matrix rows (`:311`, `:330-332`, `:342`) updated to the new guard functions |
 | `settings-public-registry-setter.md` | REQ-011 (`:185`) and AC-016 (`:211`): "the **six** `register_*_settings(...)` calls" → "every feature `register_settings` call site in the composition root" (Q-11). The same rows pin `src/main.py` line numbers that have already drifted (`:137-138` install, `:173-178` the six calls, `:161`/`:198`/`:204`/`:214` service sites; measured now: install `:156`, calls `:191-196`, sites `:179`/`:216`/`:222`/`:232`) — the amendment refreshes them |
 | `user-roles-permissions.md` | model block `:288`: `category="permissions"` → `category="security"` (Q-26) |
-| `session-management.md` | model block `:132,134,136`: `category="sessionmanagement"` → `category="security"` (Q-26) |
+| `session-management.md` | model block `:132,134,136`: `category="sessionmanagement"` → `category="security"` (Q-26) **and `group="sessionmanagement"` added** — the block states no `group`, and REQ-018 requires `group` = feature name (§5.2) |
+| `settings-coverage.md` — **NFR-002** | NFR-002 (`:222`) amended to the Q-27 wording decided at **LQ-01 (a)**: no credential or token may appear in log records or events, and a setting explicitly declared as a credential **may** be persisted; `mail.smtp_password` is named as the accepted transport-credential exception (decision recorded on `main` at `093f2ff`) |
 | `file-management.md` | **no wording change** — REQ-015/AC-029 already require what the fix does; recorded here only because the fix is traced to it |
 
 ## 5. Reproduction plan (Phase 3)
@@ -117,8 +119,9 @@ Two guards, both **in place** (Q-14: strengthen the existing tests rather than a
 | Test | Why it is RED on the current code |
 |---|---|
 | `test_main_wires_all_features` (R-1) | `MISSING` lists the 16 keys the composition root never registers (D-1) — the **only** guard that imports `main`, so the only direct D-1 reproduction |
-| `test_category_group` (R-2) | 4 rows carry `sessionmanagement` / `permissions` as their category (D-3) — the direct D-3 reproduction |
-| `test_no_secret_settings` (R-2) | `mail.smtp_password` fails the `"password" not in key` assertion — a **genuine spec conflict**, see §5.1 (LQ-01), not an incidental one |
+| `test_category_group` (R-2) | 4 rows carry `sessionmanagement` / `permissions` as their category, and the 3 `sessionmanagement.*` rows carry no `group` at all (D-3, §5.2) — the direct D-3 reproduction |
+| `test_ac_028_persisted_override_warns` (D-5, `tests/acceptance/settings_coverage/test_persistence.py`) | no `WARNING` record names a key whose persisted value overrode its definition default — the direct D-5 reproduction |
+| `test_no_secret_settings` (R-2) | **GREEN by design, not RED** — LQ-01 (a) resolves D-6 with a **spec wording** amendment, not a code change, so the widened guard already encodes the amended NFR-002: the set of credential-named inventory keys must equal the documented exemption list (`mail.smtp_password`), which keeps the name check's full force on the other 33 keys and makes any undocumented credential-named key a failure. The conflict this row predicted is recorded as resolved in §5.1 |
 | `test_key_prefix`, `test_inventory_matches`, `test_inventory_backward_compatible` (R-2) | expected to stay **GREEN** once both the inventory and the nine-feature helper are widened (each feature does register its own keys with the right kind/default) — they are widened for coverage, and they go RED if any feature ever stops registering an inventory key |
 | `tests/acceptance/filemanagement/test_filemanagement.py::test_ac_029_default_local_backend` | already GREEN at the service level; it is the **contract** the D-4 fix must satisfy, so it is in the GREEN command, not the RED set |
 
@@ -133,6 +136,10 @@ This is a conflict between two approved specs, surfaced only because the guard n
 
 **Recommended: (a)** — the mail spec and AGENTS.md both treat `mail.smtp_password` as a registered setting, so NFR-002's absolute wording is the stale side; the guard keeps its force for every other key. Recorded here as a **late question (LQ-01)** for the orchestrator to append to `docs/questions/startup-settings-registration-gaps.md` under `## Late questions (Phases 2–6)`; S3.1 must not widen the NFR-002 guard until the answer is recorded.
 
+**ANSWERED — (a)** (recorded by the orchestrator on `main` at `093f2ff`, 2026-10-11). `settings-coverage.md` NFR-002 is amended **in this change's own PR** (no separate Spec Amendment PR) with the Q-27 wording: no credential or token may appear in log records or events, and a setting explicitly declared as a credential **may** be persisted — with `mail.smtp_password` named as the accepted transport-credential exception.
+
+**Effect on the guard (applied at S3.1).** `test_no_secret_settings` now asserts that the set of inventory keys whose name contains `password` / `secret` / `credential` **equals** an explicit exemption list, `NFR_002_CREDENTIAL_EXEMPTIONS = {"mail.smtp_password"}`, in `tests/contract/settings_coverage/test_inventory.py`. The guard therefore keeps its full force on the other 33 keys (an undocumented credential-named key, or a stale exemption, fails the set equality with a message naming the offender), and it leaves the expected-RED set — its resolution is the §4 NFR-002 wording amendment, not a code change. `mail.smtp_password` stays registered and persisted; mail's existing secret handling (`@logged_class(include_args=False)`, secret-free events) is what the amended NFR-002 requires of it (Q-11).
+
 **Commands (targeted — AGENTS.md "Targeted GREEN"; the full suite is a Phase 5 gate):**
 
 - `red_command`: `uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py -v`
@@ -140,14 +147,21 @@ This is a conflict between two approved specs, surfaced only because the guard n
 
 **Test-data validity check (AGENTS.md Phase 3 item 6):** every widened row is a real key with the real kind/default/category taken from the module that registers it, so no fixture constructs an invalid `SettingDefinition`; the RED is behaviour, not invalid data.
 
-**Not in Phase 3:** the D-5 override `WARNING` test — it asserts behaviour no spec stated before this change, so it is derived from the **amended** REQ-023/AC-028 in the same Phase 3 pass (one new test function in `tests/contract/settings_coverage/` or `tests/acceptance/settings_coverage/`, decided by S3.1), and it is RED until the `WARNING` exists.
+**In Phase 3 (S3.1):** the D-5 override `WARNING` test — it asserts behaviour no spec stated before this change, so it is derived from the **amended** REQ-023/AC-028 in the same Phase 3 pass (one new test function in `tests/contract/settings_coverage/` or `tests/acceptance/settings_coverage/`, decided by S3.1), and it is RED until the `WARNING` exists.
+
+### 5.2 S3.1 findings (recorded with the reproduction tests)
+
+- **D-3 also covers `group`.** Measured: `permissions.system_principal` registers `group="permissions"`, but the three `sessionmanagement.*` definitions register **`group=None`** — `register_feature` (`src/backend/settings/registry.py:135-149`) validates the key prefix only and never sets `group`. REQ-018 / AC-023 require `group` = feature name, so the widened `test_category_group` asserts `group == "sessionmanagement"` and Phase 4 MUST add `group="sessionmanagement"` to the three definitions and to the `session-management.md` model block (§4). Not a new defect class — the second half of the requirement D-3 already cites, invisible until the guard covered the feature.
+- **The NFR-002 guard's value clause no longer demands a non-empty string.** The old assertion (`assert value and "://" not in value[:4]`) fails on `mail.smtp_username` and `mail.smtp_password`, whose approved defaults are the empty string (`src/backend/mail/feature_settings.py:95,101`): an empty value is the absence of a value, not a secret, and NFR-002 says nothing about non-emptiness. The guard now applies the connection-string clause only to non-empty strings; the **name** check is unchanged and is now enforced as a set equality against the documented exemption list. Recorded so the Phase 6 review can see a spec-traced correction, not a weakening.
+- **D-5 witness tier.** `test_ac_028_persisted_override_warns` went into `tests/acceptance/settings_coverage/test_persistence.py` (acceptance, beside `test_persisted_precedence`) because AC-028 is a user-observable startup diagnostic, not an internal contract — and that file already owns the persisted-precedence behaviour it complements.
+- **Witness hygiene (Q-22).** `tests/acceptance/settings_coverage/test_wiring.py` now runs its child with `cwd=tmp_path` and an absolute `src` entry on `sys.path` (the `tests/acceptance/permissions/test_composition_wiring.py` pattern), plus an autouse fixture that removes a repository-root `settings/` directory **only if that run created it** — a developer's own `settings/` is left alone. Within the §10 boundary: the fixture is scoped to the witness file, not to the suite.
 
 ## 6. Fix scope (Phase 4)
 
 | File | Change |
 |---|---|
 | `src/main.py` | **D-1:** register all nine features' settings at the composition root — keep the six existing imports and add the three missing ones, then call every registration against the shared instance (Q-09). **D-4:** drop `LocalDiskStorageBackend("./data/files")` from the `FileService(...)` call (`:213-218`) and the now-unused `LocalDiskStorageBackend` import (`:37`) so REQ-015's live-read default path runs (Q-12). **D-3:** none here |
-| `src/backend/sessionmanagement/feature_settings.py` | **D-3:** `category="sessionmanagement"` → `category="security"` at `:41`, `:48`, `:55` (Q-06) |
+| `src/backend/sessionmanagement/feature_settings.py` | **D-3:** `category="sessionmanagement"` → `category="security"` at `:41`, `:48`, `:55` (Q-06) **and `group="sessionmanagement"` added to the three definitions** (§5.2) |
 | `src/backend/permissions/feature_settings.py` | **D-3:** `category="permissions"` → `category="security"` at `:31` (Q-06) |
 | `src/backend/settings/registry.py` | **D-5:** one `WARNING` per key in `register()` where `self._persisted` overrides the definition default (`:121`) — key, default, persisted value; nothing else (Q-13) |
 | `docs/specs/settings-coverage.md` | §4 amendments + new REQ-023/AC-028 + §3.5 full inventory + Changelog **+ the NFR-002 resolution per LQ-01** |
@@ -159,7 +173,7 @@ This is a conflict between two approved specs, surfaced only because the guard n
 | `pyproject.toml` | `patch` bump `1.2.0 → 1.2.1` at S6.4 |
 | `docs/verification/traceability.md` | update the five Settings Coverage rows + add rows for the new guards (S5.3) |
 
-**Test files this change touches (Phase 3/4):** `tests/acceptance/settings_coverage/test_wiring.py`, `tests/contract/settings_coverage/test_inventory.py`, and `tests/acceptance/sessionmanagement/test_settings.py:58` (the category assertion re-derived from the amended `session-management.md` model block — §3 D-3).
+**Test files this change touches (Phase 3/4):** `tests/acceptance/settings_coverage/test_wiring.py` and `tests/contract/settings_coverage/test_inventory.py` (widened in place at S3.1), `tests/acceptance/settings_coverage/test_persistence.py` (the new `test_ac_028_persisted_override_warns`, S3.1), `tests/acceptance/sessionmanagement/test_settings.py:58` (the category assertion re-derived from the amended `session-management.md` model block — §3 D-3), and `tests/acceptance/logging_coverage/test_statements_via_feature.py`: its pinned `_AC_009_STATEMENTS` list for `src/backend/settings/registry.py` holds **18** entries today and must become **19**, because the D-5 `WARNING` is one more one-off statement in that module — measured at S3.1, so the D-5 fix fails `test_ac_009_settings_statements_go_through_get_logger` unless the list is updated in the same commit.
 
 ## 7. Inherited baseline on `main` (measured verbatim in this worktree)
 
@@ -223,4 +237,4 @@ A test that starts the real composition root finds **all 34** feature settings k
 
 ISSUE → **`patch`** (AGENTS.md Versioning): `bump-my-version bump patch` at S6.4 with a clean tree, `1.2.0 → 1.2.1`, `tag = false`; the `## [Unreleased]` entries move to `## [1.2.1] - <date>` in the same commit. `CHANGELOG.md` `## [Unreleased]` is currently empty, so this change's entries are the only ones in it.
 
-**Next step: S3.1** (derive the two widened guards + the REQ-023 test from this plan), then **S3.2** (ruff + confirm RED). **Blocked on LQ-01** (§5.1) for the NFR-002 half of S3.1: the change goes WAITING until the orchestrator records the user's answer in `docs/questions/startup-settings-registration-gaps.md`.
+**S3.1 done** (2026-10-11): R-1, R-2 and the D-5 witness are in place, LQ-01 is ANSWERED (§5.1), and the targeted run shows the expected RED — `uv run pytest tests/acceptance/settings_coverage/test_wiring.py tests/contract/settings_coverage/test_inventory.py tests/acceptance/settings_coverage/test_persistence.py -v` → **3 failed, 6 passed**: `test_main_wires_all_features` (16 missing keys, D-1), `test_category_group` (4 categories + 3 missing groups, D-3), `test_ac_028_persisted_override_warns` (no override `WARNING`, D-5). Every failure is an `AssertionError` on behaviour — no collection, import or `ValidationError` failure. **Next step: S3.2** (ruff on the changed paths + confirm and record RED).
