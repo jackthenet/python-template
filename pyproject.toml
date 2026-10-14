@@ -9,14 +9,14 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     # Domain and request/response validation models.
-    "pydantic>=2.13.5",
+    "pydantic>=2.14.0",
     # Structured logging: processor/renderer and binding layer over stdlib handlers.
     "structlog>=25.1.0",
     # High-performance JSON serialization/deserialization (logging file sink).
-    "orjson>=3.12.0",
+    "orjson>=3.13.0",
     # HTTP client for outbound calls.
     "httpx>=0.28.1",
-    "sqlmodel>=0.0.47",
+    "sqlmodel>=0.0.48",
     "argon2-cffi>=25.1.0",
     "email-validator>=2.3.0",
     "filetype>=1.2.0",
