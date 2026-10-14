@@ -76,7 +76,7 @@ docs = [
     # MkDocs Material theme for the published documentation site.
     "mkdocs-material>=9.5",
     # MkDocs plugin: API docs from docstrings (python extra: docstring handler).
-    "mkdocstrings[python]>=1.0.6",
+    "mkdocstrings[python]>=1.0.7",
 ]
 
 [tool.uv]
