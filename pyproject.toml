@@ -47,7 +47,7 @@ dev = [
     # Test data factories for pydantic models.
     "polyfactory>=3.3.0",
     # Pre-commit automation for local quality gates.
-    "pre-commit>=4.6.2",
+    "pre-commit>=4.7.0",
     # Low-overhead sampling profiler for live Python processes and spawned commands.
     "py-spy>=0.4.2",
     # Unit and integration test runner.
