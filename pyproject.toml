@@ -35,7 +35,7 @@ dev = [
     # Security-focused static analysis for Python code.
     "bandit>=1.9.4",
     # Complexity reporting used during refactors and cleanup work.
-    "complexipy>=8.0.1",
+    "complexipy>=8.1.0",
     # Dependency checker (unused/missing/transitive deps).
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
@@ -61,11 +61,11 @@ dev = [
     # httpx mocking for outbound-call tests.
     "respx>=0.23.1",
     # Linting, formatting, and autofix checks.
-    "ruff>=0.16.10",
+    "ruff>=0.17.2",
     # Time travel for time-dependent tests.
     "time-machine>=3.5.1",
     # Fast type checker for the source tree.
-    "ty>=0.0.84",
+    "ty>=0.0.91",
 ]
 # Documentation site tooling: installed only with `uv sync --group docs` (the
 # mkdocs job in .github/workflows/quality.yml and the mkdocs-build pre-push hook).
