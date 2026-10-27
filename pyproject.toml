@@ -39,13 +39,13 @@ dev = [
     # Dependency checker (unused/missing/transitive deps).
     "deptry>=0.25.1",
     # Property-based testing for pure logic and boundary-heavy helpers.
-    "hypothesis>=6.168.3",
+    "hypothesis>=6.170.9",
     # Static type checking for the source tree.
     "mypy>=2.4.0",
     # Vulnerability scanning for installed dependencies.
     "pip-audit>=2.10.1",
     # Test data factories for pydantic models.
-    "polyfactory>=3.3.0",
+    "polyfactory>=3.5.0",
     # Pre-commit automation for local quality gates.
     "pre-commit>=4.7.0",
     # Low-overhead sampling profiler for live Python processes and spawned commands.
