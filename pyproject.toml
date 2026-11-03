@@ -21,7 +21,7 @@ dependencies = [
     "email-validator>=2.3.0",
     "filetype>=1.2.0",
     # Image decode validation + variant generation (file-management avatars).
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     # Safe YAML serialization for settings value/template storage.
     "ruamel-yaml>=0.19.1",
 ]
