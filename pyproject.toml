@@ -31,7 +31,7 @@ dependencies = [
 # this group so deploy and compatibility mirrors stay minimal.
 dev = [
     # Database schema migration tooling.
-    "alembic>=1.20.0",
+    "alembic>=1.20.1",
     # Security-focused static analysis for Python code.
     "bandit>=1.9.4",
     # Complexity reporting used during refactors and cleanup work.
